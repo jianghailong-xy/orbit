@@ -1,0 +1,95 @@
+dry run: git merge-tree --write-tree 2fefd4747 c71302304212140a777d1eb99637dcd130ceda32 (origin/main, fetched 2026-10-09T14:22:54Z)
+exit 0, tree 5e7de1703b523f6dcb0de674bcdb5494d1c16bd6, no conflicts
+project tip abc0a4cfa is in origin/main: yes
+main's commits not in the delivery: 60
+
+what the merge would bring in (git diff --stat 2fefd4747 <merged tree>):
+ src/apiserver/src/wiki-worker/wiki-jobs.pg.spec.ts                                                  |  211 +++++++-
+ src/apiserver/src/wiki-worker/wiki-jobs.ts                                                          |   33 +-
+ src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts                                          |   96 +++-
+ src/apiserver/src/wiki-worker/wiki-maintain-job.ts                                                  |   22 +-
+ src/apiserver/src/wiki-worker/wiki-repo-ops.pg.spec.ts                                              |   37 +-
+ src/apiserver/src/wiki-worker/wiki-repo-ops.ts                                                      |   46 +-
+ src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift                                          |   18 +-
+ src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift                                       |    2 +-
+ src/macos/OrbitApp/Sources/OrbitApp/Views/BackgroundWakeCardView.swift                              |   10 +-
+ src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift                                        |  174 +++++--
+ src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift                                 |   16 +-
+ src/macos/OrbitKit/Sources/OrbitKit/App/SessionRunStart.swift                                       |   33 +-
+ src/macos/OrbitKit/Sources/OrbitKit/App/WatchWake.swift                                             |    2 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/BackgroundWakeCopyParityTests.swift                          |   12 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/PromptSuggestionTests.swift                                  |   60 ++-
+ src/macos/OrbitKit/Tests/OrbitKitTests/SessionRunStartCopyParityTests.swift                         |   22 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/SessionRunStartTests.swift                                   |   12 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/WatchWakeTests.swift                                         |    2 +-
+ src/runner-go/antigravity_google_login_other_test.go                                                |    2 +-
+ src/runner-go/antigravity_google_pty_other.go                                                       |    2 +-
+ src/runner-go/background_job.go                                                                     |    2 +-
+ src/runner-go/claude_assets.go                                                                      |   21 +-
+ src/runner-go/claude_prompt_suggestion.go                                                           |   30 +-
+ src/runner-go/claude_prompt_suggestion_test.go                                                      |   18 +-
+ src/runner-go/codex_rate_limit_reset_relay.go                                                       |   10 +-
+ src/runner-go/config.go                                                                             |    4 +
+ src/runner-go/engineinstall.go                                                                      |   10 +
+ src/runner-go/login.go                                                                              |    9 +-
+ src/runner-go/managed_instance.go                                                                   |   26 +-
+ src/runner-go/managed_instance_test.go                                                              |   16 +
+ src/runner-go/managed_sleep.go                                                                      |  183 +++++++
+ src/runner-go/managed_sleep_test.go                                                                 |  246 +++++++++
+ src/runner-go/mcp.go                                                                                |    2 +-
+ src/runner-go/mcp_test.go                                                                           |   25 +
+ src/runner-go/repohealth.go                                                                         |    3 +-
+ src/runner-go/repohealth_test.go                                                                    |    2 +-
+ src/runner-go/runloop.go                                                                            |   77 ++-
+ src/runner-go/runloop_test.go                                                                       |  104 ++++
+ src/runner-go/session.go                                                                            |   12 +-
+ src/runner-go/session_pool.go                                                                       |   24 +
+ src/runner-go/slash_registry.go                                                                     |   24 +-
+ src/runner-go/slash_registry_test.go                                                                |   65 +++
+ src/runner-go/task_cli.go                                                                           |    4 +-
+ src/runner-go/task_cli_test.go                                                                      |   11 +-
+ src/runner-go/transport.go                                                                          |    6 +-
+ src/runner-go/types.go                                                                              |    8 +
+ src/runner-go/user_mode.go                                                                          |    4 +-
+ src/runner-go/wiki_anchors.go                                                                       |   66 ++-
+ src/runner-go/wiki_fetch_lock_other.go                                                              |   11 +
+ src/runner-go/wiki_fetch_lock_unix.go                                                               |   41 ++
+ src/runner-go/wiki_fetch_lock_unix_test.go                                                          |   57 ++
+ src/runner-go/wiki_repo_ops.go                                                                      |   77 ++-
+ src/runner-go/wiki_repo_ops_fetch_test.go                                                           |  175 +++++++
+ src/runner-go/wiki_repo_ops_test.go                                                                 |  143 +++++
+ src/runner-go/worktree.go                                                                           |   65 ++-
+ src/runner-go/worktree_test.go                                                                      |  152 ++++++
+ src/shared/src/dto.ts                                                                               |    9 +
+ src/shared/src/index.ts                                                                             |    1 +
+ src/shared/src/managedRunner.ts                                                                     |   50 ++
+ src/shared/src/providerEngines.spec.ts                                                              |  121 +++++
+ src/shared/src/providerEngines.ts                                                                   |  122 +++++
+ src/shared/src/source-refusal.ts                                                                    |   35 +-
+ src/web/src/components/BackgroundWakeCard.tsx                                                       |   16 +-
+ src/web/src/components/BackgroundWakeSteer.test.tsx                                                 |    2 +-
+ src/web/src/components/ProjectPanoramaHeader.test.tsx                                               |    6 +-
+ src/web/src/components/Transcript.backgroundWake.test.tsx                                           |    6 +-
+ src/web/src/components/Transcript.settledReply.test.tsx                                             |   19 +-
+ src/web/src/components/Transcript.tsx                                                               |   60 ++-
+ src/web/src/components/Transcript.turnFoot.test.tsx                                                 |  202 ++++++++
+ src/web/src/components/Transcript.watchWake.test.tsx                                                |    2 +-
+ src/web/src/components/WatchWakeCard.tsx                                                            |    2 +-
+ src/web/src/components/WorkspaceView.promptSuggestion.test.tsx                                      |   86 ++-
+ src/web/src/components/WorkspaceView.tsx                                                            |   71 ++-
+ src/web/src/copyLanguage.test.ts                                                                    |  284 ++++++++++
+ src/web/src/index.css                                                                               |  112 +++-
+ src/web/src/pages/InfrastructurePage.machines.test.tsx                                              |   99 ++++
+ src/web/src/pages/ProjectsPage.status.test.tsx                                                      |   16 +-
+ src/web/src/pages/ProjectsPage.tsx                                                                  |   36 +-
+ test/test-provider-engine-foundation.test.mjs                                                       |   86 +++
+ 404 files changed, 29157 insertions(+), 1493 deletions(-)
+
+files this batch's own 13 commits change (git rev-list --no-merges --first-parent abc0a4cfa..2fefd4747) that the merge also changes:
+  src/web/src/index.css
+  index.css: main's hunks start at merged-file lines 4264 4504 4508 4519 4523 5924 6242 6306 6320 6328 8429 15441 15529 15535 15539 15544 15570 15577 15583 - the conversation fade, the composer's touch suggestion, the turn foot and the machine card; this batch's hunks are at lines 9805-13347 and 21770 of its own file; no rule in common.
+under src/web/src/components/ui/ or web Toast/overlay files: 0
+
+main's incoming web tests that name this batch's components or .ant- selectors: only ProjectsPage.status.test.tsx's existing vi.mock of ProjectDependencyGraph (its change: the project page's copy in English only).
+this batch's 20 product .ts/.tsx files hold no Han character (main's copyLanguage.test.ts counts Chinese literals).
+rule (coordinator, 2026-10-09): neither a conflict, nor this batch's own rules, nor ui/, Toast or overlays: record the dry run and main's change list; the landing's merge check covers the rest.

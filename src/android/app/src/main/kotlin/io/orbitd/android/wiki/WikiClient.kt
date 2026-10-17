@@ -36,6 +36,9 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
     suspend fun systemModel(): WikiSystemModelStatus = WikiSystemModelStatus.read(json(listOf("wiki", "system-model")))
     /** `GET /wiki/spaces/:id/jobs`: the space's newest server runs with their newest calls (P9). */
     suspend fun jobs(spaceId: String): WikiJobsRead = WikiJobsRead.decode(json(spacePath(spaceId, "jobs")))
+    /** `GET /wiki/spaces/:id/share`: the space's public link — null when it has none — with what its layers hold, as
+     * `{link, counts}` (share-links §10). */
+    suspend fun share(spaceId: String): JsonObject = json(spacePath(spaceId, "share")).jsonObject
     suspend fun articleDirectory(spaceId: String) = get(spacePath(spaceId, "articles"), WikiArticleDirectory.serializer())
     suspend fun article(spaceId: String, slug: String, part: Int): WikiArticle =
         get(if (part > 0) spacePath(spaceId, "articles", slug, part.toString()) else spacePath(spaceId, "articles", slug), WikiArticle.serializer())

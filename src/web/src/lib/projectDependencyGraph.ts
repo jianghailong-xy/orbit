@@ -146,7 +146,8 @@ export interface ProjectDependencyGraphResponse {
   folded: boolean;
   /** The project is bigger than one request reads, or its fold than one response carries. */
   truncated: boolean;
-  limits: { maxTasks: number; maxMarks: number };
+  /** The ceiling it was read under. Absent from a graph nobody had to read a ceiling for. */
+  limits?: { maxTasks: number; maxMarks: number };
 }
 
 /** What a mark says it is, for a reader and for a screen reader. */

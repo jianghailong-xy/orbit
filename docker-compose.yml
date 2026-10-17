@@ -15,6 +15,13 @@ services:
     container_name: orbit-postgres
     restart: unless-stopped
     logging: *logging
+    # Docker's default 64MB /dev/shm is smaller than the ~67MB dynamic shared memory segment
+    # VACUUM allocates (maintenance_work_mem-sized). On 2026-10-09 a manual VACUUM on the
+    # production box died with `could not resize shared memory segment ... to 67145440 bytes:
+    # No space left on device` — and PG16 parallelizes VACUUM automatically on any table over
+    # min_parallel_table_scan_size (8MB), so even a plain VACUUM hits it. The official postgres
+    # image documents 256MB as the recommended size; evidence in docs/postgres-runtime-settings.md §6.
+    shm_size: "256m"
     # The image's entrypoint only fixes up PGDATA's ownership, so create and chown the
     # archive here — still as root — before it drops to the postgres user. Without this
     # archive_command cannot write into the bind mount and WAL archiving stalls.

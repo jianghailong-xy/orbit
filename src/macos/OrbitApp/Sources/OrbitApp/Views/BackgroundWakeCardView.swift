@@ -21,7 +21,7 @@ import OrbitKit
 ///
 /// A job that ends while a turn runs is written into that turn (a steer): the same line, inside the
 /// running turn, saying how far it got (`steerState`) — and, while it waits for the runner, with no
-/// Cancel, because nothing takes a steer back.
+/// Cancel: a steer is taken back only by its own Withdraw, and nobody typed this one.
 struct BackgroundWakeCardView: View {
     let wake: BackgroundWake
     var ts: String?
@@ -33,7 +33,7 @@ struct BackgroundWakeCardView: View {
     /// wake — a message with no words in it, signed with the reader's own name.
     var attached: (kind: String, text: String)?
     /// Cancels a wake that is still queued. Nil once a runner has taken it, on every settled line,
-    /// and on a steer, which the server refuses to withdraw. Unlike a watch's wake this is an ordinary
+    /// and on a steer, which is not the queue's to cancel. Unlike a watch's wake this is an ordinary
     /// cancel — nothing ever re-sends it — so it asks nothing first and uses the words a queued
     /// message already uses.
     var onCancelQueued: (() -> Void)?

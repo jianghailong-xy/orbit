@@ -62,7 +62,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "byTag: inputs.byTag, searching: inputs.searching,",
                      "runnerOffline: inputs.runnerOffline,",
                      "let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)",
-                     "line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) }",
+                     // The line the project row is composed from reads the account's recaps switch
+                     // (the grouping's inputs carry it, so a toggle regroups).
+                     "line: { lines.line(for: $0, watching: inputs.watch(for: $0.id),",
+                     "recaps: inputs.recaps) }",
                      "coordinators: coordinators,",
                      "contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions"] {
             XCTAssertTrue(listing.contains(part), "the workspace grouping carries `\(part)`")
@@ -332,7 +335,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let order = try [
-            XCTUnwrap(page.range(of: "            progressCard")?.lowerBound),
+            XCTUnwrap(page.range(of: "            firstCard")?.lowerBound),
             XCTUnwrap(page.range(of: "Section(SessionProjectCopy.coordinatorSection)")?.lowerBound),
             XCTUnwrap(page.range(of: "ForEach(timeSections)")?.lowerBound),
         ]
@@ -374,30 +377,35 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(move.contains("membership.role != .coordinator { return nil }"), "a non-coordinator member cannot move its project")
     }
 
-    func testTheSummaryCardCarriesTheProjectPagesLandingLine() throws {
+    /// The landing left the progress card on 2026-10-11 (docs/mocks/project-landing-card, owner
+    /// decision): it is a card of its own under the progress card, drawn from the page's own
+    /// integration read, and a merge job's is still the merge card's.
+    func testTheProgressCardIsFollowedByTheLandingCardOfItsOwn() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let first = try slice(page, from: "@ViewBuilder private var firstCard: some View {", to: "\n    }\n")
+        let order = try [XCTUnwrap(first.range(of: "progressCard")?.lowerBound),
+                         XCTUnwrap(first.range(of: "landingCard")?.lowerBound)]
+        XCTAssertEqual(order, order.sorted(), "the landing card is drawn under the progress card")
+        XCTAssertTrue(first.contains("ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)"),
+                      "a done project's ending still takes both their place")
         let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
-        let order = try [XCTUnwrap(card.range(of: "progressLine")?.lowerBound),
-                         XCTUnwrap(card.range(of: "landingLine")?.lowerBound)]
-        XCTAssertEqual(order, order.sorted())
-        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
-        XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight leaves the card as it was")
+        XCTAssertFalse(card.contains("landingLine"), "the landing is no longer a row inside the progress card")
+
+        let landing = try slice(page, from: "@ViewBuilder private var landingCard: some View {", to: "\n    }")
+        XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight draws no card")
         XCTAssertTrue(landing.contains("TimelineView(.periodic(from: .now, by: 1))"))
-        XCTAssertTrue(landing.contains("ProjectMergeCard.progressLandingLine(integration, now: context.date,"),
-                      "a merge job's live line is the merge card's, not the progress card's")
-        XCTAssertTrue(landing.contains("!ProjectMergeCard.isMergeJob(integration.inFlight)"))
+        XCTAssertTrue(landing.contains("ProjectMergeCard.taskLandingCard(integration, now: context.date,"),
+                      "a merge job's is the merge card's, and that is decided in OrbitKit")
         XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
         XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
-        XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
-        // A press opens the jobs the row counts, on a server that lists them; on an older one, the
-        // project page, as it always did.
-        let press = try slice(landing, from: "Button {", to: "} label: {")
-        let steps = try ["if integration.inFlightJobs != nil {", "showsLandingJobs = true", "} else {",
-                         "app.openProject(address.projectID)"].map {
-            try XCTUnwrap(press.range(of: $0)?.lowerBound, "the press keeps `\($0)`")
-        }
-        XCTAssertEqual(steps, steps.sorted())
+        XCTAssertTrue(landing.contains("ProjectLandingCardView("))
+        // The card's press opens the jobs it counts, on a server that lists them; on an older one,
+        // the project page, as the row it replaced always did. Retry is the Jobs sheet's own door.
+        XCTAssertTrue(landing.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { showsLandingJobs = true },"))
+        XCTAssertTrue(landing.contains("onOpenProject: { app.openProject(address.projectID) },"))
+        XCTAssertTrue(landing.contains("try await app.retryIntegrationJob(address.projectID, jobID: jobID)"))
+        XCTAssertTrue(landing.contains("await app.loadProjectIntegration(address)"))
 
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
@@ -415,16 +423,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
                        "the landing is read on arrival and on every poll")
     }
 
-    /// The jobs a landing row counts open over this page (docs/mocks/landing-jobs-sheet), from the
-    /// progress card's row and from the merge card's alike, on a server that lists them. The sheet
-    /// is the page's, not either row's — their TimelineViews redraw every second — and it reads the
+    /// The jobs a landing card counts open over this page (docs/mocks/landing-jobs-sheet), from the
+    /// landing card and from the merge card's row alike, on a server that lists them. The sheet is
+    /// the page's, not either card's — their TimelineViews redraw every second — and it reads the
     /// page's own landing read; a Retry that went through reads it again at once, outside the polls.
     func testTheLandingRowsOpenTheJobsInFlightOverThePage() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         XCTAssertTrue(page.contains("@State private var showsLandingJobs = false"))
-        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
-        XCTAssertFalse(landing.contains(".sheet("), "the row redraws every second; the sheet is the page's")
+        let landing = try slice(page, from: "@ViewBuilder private var landingCard: some View {", to: "\n    }")
+        XCTAssertFalse(landing.contains(".sheet("), "the card redraws every second; the sheet is the page's")
         let card = try slice(page, from: "@ViewBuilder private var mergeCard: some View {", to: "\n    }\n")
         XCTAssertTrue(card.contains("onLanding: app.projectSessionsIntegration?.inFlightJobs == nil"))
         XCTAssertTrue(card.contains("? nil : { showsLandingJobs = true },"), "the merge job's row opens the same jobs")
@@ -461,13 +469,52 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(merge.contains("let onLanding: (() -> Void)?"))
         let row = try slice(merge, from: "@ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {",
                             to: "\n    }\n")
-        for part in ["if let onLanding {", "Button(action: onLanding) {", "ProjectLandingRow(line: line)",
-                     "Image(systemName: \"chevron.right\")", ".buttonStyle(.plain)"] {
+        for part in ["if let onLanding {", "Button(action: onLanding) {",
+                     "ProjectLandingHead(title: line.word, head: line.head, running: line.running,",
+                     ".buttonStyle(.plain)"] {
             XCTAssertTrue(row.contains(part), "the merge card's landing row keeps `\(part)`")
         }
+        // The merged line's anatomy (owner decision 2026-10-11): the whole row is the press, so the
+        // chevron the head used to carry is gone — as the merged line itself has none.
+        XCTAssertFalse(row.contains("chevron.right"),
+                       "the merge card's landing row draws no disclosure chevron")
         XCTAssertEqual(merge.components(separatedBy: "if let landing { landingRow(landing) }").count - 1, 2,
                        "the checking and the merging card both draw the row a press opens the jobs from")
-        XCTAssertFalse(merge.contains("if let landing { ProjectLandingRow(line: landing) }"))
+    }
+
+    /// The head the merge check card and the landing card wear (owner decision 2026-10-11, board
+    /// docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one moment earlier
+    /// — the mark in its circle, the word with the live clock at its right, and the state, the wait
+    /// and the freshness in one line under both. No chevron: the whole row is the press, as the
+    /// merged line's whole row opens its receipt.
+    func testTheHeadsWearTheMergedLinesRowAndCarryNoChevron() throws {
+        let row = code(try appSource("Views/ProjectLandingRow.swift"))
+        let head = try slice(row, from: "struct ProjectLandingHead: View {", to: "\n}\n")
+        for part in ["let head: ProjectPage.LandingHead",
+                     "LandingRing(size: 15, running: running)",
+                     "frame(width: 30, height: 30)",
+                     "in: Circle()",
+                     "Text(head.detail).font(.orbitListSubtitle)",
+                     "Image(systemName: \"exclamationmark.triangle.fill\")"] {
+            XCTAssertTrue(head.contains(part), "the head keeps `\(part)`")
+        }
+        XCTAssertFalse(head.contains("chevron"), "the whole row is the press, as the merged line is")
+        // Both cards read that one view, and their words come from the one composition each end runs.
+        let session = code(try appSource("Views/SessionProjectPage.swift"))
+        XCTAssertTrue(session.contains("ProjectLandingHead(title: line.word, head: line.head, running: line.running,"))
+        let card = code(try appSource("Views/ProjectLandingCard.swift"))
+        let cardHead = try slice(card, from: "private var head: some View {", to: "\n    }\n")
+        XCTAssertTrue(cardHead.contains("ProjectLandingHead(title: card.title, head: card.head, running: card.running,"))
+        XCTAssertFalse(cardHead.contains("chevron"),
+                       // The card's Retry row keeps its own › into the jobs list; the HEAD has none.
+                       "the landing card's head carries no chevron either")
+        // The old compact row is gone from the app (owner decision 2026-10-11): every landing row
+        // — this page's two cards, the jobs list's rows and the Work overview — is this head.
+        for view in ["Views/SessionProjectPage.swift", "Views/ProjectLandingJobsSheet.swift",
+                     "Views/ProjectsView.swift", "Views/ProjectLandingCard.swift"] {
+            XCTAssertFalse(code(try appSource(view)).contains("ProjectLandingRow("),
+                           "\(view) draws the head, not the old row")
+        }
     }
 
     /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
@@ -476,11 +523,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let order = try [
-            XCTUnwrap(page.range(of: "            progressCard")?.lowerBound),
+            XCTUnwrap(page.range(of: "            firstCard")?.lowerBound),
             XCTUnwrap(page.range(of: "            mergeCard")?.lowerBound),
             XCTUnwrap(page.range(of: "Section(SessionProjectCopy.coordinatorSection)")?.lowerBound),
         ]
-        XCTAssertEqual(order, order.sorted(), "the merge card sits between the progress card and the coordinator")
+        XCTAssertEqual(order, order.sorted(), "the merge card sits between the first card and the coordinator")
         let merge = try slice(page, from: "private var merge: ProjectMergeModel? {", to: "\n    }")
         XCTAssertTrue(merge.contains("$0.projectID == address.projectID"),
                       "another project's merge must never show on this page")
@@ -526,6 +573,18 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(merging.contains("ProgressView"), "the landing row below is this card's moving mark")
     }
 
+    /// The checking card ends on what a passing check leads to (owner decision 2026-10-15): under the
+    /// merge job's row, in the merging card's quiet meta line.
+    func testTheCheckingCardSaysWhatAPassingCheckLeadsToUnderTheMergeJobsRow() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let card = try slice(page, from: "private struct ProjectMergeCardView: View {", to: "\n}\n")
+        let checking = try slice(card, from: "case .checking:\n", to: "case .asking:")
+        let row = try XCTUnwrap(checking.range(of: "if let landing { landingRow(landing) }"))
+        let line = try XCTUnwrap(checking.range(of: "if let line = PromotionCards.onPassLine(merge.current) {"))
+        XCTAssertLessThan(row.lowerBound, line.lowerBound, "the line sits under the merge job's row")
+        XCTAssertTrue(checking.contains("Text(line).font(.orbitMeta).foregroundStyle(.secondary)"))
+    }
+
     /// A blocked candidate's card names what is in front of it — the landing holding the branch,
     /// off the project's own read — instead of leaving "Coordinator is resolving it" as the whole
     /// answer (the owner's report of 2026-10-08).
@@ -558,6 +617,30 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("PromotionCards.holder(of: promotionID, in: source.promotionOpenItems)"))
         XCTAssertTrue(sheet.contains("if let resolving = PromotionCards.resolvingLine(holder) {"),
                       "the review's press says nobody's name either")
+    }
+
+    /// The merge's press and its receipt say the branch the candidate merges into — its own
+    /// `upstreamRef`, by name — on this page's card, in the review and on the receipt, rather than a
+    /// fixed "main" (web's `mergeTo(mainBranchName(promotion.upstreamRef))`, `Now on …`).
+    func testTheMergeSaysTheBranchItMergesInto() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let asking = try slice(page, from: "@ViewBuilder private func asking(_ view: ProjectPromotionView) -> some View {",
+                               to: "\n    }\n")
+        XCTAssertTrue(asking.contains("Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))"))
+
+        let cards = code(try appSource("Views/ApprovalCards.swift"))
+        let review = try slice(cards, from: "struct PromotionReviewSheet: View {", to: "\n}\n")
+        for part in ["Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))",
+                     "CardRow(label: RunSettings.mainBranchName(view.upstreamRef),",
+                     "PromotionTasksRow(label: PromotionCards.nowOnLabel(view),"] {
+            XCTAssertTrue(review.contains(part), "the review keeps `\(part)`")
+        }
+        let receipt = try slice(cards, from: "struct PromotionReceiptSheet: View {", to: "\n}\n")
+        XCTAssertTrue(receipt.contains("PromotionTasksRow(label: PromotionCards.nowOnLabel(promotion),"))
+        for said in [page, review, receipt] {
+            XCTAssertFalse(said.contains("\"Now on main\""), "the receipt names the branch it merged into")
+            XCTAssertFalse(said.contains("Text(PromotionCards.mergeToMain)"), "the press names the branch it merges into")
+        }
     }
 
     /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up
@@ -614,7 +697,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         for reads in ["await app.loadProjectSessions(address)\n                    await Self.poll { await app.pollProjectSessions(address) }",
                       "await app.loadProjectIntegration(address)\n                    await Self.poll { await app.loadProjectIntegration(address) }",
                       "await app.loadProjectMerge(address)\n                    await Self.poll { await app.loadProjectMerge(address) }",
-                      "await app.projects?.load()\n                    await app.loadProjectStart(address)\n                    await Self.poll { await app.loadProjectStart(address) }"] {
+                      "await app.projects?.load()\n                    await app.loadProjectStart(address)\n                    await app.loadProjectDone(address)\n                    await Self.poll {\n                        await app.loadProjectStart(address)\n                        await app.loadProjectDone(address)\n                    }"] {
             XCTAssertTrue(task.contains(reads), "a read of its own: `\(reads)`")
         }
         let poll = try slice(page, from: "private static func poll(_ read: () async -> Void) async {", to: "\n    }")
@@ -625,7 +708,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "group.addTask { @MainActor in await app.loadProjectSessions(address) }",
                      "group.addTask { @MainActor in await app.loadProjectIntegration(address) }",
                      "group.addTask { @MainActor in await app.loadProjectMerge(address, force: true) }",
-                     "group.addTask { @MainActor in await app.loadProjectStart(address) }"] {
+                     "group.addTask { @MainActor in await app.loadProjectStart(address) }",
+                     "group.addTask { @MainActor in await app.loadProjectDone(address) }"] {
             XCTAssertTrue(refresh.contains(part), "pull to refresh keeps `\(part)`")
         }
 
@@ -663,7 +747,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let source = code(raw)
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
-        let order = try ["progressLine", "startLine", "landingLine"].map {
+        let order = try ["progressLine", "startLine"].map {
             try XCTUnwrap(card.range(of: $0)?.lowerBound)
         }
         XCTAssertEqual(order, order.sorted(), "the start sits under the progress line, inside the card")
@@ -680,7 +764,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
                             to: "private func openStart(")
         let asked = try slice(row, from: "case .asked(let item):", to: "case .own:")
         for part in ["Circle().fill(Color.orange)", "Text(StartProject.readyToStart)",
-                     "SessionProjectCopy.startAsked(ago)", "SessionProjectCopy.startSuggestion(settings)",
+                     "SessionProjectCopy.startAsked(ago)",
+                     // Directly into the main branch the start card opens with, off the integration read
+                     // the landing line under it holds — web's `startMainBranch(settings.upstreamRef, standing)`.
+                     "SessionProjectCopy.startSuggestion(settings, main: StartProject.mainBranch(",
+                     "suggested: settings.upstreamRef, standing: app.projectSessionsIntegration)",
                      "SessionProjectCopy.startReview", ".buttonStyle(.borderedProminent)", "openStart(.asked)"] {
             XCTAssertTrue(asked.contains(part), "the coordinator's request keeps `\(part)`")
         }
@@ -721,6 +809,41 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(sessions.contains("projectSessionsOpenItems = nil"), "another project's request never shows here")
     }
 
+    /// The page's own ending (docs/mocks/project-done-sessions-page, owner decision 2026-10-10): a
+    /// project that is done draws the settled card the conversation draws, in the progress card's
+    /// place — from the project document read the page keeps for that state and nothing else.
+    func testAProjectThatIsDoneDrawsItsEndingInTheProgressCardsPlace() throws {
+        let raw = try appSource("Views/SessionProjectPage.swift")
+        let source = code(raw)
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let card = try slice(page, from: "@ViewBuilder private var firstCard: some View {", to: "\n    }")
+        XCTAssertTrue(card.contains("if let subject = doneSubject, ProjectPage.drawsEnding(subject) {"),
+                      "the shared rule — DONE, and a projection to tally — decides the card")
+        XCTAssertTrue(card.contains("ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)"),
+                      "the settled card the conversation draws, asked nothing and waiting on nobody")
+        XCTAssertTrue(card.contains("} else {\n            progressCard\n            landingCard\n        }"),
+                      "and the progress card, with the landing card under it, wherever the ending does not stand")
+        let subject = try slice(page, from: "private var doneSubject: ProjectDoneSubject? {", to: "\n    }")
+        XCTAssertTrue(subject.contains("app.projectSessionsAddress == address ? app.projectSessionsDone : nil"),
+                      "never what the model still holds for another address")
+
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectDone(_ address: SessionProjectAddress) async {",
+                             to: "\n    }")
+        XCTAssertTrue(load.contains("guard row?.status != .open else {"),
+                      "the sidebar's rows are the Open projects: only a project that may be done is read")
+        XCTAssertTrue(load.contains("api.projectCriteria(projectID: address.projectID)"))
+        XCTAssertTrue(load.contains("projectSessionsAddress == address, !Task.isCancelled"))
+        XCTAssertTrue(load.contains("projectSessionsDone = document.doneSubject"))
+        XCTAssertFalse(load.contains("async let"))
+        let sessions = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {",
+                                 to: "\n    }")
+        XCTAssertTrue(sessions.contains("projectSessionsDone = nil"), "another project's ending never shows here")
+        let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
+        XCTAssertEqual(task.components(separatedBy: "await app.loadProjectDone(address)").count - 1, 2,
+                       "the ending is read on arrival and on every poll")
+    }
+
     func testTheProjectUILayerIsCompiledForIOSOnly() throws {
         let page = try appSource("Views/SessionProjectPage.swift")
         for part in ["struct SessionProjectRowView: View", "struct SessionProjectPage: View",
@@ -733,6 +856,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "func loadProjectSessions(_ address: SessionProjectAddress)",
                      "func pollProjectSessions(_ address: SessionProjectAddress)",
                      "func loadProjectIntegration(_ address: SessionProjectAddress)",
+                     "func loadProjectDone(_ address: SessionProjectAddress)",
                      "var projectSessionsColumn: SessionProjectAddress?"] {
             XCTAssertEqual(try branches(of: part, in: app), ["os(iOS)"])
         }

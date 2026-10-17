@@ -81,11 +81,13 @@ reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfa
   Success/completed, absent subtype, authoritative status and already explained outcomes do not
   add that notice. A page starting mid-turn does not infer that an off-page reply was missing.
 - Authenticated attachment and same-session legacy artifact images use the existing API. Other
-  HTTPS images use a separate client with no auth or redirects. Images are sampled to at most
-  1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows zoom/pan.
-  File links use Android's document destination chooser. Images/downloads are bounded to the
-  server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These bounds
-  do not alter default REST/auth requests.
+  HTTP and HTTPS images, from any host as on iOS (the account owner's decision of 2026-10-15,
+  card 34g6JcZwpKTUcwc5WvuVx), use a separate client with no auth. Unlike iOS, that client
+  follows no redirects, and an address carrying credentials is refused. Images are sampled to at
+  most 1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows
+  zoom/pan. File links use Android's document destination chooser. Images/downloads are bounded
+  to the server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These
+  bounds do not alter default REST/auth requests.
 
 Compatibility observation for A01: web also accepts old `payload.images`; the referenced iOS
 reducer uses `attachments` and does not establish that legacy format as a confirmed iOS requirement.
@@ -216,3 +218,31 @@ its logs with `rg`, so ripgrep has to be on `PATH`.
 `WorktreeRealStackDeviceTest` commits and merges a real worktree on the A11 isolated stack (its runner and the
 stand-in engine that writes `A11_STACK_NOTES.md`), through `tasks-projects-stack-device-test.sh` with
 `A11_TEST=io.orbitd.android.reader.WorktreeRealStackDeviceTest` and the args file from `tasks-projects-stack-args.py`.
+
+## A06d: increments since 4f695a286
+
+A01c's list (part 2/7: A06-11, 12, 13, 14, 15 and 17), ported from the iOS sources at 9530c051f.
+
+- **Thinking rows** (`ThinkingRows.kt`, `TranscriptRows.kt`, core `Transcript.kt`; A06-11, iOS d55e9900b and
+  471b2afbb): adjacent blocks fold into one settled row, folded until tapped, that says
+  `Thought for 1m 47s · 3 blocks · 21k chars` from the runner's stored `thinkingMs` (summed as blocks fold), or
+  `Thought · 84 chars` without it. A block closed empty keeps what this device streamed into it — its local copy
+  only, also across a reconnect's overlap — and with nothing streamed draws no row. Reasoning still being written is
+  open and held to 160 dp at its newest line. There is no device-clock fallback: streamed deltas carry no stamp and
+  a reconnect replays the prefix, so it could only guess.
+- **Fade into the composer band** (`SessionReader.kt` `fadesIntoComposerBand`; A06-12, iOS 9d3751ec2): the list's last
+  20 dp dissolve (offscreen + DstIn) and its tail row keeps that room (20 + 1 dp). Jump to latest stays a row under
+  the list, so it is never in the fade.
+- **The tail follows its rows** (`TailPinning.kt` `followsGeometry`; A06-13, iOS 900e1810d and 66c42e852): asked on
+  every layout of a pinned, still list, a tail pushed out of view by rows that grew is followed back within 80 dp
+  (in place within 0.25 dp); a scroll never is. The in-list card rail re-pins as it grows.
+- **One turn gate** (`WorktreeBarLogic.turnActive`; A06-14, iOS f759d743e): the worktree bar and merge recovery's
+  review hold Merge, Commit and the recovery steps while the turn is PENDING or RUNNING, or AWAITING_INPUT or
+  INTERRUPTED with the composer's message on its way or sub-agents still running.
+- **Answered questions** (core `QuestionRecords.kt`, `QuestionRecordViews.kt`; A06-15, iOS 94f61b52c and 010e59792):
+  folded, the card is the record — each question's opening and its answer, or the reply given in the conversation;
+  a tap replays every option with its whole description and the pick ticked. `QuestionRecordsParityTest` reads
+  `src/shared/src/question-record.fixture.json`.
+- **A running agent's live line** (`SubagentLiveLine.kt`; A06-17, iOS ea175e5af): a folded, running Agent, Task or
+  Workflow card says its sub-agent's last step in place of its progress line. `ToolLine` approximates OrbitKit's
+  `ToolDisplay` (label and file, else label and summary).

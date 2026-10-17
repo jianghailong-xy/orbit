@@ -1,0 +1,28 @@
+{
+ "trace": "choices-first-option.brows-8d4a0-\u2026-chromium-dark-phone/trace.zip (retained on failure; not committed)",
+ "failedModuleRequests": [
+  {
+   "method": "GET",
+   "url": "http://127.0.0.1:4177/node_modules/.vite/deps/react.js?v=8c640da8",
+   "status": -1
+  },
+  {
+   "method": "GET",
+   "url": "http://127.0.0.1:4177/node_modules/.vite/deps/react-dom_client.js?v=8c640da8",
+   "status": -1
+  },
+  {
+   "method": "GET",
+   "url": "http://127.0.0.1:4177/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+   "status": -1
+  },
+  {
+   "method": "GET",
+   "url": "http://127.0.0.1:4177/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=8c640da8",
+   "status": -1
+  }
+ ],
+ "consoleErrors": [
+  "Failed to load resource: net::ERR_NETWORK_CHANGED"
+ ]
+}

@@ -214,9 +214,9 @@ export const STATUS_LABEL: Record<Project['status'], string> = {
   CANCELLED: 'Cancelled',
 };
 
-/** The tag colours above (and the work and landing tags below), as a status label's tone. The names
- *  stay the replaced tag's, which a public project page still draws them with; `processing` is the
- *  blue the tone calls `info`. */
+/** The tag colours above (and the work and landing tags below), as a status label's tone, here and on
+ *  a public project page. The names stay the replaced tag's; `processing` is the blue the tone calls
+ *  `info`. */
 const TAG_TONE: Readonly<Record<string, NonNullable<BadgeProps['tone']>>> = {
   default: 'default',
   processing: 'info',
@@ -230,7 +230,7 @@ const TAG_TONE: Readonly<Record<string, NonNullable<BadgeProps['tone']>>> = {
   gold: 'gold',
   purple: 'purple',
 };
-const tagTone = (color: string) => TAG_TONE[color] ?? 'default';
+export const tagTone = (color: string) => TAG_TONE[color] ?? 'default';
 
 // Row text, not the full field — a task's acceptance criteria runs far past what a list row should
 // show. Read only by the detail page's task rows now: the projects list truncates its goal with

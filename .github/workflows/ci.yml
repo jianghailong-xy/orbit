@@ -127,12 +127,60 @@ jobs:
   # Its own runner for about six and a half minutes, in parallel with the JavaScript job rather than
   # after it: 113 specs, 822 assertions, `skipped 0` (run 34215251448, 6m28s). The JavaScript job
   # got shorter rather than longer — 3m03s before this change, 2m30s after, because `Test API
-  # server` no longer loads 113 files in order to skip them (73s -> 48s).
-  postgres:
-    name: PostgreSQL specs
+  # server` no longer loads 113 files in order to skip them (73s -> 48s). The figures in this
+  # paragraph are the landing's own, on the roster of the day; the roster has since grown to 387
+  # specs, which is why the job is three of them now — see "WHY IT IS THREE JOBS" below.
+  #
+  # WHY IT IS THREE JOBS AND NOT ONE (2026-10-09)
+  # =============================================
+  # The roster takes 41 minutes of spec time on a 4-core runner — 387 specs, median 2s,
+  # `watch-core-qa-forge` alone 280s — on top of ~1.5 minutes of checkout, `npm ci`,
+  # `prisma generate` and provisioning. The one run that finished inside the 45-minute limit
+  # (37895053362, main 19c760ae4) took 42:19; three others were cancelled at 45:18 with the sweep
+  # still running (37875563377, 37886333492, 37925405725). A red makes it worse rather than better:
+  # a spec whose outcome is not clean is run a SECOND time on its own clone before it is reported,
+  # so the 15-spec red list of 2026-10-09 (run 37934858352) put the sweep past the limit with specs
+  # still unrun. A timeout is not a verdict: the roster it stopped in the middle of is not the one
+  # the next push is judged against, and the reds it did not reach are the ones that stay hidden.
+  #
+  # So the roster is split three ways, each third on its own runner with its own PostgreSQL.
+  # `PCC_PG_SHARD=<i>/3` (scripts/project-pg-matrix.sh) takes a share by the roster's own index
+  # modulo the count, over the same `ls build/**/*.pg.spec.js | sort` the whole run uses: the shards
+  # partition the roster by construction, and a spec added tomorrow lands in exactly one of them
+  # with no list to keep honest here. The first run of it (`probe/pg-specs-shards`, run 37942654032,
+  # 393 specs) gave each shard 131 specs — 4894 tests between them, 0 failed, 0 skipped, none re-run
+  # — in 21:34 / 14:30 / 13:37 of spec time, and 23:15 / 15:52 / 15:12 of wall clock, the difference
+  # being the ~1.6 minutes of checkout, `npm ci`, `prisma generate`, provisioning and `tsc` that each
+  # pays for itself. That spread, and not a prediction, is what a reader should expect: the partition
+  # is by index, so the six specs main gained between the 387-spec roster the split was measured on
+  # and this run moved some names between shards. The bound is what makes it safe, and it is
+  # measured too: the 131 SLOWEST specs of that 387-spec roster total 34.5 minutes of spec time, so
+  # no partition of this roster by index can put 45 minutes of work on one shard — and a red costs
+  # only the second run of the spec that went red.
+  #
+  # THE COST, AND WHY IT IS THE RIGHT ONE. Three runners for ~17 minutes instead of one runner that
+  # never finished: runner minutes go UP (about 51 against 45) and the signal goes from "cancelled"
+  # to a verdict on the branch, with each shard's keep-the-output artifact naming what it ran.
+  # `fail-fast: false` is deliberate: one shard's red must not cancel the other two, whose reds are
+  # what the next push is fixed against.
+  #
+  # AND WHY A JOB CALLED `PostgreSQL specs` IS STILL HERE. A matrix job's check run is named after
+  # its matrix values ("PostgreSQL specs 1/3"), and `main`'s branch protection requires a check
+  # named exactly `PostgreSQL specs`: the split alone would leave that context unreported and block
+  # every merge. The aggregated job below is that check — it runs no specs, needs all three shards,
+  # and fails when any of them did not pass. Changing branch protection instead was the other
+  # option, and that is the account owner's to make, not this file's.
+  postgres-shards:
+    name: PostgreSQL specs ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
     # Above a passing run rather than at it: a budget is not a second chance.
     timeout-minutes: 45
+    strategy:
+      # Every shard runs to its own end even when a sibling fails: the other two shards' reds are
+      # what the next push is fixed against, and cancelling them would hide exactly that.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       # No `fetch-depth: 0` here, unlike the JavaScript job: the two removal censuses that read this
       # repository's history are plain specs, and the only pg specs that run `git` at all build
@@ -150,7 +198,7 @@ jobs:
       # the generation it skips has to happen here or `tsc` compiles against nothing.
       - name: Generate Prisma Client
         run: npm run prisma:generate
-      - name: Run every pg spec against a real PostgreSQL
+      - name: Run this shard of the pg specs against a real PostgreSQL
         env:
           # The matrix prints one summary line per spec, and under any line that is not clean the
           # tail of that child's own TAP output (`pg_matrix_failure_tail`) — which is where the
@@ -158,14 +206,41 @@ jobs:
           # put it is each child's WHOLE output: every case that passed, and the first run of any
           # spec a second run then cleared.
           PCC_PG_LOG_DIR: ${{ runner.temp }}/pg-spec-logs
+          # This job's third of the roster, by index modulo the count (see above). Every index from
+          # 1 to 3 runs, so the shards cover the roster entirely, and a shard that somehow covers
+          # nothing exits non-zero rather than printing the zeroes of a clean run.
+          PCC_PG_SHARD: ${{ matrix.shard }}/3
         run: mkdir -p "$PCC_PG_LOG_DIR" && bash scripts/project-pg-matrix.sh
       - name: Keep the failing specs' output
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: pg-spec-logs
+          # Per shard, because three jobs uploading one artifact name is a collision rather than a
+          # report. A red names its shard in the check list, and that is the artifact to read.
+          name: pg-spec-logs-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/pg-spec-logs
           if-no-files-found: warn
+
+  # The required check, and only that: `needs` on a matrix waits for every shard, and this job fails
+  # when any of them did. It carries no timeout of its own beyond the default — the work has its own
+  # 45 minutes on each shard.
+  postgres:
+    name: PostgreSQL specs
+    needs: postgres-shards
+    # Without this the job is SKIPPED when a shard fails, and a skipped required check reads as
+    # neither a pass nor a failure in front of every PR. `needs.<job>.result` is 'success' only when
+    # every shard passed, so the press below is the whole verdict. `!cancelled()` rather than
+    # `always()`: a run somebody cancelled is not this job's to turn red, and that is how the check
+    # behaved before the split.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        run: |
+          [ '${{ needs.postgres-shards.result }}' = 'success' ] || {
+            echo "the pg specs did not pass: needs.postgres-shards.result = ${{ needs.postgres-shards.result }}"
+            exit 1
+          }
 
   go-runner:
     name: Go runner

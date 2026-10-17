@@ -154,8 +154,9 @@ public enum RunnerPageFormat {
     // MARK: Engines
 
     /// The engines a runner reports on, in the order its page lists them — runnerEngines.ts
-    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported. A runner
-    /// predating Antigravity keeps its row too, so the page can explain that it needs an update.
+    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported, but not one
+    /// these apps don't draw yet (`ProviderEngines.appleShowsEngine`). A runner predating Antigravity
+    /// keeps its row too, so the page can explain that it needs an update.
     public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"]
 
     public static func engines(_ runner: Runner) -> [RunnerEngineHealth] {
@@ -165,15 +166,14 @@ public enum RunnerPageFormat {
                                                version: runner.antigravity?.version))
         }
         let known = engineOrder.compactMap { engine in reported.first { $0.engine == engine } }
-        return known + reported.filter { !engineOrder.contains($0.engine) }
+        return known + reported.filter { !engineOrder.contains($0.engine) && ProviderEngines.appleShowsEngine($0.engine) }
     }
 
-    /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`,
-    /// `Antigravity`.
+    /// The CLI's own product name, as every list of engines says it (shared `ENGINE_CLI_NAMES`, web's
+    /// `ENGINE_CLI_NAME`): `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`, `Antigravity CLI`, `DeepSeek
+    /// Harness` — on a machine's page as in the pickers.
     public static func engineName(_ engine: String) -> String {
-        if let login = LoginEngine(rawValue: engine) { return login.displayName }
-        if engine == "dsh" { return "DeepSeek Harness" }
-        return engine == "opencode" ? "OpenCode" : engine
+        ProviderEngines.cliName(engine)
     }
 
     /// OpenCode's sign-in belongs to whichever provider it runs.

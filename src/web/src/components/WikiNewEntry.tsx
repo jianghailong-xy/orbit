@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Button, Input, Modal, Select } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { KIND_SPECS, WIKI_LIMITS, type WikiFieldSchema, type WikiKind } from '@orbit/shared';
 import { WIKI_KIND_LABELS, WIKI_NEW_ENTRY, wikiKindWord } from '../lib/wiki';
 import { useToast } from '../lib/toast';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { proposeToWiki, useWikiWrite, wikiIdempotencyKey } from '../lib/wikiWrites';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Input } from './ui/Input';
+import { Select } from './ui/Select';
+import { Textarea } from './ui/Textarea';
 
 /**
  * The owner writing an entry of their own, from the home page's header.
@@ -28,7 +32,7 @@ export function WikiNewEntryButton({ spaceId }: { spaceId: string }) {
   const phone = useMediaQuery(PHONE_QUERY);
   return (
     <>
-      <Button type="primary" icon={<PlusOutlined />} aria-label={WIKI_NEW_ENTRY} onClick={() => setOpen(true)}>
+      <Button variant="primary" icon={<PlusOutlined />} aria-label={WIKI_NEW_ENTRY} onClick={() => setOpen(true)}>
         {phone ? null : WIKI_NEW_ENTRY}
       </Button>
       {open && <NewEntryModal spaceId={spaceId} onClose={() => setOpen(false)} />}
@@ -63,23 +67,32 @@ function NewEntryModal({ spaceId, onClose }: { spaceId: string; onClose: () => v
   };
 
   return (
-    <Modal
+    <Dialog
       open
       title={WIKI_NEW_ENTRY}
-      onCancel={onClose}
-      onOk={submit}
-      okText="Record"
-      okButtonProps={{ disabled: !title.trim() || !summary.trim() }}
-      confirmLoading={write.isPending}
-      destroyOnHidden
+      onClose={onClose}
       width={560}
+      className="wk-new-entry-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!title.trim() || !summary.trim()}
+            loading={write.isPending}
+            onClick={() => void submit()}
+          >
+            Record
+          </Button>
+        </>
+      }
     >
       <div className="wk-form">
         <label className="k">Kind</label>
         <Select
           value={kind}
-          onChange={(next) => {
-            setKind(next);
+          onValueChange={(next) => {
+            setKind(next as WikiKind);
             setFields({});
           }}
           options={WIKI_AUTHORED_KINDS.map((k) => ({ value: k, label: WIKI_KIND_LABELS[k] }))}
@@ -91,7 +104,7 @@ function NewEntryModal({ spaceId, onClose }: { spaceId: string; onClose: () => v
           onChange={(event) => setTitle(event.target.value)}
         />
         <label className="k">One line</label>
-        <Input.TextArea rows={2} value={summary} onChange={(event) => setSummary(event.target.value)} />
+        <Textarea rows={2} value={summary} onChange={(event) => setSummary(event.target.value)} />
         {Object.entries(spec.fields).map(([name, schema]) => (
           <SchemaInput
             key={name}
@@ -106,7 +119,7 @@ function NewEntryModal({ spaceId, onClose }: { spaceId: string; onClose: () => v
           a recipe is recorded where it was hit, by the session that hit it.
         </p>
       </div>
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -132,7 +145,7 @@ function SchemaInput({
           {label}
           {required}
         </label>
-        <Input.TextArea
+        <Textarea
           rows={3}
           value={lines}
           placeholder="One per line"
@@ -155,7 +168,7 @@ function SchemaInput({
           {label}
           {required}
         </label>
-        <Input.TextArea
+        <Textarea
           rows={2}
           value={typeof value === 'string' ? value : ''}
           onChange={(event) => onChange(event.target.value)}

@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- Design board Web 1 (T0, Cursor engine): Cursor CLI in a new session's engine list. Every frame is a
+     screenshot of the real web app: "现在" is this branch's src/web + src/shared on vite (main e00629fd4),
+     "改后" the same page with the board prototype (prototype.patch) — fed by src/web/ui-migration's
+     fixtures plus the sample fleet in capture/. Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web 1 · New session: Cursor CLI in the engine list</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:1500px">
+  <h1 class="m-h1 zh">Web 1 · 新会话：engine 列表里加 Cursor CLI</h1>
+  <p class="m-sub zh">新会话中间的 engine 列表（<code>NewSessionProviderHero</code>）按 <code>ALL_ENGINES</code> 一行一个 engine。Cursor CLI 排第 7，右边写它落到的凭据的默认模型 <b>Auto</b>（Cursor 的 <code>default[]</code>）。跑不了时和 Kimi Code、DeepSeek Harness 一样：整行变灰，右边蓝字写原因，点进 Infrastructure 里这台机器的 Cursor 行。全部是真实页面截图：「现在」是本分支 main 上的 web，「改后」是同一页面加上板上的原型（<code>prototype.patch</code>，只为出图）。示例：工作区 orbit 在 hpc 上，hpc 登录了两个 Cursor 账号（Default、Team），另有一把 Cursor key。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 点开 engine 名字</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② Cursor CLI 跑不了的四种情况（只截这一行）</div>
+    <div class="states" id="s2"></div>
+    <p class="m-cap zh">原因的优先级：runner 太旧（Update runner）> 版本不是固定版本（Unsupported version）> 没装（Not installed）> 没登录（Not signed in）。账号里有一把能用的 Cursor key 时不会出现 Not signed in：key 本身就是凭据，会话落到 key 上。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh">${cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('现在', '六个 engine', shot('w1-engines-now', { width: 452 })) +
+  frame('改后', 'Cursor CLI 第 7 行', shot('w1-engines-new', { width: 452, marks: [{ box: 'cursor', n: 1, pad: 3 }] }));
+const st = (label, scene) => `<div><div class="st-l zh">${label}</div>${shot(scene, { width: 324 })}</div>`;
+document.getElementById('s2').innerHTML =
+  st('没装：链到这台机器 Cursor 行的 Install', 'w1-row-not-installed') +
+  st('没登录（也没有 Cursor key）：链到 Sign in', 'w1-row-signed-out') +
+  st('runner 早于 Cursor（没声明 provider:cursor）', 'w1-row-update-runner') +
+  st('装的不是固定版本 2026.10.14-941492e', 'w1-row-version');
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>Cursor CLI 第 7 行</b>，名字取 <code>ENGINE_CLI_NAMES</code>（显示名待定，板上按候选「Cursor CLI」画），图标是 Cursor 的立方体标（待定，见总览板）。右边是落到的凭据的默认模型 Auto；选中后的凭据和账号在 composer 的 Provider 菜单里换（见 Web 5、Web 6）。'],
+  [2, '<b>跑不了时</b>同 DeepSeek Harness 的写法：<code>Update runner</code>、<code>Unsupported version</code> 沿用 <code>DSH_STATE_LABEL</code> 的措辞；<code>Not installed</code>、<code>Not signed in</code> 沿用登录 engine 的措辞。点击进 <code>/infrastructure?runner=…&amp;engine=cursor</code>。'],
+  ['·', '<b>不变的：</b>列表结构、顺序（<code>ALL_ENGINES</code> 末尾加一项）、「Connect a provider…」、选中后记为工作区默认、hero 下的「Send a task to get started.」。'],
+]);
+finish();
+</script>
+</body>
+</html>

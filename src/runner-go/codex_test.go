@@ -152,6 +152,8 @@ func TestCodexAppServerThreadParamsForwardSystemInstructions(t *testing.T) {
 }
 
 func TestCodexAppServerAutoUsesWorkspaceSandboxAndReviewer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("ORBIT_HOME", home)
 	job := &ClaimedSession{
 		Agent: AgentExecConfig{PermissionMode: "auto"},
 		WT:    &Worktree{RepoDir: "/repo-root"},
@@ -175,8 +177,9 @@ func TestCodexAppServerAutoUsesWorkspaceSandboxAndReviewer(t *testing.T) {
 		t.Fatalf("sandboxPolicy = %#v, want workspaceWrite with network disabled", turn["sandboxPolicy"])
 	}
 	roots, ok := sandbox["writableRoots"].([]string)
-	if !ok || len(roots) != 3 || roots[0] != "/repo" || roots[1] != "/tmp/uploads" || roots[2] != "/repo-root/.git" {
-		t.Fatalf("sandbox writableRoots = %#v", sandbox["writableRoots"])
+	cacheRoot := filepath.Join(home, "caches")
+	if !ok || len(roots) != 4 || roots[0] != "/repo" || roots[1] != "/tmp/uploads" || roots[2] != "/repo-root/.git" || roots[3] != cacheRoot {
+		t.Fatalf("sandbox writableRoots = %#v, want the workspace, the uploads, the shared .git and the runner cache root %q", sandbox["writableRoots"], cacheRoot)
 	}
 }
 

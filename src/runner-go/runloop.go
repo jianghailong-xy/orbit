@@ -201,6 +201,9 @@ var catalogRuntimes = []catalogRuntime{
 	// agy lists the models built into its binary: the same on every machine and for every key.
 	{providerAntigravity, antigravityCLIAvailable, fetchAntigravityModelCatalog},
 	{providerDsh, dshCLIAvailable, fetchDshModelCatalog},
+	// ACP's own list, with each model's parameters, read with the Default account's sign-in: it can
+	// differ by account, and there is none while that account is signed out (cursor_models.go).
+	{providerCursor, cursorCLIAvailable, fetchCursorModelCatalog},
 }
 
 // models is where c keeps engine's list.
@@ -218,6 +221,8 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 		return &c.Antigravity
 	case providerDsh:
 		return &c.Dsh
+	case providerCursor:
+		return &c.Cursor
 	}
 	return nil
 }
@@ -266,7 +271,7 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 // carrying over must not keep. A first round that read nothing reports nothing, as before.
 func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *ModelCatalog {
 	if prev == nil && len(next.Codex) == 0 && len(next.Claude) == 0 && len(next.Kimi) == 0 &&
-		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 {
+		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 && len(next.Cursor) == 0 {
 		return nil
 	}
 	merged := carryOverModelCatalog(prev, next)
@@ -304,6 +309,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	}
 	if len(next.Dsh) == 0 {
 		next.Dsh = prev.Dsh
+	}
+	if len(next.Cursor) == 0 {
+		next.Cursor = prev.Cursor
 	}
 	return next
 }
@@ -1160,6 +1168,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
 
+	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
+	// and could not deliver is offered to the control plane first, so a job this machine is holding a
+	// finished answer for is settled rather than claimed and run again (integration_result_spool.go).
+	replaySpooledIntegrationResults(loopCtx, t)
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
@@ -1373,7 +1386,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(integratingNow, job.JobID)
 						mergeMu.Unlock()
 					}()
-					runIntegrationJobAndReport(t, job)
+					runIntegrationJobAndReport(loopCtx, t, job)
 				}(job)
 			}
 			// The wiki's repository operations (contracts/wiki.contract.json `repoOps`, design §7):
@@ -1402,7 +1415,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(repoOpsNow, op.ID)
 						mergeMu.Unlock()
 					}()
-					runWikiRepoOpAndReport(t, op)
+					runWikiRepoOpAndReport(loopCtx, t, op)
 				}(op)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on
@@ -1711,6 +1724,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}(ch.WorkDir)
 			}
+			// Check the Cursor API keys somebody is waiting on (cursor_key_check.go), off this goroutine for
+			// the reason the history scan is.
+			startCursorKeyChecks(resp.CursorKeyChecks, &heartbeatOps, t.cursorKeyCheckResult)
 		})
 	}()
 

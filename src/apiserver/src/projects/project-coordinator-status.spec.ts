@@ -67,6 +67,8 @@ type Fixture = {
   carried?: { at: Date; returnedAt: Date | null; deliveredAt: Date | null } | null;
   /** What `assessSpend` reads, for the row that says what today cost (§6.1). */
   spend?: { selfStartedTurns: number; limit: number | null };
+  /** OPEN owner items on this project, as `readOwnerItemSignals` selects them (§7.6 V13). */
+  ownerItems?: Array<{ kind: string; assignee: string; assigneeReason: string }>;
 };
 
 function serviceWith(fixture: Fixture = {}) {
@@ -81,6 +83,8 @@ function serviceWith(fixture: Fixture = {}) {
           ? (fixture.project ?? projectRow())
           : null;
       },
+      // The proposal and record-as-done reads of the owner decisions: none here.
+      findMany: async () => [],
     },
     approval: {
       count: async ({ where }: any) => {
@@ -89,7 +93,25 @@ function serviceWith(fixture: Fixture = {}) {
         return fixture.pendingApprovals ?? 0;
       },
     },
+    // The owner decisions the session list adds to the same row (`countOwnerDecisionsBySession`):
+    // every read answers empty except the owner items, which `ownerItems` fills.
+    projectOpenItem: {
+      findMany: async () => {
+        queries.push('projectOpenItem.findMany');
+        return (fixture.ownerItems ?? []).map((item, n) => ({
+          id: `00000000-0000-7000-8000-0000000000e${n}`,
+          title: 'Coordinator asks: Take the slower fix?',
+          waitingSince: new Date('2026-08-26T09:30:00.000Z'),
+          projectId: PROJECT_ID,
+          project: { coordinatorSessionId: SESSION_ID, codebases: [] },
+          ...item,
+        }));
+      },
+    },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
+    session: { findMany: async () => [] },
     task: {
+      findMany: async () => [],
       groupBy: async () => {
         queries.push('task.groupBy');
         return fixture.borrowed ? [{ assigneeId: fixture.borrowed.id, _count: { _all: 4 } }] : [];
@@ -115,6 +137,8 @@ function serviceWith(fixture: Fixture = {}) {
         queries.push('wakeups');
         return fixture.carried ? [fixture.carried] : [];
       }
+      // `openItemsNoLongerOwed`: every item the fixture holds is still owed.
+      if (text.includes('FROM "project_open_item" item')) return [];
       throw new Error(`unexpected raw query: ${text}`);
     },
   };
@@ -566,6 +590,48 @@ test('the count is taken for a live reader: the turn, or the job a card names', 
   assert.deepEqual(jobbed.approvalWheres, [
     { sessionId: SESSION_ID, status: 'PENDING', backgroundJobId: { in: ['bgj_still_polling'] } },
   ]);
+});
+
+test('a parked conversation still counts what it asked the owner — the session list\'s count', async () => {
+  // The coordinator asked with `ask_owner` and its turn ended: no card is being read, so the
+  // approval half is 0, but the question waits on the owner in this conversation. The session list
+  // counts it on the same row, and the card's "Needs you" is read off this count alone (a turn that
+  // merely ended reads Idle), so leaving it out would draw the question as nothing waiting.
+  const live = {
+    coordinatorSessionId: SESSION_ID,
+    coordinatorWorkspaceId: WORKSPACE_ID,
+    coordinatorSession: sessionRow(),
+    coordinatorWorkspace: workspaceRow(),
+    members: COORDINATOR_MEMBER,
+  };
+  const asked = serviceWith({
+    project: projectRow(live),
+    ownerItems: [{ kind: 'COORDINATOR_QUESTION', assignee: 'OWNER', assigneeReason: 'DEFAULT' }],
+  });
+  const askedStatus = await asked.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.equal(askedStatus.coordination.session?.pendingApprovals, 1);
+  assert.equal(asked.queries.includes('projectOpenItem.findMany'), true);
+
+  // The coordinator's own work is not the owner's: an item assigned to it counts for nothing here.
+  const handling = serviceWith({
+    project: projectRow(live),
+    ownerItems: [{ kind: 'INTEGRATION_CONFLICT', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' }],
+  });
+  assert.equal(
+    (await handling.service.coordinatorStatus(OWNER_ID, PROJECT_ID)).coordination.session?.pendingApprovals,
+    0,
+  );
+
+  // Both halves add up: a card a running turn is asking, beside the question.
+  const both = serviceWith({
+    pendingApprovals: 2,
+    project: projectRow({ ...live, coordinatorSession: sessionRow({ status: RunStatus.RUNNING }) }),
+    ownerItems: [{ kind: 'COORDINATOR_QUESTION', assignee: 'OWNER', assigneeReason: 'DEFAULT' }],
+  });
+  assert.equal(
+    (await both.service.coordinatorStatus(OWNER_ID, PROJECT_ID)).coordination.session?.pendingApprovals,
+    3,
+  );
 });
 
 // ── Wire-shape rules the interceptors impose on this payload ──

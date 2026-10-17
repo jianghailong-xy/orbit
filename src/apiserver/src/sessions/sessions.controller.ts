@@ -532,6 +532,15 @@ export class SessionsController {
     return this.sessions.requestDiffRefresh(user.userId, id);
   }
 
+  /** Rewrite this session's recap now, ignoring the settle hooks' two-minute window. Answers with
+   *  the pass's outcome: the new text and the event seq it covers, or the reason there is none
+   *  (no key configured, too little to recap). */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/recap')
+  refreshRecap(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.refreshRecap(user.userId, id);
+  }
+
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/turns')
   turn(
@@ -579,6 +588,18 @@ export class SessionsController {
     @Param('turnId', PublicIdPipe) turnId: string,
   ) {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
+  }
+
+  // Send a message queued for the next turn into the one running now (the tray's Steer). The same
+  // turnId as the DELETE beside it.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/steer')
+  steerTurn(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.steerQueuedTurn(user.userId, id, turnId);
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' }, body: { stopSessionId: 'session' } } })

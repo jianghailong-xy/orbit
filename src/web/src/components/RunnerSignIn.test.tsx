@@ -33,6 +33,8 @@ describe('the name each login engine signs in under', () => {
       codex: 'Codex',
       kimi: 'Kimi Code',
       antigravity: 'Antigravity',
+      // Named like every engine, though no page offers its sign-in yet (webShowsEngine).
+      cursor: 'Cursor CLI',
     });
   });
 
@@ -101,6 +103,19 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     expect(html).toContain('Enter this one-time code on the sign-in page:');
     expect(html.indexOf('ZXHO-K06HC')).toBeGreaterThan(-1);
     expect(html.indexOf('ZXHO-K06HC')).toBeLessThan(html.indexOf('Copy Code &amp; Open Sign-In Page'));
+  });
+
+  it('offers the authorization link for copying into another browser', () => {
+    const html = open(
+      loginState({
+        status: 'awaiting_code',
+        engine: 'codex',
+        url: 'https://auth.example.test/authorize?state=one-time',
+      }),
+    );
+
+    expect(html).toContain('href="https://auth.example.test/authorize?state=one-time"');
+    expect(html).toContain('Copy sign-in link');
   });
 });
 

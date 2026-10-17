@@ -86,7 +86,12 @@ export function OverlaySurface({
   const popup = useRef<HTMLDivElement>(null);
   const setPopup = useCallback((node: HTMLDivElement | null) => {
     popup.current = node;
-    if (!node || !open) return;
+    if (!node) return;
+    // When the focused control inside goes away (a card swapping its content), Base UI hands focus back
+    // to the popup with a plain focus(), which scrolls a dialog taller than the screen to its top. The
+    // popup takes focus without scrolling, as its first focus below does.
+    node.focus = (options?: FocusOptions) => HTMLElement.prototype.focus.call(node, { ...options, preventScroll: true });
+    if (!open) return;
     return registerFeedbackLayer(node, scope.level);
   }, [open, scope.level]);
   const Root = kind === 'confirm' ? AlertDialog.Root : BaseDialog.Root;

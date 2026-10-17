@@ -1,4 +1,5 @@
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { CURSOR_KEY_CHECK_STATES } from '@orbit/shared';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Min, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
@@ -8,11 +9,13 @@ import { IsPublicId } from '../common/public-id';
 // OPENAI_BASE_URL into codex `-c model_providers.*` overrides (wire_api="responses"), a kimi
 // provider's key into the CLI's KIMI_MODEL_* provider, and hands an antigravity provider's key and
 // endpoint to agy as GEMINI_API_KEY / GOOGLE_GEMINI_BASE_URL. `dsh` uses the dedicated Harness
-// API-key provider through ORBIT_DSH_API_KEY / ORBIT_DSH_BASE_URL and ACP model options.
-// This is the runtime a row *borrows*; `kimi` and `antigravity` remain reserved as provider SLUGS
-// (provider-slug.ts), so a configured row can run on their CLIs without claiming the built-in
+// API-key provider through ORBIT_DSH_API_KEY / ORBIT_DSH_BASE_URL and ACP model options. `cursor` is
+// a Cursor User API Key, which only Cursor CLI spends: the runner hands it over as CURSOR_API_KEY
+// (docs/cursor-runtime-contract.md §16.3), and nothing on this side ever calls an endpoint with it.
+// This is the runtime a row *borrows*; `kimi`, `antigravity` and `cursor` remain reserved as provider
+// SLUGS (provider-slug.ts), so a configured row can run on their CLIs without claiming the built-in
 // engine's identity.
-const RUNTIMES = ['claude', 'codex', 'kimi', 'antigravity', 'dsh'];
+const RUNTIMES = ['claude', 'codex', 'kimi', 'antigravity', 'dsh', 'cursor'];
 
 export class CreateModelProviderDto {
   /** Preferred dispatch identifier. Normally omitted: the server derives one from the preset or
@@ -34,6 +37,23 @@ export class CreateModelProviderDto {
    *  to start out maintaining it yourself. */
   @IsOptional() @IsBoolean() followsPreset?: boolean;
   @IsOptional() @IsBoolean() enabled?: boolean;
+}
+
+// A runner's answer about the Cursor key a session of its own runs on (POST
+// /runner/sessions/:id/cursor-key-check): what `agent models` said, and which key it asked with, by
+// fingerprint — never the key.
+export class CursorKeyCheckDto {
+  @IsIn([...CURSOR_KEY_CHECK_STATES]) state!: string;
+  @IsString() @Matches(/^[0-9a-f]{16}$/) keyFingerprint!: string;
+}
+
+// A runner's answer about a Cursor key it was handed on a heartbeat to check (POST
+// /runner/cursor-key-check-result): the check it answers, what `agent models` said, and the key it asked
+// with, by fingerprint — never the key.
+export class CursorKeyCheckResultDto {
+  @IsString() @Matches(/^[0-9a-f]{32}$/) checkId!: string;
+  @IsIn([...CURSOR_KEY_CHECK_STATES]) state!: string;
+  @IsString() @Matches(/^[0-9a-f]{16}$/) keyFingerprint!: string;
 }
 
 // Validate an endpoint + freshly-typed key before saving. Stateless: nothing is persisted.

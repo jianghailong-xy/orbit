@@ -2,8 +2,10 @@ import {
   WIKI_MAINTAIN_JOB,
   WIKI_PLAN_SECTION_KINDS,
   WIKI_SLUG_PATTERN,
+  type WikiPlanTopic,
   type WikiPlanVersion,
 } from '@orbit/shared';
+import { PAST_THE_READ, wikiDocCodePieces, wikiDocContract, wikiDocDocSection, type WikiDocRepo } from './wiki-docs-writer';
 import { cutRunes, goTrimSpace } from './wiki-import-extract';
 import {
   emptyWikiPlanHeader,
@@ -11,7 +13,6 @@ import {
   wikiPlanDocInput,
   wikiPlanLabel,
   wikiPlanRange,
-  wikiPlanUnwrap,
   type WikiPlanCat,
   type WikiPlanDoc,
   type WikiPlanDocRead,
@@ -19,19 +20,25 @@ import {
   type WikiPlanSection,
   type WikiPlanSectionDraft,
 } from './wiki-plan-format';
-import { wikiQuote } from './wiki-plan-gate';
+import { wikiQuote, wikiUnwrap } from './wiki-plan-gate';
+import { wikiPlanTopicsBrief } from './wiki-plan-materials';
 
 /**
  * The one change to the plan a maintenance run may propose (contracts/wiki.contract.json `plan.proposals`,
  * `maintenance.job.run.steps`, the docs step; design §8, P8): the knowledge the confirmed plan has no place
  * for — entries, and design documents new on origin/main that no section cites — put to the model, whose
- * answer is checked here against the space's snapshot and again by the server's gate. Ported from
+ * answer is checked here on origin/main and again by the server's gate. Ported from
  * `src/runner-go/wiki_maintain_docs.go` (proposePlanChange, wikiProposalPrompt, parseWikiProposal,
  * assembleWikiProposal, wikiProposalSection), which does the same on the runner until P10 removes it.
  *
- * What is not a port is where the repository is read: the runner held a document's headings, a file's
- * symbols and the contracts inventory to its checkout, and the server holds them to the space's snapshot of
- * origin/main (`WikiPlanRepo`, the same gate the plan job uses).
+ * The repository is read as the runner reads it: the files the answer names, at the snapshot's commit, through
+ * the reader the documents step writes from (`WikiDocRepo`; the job's is wiki-docs-build-job.ts
+ * `WikiDocsSnapshotRepo`), and a document's section, a file's symbols and a contract are found by the same ports
+ * of the runner's `wikiDocRepo` that step uses (`wikiDocDocSection`, `wikiDocCodePieces`, `wikiDocContract`).
+ * Not by the snapshot's index: its headings and symbols are the plan gate's reading (`WikiPlanRepo`), which takes a
+ * heading named as the prompt lists it, `##` and all, for none (2026-10-09, run 28ea4f5c: refused three rounds
+ * for two sections its document has). src/shared/src/wiki-maintain-proposal.fixture.json holds both paths to the
+ * same answers.
  *
  * Nothing here touches the database or the model: the job asks, and this reads.
  */
@@ -62,18 +69,6 @@ export interface WikiMaintainPlanRead {
   version: number;
   categories: WikiPlanCat[];
   docs: WikiPlanDocRead[];
-}
-
-/** The repository's readings the proposal is held to, as the space's snapshot answers them. */
-export interface WikiMaintainProposalRepo {
-  /** A document of origin/main with a heading that reads as `section`. */
-  hasDocSection(path: string, section: string): boolean;
-  /** Whether a path names anything at the commit (a file, a directory, a glob). */
-  hasPath(path: string): boolean;
-  /** A source file that declares the symbol. */
-  hasSymbol(path: string, symbol: string): boolean;
-  /** A contracts/ file of origin/main. */
-  hasContract(path: string): boolean;
 }
 
 /** One piece of knowledge the plan has no place for, as the model is told it. */
@@ -166,74 +161,74 @@ export function wikiMaintainProposalPrompt(plan: WikiMaintainPlanRead, items: re
   for (const item of items) {
     if (item.design) {
       const d = item.design;
-      knowledge += `[${item.id}] 新设计文档 ${d.path}`;
-      if (d.title !== '') knowledge += `「${d.title}」`;
-      knowledge += `（提交 ${shortHash(d.commit)} 加入 origin/main`;
-      if (d.renamedFrom !== '') knowledge += `，由 ${d.renamedFrom} 改名而来`;
-      knowledge += '）\n';
-      if (d.opening !== '') knowledge += `    开头：${d.opening}\n`;
-      if (d.headings.length > 0) knowledge += `    章节：${d.headings.join('；')}\n`;
+      knowledge += `[${item.id}] new design doc ${d.path}`;
+      if (d.title !== '') knowledge += ` «${d.title}»`;
+      knowledge += ` (added to origin/main in commit ${shortHash(d.commit)}`;
+      if (d.renamedFrom !== '') knowledge += `, renamed from ${d.renamedFrom}`;
+      knowledge += ')\n';
+      if (d.opening !== '') knowledge += `    Opening: ${d.opening}\n`;
+      if (d.headings.length > 0) knowledge += `    Sections: ${d.headings.join('; ')}\n`;
       continue;
     }
     if (item.entry) {
       const e = item.entry;
-      knowledge += `[${item.id}] 条目（${e.kind}）「${e.title}」：${e.summary}`;
-      if (e.anchorPaths.length > 0) knowledge += `；锚点 ${e.anchorPaths.join('、')}`;
-      if (e.topics.length > 0) knowledge += `；主题 ${e.topics.join('、')}`;
+      knowledge += `[${item.id}] entry (${e.kind}) «${e.title}»: ${e.summary}`;
+      if (e.anchorPaths.length > 0) knowledge += `; anchors ${e.anchorPaths.join(', ')}`;
+      if (e.topics.length > 0) knowledge += `; topics ${e.topics.join(', ')}`;
       knowledge += '\n';
     }
   }
   let catalogue = '';
   for (const category of plan.categories) {
-    catalogue += `## 大类 \`${category.key}\`「${category.title}」`;
-    if (category.question) catalogue += ` —— ${category.question}`;
+    catalogue += `## Category \`${category.key}\` «${category.title}»`;
+    if (category.question) catalogue += ` — ${category.question}`;
     catalogue += '\n';
     for (const doc of plan.docs) {
       if (doc.category !== category.key) continue;
-      const titles = doc.sections.map((section, n) => `${n + 1}.${section.title}（${section.kind}）`);
-      catalogue += `- \`${doc.slug}\`《${doc.title}》｜${doc.question}｜含：${doc.scopeIn.join('；')}\n  各节：${titles.join(' ')}\n`;
+      const titles = doc.sections.map((section, n) => `${n + 1}.${section.title} (${section.kind})`);
+      catalogue += `- \`${doc.slug}\` «${doc.title}» | ${doc.question} | Includes: ${doc.scopeIn.join('; ')}\n  Sections: ${titles.join(' ')}\n`;
     }
   }
   return `
-# 任务：维护作业的 plan 修改建议
-这个 wiki 的文档按 owner 确认的 plan（第 ${plan.version} 版，目录见下）逐节写。维护作业找到了一些新知识，plan 里没有任何一节讲它们（下面「新知识」）。
-请从中挑出能放在一起的一组——讲同一件事、放在同一处读起来连贯的几条（至少一条，挑不出就只挑一条；有新设计文档时先考虑它），建议放进 plan 的哪一篇：放进现有的一篇（给它加一节或几节），或者新增一篇。
-和这一组讲的不是同一件事的新知识，这次不要放，留给下一次维护作业再提：不要为了一次放完，把不相干的知识凑进同一篇或同一节，也不要新增「杂项」「其他」「散落条目」这类没有具体主题的篇。不要改动别的篇，也不要删节。
+# Task: the maintenance run's proposed change to the plan
+This wiki's documents are written section by section to the plan the owner confirmed (version ${plan.version}; its catalogue is below). The maintenance run found some new knowledge that no section of the plan covers ("New knowledge" below).
+From it, pick one group that belongs together — a few items about the same thing, which read coherently in one place (at least one item; if no group can be picked, pick just one; when there is a new design document, consider it first) — and propose which document of the plan it goes into: an existing document (adding a section or a few to it), or a new one.
+New knowledge that is not about the same thing as this group is not placed this time; leave it for the next maintenance run to propose: do not put unrelated knowledge together into one document or one section to place it all at once, and do not add a document with no specific subject, such as "Miscellaneous", "Other" or "Loose entries". Do not change any other document, and do not delete a section.
 
-## 新知识
+## New knowledge
 ${knowledge}
-## plan 的目录
+## The plan's catalogue
 ${catalogue}
-## 每一节的材料来源
-- 讲机制的节（concepts / flow / interface / data / ops）：出处写设计文档和代码。新设计文档写「- 文档：<路径> § <章节标题>」，章节标题原样抄上面列出的；不写 § 就是整篇。
-- 已知的坑、决策与理由、约定（pitfalls / decisions / conventions）：出处写去会话里找原话的条件「- 会话：关键词 <词>、<词>；锚点 <路径前缀>；kind <pitfall/decision/convention/…>；主题 <slug>；要找：<要找什么样的原文>」。关键词要选新知识条目里确实出现的词。
-- 只用上面出现过的路径、章节标题和主题；不要编造。
+## Where each section's material comes from
+- A section on a mechanism (concepts / flow / interface / data / ops): its sources are the design documents and the code. For a new design document, write "- Docs: <path> § <section heading>", with the section heading copied exactly from those listed above; without §, it is the whole document.
+- Known pitfalls, decisions and reasons, conventions (pitfalls / decisions / conventions): its source is the conditions to find the words in sessions by, "- Sessions: keywords <word>, <word>; anchors <path prefix>; kind <pitfall/decision/convention/…>; topics <slug>; look for: <what kind of original words to look for>". Choose keywords that really appear in the entries of the new knowledge.
+- Use only the paths, section headings and topics that appear above; invent none.
 
-## 输出格式
-只输出下面的内容，不要前言和总结，不要 JSON：
-放入：<现有一篇的 slug，原样抄目录里反引号中的>（或者写「放入：新篇」）
-理由：<一两句：新知识是什么，为什么放在这里>
-覆盖：<这条建议用到的新知识编号，如 K1、K3>
-如果是新篇，再写这几行：
-大类：<目录里一个大类的 key>
-slug：<新篇的 slug：小写字母、数字，用连字符连接>
-标题：<中文标题>
-问题：<读者带着什么问题来，一句话>
-读者：<谁>：<读完能做什么>
-含：<要点>；<要点>
-篇幅：<a–b 字>
-然后写要新增的节，一节或几节：
-### 1. <节标题> | <type> | <中文字数>
-讲什么：<这一节具体讲什么，1–2 句>
-- 文档：<docs/….md> § <章节标题>
-- 会话：关键词 …；锚点 …；kind …；主题 …；要找：…
+## Output format
+Output only what follows, with no preamble, no summary and no JSON:
+Into: <the slug of an existing document, copied exactly from between the backticks in the catalogue> (or write "Into: new")
+Reason: <a sentence or two: what the new knowledge is, and why it goes here>
+Uses: <the numbers of the new knowledge this proposal uses, such as K1, K3>
+For a new document, also write these lines:
+Category: <the key of a category in the catalogue>
+slug: <the new document's slug: lowercase letters and digits, joined by hyphens>
+Title: <title>
+Question: <the question the reader comes with, in one sentence>
+Audience: <who>: <what they can do once they have read it>
+Includes: <point>; <point>
+Length: <a–b characters>
+Then write the sections to add, one or a few:
+### 1. <section title> | <type> | <length in characters>
+Covers: <what exactly this section says, in 1–2 sentences>
+- Docs: <docs/….md> § <section heading>
+- Sessions: keywords …; anchors …; kind …; topics …; look for: …
 `;
 }
 
 /** Hand back what was wrong with the last answer. */
 export function wikiMaintainProposalRedo(problems: readonly string[]): string {
   const listed = problems.slice(0, 30);
-  return `\n## 上一次的答案有这些问题，请改正后按同样的格式重写整个答案\n- ${listed.join('\n- ')}\n`;
+  return `\n## The last answer had these problems: correct them, and write the whole answer again in the same format\n- ${listed.join('\n- ')}\n`;
 }
 
 /** Read the model's answer: its own lines first, then a document's header and sections in the plan's line format. */
@@ -246,19 +241,20 @@ export function parseWikiMaintainProposal(text: string): WikiMaintainProposalAns
     const line = goTrimSpace(goTrimLeft(goTrimSpace(raw), '-*•'));
     const [label, value] = wikiPlanLabel(line);
     switch (label.toLowerCase()) {
-      case '放入': {
-        const trimmed = trimChars(value, '`「」《》 ');
-        if (trimmed.includes('新篇') || trimmed.toLowerCase() === 'new') answer.newDoc = true;
+      case 'into': {
+        const trimmed = trimChars(value, '`「」《》«» ');
+        const lower = trimmed.toLowerCase();
+        if (lower === 'new' || lower.startsWith('new ')) answer.newDoc = true;
         else answer.target = trimmed;
         continue;
       }
-      case '理由':
+      case 'reason':
         answer.reason = value;
         continue;
-      case '覆盖':
+      case 'uses':
         answer.covers = (value.toUpperCase().match(COVER_ID) ?? []);
         continue;
-      case '大类':
+      case 'category':
         answer.category = trimChars(value, '`「」 ');
         continue;
       case 'slug':
@@ -295,22 +291,25 @@ function goTrimLeft(value: string, cutset: string): string {
  * Turn the answer into the proposal the server gates: the document as it should read — the plan's own, with
  * the new sections after its last, or a new one — and the facts it came from. What is wrong with it that this
  * side can see — a missing line, a kind the plan does not have, a file, document section, symbol or contract
- * origin/main does not have — comes back as problems, for the model.
+ * origin/main does not have, a topic the space does not have (`topics`, the space's: docs.reads.affected) —
+ * comes back as problems, for the model.
  */
 export function assembleWikiMaintainProposal(
   plan: WikiMaintainPlanRead,
   answer: WikiMaintainProposalAnswer,
   items: readonly WikiMaintainProposalItem[],
-  repo: WikiMaintainProposalRepo,
+  repo: WikiDocRepo,
+  topics: readonly WikiPlanTopic[],
 ): { request: WikiMaintainProposalRequest; problems: string[] } {
   const problems: string[] = [];
+  if (goTrimSpace(answer.reason) === '') problems.push('the Reason line is missing: say what the new knowledge is, and why it goes here');
   const byId = new Map(items.map((item) => [item.id, item]));
   const facts: Array<{ kind: string; id: string }> = [];
   const seen = new Set<string>();
   for (const id of answer.covers) {
     const item = byId.get(id);
     if (!item) {
-      problems.push(`「覆盖」里的 ${wikiQuote(id)} 不是新知识的编号`);
+      problems.push(`${wikiQuote(id)} on the Uses line is not the number of an item of new knowledge`);
       continue;
     }
     const fact = item.design ? { kind: 'commit', id: item.design.commit } : { kind: 'entry', id: item.entry!.id };
@@ -319,16 +318,15 @@ export function assembleWikiMaintainProposal(
       facts.push(fact);
     }
   }
-  if (goTrimSpace(answer.reason) === '') problems.push('「理由」一行缺了：写明新知识是什么、为什么放在这里');
-  if (facts.length === 0) problems.push('「覆盖」一行缺了：列出这条建议用到的新知识编号，如 K1、K2');
-  if (answer.sections.length === 0) problems.push('没有要新增的节：至少写一节「### 1. <节标题> | <type> | <中文字数>」');
+  if (facts.length === 0) problems.push('the Uses line is missing: list the numbers of the new knowledge this proposal uses, such as K1, K2');
+  if (answer.sections.length === 0) problems.push('there is no section to add: write one at least, "### 1. <section title> | <type> | <length in characters>"');
   const sections: WikiPlanSection[] = [];
   answer.sections.forEach((draft, i) => {
-    const made = wikiMaintainProposalSection(`第 ${i + 1} 节`, draft, repo);
+    const made = wikiMaintainProposalSection(`section ${i + 1}`, draft, repo, topics);
     problems.push(...made.problems);
     sections.push(made.section);
   });
-  for (const line of answer.stray) problems.push(`${wikiQuote(cutRunes(line, 60))} 不是这个格式里的一行：删掉它`);
+  for (const line of answer.stray) problems.push(`${wikiQuote(cutRunes(line, 60))} is not a line of this format: drop it`);
 
   let doc: WikiPlanDoc;
   const category: WikiPlanCat | null = null;
@@ -346,29 +344,30 @@ export function assembleWikiMaintainProposal(
       sections,
     };
     if (!plan.categories.some((c) => c.key === answer.category)) {
-      problems.push(`「大类」${wikiQuote(answer.category)} 不是目录里的大类：原样抄一个大类的 key`);
+      problems.push(`Category ${wikiQuote(answer.category)} is not a category of the catalogue: copy a category's key exactly`);
     }
     if (!new RegExp(WIKI_SLUG_PATTERN, 'u').test(answer.slug)) {
-      problems.push(`「slug」${wikiQuote(answer.slug)} 不是 slug：小写字母和数字，用连字符连接`);
+      problems.push(`slug ${wikiQuote(answer.slug)} is not a slug: lowercase letters and digits, joined by hyphens`);
     }
     for (const existing of plan.docs) {
       if (existing.slug === answer.slug) {
-        problems.push(`slug ${wikiQuote(answer.slug)} 已经是现有的一篇：新篇要用新的 slug，放进现有的一篇就写「放入：${answer.slug}」`);
+        problems.push(`slug ${wikiQuote(answer.slug)} is an existing document already: a new document takes a new slug, and to add to the existing one, `
+          + `write "Into: ${answer.slug}"`);
       }
     }
     if (h.title === '' || h.question === '' || h.audience.length === 0 || h.scopeIn.length === 0) {
-      problems.push('新篇要写全「标题」「问题」「读者」「含」「篇幅」五行');
+      problems.push('a new document needs all five lines: Title, Question, Audience, Includes and Length');
     }
     const range = wikiPlanRange(h.length);
     if (range.ok) doc.length = { min: range.min, max: range.max };
-    else problems.push(`「篇幅」${wikiQuote(h.length)} 不是篇幅：写成 <a–b 字>`);
+    else problems.push(`Length ${wikiQuote(h.length)} is not a length: write it as <a–b characters>`);
   } else {
     const target = plan.docs.find((one) => one.slug === answer.target);
     if (!target) {
-      problems.push(`「放入」${wikiQuote(answer.target)} 不是目录里的一篇：原样抄一篇的 slug，或写「放入：新篇」`);
+      problems.push(`Into ${wikiQuote(answer.target)} is not a document of the catalogue: copy a document's slug exactly, or write "Into: new"`);
       doc = { category: '', slug: '', title: '', question: '', audience: [], scopeIn: [], scopeOut: [], length: { min: 0, max: 0 }, sections: [] };
     } else {
-      if (target.protected) problems.push(`${target.slug} 是受保护的篇，不能改：放进别的篇，或新增一篇`);
+      if (target.protected) problems.push(`${target.slug} is a protected document and does not change: put it into another document, or add a new one`);
       const base = wikiPlanDocInput(target);
       doc = { ...base, protected: false, sections: [...base.sections, ...sections] };
     }
@@ -379,59 +378,96 @@ export function assembleWikiMaintainProposal(
   };
 }
 
-/** One new section as the model wrote it, checked against the snapshot: its kind, its length, and every file, document section, symbol and contract it names. */
+/**
+ * One new section as the model wrote it, checked on origin/main as the runner checks it (`wikiProposalSection`): its
+ * kind, its length, every file, document section, symbol and contract it names — read in the files at the commit —
+ * its session condition, its topics among the space's, and its lines.
+ */
 export function wikiMaintainProposalSection(
   at: string,
   draft: WikiPlanSectionDraft,
-  repo: WikiMaintainProposalRepo,
+  repo: WikiDocRepo,
+  topics: readonly WikiPlanTopic[],
 ): { section: WikiPlanSection; problems: string[] } {
   const problems: string[] = [];
   const section: WikiPlanSection = {
     title: draft.title,
-    kind: wikiPlanUnwrap(draft.kind),
+    kind: wikiUnwrap(draft.kind),
     covers: draft.covers,
     length: 0,
     sources: { docs: [], code: [], contracts: [], sessions: null },
   };
   if (!(WIKI_PLAN_SECTION_KINDS as readonly string[]).includes(section.kind)) {
-    problems.push(`${at}的 type ${wikiQuote(section.kind)} 不是节的类型：${WIKI_PLAN_SECTION_KINDS.join('、')} 之一`);
+    problems.push(`${at}: the type ${wikiQuote(section.kind)} is not a section type: one of ${WIKI_PLAN_SECTION_KINDS.join(', ')}`);
   }
   const range = wikiPlanRange(draft.length);
   if (range.ok) section.length = range.min;
-  else problems.push(`${at}的字数 ${wikiQuote(draft.length)} 不是数字`);
-  if (goTrimSpace(draft.covers) === '') problems.push(`${at}缺「讲什么」`);
+  else problems.push(`${at}: the length ${wikiQuote(draft.length)} is not a number`);
+  if (goTrimSpace(draft.covers) === '') problems.push(`${at} has no Covers line`);
   section.sources.docs = draft.docs.map((source) => ({ path: source.path, section: source.section ?? null }));
   section.sources.code = draft.code.map((source) => ({ path: source.path, symbols: source.symbols ?? [] }));
   section.sources.contracts = draft.contracts.map((path) => ({ path }));
   for (const source of draft.docs) {
     const heading = source.section ?? '';
-    if (repo.hasDocSection(source.path, heading)) continue;
-    if (!repo.hasPath(source.path)) problems.push(`${at}的文档 ${wikiQuote(source.path)} 在 origin/main 上没有`);
-    else problems.push(`${at}的文档 ${source.path} 里没有章节 ${wikiQuote(heading)}：原样抄新知识里列出的章节标题，或不写 §`);
+    const found = wikiDocDocSection(repo, source.path, heading);
+    if (found.piece) continue;
+    // A heading a bounded read did not reach is missing as the documents step says it is (design §7).
+    if (!repo.show(source.path)) problems.push(`${at}: the document ${wikiQuote(source.path)} is not on origin/main`);
+    else {
+      problems.push(`${at}: the document ${source.path} has no section ${wikiQuote(heading)}: copy a section heading the new knowledge lists exactly, `
+        + `or write no §${found.past ? ` ${PAST_THE_READ}` : ''}`);
+    }
   }
   for (const source of draft.code) {
-    const symbols = source.symbols ?? [];
-    const missing = symbols.length === 0
-      ? (repo.hasPath(source.path) ? [] : [`${source.path} (not at origin/main)`])
-      : symbols.filter((symbol) => !repo.hasSymbol(source.path, symbol)).map((symbol) => `${source.path}#${symbol}`);
-    if (missing.length > 0) problems.push(`${at}的代码在 origin/main 上找不到：${missing.join('、')}`);
+    const { missing } = wikiDocCodePieces(repo, source.path, source.symbols ?? [], []);
+    if (missing.length > 0) problems.push(`${at}: code not found on origin/main: ${missing.join(', ')}`);
   }
   for (const path of draft.contracts) {
-    if (!repo.hasContract(path)) problems.push(`${at}的契约 ${wikiQuote(path)} 在 origin/main 上没有`);
+    if (!wikiDocContract(repo, path)) problems.push(`${at}: the contract ${wikiQuote(path)} is not on origin/main`);
   }
-  if (draft.sessions) {
+  const c = draft.sessions;
+  if (c) {
     section.sources.sessions = {
-      projects: draft.sessions.projects ?? [],
-      since: draft.sessions.since || null,
-      until: draft.sessions.until || null,
-      keywords: draft.sessions.keywords ?? [],
-      anchorPaths: draft.sessions.anchorPaths ?? [],
-      entryKinds: (draft.sessions.entryKinds ?? []).map((kind) => wikiPlanUnwrap(kind)),
-      topics: draft.sessions.topics ?? [],
-      evidence: draft.sessions.evidence ?? '',
+      projects: c.projects ?? [],
+      since: c.since || null,
+      until: c.until || null,
+      keywords: c.keywords ?? [],
+      anchorPaths: c.anchorPaths ?? [],
+      entryKinds: (c.entryKinds ?? []).map((kind) => wikiUnwrap(kind)),
+      topics: (c.topics ?? []).map((topic) => wikiUnwrap(topic)),
+      evidence: c.evidence ?? '',
     };
+    for (const part of c.stray ?? []) {
+      problems.push(`${at}: ${wikiQuote(cutRunes(part, 60))} is not a part of a session condition: it has projects, dates, keywords, `
+        + 'anchors, kinds, topics and what to look for — drop it');
+    }
+    // The server's gate takes a topic only from the space's (plan.gate.references), and lists them with one it refuses:
+    // so is it here, and listed the same, so the round that refuses it can fix it. A document's slug passed here until
+    // 2026-10-10 and was refused at the gate in the run's last round (canary 3b2bd5f2, «wiki-maintenance»).
+    const known = new Set(topics.map((topic) => topic.slug));
+    for (const topic of section.sources.sessions.topics) {
+      if (!known.has(topic)) problems.push(`${at}: ${wikiQuote(topic)} is not a topic of this space: ${wikiPlanTopicsBrief({ topics })}`);
+    }
+  }
+  const { docs, code, contracts, sessions } = section.sources;
+  if (docs.length + code.length + contracts.length === 0 && sessions === null) {
+    problems.push(`${at} names no sources: a section on a mechanism names its design documents and code, one on pitfalls, `
+      + 'decisions or conventions the sessions to find the words in');
+  }
+  for (const line of draft.stray ?? []) {
+    problems.push(`${at}: ${wikiQuote(cutRunes(line, 60))} is not a line of a section: a section has what it covers, its documents, `
+      + 'code, contracts and sessions, and nothing else — drop it');
   }
   return { section, problems };
+}
+
+/** Every file the answer's sections name — documents, code and contracts: what the check reads before it looks. */
+export function wikiMaintainProposalPaths(answer: WikiMaintainProposalAnswer): string[] {
+  return answer.sections.flatMap((draft) => [
+    ...draft.docs.map((source) => source.path),
+    ...draft.code.map((source) => source.path),
+    ...draft.contracts,
+  ]);
 }
 
 /** The numbers a run's proposal is held to, re-exported for the job: rounds at most, items at most. */

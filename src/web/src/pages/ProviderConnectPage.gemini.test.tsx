@@ -9,10 +9,11 @@ import { PROVIDERS_BASE, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderConnectPage } from './ProviderConnectPage';
 
 /**
- * The Gemini preset, which runs on the Antigravity CLI (agy): connecting a key probes the Gemini API
- * on the endpoint agy calls and saves the row on that runtime, and editing a row keeps it there. The
- * form used to know only claude/codex/kimi, and read anything else as Claude — so a Save on a Gemini
- * row would have sent `runtime: 'claude'` back and moved it off agy.
+ * The Gemini preset, Google Gemini's key, whose protocol the Antigravity CLI (agy) speaks natively:
+ * connecting a key probes the Gemini API on the endpoint agy calls and saves the row on that protocol,
+ * and editing a row keeps it there. The form used to know only claude/codex/kimi, and read anything
+ * else as Claude — so a Save on a Gemini row would have sent `runtime: 'claude'` back and moved it off
+ * agy.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -33,6 +34,7 @@ const geminiRow: ProviderRow = {
   slug: 'gemini',
   label: 'Gemini',
   runtime: 'antigravity',
+  engines: ['antigravity', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://generativelanguage.googleapis.com',
   models: [{ value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', contextWindow: 1_048_576 }],
   defaultModel: 'gemini-3.8-flash',
@@ -140,12 +142,14 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('says it runs on Antigravity, what agy does with the key, and nothing about not running', async () => {
+  it('connects Google Gemini on the Gemini API, says who gets the key and what agy does with it', async () => {
     await mount('/providers/new/gemini');
-    expect(container.querySelector('h1')?.textContent).toBe('Connect Antigravity');
-    expect(text()).toContain('Runs on the Antigravity CLI');
-    expect(text()).toContain('models from the runtime CLI');
-    expect(text()).toContain('commands the agent runs can read it');
+    expect(container.querySelector('h1')?.textContent).toBe('Connect Google Gemini');
+    expect(text()).toContain('Gemini API · models from the runtime CLI');
+    expect(text()).not.toContain('Runs on');
+    expect(text()).toContain(
+      'Sessions on the Antigravity CLI and OpenCode hand this key to the CLI in its environment, where commands the agent runs can read it.',
+    );
     expect(text()).toContain('usage statistics (not your conversations) to Google');
     expect(text()).not.toMatch(/can't run today|Responses API/);
   });
@@ -168,8 +172,9 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
     expect(sent[1].method).toBe('POST');
     expect(sent[1].path).toBe(PROVIDERS_BASE);
     // The list is agy's, read off the runner: nothing of it is sent to be parked on the row.
+    // A new key is named after its vendor, as the gallery and this page's title name it.
     expect(sent[1].body).toEqual({
-      label: 'Antigravity',
+      label: 'Google Gemini',
       runtime: 'antigravity',
       baseUrl: 'https://generativelanguage.googleapis.com',
       apiKey: 'AIza-test',

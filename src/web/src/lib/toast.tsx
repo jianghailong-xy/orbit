@@ -16,7 +16,7 @@ import { clearToasts, showToast } from './toastStore';
 // server's words as the headline: "revision 12 is stale" on its own doesn't say which action
 // failed.
 //
-// None of these hands anything back. AntD's handle, which they used to return, was a thenable that
+// None of these hands anything back. The replaced library's handle, which they used to return, was a thenable that
 // settled when the toast closed, and `onError: (e) => message.error(…)` returned it to TanStack
 // Query, which waited on it: an error toast never closes on its own, so the mutation stayed pending
 // — its button spinning — until someone clicked the toast's ×.

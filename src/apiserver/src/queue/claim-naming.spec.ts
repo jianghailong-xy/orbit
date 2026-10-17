@@ -86,7 +86,9 @@ async function claim(options: Options = {}): Promise<ClaimedSession> {
     session: { findUniqueOrThrow: async () => session, findFirst: async () => null, update: async () => session },
     $executeRaw: async () => 1,
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never
+    // `aggregate` (Prisma compiles that into an OFFSET subquery the planner cannot flatten).
+    $queryRaw: async () => [{ max: 0 }],
     user: { findUnique: async () => ({ role: 'MEMBER' }) },
     modelProvider: { findFirst: async () => row },
   } as unknown as PrismaService;

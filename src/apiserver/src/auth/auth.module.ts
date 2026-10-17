@@ -11,6 +11,7 @@ import { DisabledAccounts } from './disabled-accounts';
 import { GoogleAuthController } from './google-auth.controller';
 import { GoogleLoginService } from './google-login.service';
 import { GoogleOAuthClient } from './google-oauth.client';
+import { createImpersonationJwt, IMPERSONATION_JWT, Impersonation } from './impersonation';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PatDeviceLoginController } from './pat-device-login.controller';
 import { PatDeviceLoginService } from './pat-device-login.service';
@@ -56,6 +57,9 @@ import { SignInProvidersService } from './sign-in-providers.service';
     PatService,
     PatDeviceLoginService,
     PatRequestAudit,
+    // An administrator viewing Orbit as another account, read-only, on a key derived for it alone.
+    { provide: IMPERSONATION_JWT, inject: [ConfigService], useFactory: createImpersonationJwt },
+    Impersonation,
     SignInProvidersService,
     GoogleLoginService,
     // Google's endpoints over the global fetch; the specs hand GoogleLoginService a fake in its place.
@@ -67,9 +71,10 @@ import { SignInProvidersService } from './sign-in-providers.service';
     // and the request audit records that refusal as it records the guard's.
     { provide: APP_INTERCEPTOR, useClass: PatRefusalInterceptor },
   ],
-  // PatService, PatRequestAudit and DisabledAccounts are exported because JwtAuthGuard is instantiated in every
-  // module that uses it, PatService also because admin/* lists and revokes a user's tokens, GoogleLoginService
-  // because admin/* unlinks a user's Google account, and DisabledAccounts also because admin/* disables one.
-  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService, DisabledAccounts],
+  // PatService, PatRequestAudit, DisabledAccounts and Impersonation are exported because JwtAuthGuard is
+  // instantiated in every module that uses it, PatService also because admin/* lists and revokes a user's tokens,
+  // GoogleLoginService because admin/* unlinks a user's Google account, DisabledAccounts also because admin/*
+  // disables one, and Impersonation also because admin/* issues the token for viewing one.
+  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService, DisabledAccounts, Impersonation],
 })
 export class AuthModule {}

@@ -42,10 +42,12 @@ public enum ProjectPage {
     /// Pending landing / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
     /// the lanes outside that sum only when they are non-zero; one that does not draws the seven
     /// lanes, Done carrying its share of the whole. `started` is whether anybody has started the
-    /// project; only `false` changes anything — Ready's footnote.
+    /// project; only `false` changes anything — Ready's footnote. `main` is the project's main branch
+    /// by name, which the lanes about it say.
     public static func overviewCells(_ b: ProjectPanoramaBuckets, taskCount: Int,
                                      line: IntegrationLine?, started: Bool? = nil,
-                                     paused: Bool = false, manualReadyCount: Int = 0) -> [OverviewCell] {
+                                     paused: Bool = false, manualReadyCount: Int = 0,
+                                     main: String = RunSettings.defaultMainBranch) -> [OverviewCell] {
         let readyFootnote = started == false ? readyUntilStarted : paused ? readyWhilePaused
             : b.ready > 0 && manualReadyCount == b.ready ? "can start manually" : "can start now"
         if reportsIntegrationLanes(b) {
@@ -64,10 +66,10 @@ public enum ProjectPage {
             if line != .main {
                 lanes.append(OverviewCell(key: "onIntegrationLine", label: "On project branch",
                                           value: b.onIntegrationLine ?? 0,
-                                          footnote: "not on main yet", glyph: .branch))
+                                          footnote: "not on \(main) yet", glyph: .branch))
             }
-            lanes.append(OverviewCell(key: "onUpstream", label: "On main", value: b.onUpstream ?? 0,
-                                      footnote: "landed on main", glyph: .check))
+            lanes.append(OverviewCell(key: "onUpstream", label: "On \(main)", value: b.onUpstream ?? 0,
+                                      footnote: "landed on \(main)", glyph: .check))
             let extras = [
                 OverviewCell(key: "doneNotIntegrated", label: "Done", value: b.doneNotIntegrated ?? 0,
                              footnote: "nothing to land", glyph: .check),
@@ -155,10 +157,30 @@ public enum ProjectPage {
             self.wait = wait
             self.timedOut = timedOut
         }
+
+        /// The head's two slots (`landingHead`), from this line's own facts.
+        public var head: LandingHead {
+            ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
+                                    clock: clock, wait: wait, updated: updated)
+        }
     }
 
-    /// One job of the list the landing row opens (docs/mocks/landing-jobs-sheet), drawn as the row
-    /// itself.
+    /// The two slots under a card's head title, as the merge check card and the landing card draw
+    /// them (owner decision 2026-10-11, board docs/mocks/project-merge-check-row): the row that
+    /// becomes the timeline's "Merged into main" line, so the same object keeps its shape from the
+    /// check to the merge. `right` is the live number the row is watched by — the elapsed clock —
+    /// and `detail` is the one line under the title, which is where the state word went: it used to
+    /// sit in the head's far corner, where the clock now is.
+    public struct LandingHead: Equatable, Sendable {
+        /// The title row's right slot: the job's clock, or the state word for a job that has no
+        /// clock left that moves (the server judged its runner silent).
+        public let right: String
+        /// Whether that slot is a clock — drawn in tabular digits, in the live ink.
+        public let isClock: Bool
+        /// The line under the title: the state, what the job waited for a runner before its clock
+        /// began, and where the reports stand — "checking · waited 1m 20s · updated just now".
+        public let detail: String
+    }
     public struct LandingJobLine: Equatable, Sendable, Identifiable {
         public let jobId: String
         /// The task a press on the row opens; nil for a promotion or a merge check, whose row opens
@@ -182,6 +204,15 @@ public enum ProjectPage {
     public static let landingMayHaveBeenPushed = "may have been pushed"
     public static let landingRetriedByOwner = "retried by you"
     public static let landingRetriedByCoordinator = "retried by the coordinator"
+    /// The card's own three: the branch the work lands on ("onto project/…"), the sentence that
+    /// takes the reader off the hook while it lands, and the way into the jobs from the card that
+    /// also offers Retry.
+    public static let landingOnto = "onto"
+    public static let landingNothingToDo = "Nothing to do — it lands on its own."
+    public static let landingAllJobs = "All jobs"
+    /// "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
+    /// row's old `Waited` was a column heading, and this is a sentence.
+    public static let landingWaited = "waited"
 
     public static let integrationJobWords = [
         "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
@@ -190,6 +221,15 @@ public enum ProjectPage {
         "FETCH": "fetching", "MAIN_SYNC": "syncing main", "REBASE": "rebasing", "MERGE": "merging",
         "CHECK": "checking", "VERIFY": "verifying", "PUSH": "pushing",
     ]
+
+    /// The two above for a project whose main branch is `main` by name — web's `jobWords` and
+    /// `jobPhases`: a merge names the branch it goes into, and the sync takes that branch in.
+    public static func integrationJobWords(_ main: String) -> [String: String] {
+        integrationJobWords.merging(["LAND_PROMOTION": "Merge to \(main)"]) { $1 }
+    }
+    public static func integrationPhaseWords(_ main: String) -> [String: String] {
+        integrationPhaseWords.merging(["MAIN_SYNC": "syncing \(main)"]) { $1 }
+    }
 
     /// The state word for a job whose runner has stopped reporting — web's `LANDING_NO_REPORT`.
     ///
@@ -201,9 +241,6 @@ public enum ProjectPage {
     public static func landingNoReportFor(_ minutes: Int) -> String { "No report for \(minutes)m" }
     /// And for a job claimed whose runner has never reported at all.
     public static let landingNoReportYet = "No report yet"
-    /// The landing row's label for what a claimed job waited before its clock began — web's
-    /// `LandingRow`, `landingLine`'s own `wait`.
-    public static let landingWaitLabel = "Waited"
 
     /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
     ///
@@ -256,6 +293,8 @@ public enum ProjectPage {
     /// leaves the reading of the reports here, from the runner's heartbeat: a claimed job whose
     /// runner has gone quiet reads "No report" for as long as it stays quiet — never "timed out",
     /// which is the job's own verdict to give and arrives as the server's `blockingReason`.
+    ///
+    /// A merge and a sync name the project's main branch, which the view carries (`upstreamRef`).
     public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date(),
                                    updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingLine? {
         guard let inFlight = view.inFlight else { return nil }
@@ -271,7 +310,8 @@ public enum ProjectPage {
         let silent = listed == nil && running
             && (heartbeatAt.map { now.timeIntervalSince($0) > 600 } ?? true)
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
-        let word = integrationJobWords[inFlight.kind ?? ""] ?? "Integration"
+        let main = RunSettings.mainBranchName(view.upstreamRef)
+        let word = integrationJobWords(main)[inFlight.kind ?? ""] ?? "Integration"
         let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs) : inFlight.taskTitle
         // What the job waited for a runner before it was claimed — the row's own `inFlight` carries
         // it, and only a CLAIMED job has one to show: a queued job's whole clock is that wait.
@@ -281,7 +321,39 @@ public enum ProjectPage {
         }
         return liveLine(word: word, what: what, running: running, phase: inFlight.phase,
                         startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
-                        updatedAt: updatedAt, unavailable: unavailable, silent: silent, wait: wait)
+                        updatedAt: updatedAt, unavailable: unavailable, main: main, silent: silent,
+                        wait: wait)
+    }
+
+    /// The head's two slots, composed from the facts the landing line already counted — the same
+    /// words in the same order on both clients (`landingWaited` is the only new word).
+    ///
+    /// A timed-out job has no clock that moves, so its right slot says so instead, and its line is
+    /// the silence measured against the limit it went past: "No report for 110m · limit 10m". An
+    /// older server's "No report" is that same fact said once, so the line is its own "No report for
+    /// 5m" and never "No report · No report for 5m". Everything else is the state word, the wait
+    /// when there was one, and the freshness — "checking · waited 1m 20s · updated just now" — with
+    /// the freshness's own capital folded away, because the line reads as one sentence.
+    public static func landingHead(state: String, timedOut: Bool, clockLabel: String, clock: String,
+                                   wait: String?, updated: String?) -> LandingHead {
+        if timedOut {
+            let silence = "\(clockLabel) \(clock)"  // "No report for 110m"
+            return LandingHead(right: state, isClock: false,
+                               detail: [silence, updated].compactMap { $0 }.joined(separator: " · "))
+        }
+        if state == landingNoReport {
+            return LandingHead(right: clock, isClock: true, detail: updated ?? state)
+        }
+        var parts = [state]
+        if let wait { parts.append("\(landingWaited) \(wait)") }
+        if let updated { parts.append(lowercasingFirst(updated)) }
+        return LandingHead(right: clock, isClock: true, detail: parts.joined(separator: " · "))
+    }
+
+    /// "Updated 2m ago" as the clause it is mid-line: "updated 2m ago".
+    private static func lowercasingFirst(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.lowercased() + text.dropFirst()
     }
 
     /// What a job waited for a runner before its clock began, from the server's own measurement:
@@ -297,15 +369,16 @@ public enum ProjectPage {
     public static func landingJobLines(_ view: ProjectIntegrationView, now: Date = Date(),
                                        updatedAt: Date? = nil, refreshFailed: Bool = false) -> [LandingJobLine] {
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+        let main = RunSettings.mainBranchName(view.upstreamRef)
         return (view.inFlightJobs ?? []).map { job in
-            let word = integrationJobWords[job.kind] ?? "Integration"
+            let word = integrationJobWords(main)[job.kind] ?? "Integration"
             let line = job.timedOut && !unavailable
                 ? timedOutLine(job, word: word, what: job.taskTitle, now: now)
                 : liveLine(word: word, what: job.taskTitle, running: job.state == "RUNNING", phase: job.phase,
                            startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
-                           updatedAt: updatedAt, unavailable: unavailable)
+                           updatedAt: updatedAt, unavailable: unavailable, main: main)
             return LandingJobLine(jobId: job.jobId, taskId: job.taskId, line: line,
-                                  detail: landingJobDetail(job), retryable: job.retryable)
+                                  detail: landingJobDetail(job, main: main), retryable: job.retryable)
         }
     }
 
@@ -317,9 +390,11 @@ public enum ProjectPage {
     /// A job running or waiting its turn, as the row draws it. `unavailable` freezes the clock at the
     /// last update the app had and stops the row claiming activity; `silent` freezes it at the last
     /// REPORT instead — the same freeze, reached from the runner's silence rather than this app's read.
+    /// `main` is the project's main branch by name, which a sync names.
     private static func liveLine(word: String, what: String?, running: Bool, phase: String?,
                                  startedAt: String, heartbeatAt: String?, now: Date, updatedAt: Date?,
-                                 unavailable: Bool, silent: Bool = false, wait: String? = nil) -> LandingLine {
+                                 unavailable: Bool, main: String, silent: Bool = false,
+                                 wait: String? = nil) -> LandingLine {
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
         let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
@@ -340,7 +415,7 @@ public enum ProjectPage {
         return LandingLine(what: what, running: running && !unavailable && !silent,
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
-                                   : running ? (integrationPhaseWords[phase ?? ""] ?? "running") : "queued",
+                                   : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
                            clock: landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait)
@@ -358,8 +433,9 @@ public enum ProjectPage {
     }
 
     /// The line under a job: what a timed-out job's runner did, or which generation a retried job is
-    /// and who asked for it. Whether a push may have happened is read off the step it stopped at.
-    private static func landingJobDetail(_ job: ProjectIntegrationJob) -> String? {
+    /// and who asked for it. Whether a push may have happened is read off the step it stopped at —
+    /// a sync, of `main`, the project's main branch by name.
+    private static func landingJobDetail(_ job: ProjectIntegrationJob, main: String) -> String? {
         // An instant the clock cannot read is said to be one, as the web says it, never a wrong time.
         func time(_ iso: String) -> String {
             RelativeTime.parse(iso).map { landingClockTime($0) } ?? "--:--"
@@ -367,13 +443,122 @@ public enum ProjectPage {
         if job.timedOut {
             // A runner with no name is "The runner", as the web's truthiness reads an empty one.
             let runner = job.runnerName.flatMap { $0.isEmpty ? nil : "Runner \($0)" } ?? "The runner"
-            let step = integrationPhaseWords[job.phase ?? ""] ?? "running"
+            let step = integrationPhaseWords(main)[job.phase ?? ""] ?? "running"
             let push = job.phase == "PUSH" || job.phase == "VERIFY" ? landingMayHaveBeenPushed : landingNoPushRecorded
             return "\(runner) took it at \(time(job.startedAt)) · stopped at \(step) · \(push)"
         }
         guard let retriedBy = job.retriedBy else { return nil }
         let who = retriedBy == "OWNER" ? landingRetriedByOwner : landingRetriedByCoordinator
         return "Generation \(job.generation) · \(who) at \(time(job.queuedAt))"
+    }
+
+    // MARK: - The landing as a card of its own
+
+    /// The landing in flight as the card the project's sessions page draws under its progress card
+    /// (owner decision 2026-10-11, mocks in docs/mocks/project-landing-card): the merge card's
+    /// shape and language, for the job that lands a task on the project branch.
+    ///
+    /// It says what the row could not: which branch the work goes onto, who the several jobs are
+    /// when there are several, and — when the server judged the runner silent — where it stopped
+    /// and whether a Retry takes it. Nothing is added to the read: every field is the landing line's
+    /// own, the job list's own, or the project's own `landTask.targetRef`. Web: `landingCard`,
+    /// `ProjectLandingCard`.
+    public struct LandingCard: Equatable, Sendable {
+        /// One job in flight, as the card's body draws it.
+        public struct Job: Equatable, Sendable, Identifiable {
+            public let jobId: String
+            /// The task the job lands, which its row opens; nil for a promotion or a merge check.
+            public let taskId: String?
+            /// The task's title — or nil for a job that lands no single task.
+            public let title: String?
+            /// The job's own state word: its phase, "queued", or "Timed out".
+            public let state: String
+            public let running: Bool
+            public let timedOut: Bool
+            /// Whether the server offers Retry for this one, never inferred from `timedOut`.
+            public let retryable: Bool
+            /// What a timed-out runner did before it stopped; the job list's own sentence.
+            public let detail: String?
+            public var id: String { jobId }
+        }
+
+        /// What is in flight, in the landing row's own word: "Landing", "Merge check".
+        public let word: String
+        /// The head's title: the word alone, or the word and the count while several jobs are in
+        /// flight — "Landing 2 jobs", the row's name slot with the word in front of it.
+        public let title: String
+        /// The lead job's state word, or the app failing to read the server.
+        public let state: String
+        public let running: Bool
+        /// The server judged the lead job's runner silent past its limit: the card draws in the
+        /// warning ink, with a triangle where the ring was, and nothing spins.
+        public let timedOut: Bool
+        /// One job's task title, or nil while several are in flight — the count is the head's, and
+        /// the bodies are `jobs`.
+        public let what: String?
+        /// Every job in flight, in the server's order (running first, then the queue oldest first);
+        /// empty from a server that does not list them.
+        public let jobs: [Job]
+        /// The branch the lead job lands on, short — the task page's own Target field. Nil when the
+        /// job is not among the project's landings: a promotion, a merge check, or a server that
+        /// does not list its jobs.
+        public let target: String?
+        public let clock: String
+        public let clockLabel: String
+        public let wait: String?
+        public let updated: String?
+        /// What the timed-out lead job's runner did before it stopped, or nil.
+        public let detail: String?
+        /// The job Retry takes, when the server says a retry takes one.
+        public let retryJobId: String?
+
+        /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
+        /// word, the same clock, the same state and freshness, in the merged row's anatomy.
+        public var head: LandingHead {
+            ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
+                                    clock: clock, wait: wait, updated: updated)
+        }
+    }
+
+    /// The card, or nil when nothing is landing — which is what removes it from the page.
+    ///
+    /// The head is the landing row's: the same word, the same state, the same clock, the same
+    /// `wait` and freshness. What the card adds is the branch (`target`), the several jobs, and the
+    /// detail under a timed-out one — all of them read from what the same integration read already
+    /// carries, so the card can never be asked for something the row could not say.
+    public static func landingCard(_ view: ProjectIntegrationView, now: Date = Date(),
+                                   updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingCard? {
+        guard let line = landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed) else {
+            return nil
+        }
+        let jobs = landingJobLines(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+            .map { job in
+                LandingCard.Job(jobId: job.jobId, taskId: job.taskId, title: job.line.what, state: job.line.state,
+                                running: job.line.running, timedOut: job.line.timedOut,
+                                retryable: job.retryable, detail: job.detail)
+            }
+        // The row's own rule for the name slot, one row down: several jobs are a count in the head
+        // and a row each in the body; one job is its title in the body.
+        let several = view.integratingCount + view.queuedCount > 1
+        let lead = jobs.first
+        return LandingCard(
+            word: line.word,
+            title: several ? [line.word, line.what].compactMap { $0 }.joined(separator: " ") : line.word,
+            state: line.state, running: line.running, timedOut: line.timedOut,
+            what: several ? nil : line.what,
+            jobs: jobs,
+            target: lead.flatMap { landingTarget(view, jobId: $0.jobId) },
+            clock: line.clock, clockLabel: line.clockLabel, wait: line.wait, updated: line.updated,
+            detail: line.timedOut ? lead?.detail : nil,
+            retryJobId: lead?.retryable == true ? lead?.jobId : nil)
+    }
+
+    /// The branch a job lands on, short, from the project's own landings — the field the task page's
+    /// Target row prints. Nil when the job is not one of them, or names no branch at all.
+    private static func landingTarget(_ view: ProjectIntegrationView, jobId: String) -> String? {
+        let landing = view.landTasks.first { $0.landTask?.jobId == jobId }?.landTask
+        guard let ref = landing?.targetRef, !ref.isEmpty else { return nil }
+        return PromotionCards.shortRef(ref)
     }
 
     /// One formatter for every clock time, built once: the job list redraws each second, and an ICU
@@ -396,6 +581,19 @@ public enum ProjectPage {
             if formatter.timeZone != timeZone { formatter.timeZone = timeZone }
             return formatter.string(from: date)
         }
+    }
+
+    // MARK: - The ending, where the progress card was
+
+    /// Whether a project page draws the project's ending where its progress card was: a read that
+    /// says DONE and carries the unified projection's counts to tally. The same card, and the same
+    /// rule, the coordinator conversation's settled branch keeps — and the browser's sessions page
+    /// keeps off its own document read (docs/mocks/project-done-sessions-page, owner decision
+    /// 2026-10-10). A read without the counts (an older server, whose projection draws none of these
+    /// cards) keeps the progress card, which in that state says its status and nothing else.
+    public static func drawsEnding(_ subject: ProjectDoneSubject?) -> Bool {
+        guard let subject, subject.status == "DONE" else { return false }
+        return subject.counts != nil
     }
 
     // MARK: - Acceptance criteria
@@ -461,8 +659,10 @@ public enum ProjectPage {
 
     /// The criterion's work in words, or nil when the read did not answer for it (which is also
     /// what an older server's document draws). An unrecognised clause or action prints as itself —
-    /// dropping it would under-report exactly when there is more to say.
-    public static func criterionWork(_ c: ProjectCriterion, integrationRef: String?) -> CriterionWork? {
+    /// dropping it would under-report exactly when there is more to say. Where met work is says
+    /// `main`, the project's main branch by name.
+    public static func criterionWork(_ c: ProjectCriterion, integrationRef: String?,
+                                     main: String = RunSettings.defaultMainBranch) -> CriterionWork? {
         guard let satisfied = c.satisfied else { return nil }
         var landing: String?
         var warning: String?
@@ -470,8 +670,8 @@ public enum ProjectPage {
             switch raw {
             case "ON_INTEGRATION_LINE":
                 landing = "on \(integrationRef ?? "the project branch")"
-                warning = "not on main yet"
-            case "LANDED": landing = "on main"
+                warning = "not on \(main) yet"
+            case "LANDED": landing = "on \(main)"
             case "UNKNOWN": landing = "no merge receipt either way"
             default: landing = raw
             }
@@ -511,13 +711,15 @@ public enum ProjectPage {
     public static func coordinatorPill(_ status: ProjectCoordinatorStatus) -> Pill {
         if status.state == .live, let session = status.coordination.session,
            !coordinatorFinished(status) {
-            // A pending approval blocks INSIDE a turn, so it is asked before "Working".
+            // What waits on the reader — a card, or an owner decision drawn in the conversation, both
+            // counted in `pendingApprovals` — is asked before "Working": a pending approval blocks
+            // INSIDE a turn. A turn that ended on its own is the coordinator's resting state between
+            // wake-ups, and reads "Idle" (owner decision, 2026-10-15).
             if session.pendingApprovals > 0 { return Pill(label: "Needs you", tone: .warning) }
             if session.runState == .running
                 || (session.runState == .awaitingInput && session.engineTurnActive) {
                 return Pill(label: "Working", tone: .brand)
             }
-            if session.runState == .awaitingInput { return Pill(label: "Needs you", tone: .warning) }
             return Pill(label: "Idle", tone: .neutral)
         }
         if coordinatorFinished(status) { return Pill(label: "Completed", tone: .neutral) }
@@ -693,16 +895,17 @@ public enum ProjectPage {
 
     /// The line row's facts, in order: "⎇ project/x", "7 commits ahead of main", "synced with main
     /// 12m ago", "Running jobs 1 · Queued 0", "Last landing check ✓ passing". Nil when no
-    /// line has been decided.
+    /// line has been decided. Main is the project's main branch by name, which the view carries.
     public static func integrationFacts(_ view: ProjectIntegrationView, now: Date) -> [String]? {
         guard let line = view.line, line != .unknown else { return nil }
         let branchLine = line == .projectBranch
+        let main = RunSettings.mainBranchName(view.upstreamRef)
         var facts: [String] = [branchLine ? (view.ref ?? "project branch") : (view.upstreamRef ?? "main")]
         if branchLine, let ahead = view.commitsAheadOfUpstream {
-            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of main at last measurement")
+            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of \(main) at last measurement")
         }
         if branchLine, let synced = view.lastUpstreamSyncAt, let ago = RelativeTime.ago(synced, now: now) {
-            facts.append("synced with main \(ago)")
+            facts.append("synced with \(main) \(ago)")
         }
         facts.append("Running jobs \(view.integratingCount) · Queued \(view.queuedCount)")
         let tip: String
@@ -808,7 +1011,7 @@ public enum ProjectPage {
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
         case "AWAITING_OWNER": return Tag(text: "Awaiting your approval", tone: .warning)
         case "ON_INTEGRATION_LINE": return Tag(text: "On \(ref ?? "the project branch")", tone: .success)
-        case "ON_UPSTREAM": return Tag(text: "On \(upstreamRef ?? "main")", tone: .success)
+        case "ON_UPSTREAM": return Tag(text: "On \(RunSettings.mainBranchName(upstreamRef))", tone: .success)
         default: return nil
         }
     }

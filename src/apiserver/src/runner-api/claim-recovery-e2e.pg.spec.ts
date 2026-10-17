@@ -423,8 +423,19 @@ test('a lost claim is recovered without the session ever going silent', {
     };
   }
 
-  /** Poll until the read settles, so a spec never depends on how long a spawn takes. */
-  async function eventually<T>(what: string, read: () => Promise<T | undefined>, timeoutMs = 90_000): Promise<T> {
+  /**
+   * Poll until the read settles, so a spec never depends on how long a spawn takes.
+   *
+   * The fuse is a hang detector and not a performance budget, and 90s was short enough to be the
+   * second thing on CI: this file compiles the runner's fault binary (`go test -c`) and spawns it
+   * per scenario, and on 2026-10-09 the wait below for the completion that follows a first spawn
+   * timed out at 90s in two CI runs of `scripts/project-pg-matrix.sh` — once NOT REPRODUCED on the
+   * script's own second run, which it classified as a load-shaped timeout rather than a failed
+   * assertion, and once reproduced on a shard whose own sweep ran 25:36 against 15:52 for the same
+   * 131 specs. The whole file takes 37s on an idle 24-core host, and 180s still leaves a red first
+   * run plus its second run inside the matrix's 600s per-spec budget (`PCC_PG_SPEC_TIMEOUT`).
+   */
+  async function eventually<T>(what: string, read: () => Promise<T | undefined>, timeoutMs = 180_000): Promise<T> {
     const deadline = Date.now() + timeoutMs;
     let last: T | undefined;
     while (Date.now() < deadline) {

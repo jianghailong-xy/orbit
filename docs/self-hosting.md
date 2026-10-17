@@ -79,6 +79,12 @@ By default, the gateway listens on <http://localhost:2086>. A fresh deployment r
 There is no public self-service signup unless an administrator opens sign-up through
 [Google sign-in](#google-sign-in).
 
+To see Orbit as one of those users while helping them, an administrator opens **Admin → Users → View as**: Orbit as
+that user sees it, read-only, for 30 minutes, under a band that says whose Orbit it is and offers **Exit**. The
+reason asked for first is recorded with the account. Nothing can be changed while viewing, and administration and
+stored keys stay out of reach. Your own account, another administrator's and a disabled one cannot be viewed, and
+disabling either account ends the view.
+
 Useful diagnostics:
 
 ```bash
@@ -237,7 +243,9 @@ open it:
   personal access tokens and runners work as before. You cannot disable your own account or the last
   administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
   tasks.
-- **Admin → Users** shows how each account signs in and when it was created, so unexpected sign-ups stand out.
+- **Admin → Users** shows how each account signs in, when it was created and when it last used Orbit (in one of
+  the apps or with an access token), so unexpected sign-ups and accounts nobody uses any more stand out. Search
+  finds an account by name or email.
 
 ### Testing and publishing the Google app
 

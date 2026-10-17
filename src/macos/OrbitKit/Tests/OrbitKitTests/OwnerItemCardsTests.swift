@@ -117,6 +117,17 @@ final class OwnerItemCardsTests: XCTestCase {
             XCTAssertEqual(try declaration(web, name), NeedsYouLogic.kindWord(kind),
                            "\(name) drifted — first is the browser's, second is this client's.")
         }
+        // An escalated item says its short reason after the word, and the row composes it the way
+        // the browser's `ownerItemWord` does — the same two pieces, the same separator between them.
+        XCTAssertEqual(NeedsYouLogic.needSeparator, try declaration(web, "OWNER_ITEM_NEED_SEPARATOR"))
+        XCTAssertTrue(web.contains("`${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`"),
+                      "the browser builds the escalated row's words out of these two constants; this "
+                          + "client must join the same two the same way")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([SessionOwnerItem(
+            itemId: "i", kind: .escalated, title: "t", since: "2026-09-13T10:00:00Z",
+            need: "the check failed")]),
+                       "\(NeedsYouLogic.kindWord(.escalated)!)"
+                       + "\(NeedsYouLogic.needSeparator)the check failed")
         // A kind neither end can name is named by neither: the row falls back to its generic words
         // rather than trailing an empty separator, which is the choice the bar already makes.
         XCTAssertNil(NeedsYouLogic.kindWord(.unknown))
@@ -488,6 +499,69 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertEqual(PromotionCards.mergedLine(merged, now: now),
                        "324cf00 · merge of project/bg-jobs · under your Automatic setting · 2m")
         XCTAssertEqual(PromotionCards.revertLine(merged), "git revert -m 1 324cf0031a")
+    }
+
+    /// A project whose main branch is master: every sentence the card says about the branch it merges
+    /// INTO names master — the candidate's own `upstreamRef`, named the one way the project page names
+    /// it — while the branch it merges from is still the candidate's source.
+    func testTheMergeNamesTheProjectsMainBranch() {
+        func onMaster(_ state: PromotionState, conflicts: [String] = [], blockedReason: String? = nil,
+                      merged: ProjectPromotionView.Merged? = nil,
+                      execution: ProjectPromotionView.Execution? = nil) -> ProjectPromotionView {
+            ProjectPromotionView(promotionId: "pr-1", state: state, sourceRef: "refs/heads/project/bg-jobs",
+                                 sourceSha: "58f3a4711d0c", upstreamRef: "refs/heads/master", commitsAhead: 7,
+                                 taskIds: ["t1", "t2"], conflicts: conflicts, blockedReason: blockedReason,
+                                 merged: merged, execution: execution)
+        }
+        let ready = onMaster(.ready)
+        XCTAssertEqual(PromotionCards.title(ready), "Merge project/bg-jobs into master?")
+        XCTAssertEqual(PromotionCards.previewTitle(ready), "Merge to master")
+        XCTAssertEqual(PromotionCards.pageTitle(ready), "Merge into master?")
+        XCTAssertEqual(PromotionCards.eventLine(ready).text, "Merge into master is waiting for you")
+        XCTAssertEqual(PromotionCards.branchLine(ready), "project/bg-jobs · 7 commits ahead of master")
+        XCTAssertEqual(PromotionCards.upstreamLine(onMaster(.ready, conflicts: ["a.go"])), "1 file conflict with master")
+        XCTAssertEqual(PromotionCards.mergeTo(RunSettings.mainBranchName(ready.upstreamRef)), "Merge to master")
+        let queued = onMaster(.confirmed, execution: .init(state: "QUEUED", startedAt: "2026-09-13T12:00:00Z"))
+        XCTAssertEqual(PromotionCards.title(queued), "Merge queued: project/bg-jobs into master")
+        XCTAssertEqual(PromotionCards.mergingStatusLine(queued), "confirmed — queued to merge into master")
+        XCTAssertEqual(PromotionCards.blockedLine(onMaster(.blocked, blockedReason: "ALREADY_LANDED")),
+                       "nothing to merge — project/bg-jobs is already on master")
+        XCTAssertEqual(PromotionCards.blockedLine(onMaster(.blocked, conflicts: ["a.go"])),
+                       "1 file conflict with master: a.go")
+        let merged = onMaster(.merged, merged: .init(sha: "324cf0031a", at: "2026-09-13T12:00:00Z"))
+        XCTAssertEqual(PromotionCards.title(merged), "✓ Merged into master")
+        XCTAssertEqual(PromotionCards.receiptLine(merged), "✓ Merged into master · 324cf00 · 2 tasks")
+        XCTAssertEqual(PromotionCards.timelineTitle(merged), "Merged into master")
+        XCTAssertEqual(PromotionCards.nowOnLabel(merged), "Now on master")
+        let automatic = onMaster(.merged, merged: .init(sha: "324cf0031a", at: "2026-09-13T12:00:00Z",
+                                                        automatic: true))
+        XCTAssertEqual(PromotionCards.title(automatic), "✓ Merged into master automatically")
+        // Who is in front of a blocked merge: a landing that is syncing the branch it merges into.
+        let syncing = ProjectLandTask(taskId: "t9", taskTitle: "C5", landTask: LandTaskIntegrationView(
+            jobId: "j9", state: "RUNNING", phase: "MAIN_SYNC", targetRef: "refs/heads/master"))
+        XCTAssertEqual(PromotionCards.blockedByLine(onMaster(.blocked, conflicts: ["a.go"]), landings: [syncing]),
+                       "“C5” is landing on the project line · syncing master")
+        // On main, and for a candidate that names no branch at all, it is main as it always was.
+        XCTAssertEqual(PromotionCards.nowOnLabel(candidate(.merged)), "Now on main")
+        let unnamed = ProjectPromotionView(promotionId: "pr-1", state: .ready, sourceRef: "refs/heads/project/bg-jobs",
+                                           sourceSha: "58f3a47", upstreamRef: "")
+        XCTAssertEqual(PromotionCards.pageTitle(unnamed), "Merge into main?")
+    }
+
+    /// The bar's and the row's word for a merge approval names the branch the item's own project
+    /// merges into (`SessionOwnerItem.mainBranch`); the other three kinds name no branch.
+    func testTheMergeApprovalsWordNamesTheProjectsMainBranch() {
+        XCTAssertEqual(NeedsYouLogic.kindWord(.promotionApproval, main: "master"), "Approve merge to master")
+        for kind in [OwnerItemKind.coordinatorQuestion, .escalated, .fusePaused] {
+            XCTAssertEqual(NeedsYouLogic.kindWord(kind, main: "master"), NeedsYouLogic.kindWord(kind))
+        }
+        let onMaster = SessionOwnerItem(itemId: "i1", kind: .promotionApproval, title: "Merge 3 tasks",
+                                        since: "2026-09-13T10:00:00Z", mainBranch: "master")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([onMaster]), "Approve merge to master")
+        XCTAssertEqual(NeedsYouLogic.ownerItemText(onMaster, project: "Payments"), "Approve merge to master · Payments")
+        let unnamed = SessionOwnerItem(itemId: "i1", kind: .promotionApproval, title: "Merge 3 tasks",
+                                       since: "2026-09-13T10:00:00Z")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([unnamed]), "Approve merge to main")
     }
 
     /// The two cards have their own transcript rows, addressed the way the bar above the transcript

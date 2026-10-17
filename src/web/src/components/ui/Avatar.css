@@ -9,3 +9,5 @@
 /* A picture fills the border box's inside; the caller's background still shows in the clear border. */
 .orbit-avatar-image { background: transparent; }
 .orbit-avatar > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* An icon in place of the text sits straight in the centring box, as in the replaced icon avatar. */
+.orbit-avatar-icon > .anticon { margin: 0; }

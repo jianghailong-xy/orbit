@@ -1,0 +1,78 @@
+TAP version 13
+# coordinator-pg-isolation database=pccspec_2 user=pccspec_ server=172.17.0.17/32:5432 system_identifier=7694707570175406115 version=16.15
+# Subtest: a merge recorded outside the card ends the candidate offering the same branch
+    # Subtest: (1) the incident: blocked by a branch nobody pushed, then merged by hand — the card ends
+    ok 1 - (1) the incident: blocked by a branch nobody pushed, then merged by hand — the card ends
+      ---
+      duration_ms: 268.549875
+      type: 'test'
+      ...
+    # Subtest: (2) a receipt before the check is claimed cancels the check, which is never handed out
+    ok 2 - (2) a receipt before the check is claimed cancels the check, which is never handed out
+      ---
+      duration_ms: 89.912471
+      type: 'test'
+      ...
+    # Subtest: (3) a receipt while the check runs asks it to stop, and its late answer opens nothing
+    ok 3 - (3) a receipt while the check runs asks it to stop, and its late answer opens nothing
+      ---
+      duration_ms: 79.723522
+      type: 'test'
+      ...
+    # Subtest: (4) another branch, another target and a merge that did not land leave it standing
+    ok 4 - (4) another branch, another target and a merge that did not land leave it standing
+      ---
+      duration_ms: 67.798981
+      type: 'test'
+      ...
+    # Subtest: (5) a candidate already asking the owner takes its card with it
+    ok 5 - (5) a candidate already asking the owner takes its card with it
+      ---
+      duration_ms: 80.074957
+      type: 'test'
+      ...
+    # Subtest: (6) a candidate the owner confirmed stays the platform’s own merge
+    ok 6 - (6) a candidate the owner confirmed stays the platform’s own merge
+      ---
+      duration_ms: 95.695049
+      type: 'test'
+      ...
+    # Subtest: (7) recording the merge again retires what an older build left beside it, and nothing newer
+    ok 7 - (7) recording the merge again retires what an older build left beside it, and nothing newer
+      ---
+      duration_ms: 169.181471
+      type: 'test'
+      ...
+    # Subtest: (8) the runner’s own merge of the branch retires it the same way
+    ok 8 - (8) the runner’s own merge of the branch retires it the same way
+      ---
+      duration_ms: 51.458501
+      type: 'test'
+      ...
+    # Subtest: (9) migration 0411 retires what was already standing, once, and nothing else
+    ok 9 - (9) migration 0411 retires what was already standing, once, and nothing else
+      ---
+      duration_ms: 92.387892
+      type: 'test'
+      ...
+    # Subtest: (10) a receipt retires a candidate whose check is RUNNING and already timed out: the lost check ends as ERROR · RUNNER_LOST and stops holding the project's check slot
+    ok 10 - (10) a receipt retires a candidate whose check is RUNNING and already timed out: the lost check ends as ERROR · RUNNER_LOST and stops holding the project's check slot
+      ---
+      duration_ms: 90.996287
+      type: 'test'
+      ...
+    1..10
+ok 1 - a merge recorded outside the card ends the candidate offering the same branch
+  ---
+  duration_ms: 1244.607941
+  type: 'test'
+  ...
+1..1
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1937.050398

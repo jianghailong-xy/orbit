@@ -1,0 +1,182 @@
+{
+ "steps": [
+  {
+   "step": "dup-check",
+   "argv": "env DUP_OUT=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/dup-check.json DUP_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/dup-check-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2b-antd-side-retirement/dup-check.config.mjs --project chromium-dark-desktop",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": "",
+   "start": "2026-10-11T03:59:50Z load: 10.16 10.97 10.25",
+   "end": "2026-10-11T04:00:06Z load: 13.71 11.72 10.50",
+   "exit": "0",
+   "summary": [
+    "28 passed (15.4s)"
+   ]
+  },
+  {
+   "step": "smoke-1",
+   "argv": "env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/smoke-1-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep orbit-menu menu-enter burst sample 0$",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": "",
+   "start": "2026-10-11T03:55:06Z load: 15.33 12.33 10.28",
+   "end": "2026-10-11T03:55:10Z load: 16.82 12.69 10.40",
+   "exit": "0",
+   "summary": [
+    "1 passed (3.1s)"
+   ]
+  },
+  {
+   "step": "shape-88",
+   "argv": "env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/shape-88-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep (antd-submenu sub-right|antd-session sub-right|antd-dialog dlg-enter|antd-confirm dlg-enter) burst sample 0$",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": "",
+   "start": "2026-10-11T03:55:14Z load: 16.82 12.69 10.40",
+   "end": "2026-10-11T03:58:50Z load: 10.01 11.13 10.25",
+   "exit": "1",
+   "summary": [
+    "4 failed"
+   ]
+  },
+  {
+   "step": "kw2-sel-before",
+   "argv": "env KW2_BURST=3 KW2_PACED=3 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/kw2-sel-before-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep (orbit-field|orbit-sample|antd-sample) select-",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": "",
+   "start": "2026-10-11T04:00:11Z load: 13.41 11.69 10.50",
+   "end": "2026-10-11T04:08:17Z load: 9.14 10.37 10.48",
+   "exit": "0",
+   "summary": [
+    "294 passed (8.1m)"
+   ]
+  },
+  {
+   "step": "kw2-oth-before",
+   "argv": "env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/kw2-oth-before-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep-invert  select-",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": "",
+   "start": "2026-10-11T04:08:17Z load: 9.14 10.37 10.48",
+   "end": "2026-10-11T05:14:10Z load: 8.31 8.11 8.36",
+   "exit": "1",
+   "summary": [
+    "88 failed",
+    "248 passed (1.1h)"
+   ]
+  },
+  {
+   "step": "kw2-oth-ref-before",
+   "argv": "env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/kw2-oth-ref-before-out npx playwright test --config /mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep-invert  select-",
+   "tree": "/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2 HEAD 743d21ab293caafe6c35325369d4d20eeaf7250d",
+   "uncommitted": "",
+   "start": "2026-10-11T05:14:13Z load: 8.31 8.11 8.36",
+   "end": "2026-10-11T06:20:06Z load: 7.73 6.89 7.32",
+   "exit": "1",
+   "summary": [
+    "88 failed",
+    "248 passed (1.1h)"
+   ]
+  },
+  {
+   "step": "kw2-sel-after",
+   "argv": "env KW2_BURST=3 KW2_PACED=3 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/kw2-sel-after-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep (orbit-field|orbit-sample) select-",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:21:12Z load: 8.26 7.24 7.42",
+   "end": "2026-10-11T06:26:39Z load: 8.42 7.98 7.70",
+   "exit": "0",
+   "summary": [
+    "198 passed (5.4m)"
+   ]
+  },
+  {
+   "step": "kw2-oth-after",
+   "argv": "env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/kw2-oth-after-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep-invert  select-",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:26:39Z load: 8.42 7.98 7.70",
+   "end": "2026-10-11T06:32:33Z load: 8.83 8.41 8.02",
+   "exit": "0",
+   "summary": [
+    "200 passed (5.9m)"
+   ]
+  },
+  {
+   "step": "ref-copy-after",
+   "argv": "cp /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs /mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs",
+   "tree": "/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2 HEAD 743d21ab293caafe6c35325369d4d20eeaf7250d",
+   "uncommitted": "",
+   "start": "2026-10-11T06:32:33Z load: 8.83 8.41 8.02",
+   "end": "2026-10-11T06:32:33Z load: 8.83 8.41 8.02",
+   "exit": "0",
+   "summary": []
+  },
+  {
+   "step": "kw2-oth-ref-after",
+   "argv": "env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/kw2-oth-ref-after-out npx playwright test --config /mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep-invert  select-",
+   "tree": "/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2 HEAD 743d21ab293caafe6c35325369d4d20eeaf7250d",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:32:33Z load: 8.83 8.41 8.02",
+   "end": "2026-10-11T06:38:29Z load: 9.19 8.72 8.25",
+   "exit": "0",
+   "summary": [
+    "200 passed (5.9m)"
+   ]
+  },
+  {
+   "step": "kw1-after",
+   "argv": "env MOVE_RESULTS=src/web/.choices-results/p2-keyboard-window npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep (orbit-field|orbit-sample) select-[a-z0-9-]+ (burst|paced) sample [0-2]$",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:38:29Z load: 9.19 8.72 8.25",
+   "end": "2026-10-11T06:43:24Z load: 8.94 8.68 8.32",
+   "exit": "0",
+   "summary": [
+    "150 passed (4.9m)"
+   ]
+  },
+  {
+   "step": "kw1-other-after",
+   "argv": "env MOVE_RESULTS=src/web/.choices-results/p2-keyboard-window npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep-invert  select- --grep (burst|paced) sample 0$",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:43:24Z load: 8.94 8.68 8.32",
+   "end": "2026-10-11T06:45:03Z load: 8.32 8.72 8.39",
+   "exit": "0",
+   "summary": [
+    "66 passed (1.6m)"
+   ]
+  },
+  {
+   "step": "kw1-all-sel-after",
+   "argv": "env MOVE_RESULTS=src/web/.choices-results/p2-keyboard-window npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep (orbit-field|orbit-sample|antd-sample) select-[a-z0-9-]+ (burst|paced) sample [0-2]$",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:56:00Z load: 9.47 9.84 9.22",
+   "end": "2026-10-11T07:03:13Z load: 9.27 9.27 9.14",
+   "exit": "0",
+   "summary": [
+    "222 passed (7.2m)"
+   ]
+  },
+  {
+   "step": "sk-after",
+   "argv": "env MOVE_RESULTS=src/web/.choices-results/p2-select-keys-burst npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs --project chromium-dark-desktop",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:45:03Z load: 8.32 8.72 8.39",
+   "end": "2026-10-11T06:52:27Z load: 11.07 10.13 9.14",
+   "exit": "0",
+   "summary": [
+    "276 passed (7.4m)"
+   ]
+  },
+  {
+   "step": "merge-check",
+   "argv": "bash -c cd ../.. && npm run build -w @orbit/web && npm run test -w @orbit/web",
+   "tree": "/root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc",
+   "uncommitted": " M docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs ",
+   "start": "2026-10-11T06:52:27Z load: 11.07 10.13 9.14",
+   "end": "2026-10-11T06:55:42Z load: 10.50 10.04 9.27",
+   "exit": "0",
+   "summary": []
+  }
+ ]
+}

@@ -1,0 +1,2255 @@
+argv: bash -c npx vitest run --maxWorkers=2 $(cat /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/related-tests.txt)
+tree: /root/.orbit/worktrees/ba9b2bbb-b78b-5991-855c-183de0d5d9e3
+head: 2fefd4747094805129d4ffbd53ee1f40bea58065
+uncommitted:
+load: 19.99 20.20 22.69 20/4772 3363504
+mem: 4334M available, swap 13096M free
+disk: / 10126M available, TMPDIR /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/tmp
+started: 2026-10-09T11:47:38Z
+
+cgroup: 0::/system.slice/run-p3363513-i53663806.scope oom_score_adj 500
+
+ RUN  v5.0.2 /root/.orbit/worktrees/ba9b2bbb-b78b-5991-855c-183de0d5d9e3/src/web
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the oldest waiting member named on the second line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the oldest waiting member named on the second line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the oldest waiting member named on the second line
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the oldest waiting member named on the second line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the oldest waiting member named on the second line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project sessions page when there is no coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project sessions page when there is no coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project sessions page when there is no coordinator
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project sessions page when there is no coordinator
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > draws the progress tag as part of the entry, with the session-count hint
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > draws the progress tag as part of the entry, with the session-count hint
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > draws the progress tag as part of the entry, with the session-count hint
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > draws the progress tag as part of the entry, with the session-count hint
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > highlights a project when an already-opened session is any of its members
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > highlights a project when an already-opened session is any of its members
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > highlights a project when an already-opened session is any of its members
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its hover menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its hover menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its hover menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its hover menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its context menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its context menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its context menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > has exactly the project actions in its context menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > pins and moves the coordinator from the project menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > pins and moves the coordinator from the project menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > pins and moves the coordinator from the project menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > pins and moves the coordinator from the project menu
+Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > pins and moves the coordinator from the project menu
+Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > pins and moves the coordinator from the project menu
+Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > offers Unpin for a pinned coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > offers Unpin for a pinned coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > offers Unpin for a pinned coordinator
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project itself from the project entry menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project itself from the project entry menu
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project itself from the project entry menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > opens the project itself from the project entry menu
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > exposes only Pin on a right swipe and Move on a left swipe on a phone
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > exposes only Pin on a right swipe and Move on a left swipe on a phone
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > exposes only Pin on a right swipe and Move on a left swipe on a phone
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > exposes only Pin on a right swipe and Move on a left swipe on a phone
+Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > exposes only Pin on a right swipe and Move on a left swipe on a phone
+Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > consumes the synthesized progress click after a phone swipe and closes an open swipe before navigating
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > consumes the synthesized progress click after a phone swipe and closes an open swipe before navigating
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > consumes the synthesized progress click after a phone swipe and closes an open swipe before navigating
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+An update to ForwardRef inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project entry navigation and actions > consumes the synthesized progress click after a phone swipe and closes an open swipe before navigating
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads one DONE project detail for its title and progress when the Open sidebar has no summary
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads one DONE project detail for its title and progress when the Open sidebar has no summary
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads one DONE project detail for its title and progress when the Open sidebar has no summary
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads one DONE project detail for its title and progress when the Open sidebar has no summary
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project (narrow: true)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads one DONE project detail for its title and progress when the Open sidebar has no summary
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > a focused row that answers Enter itself, while the start card holds the bare key > expands the row and does not start the project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > a focused row that answers Enter itself, while the start card holds the bare key > expands the row and does not start the project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > a focused row that answers Enter itself, while the start card holds the bare key > expands the row and does not start the project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > a focused row that answers Enter itself, while the start card holds the bare key > expands the row and does not start the project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists Open and Completed members across workspaces, excludes Trash and counts running members
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists Open and Completed members across workspaces, excludes Trash and counts running members
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the project settlement card is not drawn in a conversation > draws no settlement card for a project that looks finished, and sends nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists Open and Completed members across workspaces, excludes Trash and counts running members
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the project settlement card is not drawn in a conversation > draws no settlement card for a project that looks finished, and sends nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the project settlement card is not drawn in a conversation > draws no settlement card for a project that looks finished, and sends nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ✓ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (19 tests) 3493ms
+   ✓ the start card in WorkspaceView (6)
+     ✓ is drawn once in a coordinator conversation, beside the criteria card, through every re-read 738ms
+     ✓ is drawn in no conversation that coordinates no project, which reads nothing for one 347ms
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists Open and Completed members across workspaces, excludes Trash and counts running members
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists Open and Completed members across workspaces, excludes Trash and counts running members
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists Open and Completed members across workspaces, excludes Trash and counts running members
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > gives mixed member rows their own lifecycle actions from the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > gives mixed member rows their own lifecycle actions from the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > gives mixed member rows their own lifecycle actions from the open page
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > gives mixed member rows their own lifecycle actions from the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > gives mixed member rows their own lifecycle actions from the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > gives mixed member rows their own lifecycle actions from the completed page
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > counts each member once when Open and Completed responses overlap during a lifecycle change
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > counts each member once when Open and Completed responses overlap during a lifecycle change
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > counts each member once when Open and Completed responses overlap during a lifecycle change
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > counts each member once when Open and Completed responses overlap during a lifecycle change
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses each member’s lifecycle for phone swipe buttons and full swipes from the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses each member’s lifecycle for phone swipe buttons and full swipes from the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses each member’s lifecycle for phone swipe buttons and full swipes from the open page
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses each member’s lifecycle for phone swipe buttons and full swipes from the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses each member’s lifecycle for phone swipe buttons and full swipes from the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses each member’s lifecycle for phone swipe buttons and full swipes from the completed page
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > hides the project page search button while keeping the global keyboard palette
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > hides the project page search button while keeping the global keyboard palette
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > hides the project page search button while keeping the global keyboard palette
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > hides the project page search button while keeping the global keyboard palette
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > hides the project page search button while keeping the global keyboard palette
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > hides the project page search button while keeping the global keyboard palette
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > preserves the page in member links, browser Back and a fresh mount of the address
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists all members from Completed, keeps its address in navigation and restores it on refresh
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > has one action in its header, and its back button returns to the workspace list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > has one action in its header, and its back button returns to the workspace list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > has one action in its header, and its back button returns to the workspace list
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > has one action in its header, and its back button returns to the workspace list
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > has one action in its header, and its back button returns to the workspace list
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from its header, and its progress card is first in the list with no link of its own
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from its header, and its progress card is first in the list with no link of its own
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from its header, and its progress card is first in the list with no link of its own
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from its header, and its progress card is first in the list with no link of its own
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from its header, and its progress card is first in the list with no link of its own
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > says a project nobody has started is not started, and offers the owner’s own start while nobody asked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > says a project nobody has started is not started, and offers the owner’s own start while nobody asked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > says a project nobody has started is not started, and offers the owner’s own start while nobody asked
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > says a project nobody has started is not started, and offers the owner’s own start while nobody asked
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers the coordinator’s request to start with what it suggests, and opens it to be answered here
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers the coordinator’s request to start with what it suggests, and opens it to be answered here
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers the coordinator’s request to start with what it suggests, and opens it to be answered here
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers the coordinator’s request to start with what it suggests, and opens it to be answered here
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads no open items for a project already started, and draws no start
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads no open items for a project already started, and draws no start
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads no open items for a project already started, and draws no start
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > reads no open items for a project already started, and draws no start
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > carries a task landing on the project branch in its card, and lists every job in flight from it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > carries a task landing on the project branch in its card, and lists every job in flight from it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > carries a task landing on the project branch in its card, and lists every job in flight from it
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > carries a task landing on the project branch in its card, and lists every job in flight from it
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from the landing line of a server that does not list its jobs
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from the landing line of a server that does not list its jobs
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from the landing line of a server that does not list its jobs
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from the landing line of a server that does not list its jobs
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens the project from the landing line of a server that does not list its jobs
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers Move on a phone’s swipe only for the coordinator, as its menu does
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers Move on a phone’s swipe only for the coordinator, as its menu does
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers Move on a phone’s swipe only for the coordinator, as its menu does
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > offers Move on a phone’s swipe only for the coordinator, as its menu does
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens a phone row’s menu on a held press, and its release does not open the row
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens a phone row’s menu on a held press, and its release does not open the row
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens a phone row’s menu on a held press, and its release does not open the row
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > opens a phone row’s menu on a held press, and its release does not open the row
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ✓ src/components/WorkspaceView.settlementPointer.test.tsx (9 tests) 1827ms
+   ✓ the settlement question on the pinned line (8)
+     ✓ is one more in the count while the card is on screen and still a question, and opens no list 384ms
+     ✓ leaves no line on New session, and counts the card again on the way back 391ms
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > returns to the originating folder with the page back button
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > returns to the originating folder with the page back button
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > returns to the originating folder with the page back button
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > returns to the originating folder with the page back button
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > returns to the originating folder with the page back button
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > renders an empty scoped project without falling back to the workspace list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > renders an empty scoped project without falling back to the workspace list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > renders an empty scoped project without falling back to the workspace list
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > renders project read failures on the same page, with the reason and a retry
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > renders project read failures on the same page, with the reason and a retry
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > renders project read failures on the same page, with the reason and a retry
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a completed member in the project page and changes its row actions immediately
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a completed member in the project page and changes its row actions immediately
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a completed member in the project page and changes its row actions immediately
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a completed member in the project page and changes its row actions immediately
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a restored member and changes its actions while retaining the Completed page address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a restored member and changes its actions while retaining the Completed page address
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > keeps a restored member and changes its actions while retaining the Completed page address
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the open page
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the open page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the completed page
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+ ✓ src/firstPageStylesheet.test.ts (1 test) 1799ms
+   ✓ the first page stylesheet (1)
+     ✓ is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components 1797ms
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project sessions page > lists and opens the opposite-view coordinator from its row on the completed page
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > does not request extra members when the local coordinator and waiting target are available
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > does not request extra members when the local coordinator and waiting target are available
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > does not request extra members when the local coordinator and waiting target are available
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > only supplements projects in the current list that lack a coordinator or waiting member
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > only supplements projects in the current list that lack a coordinator or waiting member
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > only supplements projects in the current list that lack a coordinator or waiting member
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > never reads an unpaginated cross-workspace Completed list in either view
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > never reads an unpaginated cross-workspace Completed list in either view
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > never reads an unpaginated cross-workspace Completed list in either view
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > never reads an unpaginated cross-workspace Completed list in either view
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the entry query stable on unrelated events and debounces project-member updates
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the entry query stable on unrelated events and debounces project-member updates
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the entry query stable on unrelated events and debounces project-member updates
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > leads at the head of a conversation whose window begins after the merge
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > leads at the head of a conversation whose window begins after the merge
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > leads at the head of a conversation whose window begins after the merge
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the page query stable on unrelated events and debounces project-member updates
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the page query stable on unrelated events and debounces project-member updates
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the page query stable on unrelated events and debounces project-member updates
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > project-specific supplemental reads > keeps the page query stable on unrelated events and debounces project-member updates
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card strip > does not keep a card of its own for a promotion that has already merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card strip > does not keep a card of its own for a promotion that has already merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card strip > does not keep a card of its own for a promotion that has already merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ✓ src/components/WorkspaceView.promotionPlacement.test.tsx (13 tests) 1904ms
+   ✓ the record a merge leaves, in the conversation it happened in (4)
+     ✓ is drawn among the events, at the moment it happened, and not in the pane’s card strip 423ms
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws the asking candidate under the progress card, and presses its own door from there
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws the asking candidate under the progress card, and presses its own door from there
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws the asking candidate under the progress card, and presses its own door from there
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws the asking candidate under the progress card, and presses its own door from there
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > says a blocked candidate is the coordinator’s, and offers the way to it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > says a blocked candidate is the coordinator’s, and offers the way to it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > says a blocked candidate is the coordinator’s, and offers the way to it
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > says a blocked candidate is the coordinator’s, and offers the way to it
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > says a blocked candidate is the coordinator’s, and offers the way to it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > says a blocked candidate is the coordinator’s, and offers the way to it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > names nobody once the project’s items are read and none holds the blocked candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > names nobody once the project’s items are read and none holds the blocked candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > names nobody once the project’s items are read and none holds the blocked candidate
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > names nobody once the project’s items are read and none holds the blocked candidate
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > lists the jobs in flight from the merge check’s landing row
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > lists the jobs in flight from the merge check’s landing row
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > lists the jobs in flight from the merge check’s landing row
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > lists the jobs in flight from the merge check’s landing row
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws nothing about main while nothing is on offer
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws nothing about main while nothing is on offer
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws nothing about main while nothing is on offer
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws nothing about main while nothing is on offer
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws each merge already made on the timeline at its own instant, and opens its receipt
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws each merge already made on the timeline at its own instant, and opens its receipt
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws each merge already made on the timeline at its own instant, and opens its receipt
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+stderr | src/components/WorkspaceView.projectSessions.test.tsx > the merge into main on the project sessions page > draws each merge already made on the timeline at its own instant, and opens its receipt
+Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+
+ ✓ src/components/WorkspaceView.projectSessions.test.tsx (51 tests) 13709ms
+   ✓ project entry navigation and actions (13)
+     ✓ opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false) 640ms
+     ✓ pins and moves the coordinator from the project menu 326ms
+   ✓ project sessions page (27)
+     ✓ preserves the page in member links, browser Back and a fresh mount of the address 353ms
+     ✓ lists all members from Completed, keeps its address in navigation and restores it on refresh 438ms
+     ✓ opens a phone row’s menu on a held press, and its release does not open the row 925ms
+   ✓ project-specific supplemental reads (5)
+     ✓ keeps the entry query stable on unrelated events and debounces project-member updates 1538ms
+     ✓ keeps the page query stable on unrelated events and debounces project-member updates 1580ms
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on the evidence card > arms the composer with this version, keeps the card up with Confirm done live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on the evidence card > arms the composer with this version, keeps the card up with Confirm done live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on the evidence card > arms the composer with this version, keeps the card up with Confirm done live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on the evidence card > sends the typed reason to the decision door as this session’s SEND_BACK, and starts no turn
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on the evidence card > sends the typed reason to the decision door as this session’s SEND_BACK, and starts no turn
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on the evidence card > sends the typed reason to the decision door as this session’s SEND_BACK, and starts no turn
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on a dispatched task’s card drawn in its run > sends the reason as the dispatching session’s SEND_BACK, not this run’s
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.evidenceHandoff.test.tsx > Chat about this on a dispatched task’s card drawn in its run > sends the reason as the dispatching session’s SEND_BACK, not this run’s
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ✓ src/components/WorkspaceView.evidenceHandoff.test.tsx (3 tests) 702ms
+   ✓ Chat about this on the evidence card (2)
+     ✓ arms the composer with this version, keeps the card up with Confirm done live, and reaches no door 390ms
+ ✓ src/components/ui/keyboardWindow.test.tsx (58 tests) 1375ms
+ ✓ src/components/TaskDetailPanel.modelRouting.test.tsx (16 tests) 1566ms
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — empty states > offers a create CTA on an account with nothing in it
+No routes matched location "/workspaces/2zQeDGWFFAgN2112jNEnZ/new?intent=project" 
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > draws the receipt of an answer already on the read, in the conversation — the reload case
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > opens project-intent compose in firstOpenableWorkspace order
+No routes matched location "/workspaces/2zQeDGWFFAgN2112jNEna/new?intent=project" 
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > draws the receipt of an answer already on the read, in the conversation — the reload case
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > draws the receipt of an answer already on the read, in the conversation — the reload case
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > routes to runner guidance when every workspace runner is offline
+No routes matched location "/infrastructure" 
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > uses the DefaultLanding registration guide when no workspace can open
+No routes matched location "/runners/register" 
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > uses the DefaultLanding only runner when no workspace can open
+No routes matched location "/runners/2zQeDGWFFAgN2112jNEnJ" 
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > uses the DefaultLanding machine list when no workspace can open
+No routes matched location "/infrastructure" 
+
+ ✓ src/pages/ProjectsPageToolbar.test.tsx (18 tests) 1127ms
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ✓ src/components/WorkspaceView.criteriaDecisionCard.test.tsx (4 tests) 1200ms
+   ✓ the criteria decision card in an open coordinator conversation (4)
+     ✓ is on the page once for its intent, through every re-read and after the answer elsewhere 519ms
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > keeps the app project page’s seven blocks in the app’s order, and none of the other nine
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > draws each block from the link: the header, the overview, the goal, the chain and the tasks in their bands
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > with Task pages, the task graph and the task list open the project’s tasks at /s/<token>/t/<id>
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > without Task pages, the graph and the list name the tasks without opening them
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+ ✓ src/pages/ProjectCoordinatorSection.test.tsx (13 tests) 783ms
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > with Conversations, the Work overview and the prose open the coordinator’s conversation
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > reads the criteria as the app’s card does — in its words, with no branch named
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > a run’s page reads Project › Task › Run, and the coordinator’s Project › Coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > a run’s page reads Project › Task › Run, and the coordinator’s Project › Coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/pages/SharedProjectPage.test.tsx > a project link’s public page > on a phone, reads as the app’s phone page: four criteria, then the rest behind one button
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.
+
+ ✓ src/pages/SharedProjectPage.test.tsx (11 tests) 803ms
+ ✓ src/components/ui/Menu.test.tsx (20 tests) 646ms
+ ✓ src/components/TaskDetailPanel.share.test.tsx (4 tests) 721ms
+ ✓ src/components/ui/Select.test.tsx (26 tests) 763ms
+ ✓ src/components/ProjectProgressStatus.test.tsx (52 tests) 573ms
+ ✓ src/pages/TaskListView.taskUrl.test.tsx (10 tests) 765ms
+ ✓ src/pages/ProjectsPage.status.test.tsx (7 tests) 535ms
+ ✓ src/components/StartProjectCard.test.tsx (37 tests) 767ms
+ ✓ src/components/CriteriaDecisionCard.test.tsx (36 tests) 851ms
+   ✓ a card that is no longer a question (3)
+     ✓ is the whole card at 0.72, and no later rule in the stylesheet takes it back 786ms
+ ✓ src/components/AcceptanceConfirmationCard.test.tsx (41 tests) 536ms
+ ✓ src/pages/ProjectsPage.automatic.test.tsx (7 tests) 511ms
+ ✓ src/components/ui/boundary.test.ts (1 test) 2920ms
+   ✓ keeps Base UI inside Orbit components, fixtures private, and public components free of AntD 2920ms
+ ✓ src/pages/ProjectDetailPanorama.test.tsx (9 tests) 3414ms
+   ✓ ProjectDetailPage — the panorama, assembled (9)
+     ✓ lays the four blocks out in the order the reader asks for them 1067ms
+     ✓ keeps a card that fails to that card, and the rest of the page standing 563ms
+     ✓ keeps idle ready work visible without diagnosing a dispatch failure 545ms
+     ✓ draws the chain strip on a chain and nothing at all on a mesh 500ms
+ ✓ src/pages/ProjectsPage.test.tsx (103 tests) 1458ms
+   ✓ ProjectsPage (10)
+     ✓ renders each project’s title, status, task count and goal/fallback 470ms
+ ✓ src/pages/TaskListView.scopeMenu.test.tsx (8 tests) 425ms
+ ✓ src/components/WorkspaceView.projectIntent.test.tsx (4 tests) 399ms
+ ✓ src/pages/ProjectsPagePhone.test.tsx (7 tests) 482ms
+ ✓ src/pages/TaskListView.createdIn.test.tsx (5 tests) 335ms
+ ✓ src/pages/ProjectsPage.delete.test.tsx (4 tests) 387ms
+ ✓ src/components/ProjectRunSettings.test.tsx (15 tests) 987ms
+ ✓ src/components/ProjectDoneSettlementCard.nativeParity.test.tsx (12 tests) 328ms
+ ✓ src/components/ProjectShareControls.test.tsx (5 tests) 283ms
+ ✓ src/components/ProjectDoneConversation.test.tsx (12 tests) 296ms
+ ✓ src/components/TaskDetailPanel.test.tsx (65 tests) 319ms
+ ✓ src/components/ProjectReadyToRun.test.tsx (13 tests) 279ms
+ ✓ src/components/ProjectBlockers.test.tsx (11 tests) 263ms
+ ✓ src/components/CoordinatorQuestionCard.test.tsx (18 tests) 182ms
+ ✓ src/pages/TaskListView.outsideProjects.test.tsx (8 tests) 313ms
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws the start as a card: how, which project, and the tasks that wait on the coordinator
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/ProjectWhyNotDoneGate.test.tsx (23 tests) 237ms
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws the start as a card: how, which project, and the tasks that wait on the coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws the start as a card: how, which project, and the tasks that wait on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > leaves a message with no payload as the bubble it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > leaves a message with no payload as the bubble it always was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > leaves a message with no payload as the bubble it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > carries the settings the start left, and marks the ones that differ from the suggestion
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > carries the settings the start left, and marks the ones that differ from the suggestion
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > carries the settings the start left, and marks the ones that differ from the suggestion
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > names the Automatic switch as its own kind of start, confirming nothing
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > names the Automatic switch as its own kind of start, confirming nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > names the Automatic switch as its own kind of start, confirming nothing
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > says so in one line when no task waits on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > says so in one line when no task waits on the coordinator
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > says so in one line when no task waits on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > speaks of one waiting task in the singular
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > speaks of one waiting task in the singular
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > speaks of one waiting task in the singular
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > is drawn the same while it waits on the queue as once a runner echoes it
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/ProjectStartedCard.test.tsx (10 tests) 301ms
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws the item as a card: its kind, its title and the files it conflicted on
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/ProjectDoneSettlementCard.closeout.test.tsx (13 tests) 190ms
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws the item as a card: its kind, its title and the files it conflicted on
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws the item as a card: its kind, its title and the files it conflicted on
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws a delivery review as the coordinator’s decision, with the files it is about
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws a delivery review as the coordinator’s decision, with the files it is about
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws a delivery review as the coordinator’s decision, with the files it is about
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > says the work is already on main when a merge receipt records it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > says the work is already on main when a merge receipt records it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > says the work is already on main when a merge receipt records it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > leaves a delivery with no payload as the message it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > leaves a delivery with no payload as the message it always was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > leaves a delivery with no payload as the message it always was
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/OpenItemDeliveryCard.test.tsx (6 tests) 277ms
+ ✓ src/components/AcceptanceConfirmationCard.preview.test.tsx (2 tests) 138ms
+ ✓ src/components/OwnerConfirmationReview.test.tsx (19 tests) 176ms
+ ✓ src/components/ProjectAcceptanceCard.test.tsx (37 tests) 212ms
+ ✓ src/components/DecisionRail.pointer.test.tsx (12 tests) 119ms
+ ✓ src/pages/ProjectsPage.readyToClose.test.tsx (2 tests) 167ms
+ ✓ src/components/EvidenceDecisionCard.test.tsx (34 tests) 188ms
+ ✓ src/pages/TaskListView.test.tsx (33 tests) 144ms
+ ✓ src/components/ProjectDependencyGraph.test.tsx (45 tests) 147ms
+ ✓ src/components/CriteriaChangeCard.test.tsx (10 tests) 145ms
+ ✓ src/components/ProjectPromotionCard.chat.test.tsx (15 tests) 124ms
+ ✓ src/components/ProjectProgressStatus.chat.test.tsx (21 tests) 126ms
+ ✓ src/components/ProjectPromotionCard.test.tsx (54 tests) 105ms
+ ✓ src/components/DecisionRail.exceptions.test.tsx (8 tests) 83ms
+ ✓ src/pages/ProjectsPage.newTask.test.tsx (3 tests) 97ms
+ ✓ src/components/CoordinatorQuestionRecord.test.tsx (23 tests) 103ms
+ ✓ src/components/ProjectSections.test.tsx (8 tests) 126ms
+ ✓ src/components/OwnerConfirmationCard.test.tsx (22 tests) 189ms
+ ✓ src/components/ProjectTasksGraph.test.tsx (2 tests) 75ms
+ ✓ src/components/ProjectCrossingsCard.move.test.tsx (3 tests) 111ms
+ ✓ src/pages/ProjectsPageProductionSnapshot.test.tsx (13 tests) 498ms
+   ✓ projects index — 2026-08-23 production snapshot (7)
+     ✓ holds that order whatever order the endpoint returned the rows in 455ms
+ ✓ src/components/CardHotkey.test.tsx (19 tests) 92ms
+ ✓ src/components/TaskDetailPanel.reopen.test.tsx (10 tests) 92ms
+ ✓ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx (3 tests) 56ms
+ ✓ src/components/ProjectSettlementCard.test.tsx (29 tests) 61ms
+ ✓ src/components/ProjectPanoramaHeader.test.tsx (63 tests) 66ms
+ ✓ src/components/ProjectCoordinatorCard.test.tsx (37 tests) 62ms
+ ✓ src/components/TaskScheduleEditor.test.tsx (26 tests) 44ms
+ ✓ src/components/CriteriaDecisionCard.receipt.test.tsx (2 tests) 35ms
+ ✓ src/components/TaskAttributionCard.test.tsx (13 tests) 32ms
+ ✓ src/components/ProjectCrossingsCard.test.tsx (19 tests) 47ms
+ ✓ src/pages/TaskRoute.test.tsx (6 tests) 45ms
+ ✓ src/components/DecisionRail.test.tsx (31 tests) 21ms
+ ✓ src/pages/ProjectTasksTopology.test.tsx (19 tests) 42ms
+ ✓ src/components/EvidenceDecisionReceipt.test.tsx (6 tests) 19ms
+ ✓ src/components/ProjectProgressStatus.handling.test.tsx (10 tests) 20ms
+ ✓ src/components/CriteriaDecisionCard.settled.test.tsx (12 tests) 17ms
+ ✓ src/components/ProjectDoneSettlementCard.test.tsx (5 tests) 25ms
+ ✓ src/components/DecisionRail.settlement.test.tsx (14 tests) 16ms
+ ✓ src/components/CardAction.test.tsx (4 tests) 10ms
+ ✓ src/components/ProjectProgressStatus.doneRequest.test.tsx (2 tests) 8ms
+ ✓ src/components/WorkspaceView.decisionStrip.test.tsx (3 tests) 4ms
+ ✓ src/components/TaskDependencyGraph.test.tsx (7 tests) 9ms
+ ✓ src/pages/ProjectsPageRowSortKeysVisible.test.tsx (3 tests) 3ms
+
+ Test Files  86 passed (86)
+      Tests  1517 passed (1517)
+   Start at  19:47:42
+   Duration  85.17s (import 42%, tests 34%, environment 17%, transform 7%)
+
+     Import  459 modules were evaluated 1654 times · 68.09s total, 42% of tracked time
+             ~17.43s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+exit=0
+load: 27.23 22.56 23.29 19/4797 3370448
+mem: 4068M available, swap 9937M free
+ended: 2026-10-09T11:49:08Z

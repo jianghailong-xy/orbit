@@ -63,6 +63,9 @@ function harness(seed: Row[] = []) {
     },
     providerPool: { findMany: async () => [] },
     providerPoolMember: { findFirst: async () => null },
+    // No retired provider names (migration 0415), and nothing in use on a key (readKeyUsage).
+    providerSlugAlias: { findMany: async () => [] },
+    $queryRaw: async () => [],
   };
   const published: string[] = [];
   const service = new ProvidersService(

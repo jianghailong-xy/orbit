@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
 import {
   NO_LONGER_ON_OFFER,
+  ON_PASS_ASKS,
+  ON_PASS_MERGES,
   isMergeJob,
   mergeCardShape,
   moreTasks,
@@ -12,6 +14,7 @@ import {
   promotionBranchLine,
   promotionChecksSummary,
   promotionMergingStatus,
+  promotionOnPassLine,
   promotionChangesLine,
   promotionEventLine,
   promotionPageCounts,
@@ -73,6 +76,19 @@ describe('the merge card on the project sessions view', () => {
     expect(mergeCardShape(candidate({ state: 'DECLINED' }), null)).toBeNull();
     expect(isMergeJob({ kind: 'LAND_PROMOTION' })).toBe(true);
     expect(isMergeJob({})).toBe(false);
+  });
+
+  it('says under the merge check what a pass leads to, while there is a check to say it of', () => {
+    expect(ON_PASS_MERGES).toBe('Merges on its own when it passes.');
+    expect(ON_PASS_ASKS).toBe('Asks you when it passes.');
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING', onPass: 'MERGE' }))).toBe(ON_PASS_MERGES);
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING', onPass: 'ASK' }))).toBe(ON_PASS_ASKS);
+    // A server older than the answer, and one that has none for this candidate.
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING' }))).toBeNull();
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING', onPass: null }))).toBeNull();
+    // Past the check there is nothing left to say about one.
+    expect(promotionOnPassLine(candidate({ state: 'READY', onPass: 'MERGE' }))).toBeNull();
+    expect(promotionOnPassLine(null)).toBeNull();
   });
 
   it('says what is asked of main, with the branch under it', () => {
@@ -199,6 +215,12 @@ describe('who is in front of a blocked merge', () => {
         + 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first');
   });
 
+  it('says which branch a landing in front of it is syncing: the project’s main branch, by name', () => {
+    const onMaster = candidate({ state: 'BLOCKED', upstreamRef: 'refs/heads/master' });
+    expect(promotionBlockedBy(onMaster, [landing({ state: 'RUNNING', phase: 'MAIN_SYNC', reason: null })]))
+      .toBe('“同步项目线与 main：解开迁移台账冲突” is landing on the project line · syncing master');
+  });
+
   it('says nothing when the line is doing nothing on the branches this merge goes through', () => {
     expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }), [])).toBeNull();
     expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }), null)).toBeNull();
@@ -259,5 +281,40 @@ describe('the sessions view’s timeline', () => {
       [merged('m', local(1, 1) /* five days back */), candidate()], now);
     expect(sections.map((section) => section.title)).toEqual(['Today', '2–7 days ago']);
     expect(sections.flatMap((section) => section.items.map((item) => item.kind))).toEqual(['session', 'merge']);
+  });
+});
+
+describe('the branch a merge goes into, named one way', () => {
+  // Every sentence above names the candidate's `upstreamRef` — the project's main branch — as the
+  // project page names it (`mainBranchName`): `refs/heads/` dropped, whichever spelling the read has.
+  it('says master wherever it says main, for a candidate merging into master', () => {
+    for (const upstreamRef of ['refs/heads/master', 'master']) {
+      const asking = candidate({ upstreamRef, conflicts: ['a.go'] });
+      expect(promotionPageTitle(asking)).toBe('Merge into master?');
+      expect(promotionBranchLine(asking)).toBe('project/34ZurCP3bv9yLXGVyUGnx · 5 commits ahead of master');
+      expect(promotionChecksSummary(asking).text).toBe('No checks recorded · 1 file conflict with master');
+      expect(promotionEventLine(asking).text).toBe('Merge into master is waiting for you');
+      expect(promotionBlockedLine(candidate({ upstreamRef, state: 'BLOCKED', conflicts: ['a.go'] })))
+        .toBe('1 file conflict with master: a.go');
+      expect(promotionBlockedLine(candidate({ upstreamRef, state: 'BLOCKED', blockedReason: 'ALREADY_LANDED' })))
+        .toBe('nothing to merge — project/34ZurCP3bv9yLXGVyUGnx is already on master');
+      expect(promotionMergingStatus(candidate({ upstreamRef, state: 'CONFIRMED',
+        execution: { state: 'QUEUED', phase: null, startedAt: '2026-10-06T03:32:00Z' } } as Partial<ProjectPromotionView>)))
+        .toBe('confirmed — queued to merge into master');
+      const done = { ...merged('m1', '2026-10-06T04:00:00Z'), upstreamRef };
+      expect(promotionReceiptLine(done)).toBe('✓ Merged into master · 8d5a868 · 2 tasks');
+      expect(promotionTimelineTitle(done)).toBe('Merged into master');
+      expect(promotionPageTitle({ ...merged('m2', '2026-10-06T04:00:00Z', true), upstreamRef }))
+        .toBe('✓ Merged into master automatically');
+    }
+  });
+
+  it('says main as before for a candidate merging into main', () => {
+    const asking = candidate({ conflicts: ['a.go'] });
+    expect(promotionPageTitle(asking)).toBe('Merge into main?');
+    expect(promotionBranchLine(asking)).toBe('project/34ZurCP3bv9yLXGVyUGnx · 5 commits ahead of main');
+    expect(promotionEventLine(asking).text).toBe('Merge into main is waiting for you');
+    expect(promotionReceiptLine(merged('m1', '2026-10-06T04:00:00Z'))).toBe('✓ Merged into main · 8d5a868 · 2 tasks');
+    expect(promotionTimelineTitle(merged('m1', '2026-10-06T04:00:00Z'))).toBe('Merged into main');
   });
 });

@@ -1,6 +1,5 @@
 import { useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input } from 'antd';
 import {
   CheckCircleFilled,
   ClockCircleOutlined,
@@ -19,6 +18,8 @@ import type {
 import { CardActionButton, CardActions } from './CardAction';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { ReviewCard } from './ReviewCard';
+import { Alert } from './ui/Alert';
+import { Textarea } from './ui/Textarea';
 import { api } from '../api';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -253,7 +254,7 @@ export function CoordinatorQuestionCard({
         )}
         {/* Always there: none of the options may be what the owner wants, and one that is may
             still need a condition said with it. */}
-        <Input.TextArea
+        <Textarea
           className="coordinator-question-free"
           value={text}
           maxLength={2000}
@@ -272,9 +273,8 @@ export function CoordinatorQuestionCard({
       {answer.isError ? (
         <Alert
           type="error"
-          showIcon
           className="coordinator-question-error"
-          message="That answer was not recorded"
+          title="That answer was not recorded"
           description={(answer.error as Error).message}
         />
       ) : null}

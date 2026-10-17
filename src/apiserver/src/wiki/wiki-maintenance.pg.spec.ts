@@ -19,7 +19,9 @@
  *   7. what a failed run left waiting for its verification is the next run's to verify
  *      (`reviewModes.verification.adoption`): it reads them and its verdicts apply, a later op's live entry
  *      of the same content is never joined by a second copy, every floor holds, and nobody but a
- *      maintenance run of the space reads them;
+ *      maintenance run of the space reads them; and the door adopts what it always did once the server's
+ *      runs adopt what ended runs left (2026-10-11): an ended server run's op is in no session's list, and its
+ *      verdict through the door is refused 404;
  *   8. the documents follow what changed (criterion 3 revision 3, criterion 11): the owner's confirmation
  *      of a plan version makes one build task — a second confirmation while it runs records one build
  *      that waits, never two, and the build's task ending makes it; the entries a run wrote make only the
@@ -1200,6 +1202,38 @@ test('an adopted op\'s unsupported verdict counts toward the fallback as any doe
   // Out of Automatic, the adoption list says so before a model is asked anything.
   const list = await call(h, { runner: s.machine.token, session: next }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`);
   assert.equal(list.body.mode, 'tiered');
+});
+
+test('the runner door adopts what it always did: an ended server run\'s op is in no maintenance session\'s list, and its verdict through the door is refused 404', { skip }, async () => {
+  const h = await boot();
+  const s = await automaticSpace(h, 'adoption-server-run');
+  const cite = [{ kind: 'turn', ref: s.cite }];
+  // The server's maintenance run of the space proposed an op under its wiki job and ended without its verdict
+  // (maintenance.job.server.verify): the server's next run adopts it, and no session's.
+  const jobId = randomUUID();
+  await h.prisma.wikiJob.create({ data: { id: jobId, ownerId: s.owner.id, spaceId: s.spaceId, kind: 'maintain', input: {}, state: 'succeeded', endedAt: new Date() } });
+  const proposed = await h.service.submitChangeset(
+    { origin: 'maintenance', ownerId: s.owner.id, userId: null, sessionId: null, jobId, toolCallId: null, authorKind: 'system' },
+    s.spaceId,
+    { ops: [{ op: 'add', entry: concept('What an ended server run left waiting'), sources: cite }], rationale: 'the server run', idempotencyKey: randomUUID() },
+  );
+  const ofRun = toUuid((proposed.ops as Array<{ opId: string }>)[0]!.opId);
+  // A failed session's run left one too: the one the door adopts, as it always has.
+  const failed = await maintenanceRun(h, s);
+  const [ofSession] = await proposeAsRun(h, s, failed, [{ op: 'add', entry: concept('What a failed session run left waiting'), sources: cite }]);
+  await failRun(h, s, failed);
+
+  const next = await maintenanceRun(h, s);
+  assert.deepEqual((await adoptionList(h, s, next)).map((one) => toUuid(one.opId)), [toUuid(ofSession.opId)], 'the ended session\'s op, and no job\'s');
+  const route = `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`;
+  const refused = await call(h, { runner: s.machine.token, session: next }, 'POST', route, { verdicts: [verdictFor(uuidToBase62(ofRun), 'supported')] });
+  expectStatus(refused, 404, 'a server run\'s op reported through the door');
+  assert.equal(refused.body.outcomes[0].message, 'no op of an ended session waits for a verdict in this space by that id: a maintenance '
+    + 'run reports for the ops its adoption list gave, by their opId');
+  assert.equal((await h.prisma.wikiChangesetOp.findUniqueOrThrow({ where: { id: ofRun } })).decision, 'verifying', 'nothing recorded');
+  const adopted = await call(h, { runner: s.machine.token, session: next }, 'POST', route, { verdicts: [verdictFor(ofSession.opId, 'supported')] });
+  expectStatus(adopted, 200, 'the session\'s op, adopted through the door');
+  assert.equal(adopted.body.outcomes[0].status, 'applied');
 });
 
 // ── 8. the documents follow what changed ─────────────────────────────────────────────────────────

@@ -1288,6 +1288,36 @@
     "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
   },
   {
+    "name": "Claude signed out, and its workspaces run Claude Code and DeepSeek Harness on DeepSeek keys: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.284 (Claude Code)", "auth": "no" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastEngine": "claude", "lastProvider": "deepseek", "workDir": "~/app" },
+        { "id": "ws-docs", "name": "docs", "lastEngine": "dsh", "lastProvider": "deepseek-2", "workDir": "~/docs" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
     "name": "Claude sign-in unknown: nothing",
     "input": {
       "runner": {

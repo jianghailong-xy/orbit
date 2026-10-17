@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { ArrowLeftOutlined, HistoryOutlined, RightOutlined } from '@ant-design/icons';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { RECENT_DECISIONS, ReviewCard, TimelineRow, UsageCard, WikiDecisionRows, reviewOps } from './WikiHome';
@@ -9,6 +8,7 @@ import { WikiDot } from './WikiMarks';
 import { WikiPlanBanners, WikiPlanCard } from './WikiPlanCard';
 import { WikiRunTimelineRow } from './WikiRunPage';
 import { WikiRunsCard } from './WikiRunsCard';
+import { Button } from './ui/Button';
 import {
   wikiEntriesOfKindQuery,
   wikiEntriesQuery,

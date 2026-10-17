@@ -49,6 +49,12 @@ if 'a08c' in seed:
                        'batch': {'approvalId': row['batch']['approvalId'], 'taskCount': row['batch']['preview'].get('taskCount'),
                                  'titles': [t['title'] for t in row['batch']['tasks']]},
                        'merge': {'approvalId': row['merge']['approvalId'], 'proposed': row['merge']['input']['mergeCheckCommand']}}
+# A07c: the keys, pool, runner, workspace and sessions a07c-stack.mjs seeded (ids and names only), when seeded.
+if 'a07c' in seed:
+    compact['a07c'] = seed['a07c']
+# A07d: the DeepSeek key, the two Harness runners, the workspace and the sessions a07d-stack.mjs seeded (ids and names only).
+if 'a07d' in seed:
+    compact['a07d'] = seed['a07d']
 b64 = lambda text: base64.b64encode(text.encode()).decode()
 lines = {
     'a11Seed': json.dumps(compact, ensure_ascii=False, separators=(',', ':')),

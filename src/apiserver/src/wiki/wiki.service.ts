@@ -8,6 +8,7 @@ import {
   WIKI_KINDS,
   WIKI_LIMITS,
   WIKI_MACHINE_TRUST,
+  WIKI_MAINTAIN_JOB,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_RULES,
   WIKI_SOURCE_KINDS,
@@ -427,6 +428,8 @@ type Restorations = ReadonlyMap<string, readonly ResolvedSource[]>;
  * run's work away. What grew with the space — the near neighbours — is read before the transaction opens
  * (`ChangesetNeighbours`); this is the margin for what cannot move out, not room for a slow query:
  * wiki-scale.pg.spec.ts holds the transaction well under the old 5 s without it.
+ *
+ * An anchor check's transaction (`recordAnchorChecks`) has the same budget, for the reason given there.
  */
 const CHANGESET_TRANSACTION = { timeout: 15_000, maxWait: 5_000 };
 
@@ -2171,10 +2174,12 @@ export class WikiService {
    * Automatic, and a verifier that reads it can stop before it asks a model anything.
    *
    * `adopt` is a maintenance run's read instead (contract `reviewModes.verification.adoption`): the ops
-   * ended sessions left waiting in the space, which no proposer will verify now. The caller — a
-   * maintenance run of the space, which its door has checked — never proposed them, so each is handed
-   * with the neighbours its draft has NOW beside the ones recorded: a later op may have made the same
-   * knowledge live while it waited.
+   * ended sessions left waiting in the space, which no proposer will verify now — and, for the server's
+   * own run (`maintenance.job.server.verify`), those its ended jobs left waiting too ({@link adoptedByJob}),
+   * in the one list, in the order they were recorded. The caller — a maintenance run of the space, which
+   * its door has checked, or the space's maintain job — never proposed them, so each is handed with the
+   * neighbours its draft has NOW beside the ones recorded: a later op may have made the same knowledge
+   * live while it waited.
    */
   async listVerifications(
     principal: WikiPrincipal,
@@ -2195,7 +2200,9 @@ export class WikiService {
       }
     }
     const scope = options.adopt
-      ? { sessionId: { in: await this.adoptableSessions(principal, space.id) } }
+      ? adoptsAsJob(principal)
+        ? await this.adoptedByJob(principal, space.id)
+        : { sessionId: { in: await this.adoptableSessions(principal, space.id) } }
       : proposerScope(principal);
     const rows = await this.prisma.wikiChangesetOp.findMany({
       where: {
@@ -2407,6 +2414,67 @@ export class WikiService {
   }
 
   /**
+   * What the server's own maintenance run adopts in the space (contract `reviewModes.verification.adoption.who`,
+   * `maintenance.job.server.verify`): the ops of the space's ended sessions, as a session's run adopts, and the ops of
+   * its ended jobs ({@link adoptableJobs}) — what a server run's two passes left without a verdict, which no job is
+   * left to verify once its run has ended. Nothing at all for a job that is not the space's maintain job.
+   */
+  private async adoptedByJob(principal: WikiPrincipal, spaceId: string): Promise<Prisma.WikiChangesetWhereInput> {
+    if (!(await this.adoptingJob(this.prisma as unknown as Tx, principal, spaceId))) return { id: { in: [] } };
+    return {
+      OR: [
+        { sessionId: { in: await this.adoptableSessions(principal, spaceId) } },
+        { sessionId: null, jobId: { in: await this.adoptableJobs(principal, spaceId) } },
+      ],
+    };
+  }
+
+  /**
+   * The jobs whose waiting ops the server's maintenance run of the space adopts: each job of the space with an op
+   * still verifying there that has ended ({@link ENDED_JOB}), so that it will verify nothing of its own again —
+   * never the caller's own job, whose ops are its own to verify.
+   */
+  private async adoptableJobs(principal: WikiPrincipal, spaceId: string): Promise<string[]> {
+    const waiting = await this.prisma.wikiChangesetOp.findMany({
+      where: { ownerId: principal.ownerId, decision: 'verifying', changeset: { spaceId, sessionId: null, jobId: { not: null } } },
+      select: { changeset: { select: { jobId: true } } },
+    });
+    const named = [...new Set(waiting.map((row) => row.changeset.jobId!))].filter((id) => id !== principal.jobId);
+    if (named.length === 0) return [];
+    const ended = await this.prisma.wikiJob.findMany({
+      where: { id: { in: named }, ownerId: principal.ownerId, spaceId, state: { in: [...ENDED_JOB] } },
+      select: { id: true },
+    });
+    return ended.map((row) => row.id);
+  }
+
+  /**
+   * Whether an op whose changeset names `proposer` is one the server's maintenance run may adopt — the writer's own
+   * check of what {@link adoptedByJob} lists: the caller is the space's maintain job, and the op is an ended session's
+   * ({@link adoptable}) or an ended job's of the space other than the caller's own.
+   */
+  private async adoptableByJob(
+    tx: Tx,
+    principal: WikiPrincipal,
+    spaceId: string,
+    proposer: { sessionId: string | null; jobId: string | null },
+  ): Promise<boolean> {
+    if (!(await this.adoptingJob(tx, principal, spaceId))) return false;
+    if (proposer.sessionId !== null) return this.adoptable(tx, principal, proposer.sessionId);
+    if (proposer.jobId === null || proposer.jobId === principal.jobId) return false;
+    return (await tx.wikiJob.count({ where: { id: proposer.jobId, ownerId: principal.ownerId, spaceId, state: { in: [...ENDED_JOB] } } })) === 1;
+  }
+
+  /**
+   * Whether a job's principal is the space's own maintenance run, the one job that adopts there: a maintain job of the
+   * space. Another space's run, or a job of another kind, adopts nothing.
+   */
+  private async adoptingJob(reader: Tx, principal: WikiPrincipal, spaceId: string): Promise<boolean> {
+    const where = { id: principal.jobId!, ownerId: principal.ownerId, spaceId, kind: WIKI_MAINTAIN_JOB.kind };
+    return (await reader.wikiJob.count({ where })) === 1;
+  }
+
+  /**
    * The neighbours an adopted add's draft has now, its own lineage never among them: what a duplicate
    * of it may name besides the ones recorded with it, since a later op may have made the same knowledge
    * live while it waited. An amend has none: its entry moving since is a conflict, not a duplicate.
@@ -2453,7 +2521,8 @@ export class WikiService {
    * owner's is. WHEN: while the space is Automatic, and only then (`verification.notAutomatic`).
    *
    * `adopt` is a maintenance run's report for what it adopted (`verification.adoption`): then the ops
-   * found are those of the space's ended sessions, and nobody's still running.
+   * found are those of the space's ended sessions — and, for the server's run, of its ended jobs other than
+   * the run's own (`adoptableByJob`) — and nobody's still running.
    */
   async recordVerifications(
     principal: WikiPrincipal,
@@ -2509,9 +2578,10 @@ export class WikiService {
    * what was recorded and writes nothing.
    *
    * An ADOPTED op (`adopt`, `verification.adoption`) is found among the space's ended sessions' ops
-   * instead of the caller's, may be named a duplicate of what its adoption list offered it now, and —
-   * an add whose verdict would apply it while an entry of the space already holds its very content
-   * live — is judged a duplicate of that entry: no verdict makes a second live copy of it.
+   * instead of the caller's — for the server's run, among its ended jobs' ops too — may be named a
+   * duplicate of what its adoption list offered it now, and — an add whose verdict would apply it while
+   * an entry of the space already holds its very content live — is judged a duplicate of that entry: no
+   * verdict makes a second live copy of it.
    */
   private async applyVerdict(
     tx: Tx,
@@ -2523,8 +2593,13 @@ export class WikiService {
   ): Promise<{ outcome: WikiVerificationOutcome; trip: VerificationTrip | null; wrote: boolean }> {
     const ownerId = principal.ownerId;
     const opId = toUuid(verdict.opId);
+    // What an adoption finds: an op a session proposed, as a session's run has always found it — and, for the server's
+    // own run, one a job proposed too (`adoptableByJob` then says which of them it may verify).
+    const adopted: Prisma.WikiChangesetWhereInput = adoptsAsJob(principal)
+      ? { OR: [{ sessionId: { not: null } }, { jobId: { not: null } }] }
+      : { sessionId: { not: null } };
     const op = await tx.wikiChangesetOp.findFirst({
-      where: { id: opId, ownerId, changeset: { spaceId, ...(adopt ? { sessionId: { not: null } } : proposerScope(principal)) } },
+      where: { id: opId, ownerId, changeset: { spaceId, ...(adopt ? adopted : proposerScope(principal)) } },
       select: {
         id: true,
         changesetId: true,
@@ -2542,10 +2617,15 @@ export class WikiService {
         verificationVerdict: true,
         verificationDuplicateOf: true,
         verifiedAt: true,
-        changeset: { select: { sessionId: true, toolCallId: true } },
+        changeset: { select: { sessionId: true, toolCallId: true, jobId: true } },
       },
     });
-    if (adopt && (!op || !(await this.adoptable(tx, principal, op.changeset.sessionId)))) {
+    if (adopt && adoptsAsJob(principal)) {
+      if (!op || !(await this.adoptableByJob(tx, principal, spaceId, op.changeset))) {
+        throw new VerdictRefusal(404, 'no op of an ended session or an ended run waits for a verdict in this space by that id: '
+          + "the space's maintenance run reports for the ops its adoption list gave, by their opId");
+      }
+    } else if (adopt && (!op || !(await this.adoptable(tx, principal, op.changeset.sessionId)))) {
       throw new VerdictRefusal(404, 'no op of an ended session waits for a verdict in this space by that id: a maintenance '
         + 'run reports for the ops its adoption list gave, by their opId');
     }
@@ -2801,6 +2881,16 @@ export class WikiService {
    * at once, and — unless a challenge of it is already open — a system challenge is filed in the same
    * transaction, through `recordChangeset` like any other write: origin maintenance and no session, so
    * it counts against no session's quota. A Tiered pitfall the check leaves verified may become Auto.
+   *
+   * EACH ENTRY'S TRANSACTION HAS A CHANGESET'S BUDGET (`CHANGESET_TRANSACTION`), not Prisma's 5 s. It is a
+   * dozen statements and commits in tens of milliseconds, but on a loaded database one statement of it can
+   * take seconds by itself: on 2026-10-16 (run 6e62f826, 16:37:35) and 2026-10-17 (run 34cadf93, 02:38:31) a
+   * statement of one entry's transaction ran past the default, the `wikiEntry.findFirst` after it found the
+   * transaction expired (5000 ms; 6674 and 6002 ms passed), and the canary's run failed whole at its anchors
+   * step. No lock wait was logged either time. A check that breaks an anchor files a changeset of one op in
+   * it, and the worst lock wait four days of log_lock_waits recorded was 12.1 s (docker-compose.yml): 15 s
+   * holds both. What still runs past it is a P2028, which the server's run takes as the platform's and tries
+   * again (`maintenance.job.server.failureKinds`).
    */
   async recordAnchorChecks(
     caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
@@ -2826,7 +2916,7 @@ export class WikiService {
         const outcome = await withTransactionRetry(
           this.prisma,
           (tx) => this.applyAnchorCheck(tx, caller, space, shape.ref, at, item, literals),
-          loggedRetry(this.logger, 'wiki.recordAnchorChecks'),
+          loggedRetry(this.logger, 'wiki.recordAnchorChecks', { transaction: CHANGESET_TRANSACTION }),
         );
         outcomes.push(outcome);
         if (outcome.status === 'recorded') wrote = true;
@@ -4967,6 +5057,21 @@ function proposerScope(principal: WikiPrincipal): Prisma.WikiChangesetWhereInput
 const ENDED_SESSION: Prisma.SessionWhereInput = {
   OR: [{ status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } }, { completedAt: { not: null } }, { deletedAt: { not: null } }],
 };
+
+/**
+ * A wiki job that has ended (contract `reviewModes.verification.adoption.who`, `maintenance.job.server.verify`): it
+ * succeeded, failed or was cancelled. What its run proposed and left waiting for a verdict is nobody's to verify but
+ * the space's next server maintenance run's, which adopts it.
+ */
+const ENDED_JOB = ['succeeded', 'failed', 'cancelled'] as const;
+
+/**
+ * Whether the caller adopts as the server's own maintenance run — a wiki job's principal, with no session — rather
+ * than as a session's run on the runner door, whose adoption takes ended sessions' ops alone, as it always has.
+ */
+function adoptsAsJob(principal: WikiPrincipal): boolean {
+  return principal.sessionId === null && !!principal.jobId;
+}
 
 /**
  * One verdict, checked for the shape the contract gives it (`reviewModes.verification.report`) before

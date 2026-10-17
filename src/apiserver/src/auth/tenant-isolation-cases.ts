@@ -111,7 +111,7 @@ export interface Tenant {
   wikiArticlePart: number;
   wikiDocSlug: string;
   wikiTopicSlug: string;
-  /** For /admin/*: a user an administrator acts on, one of its tokens, a global provider. */
+  /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
@@ -209,6 +209,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── admin/*: an administrator acts on other accounts by design; a member is refused ─────────────
   'GET /admin/users/:id/access-tokens': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // The subject has a profile photo: the administrator is answered its bytes.
+  'GET /admin/users/:id/avatar': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // Before the role and disabled cases below: the subject is still an enabled member, whom an administrator may view.
+  'POST /admin/users/:id/impersonate': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { reason: 'the census' } }) },
   'DELETE /admin/users/:id/access-tokens/:tokenId': {
     request: (of) => ({ params: { id: of.adminSubjectId, tokenId: of.adminSubjectTokenId } }),
   },
@@ -365,6 +369,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── providers: the account's own, its pools, and the pools it shares with others ───────────────
   'GET /providers/mine/:id/key': { request: (of) => ({ params: { id: of.providerId } }) },
   'GET /providers/mine/:id/balance': { request: (of) => ({ params: { id: of.providerId } }) },
+  'GET /providers/mine/:id/usage': { request: (of) => ({ params: { id: of.providerId } }) },
+  // The account's own key is no Cursor key: it is answered that, which no key of anybody else's is.
+  'POST /providers/mine/:id/key-check': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },
@@ -478,10 +485,15 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/worktree-file': { request: (of) => ({ params: { id: of.sessionId }, query: { path: 'census.txt' } }) },
   'GET /sessions/:id/diff': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/diff/refresh': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/recap': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId }, body: turn('turn') }) },
   'POST /sessions/:id/turns/current-work-routing': { request: (of) => ({ params: { id: of.sessionId }, body: turn('routed') }) },
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/turns/:turnId': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
+  'POST /sessions/:id/turns/:turnId/steer': {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
   },

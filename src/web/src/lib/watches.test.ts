@@ -29,6 +29,7 @@ import {
   expiryLabel,
   formatSpan,
   groupWatches,
+  isLiveWatch,
   lastChangedAt,
   mergeWatches,
   parseWatchWake,
@@ -40,13 +41,16 @@ import {
   stripCounts,
   stripSentence,
   stripStaleLine,
+  taskStaleLines,
   thresholdOf,
   updateWatch,
+  waitsBeyondTasks,
   wakeWithdrawn,
   watchBucket,
   watchErrorMessage,
   watchProblem,
   watchStateCopy,
+  watchedTasks,
   watchesFollowedBy,
   watchesFollowing,
   watchingSessions,
@@ -718,9 +722,55 @@ describe('the Watching strip, in the words both clients say', () => {
       word: string;
       line: string;
     }>;
+    fold: Array<{
+      case: string;
+      watches: Array<{
+        state: WatchView['state'];
+        predicate: WatchPredicate;
+        lastEvaluatedAt: string | null;
+        createdAt: string;
+        targets: Array<{
+          id: string;
+          kind: 'TASK' | 'SESSION';
+          title: string;
+          state?: WatchTargetView['state'];
+          status: WatchTargetView['targetStatus'];
+          task?: WatchTargetView['targetTask'];
+        }>;
+      }>;
+      watchedTasks: Array<{ id: string; title: string; status: string | null; running: boolean; queued: boolean; stale: boolean }>;
+      strip: number[];
+      taskStaleLines: string[];
+      word: string;
+      line: string;
+    }>;
     sessionWords: Record<string, string>;
   };
   const now = Date.parse(fixture.now);
+
+  /** A fold case's watches, as `GET /watches` sends them: a target's `task` is its `targetTask`, absent when the case gives none. */
+  const foldWatches = (c: (typeof fixture.fold)[number], observer: string): WatchView[] =>
+    c.watches.map((w, i) =>
+      watch({
+        id: `w${i}`,
+        action: 'RESUME_SESSION',
+        observerType: 'SESSION',
+        observerSessionId: observer,
+        state: w.state,
+        predicate: w.predicate,
+        lastEvaluatedAt: w.lastEvaluatedAt,
+        createdAt: w.createdAt,
+        targets: w.targets.map((t) =>
+          target(t.id, {
+            targetKind: t.kind,
+            targetTitle: t.title,
+            targetStatus: t.status,
+            state: t.state ?? 'OBSERVED',
+            ...(t.task === undefined ? {} : { targetTask: t.task }),
+          }),
+        ),
+      }),
+    );
 
   it('says what each watch waits for in one sentence', () => {
     expect(fixture.sentences.length).toBeGreaterThan(10);
@@ -779,6 +829,48 @@ describe('the Watching strip, in the words both clients say', () => {
       );
       expect(sessionWatching(watchingSessions(watches), observer), c.case).toEqual({ word: c.word, line: c.line });
     }
+  });
+
+  /**
+   * A task's run session is a target on that task in the cards above the composer and in the
+   * session's words: its eye on the task's row, no Watching strip of its own, and one target where
+   * the task and its run are both waited on — the same cases OrbitKit and Android are proved against.
+   */
+  it('folds a task’s run session into that task, as the native clients do', () => {
+    expect(fixture.fold.length).toBeGreaterThanOrEqual(5);
+    const observer = 'observerSession';
+    for (const c of fixture.fold) {
+      const watches = foldWatches(c, observer);
+      const waitingOn = watchesFollowing(watches, observer).filter(isLiveWatch);
+      expect(
+        watchedTasks(waitingOn, now).map(({ id, title, standing, stale }) => ({
+          id,
+          title,
+          status: standing?.status ?? null,
+          running: standing?.running ?? false,
+          queued: standing?.queued ?? false,
+          stale,
+        })),
+        c.case,
+      ).toEqual(c.watchedTasks);
+      expect(waitingOn.flatMap((w, i) => (waitsBeyondTasks(w) ? [i] : [])), c.case).toEqual(c.strip);
+      expect(taskStaleLines(waitingOn, now), c.case).toEqual(c.taskStaleLines);
+      expect(watchingWord(watches, observer), c.case).toBe(c.word);
+      expect(sessionWatching(watchingSessions(watches), observer), c.case).toEqual({ word: c.word, line: c.line });
+    }
+  });
+
+  it('still says each watch as it was made: its condition is about the session it names', () => {
+    const owners = fixture.fold[0];
+    const [taskAwait, sessionAwait] = foldWatches(owners, 'observerSession');
+    expect(sessionAwait.targets[0].targetTask?.id).toBe('T1');
+    expect(stripSentence(sessionAwait, now)).toBe(
+      'Resumes this session when it finishes its turn or asks for an approval, or in 1d 2h at the latest.',
+    );
+    expect(describeCondition(sessionAwait.predicate, sessionAwait.targets)).toBe(
+      'When the session finishes its turn, or the session asks for an approval',
+    );
+    expect(stripSentence(taskAwait, now)).toBe('Resumes this session when it finishes, or in 1d 2h at the latest.');
   });
 
   it('reads the leaves in the words the rest of the page reads them in', () => {

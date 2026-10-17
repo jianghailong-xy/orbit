@@ -1,0 +1,248 @@
+{
+ "select openers: no value": {
+  "chromium-light-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list open"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "Never",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  },
+  "chromium-dark-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "Never",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  },
+  "webkit-light-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "Never",
+    "hovered": "Never",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  },
+  "webkit-dark-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "Never",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "Never",
+    "hovered": "Never",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  }
+ },
+ "select openers: a value": {
+  "chromium-light-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "Never",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list open"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "7 | list open"
+   }
+  },
+  "chromium-dark-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "Never",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list open"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "7 | list open"
+   }
+  },
+  "webkit-light-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "Never",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list open"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "7 | list open"
+   }
+  },
+  "webkit-dark-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "Never",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list open"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "7 | list open"
+   }
+  }
+ },
+ "select openers: first option disabled": {
+  "chromium-light-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  },
+  "chromium-dark-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  },
+  "webkit-light-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  },
+  "webkit-dark-desktop": {
+   "antd": {
+    "arrowUpOpensOn": "closed",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "7 days",
+    "reopenedOn": "closed",
+    "hovered": "7 days",
+    "afterLeaving": "7 days",
+    "enterAfterLeaving": "7 | list closed"
+   },
+   "orbit": {
+    "arrowUpOpensOn": "7 days",
+    "clickOpensOn": "7 days",
+    "afterArrowDown": "30 days",
+    "reopenedOn": "7 days",
+    "hovered": "7 days",
+    "afterLeaving": "none",
+    "enterAfterLeaving": "null | list open"
+   }
+  }
+ }
+}

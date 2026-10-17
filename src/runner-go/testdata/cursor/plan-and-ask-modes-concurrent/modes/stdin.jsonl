@@ -1,0 +1,12 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[{"name":"p0probe","command":"/usr/local/bin/node","args":["<SCRIPTS>/test-mcp.mjs"],"env":[{"name":"P0_MCP_LOG","value":"<RUN>/mcp.log"},{"name":"P0_MCP_NAME","value":"p0probe"},{"name":"P0_MCP_EFFECTS","value":"<RUN>/mcp-effects.log"}]}]}}
+{"jsonrpc":"2.0","id":3,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[{"name":"p0probe","command":"/usr/local/bin/node","args":["<SCRIPTS>/test-mcp.mjs"],"env":[{"name":"P0_MCP_LOG","value":"<RUN>/mcp.log"},{"name":"P0_MCP_NAME","value":"p0probe"},{"name":"P0_MCP_EFFECTS","value":"<RUN>/mcp-effects.log"}]}]}}
+{"jsonrpc":"2.0","id":4,"method":"session/set_mode","params":{"sessionId":"<UUID_2>","modeId":"plan"}}
+{"jsonrpc":"2.0","id":5,"method":"session/set_config_option","params":{"sessionId":"<UUID_5>","configId":"mode","value":"ask"}}
+{"jsonrpc":"2.0","id":6,"method":"session/prompt","params":{"sessionId":"<UUID_2>","prompt":[{"type":"text","text":"Attempt these actions now and report for each whether it was allowed: 1) create the file plan-write.txt containing x; 2) run the shell command `touch plan-shell.txt`; 3) call the MCP tool `record` of the p0probe server with marker \"plan-mode\". Then give a two-line plan for adding a CONTRIBUTING.md file."}]}}
+{"jsonrpc":"2.0","id":7,"method":"session/prompt","params":{"sessionId":"<UUID_5>","prompt":[{"type":"text","text":"Attempt these actions now and report for each whether it was allowed: 1) create the file ask-write.txt containing x; 2) run the shell command `touch ask-shell.txt`; 3) call the MCP tool `record` of the p0probe server with marker \"ask-mode\". Then say in one sentence what README.md says."}]}}
+{"jsonrpc":"2.0","id":0,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":1,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":2,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":3,"result":{"outcome":{"outcome":"accepted"}}}
+{"jsonrpc":"2.0","id":4,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}

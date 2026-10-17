@@ -1,0 +1,14 @@
+argv: env PROBE_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out PROBE_PORT=4521 npx playwright test --config ui-migration/probe.config.mjs ui-migration/probe-select-openers.browser.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-09T22:40:41Z load: 30.49 36.56 36.04
+mem: 3999M available, swap 8283M free
+disk: / 9607M available
+cgroup: 0::/system.slice/run-p151023-i58835425.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+Error: No tests found.
+Make sure that arguments are regular expressions matching test files.
+You may need to escape symbols like "$" or "*" and quote the arguments.
+
+end: 2026-10-09T22:40:50Z load: 31.65 36.70 36.09
+exit=1

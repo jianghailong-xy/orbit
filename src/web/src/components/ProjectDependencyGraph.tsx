@@ -57,7 +57,6 @@ import {
   type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Alert, Button, Empty, Modal, Popover, Spin, Tooltip } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import {
   createContext,
@@ -104,6 +103,13 @@ import {
 // deuteranopia/protanopia simulation in `lib/statusPalette.test.ts`.
 import { EDGE_COLORS } from './TaskDependencyGraph';
 import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Empty } from './ui/Empty';
+import { Popover } from './ui/Popover';
+import { Spinner } from './ui/Spinner';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The colour-independent second channel for a failed prerequisite.
@@ -418,14 +424,15 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
         </button>
       ) : (
         <Popover
-          content={<MotifSamples mark={mark} />}
           title={mark.title}
-          trigger="click"
-          placement="bottom"
+          side="bottom"
+          trigger={
+            <button type="button" className="pdg-fold-main nodrag nopan" aria-label={label}>
+              {body}
+            </button>
+          }
         >
-          <button type="button" className="pdg-fold-main nodrag nopan" aria-label={label}>
-            {body}
-          </button>
+          <MotifSamples mark={mark} />
         </Popover>
       )}
       {data.hasOutgoing && (
@@ -1000,8 +1007,9 @@ function ProjectFlow(props: {
 }
 
 /**
- * `data` draws a graph already in hand — a public project page's, which its link carries — instead
- * of reading the project's own; nothing is fetched then.
+ * `data` draws a graph already in hand — a public project page's, which its link carries, or a
+ * proposed batch's, which no project has yet — instead of reading a project's own; nothing is
+ * fetched then, and `projectId` is not needed.
  *
  * The start card draws the same graph two more ways (docs/mocks/start-card-web-width, board 02):
  * `embedded`, its picture of a plan that fits — top to bottom (`direction`), fitted, deaf to the
@@ -1016,7 +1024,8 @@ export function ProjectDependencyGraph({
   fullScreenOnly = false,
   onClose,
 }: {
-  projectId: string;
+  /** Where its marks' tasks open. With `data` and no project, every mark is words, not a link. */
+  projectId?: string;
   data?: ProjectDependencyGraphResponse;
   /** Which way dependencies advance; by default down a phone and across anything wider. */
   direction?: 'LR' | 'TB';
@@ -1047,7 +1056,11 @@ export function ProjectDependencyGraph({
     setFullScreen(false);
     onClose?.();
   }, [onClose, pathname]);
-  const query = useQuery({ ...projectDependencyGraphQuery(projectId), enabled: !data });
+  // A graph handed in is drawn; a canvas that names no project has nothing it could fetch.
+  const query = useQuery({
+    ...projectDependencyGraphQuery(projectId ?? ''),
+    enabled: !data && Boolean(projectId),
+  });
   const graph = data
     ? { data, isLoading: false, isError: false as const, error: null, refetch: query.refetch }
     : query;
@@ -1124,7 +1137,7 @@ export function ProjectDependencyGraph({
   if (graph.isLoading) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -1132,8 +1145,7 @@ export function ProjectDependencyGraph({
     return (
       <Alert
         type="error"
-        showIcon
-        message="Dependency graph could not be loaded"
+        title="Dependency graph could not be loaded"
         description={graph.error instanceof Error ? graph.error.message : undefined}
         action={
           <Button size="small" danger onClick={() => graph.refetch()}>
@@ -1148,7 +1160,7 @@ export function ProjectDependencyGraph({
   }
 
   return (
-    <GraphProjectCtx.Provider value={projectId}>
+    <GraphProjectCtx.Provider value={projectId ?? null}>
       {fullScreenOnly ? null : (
         <div
           ref={stripRef}
@@ -1156,7 +1168,7 @@ export function ProjectDependencyGraph({
           style={stripHeight ? { height: stripHeight } : undefined}
           data-testid="project-dependency-graph"
         >
-          <Tooltip title="Open full-screen graph">
+          <Tooltip content="Open full-screen graph">
             <button
               type="button"
               className="tdg-maximize"
@@ -1182,17 +1194,15 @@ export function ProjectDependencyGraph({
           )}
         </div>
       )}
-      <Modal
+      <Dialog
         className="tdg-modal"
         open={fullScreen}
-        onCancel={() => {
+        onClose={() => {
           setFullScreen(false);
           onClose?.();
         }}
-        footer={null}
         width={narrow ? '100vw' : 'calc(100vw - 48px)'}
         title="Task graph"
-        destroyOnClose
       >
         <div className="tdg-full-canvas">
           <ProjectFlow
@@ -1205,14 +1215,17 @@ export function ProjectDependencyGraph({
             onHover={setHoverMarkId}
           />
         </div>
-      </Modal>
+      </Dialog>
       {/* Opened from the start card, the list it would point at is the card's own, above. */}
       {graph.data?.truncated && !fullScreenOnly ? (
         <Alert
           style={{ marginTop: 8 }}
           type="warning"
-          showIcon
-          message={`This project is larger than one graph request reads (${graph.data.limits.maxTasks.toLocaleString()} tasks).`}
+          title={
+            graph.data.limits
+              ? `This project is larger than one graph request reads (${graph.data.limits.maxTasks.toLocaleString()} tasks).`
+              : 'This project is larger than one graph request reads.'
+          }
           description="The task list below has all of them, in dependency order."
         />
       ) : null}

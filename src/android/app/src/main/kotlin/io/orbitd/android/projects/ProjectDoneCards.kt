@@ -83,7 +83,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 Modifier.padding(top = 6.dp).clickable(role = Role.Button) { criteriaOpen = !criteriaOpen }.testTag("$tag-criteria"),
                 style = MaterialTheme.typography.labelMedium, color = accent)
         }
-        Text(ProjectDone.cardTally(counts), Modifier.testTag("$tag-tally"), style = MaterialTheme.typography.labelMedium, color = muted)
+        Text(ProjectDone.cardTally(counts, ProjectDone.mainBranch(doc)), Modifier.testTag("$tag-tally"), style = MaterialTheme.typography.labelMedium, color = muted)
         if (criteriaOpen) DonePanel {
             criteria.forEachIndexed { index, criterion ->
                 if (index > 0) HorizontalDivider()
@@ -91,7 +91,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                     DoneOrdinal("${criterion.ordinal ?: index + 1}")
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(criterion.text, style = MaterialTheme.typography.bodySmall)
-                        Text(ProjectDone.criterionState(criterion), style = MaterialTheme.typography.labelMedium, color = muted)
+                        Text(ProjectDone.criterionState(criterion, ProjectDone.mainBranch(doc)), style = MaterialTheme.typography.labelMedium, color = muted)
                     }
                 }
             }
@@ -190,10 +190,12 @@ private fun ProjectDoneReceipt(doc: JsonObject, record: JsonObject?, enabled: Bo
     }
 }
 
-/** A project Orbit recorded done itself: the old question's terminal state, "This project is done · recorded by Orbit", and how its
- * criteria ended — the only part of "Why is this project not done?" a conversation still draws. */
+/** A project that is done: the old question's terminal state, "This project is done · recorded by Orbit" (or "recorded by you"),
+ * and how its criteria ended — the only part of "Why is this project not done?" a conversation still draws, and the card a project's
+ * sessions page draws where its progress card was while it is done (docs/mocks/project-done-sessions-page, owner decision 2026-10-10).
+ * The chrome belongs to the caller: the conversation wraps it in its Surface, the page in the list's own. */
 @Composable
-private fun ProjectSettledCard(doc: JsonObject, tag: String) {
+internal fun ProjectSettledCard(doc: JsonObject, tag: String) {
     Column(Modifier.fillMaxWidth().testTag("$tag-settled"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DoneSettledHead(ProjectDone.settledBadge(doc.text("doneBy"))) {}
         Text(ProjectDone.whyNotDoneTally(doc), Modifier.testTag("$tag-settled-tally"), style = MaterialTheme.typography.labelMedium,

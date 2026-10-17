@@ -192,6 +192,11 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(rows.contains("Text(SettingsCopy.suggestedRepliesHint)"))
         XCTAssertTrue(list.contains("UpdatePreferencesRequest(promptSuggestions: value)"))
         XCTAssertTrue(list.contains("promptSuggestions = p?.suggestedReplies ?? true"))
+        // And session recaps, the same shape; absent reads as on.
+        XCTAssertTrue(rows.contains("Toggle(isOn: $recaps) {"))
+        XCTAssertTrue(rows.contains("Text(SettingsCopy.sessionRecapsHint)"))
+        XCTAssertTrue(list.contains("UpdatePreferencesRequest(recaps: value)"))
+        XCTAssertTrue(list.contains("recaps = p?.showRecaps ?? true"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.

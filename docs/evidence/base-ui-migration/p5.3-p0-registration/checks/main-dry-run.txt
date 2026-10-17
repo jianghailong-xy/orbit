@@ -1,0 +1,27 @@
+HEAD 58cfe507b471276a8520058a2a55158a181f44e1, origin/main a209ed4348adb6a76eb2599cf02223e452edf46f, base e83d71958d20674429e6df4bf67b3345544a4a18, 2026-10-10T12:33:17Z
+merge-tree exit 0 (0 = no conflicts), result tree: 516600fcc78561289fa2fbdea0dac7deee75bbce
+## main's commits since the base
+a209ed434 Merge refs/heads/project/34bmzOkov3xN2yLPrnsCk into refs/heads/main
+7b4d06cc0 Merge refs/heads/project/34cq4x8pFLbPT4YieZIMq into refs/heads/main
+897e73096 chore(release): stage runner 0.1.229 at 60%
+2f9a0def5 Merge refs/heads/main into refs/heads/project/34bmzOkov3xN2yLPrnsCk
+77e1f9585 fix(copy): the coordinator's judgment turn and the messages delivered to it are English
+195784401 fix(wiki-worker): the documents' build reads a wildcard source as the runner's git show does
+5215d2c49 Merge refs/heads/main into refs/heads/project/34bmzOkov3xN2yLPrnsCk
+## main's changes since the base, by area
+  contracts: 1 files
+  docs: 2 files
+  runner-release.json: 1 files
+  src/apiserver: 21 files
+  src/runner-go: 1 files
+  src/shared: 2 files
+  src/web: 1 files
+## under src/web, src/shared, the lockfile, scripts/worktree-overlay.sh or docs/evidence
+M	src/shared/src/wiki-docs-build.fixture.json
+M	src/shared/src/wikiContract.spec.ts
+M	src/web/src/copyLanguage.test.ts
+## readers of the changed src/shared files, outside src/shared's tests (none under src/web = the Web build does not read them)
+src/shared/src/wiki-docs-build.fixture.json:
+  under src/web: 0 files
+src/shared/src/wikiContract.spec.ts:
+  under src/web: 0 files

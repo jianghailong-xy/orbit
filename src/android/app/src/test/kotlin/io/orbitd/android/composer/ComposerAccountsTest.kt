@@ -67,4 +67,26 @@ class ComposerAccountsTest {
         assertFalse(runner("google", "yes", null, capabilities = "\"codex-account-move/v1\"").movesAccounts("antigravity"))
         assertTrue(runner("google", "yes", null, capabilities = "\"codex-account-move/v1\"").movesAccounts("codex"))
     }
+
+    /** The Provider menu's sign-in group is the runner's accounts of the session's engine (board 4 ④): Claude Code's two here, each
+     * with its quota, its sign-in named Default; one account alone names the sign-in after itself. DeepSeek Harness has no sign-in —
+     * its group is the account's DeepSeek keys, both of them — and no accounts to pick, whichever key it spends. */
+    @Test fun theSignInGroupIsTheEnginesAccountsAndHarnessHasOnlyItsDeepSeekKeys() {
+        val catalog = EngineFixture.catalog()
+        val claude = catalog.credentials("claude")
+        assertEquals(CredentialKind.LOGIN, claude.first().kind)
+        assertEquals("Default", claude.first().label)
+        assertEquals(listOf("Default", "Work"), catalog.accountChoices("claude").map { it.label })
+        assertTrue(catalog.movesAccounts("claude"))
+        val single = EngineFixture.catalog(runner = EngineFixture.RUNNER.replace(""",{"id":"5c2e91a0","name":"Work","auth":"yes"}""", ""))
+        assertEquals("Default", single.credentials("claude").first().label)
+        val named = EngineFixture.catalog(runner = EngineFixture.RUNNER.replace("""{"id":"default","auth":"yes"},""", ""))
+        assertEquals("Work", named.credentials("claude").first().label)
+        val harness = catalog.credentials("dsh")
+        assertEquals(listOf("deepseek", "deepseek-2"), harness.map { it.id })
+        assertTrue(harness.all { it.kind == CredentialKind.KEY && it.unavailable == null })
+        assertTrue(catalog.accountChoices("dsh").isEmpty())
+        // A key's own quota is the key's: never the runner sign-in's, under any engine.
+        assertNull(catalog.usage(obj("""{"engine":"dsh","provider":"deepseek"}""")))
+    }
 }

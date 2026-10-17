@@ -178,11 +178,16 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     const revived = await sessions.resume(f.ownerId, ended, { clientTurnId: 'revive-ended', content: 'revive the ended one' });
     assert.equal(revived.revived, true);
     assert.equal((await f.poll(CURRENT))?.sessionId, ended);
+    // A new session naming the built-in `dsh` runs on the owner's default DeepSeek key, the workspace's
+    // own key notwithstanding (docs/provider-engine-contract.md §3.3); that one stays the credential of
+    // the built-in sessions it already ran.
     const fresh = await f.create('dsh');
+    assert.deepEqual(await db.session.findUniqueOrThrow({ where: { id: fresh.id }, select: { provider: true, providerBuiltin: true, engine: true } }),
+      { provider: f.configured, providerBuiltin: false, engine: AgentProvider.DSH });
     const job = await f.poll(CURRENT);
     assert.equal(job?.sessionId, fresh.id);
     assert.equal(job?.provider, AgentProvider.DSH);
-    assert.equal(job?.agent.env?.ORBIT_DSH_API_KEY, 'native-session-key');
+    assert.equal(job?.agent.env?.ORBIT_DSH_API_KEY, 'configured-session-key');
   });
 
   await t.test('IG-PG6 platform and version reports refuse with their own notices', async () => {

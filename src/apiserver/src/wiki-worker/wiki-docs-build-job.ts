@@ -9,7 +9,10 @@ import { wikiPlanProjectIds } from '../wiki/wiki-plan';
 import { finishWikiPlanJob, progressWikiPlanBuildOfJob, type WikiPlanJobEnd } from '../wiki/wiki-plan-job';
 import { WikiRefusalError, type WikiService } from '../wiki/wiki.service';
 import {
+  carryWikiDocsSection,
+  mergeWikiDocsBuild,
   runWikiDocsBuild,
+  wikiDocsBuildCarryOf,
   WikiDocsCallFailed,
   WikiDocsWriteRefused,
   type WikiDocsBuildSummary,
@@ -20,7 +23,8 @@ import {
 import { wikiDocCleanPath, type WikiDocRepo, type WikiDocShown, type WikiDocsPlanDoc } from './wiki-docs-writer';
 import { cutRunes } from './wiki-import-extract';
 import { isWikiJobCancellation, WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
-import { writeWikiJobProgress } from './wiki-jobs';
+import { readWikiJobCarry, wikiJobCarryWriter, writeWikiJobProgress } from './wiki-jobs';
+import { wikiJobModelCalls } from './wiki-model-queue';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -67,6 +71,11 @@ import {
  * ends both failed once every other section has been tried, as the command exited non-zero. A failure of the
  * platform (the space's runner away, a read or a request past its limit, the worker stopping) is not the
  * build's: the job is tried again and the plan job reads as running meanwhile.
+ *
+ * THE REPORT IS THE WHOLE BUILD'S (contract `jobs.carry`), the job's and the plan job's alike. A section an earlier
+ * attempt wrote is unchanged for the replay by its fingerprint; each written section is carried on the job's row as it
+ * is written, and the report counts it written, once. Its calls and usage are the job's own requests, each once, and
+ * its seconds run from the job's first claim.
  */
 
 /** What the job needs besides its context. */
@@ -141,6 +150,11 @@ export async function runWikiDocsBuildJob(context: WikiJobContext, deps: WikiDoc
     stored.set(doc.slug, new Map(doc.sections.map((section) => [section.key, { materialSha256: section.materialSha256, stale: section.stale }])));
   }
   const literals = await ownerEnvLiterals(prisma, job.ownerId);
+  // What the attempts before this one wrote: the replay finds it unchanged, and the report counts it written.
+  const { carry: carried, startedAt } = await readWikiJobCarry(prisma, job.id);
+  const earlier = wikiDocsBuildCarryOf(carried);
+  const carry = wikiDocsBuildCarryOf(carried);
+  const keep = wikiJobCarryWriter(prisma, job, () => ({ docs: carry.docs }));
   const summary = await runWikiDocsBuild({
     repo,
     prepare: (paths) => repo.prepare(paths),
@@ -182,16 +196,26 @@ export async function runWikiDocsBuildJob(context: WikiJobContext, deps: WikiDoc
       await progressWikiPlanBuildOfJob(prisma, planJobId, job.id, at);
       await progress(prisma, context, { step: 'documents', ...at });
     },
+    onSection: async (doc, run, answer) => {
+      if (carryWikiDocsSection(carry, doc.slug, run, answer)) await keep();
+    },
   });
 
-  const build = buildReportOf(summary, deps.model);
-  const report: WikiDocsBuildJobReport = { kind: 'docs_build', planJobId, ...summary, build };
-  if (summary.failed > 0) {
-    const error = `${summary.failed === 1 ? '1 section was' : `${summary.failed} sections were`} left unwritten`;
-    await finishPlanJob(deps, job.id, planJobId, { outcome: 'failed', version: summary.planVersion, errors: [], error, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
+  const spent = await wikiJobModelCalls(prisma, { jobId: job.id, failed: true });
+  const whole: WikiDocsBuildSummary = {
+    ...mergeWikiDocsBuild(summary, earlier),
+    calls: spent.calls,
+    usage: { inputTokens: spent.inputTokens, outputTokens: spent.outputTokens },
+    seconds: startedAt ? Math.max(0, (Date.now() - startedAt.getTime()) / 1000) : summary.seconds,
+  };
+  const build = buildReportOf(whole, deps.model);
+  const report: WikiDocsBuildJobReport = { kind: 'docs_build', planJobId, ...whole, build };
+  if (whole.failed > 0) {
+    const error = `${whole.failed === 1 ? '1 section was' : `${whole.failed} sections were`} left unwritten`;
+    await finishPlanJob(deps, job.id, planJobId, { outcome: 'failed', version: whole.planVersion, errors: [], error, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
     throw new WikiJobContentError(error, report as unknown as Record<string, unknown>);
   }
-  await finishPlanJob(deps, job.id, planJobId, { outcome: 'succeeded', version: summary.planVersion, errors: [], error: null, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
+  await finishPlanJob(deps, job.id, planJobId, { outcome: 'succeeded', version: whole.planVersion, errors: [], error: null, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
   return report;
 }
 
@@ -332,14 +356,23 @@ function refusalText(spaceId: string, error: WikiRefusalError): string {
 
 // ── The repository, through the space's runner ─────────────────────────────────────────────────
 
-/** What a `read` cut short ends with: `wikiRepoOpAfterwardsMarker` in src/runner-go/wiki_repo_ops.go. */
-const READ_CUT_MARKER = '\n…（后略）\n';
+/**
+ * What a `read` cut short ends with: `wikiRepoOpAfterwardsMarker` in src/runner-go/wiki_repo_ops.go, `\n… (rest omitted)\n` —
+ * or the `\n…（后略）\n` an older runner ends it with, as the read cache may still hold it.
+ */
+const READ_CUT_MARKER = /\n…(?: \(rest omitted\)|（后略）)\n$/u;
 
 /**
  * The checkout at the snapshot's commit, as the writer reads it (`WikiDocRepo`): which files there are and how big
  * from the snapshot, and each file's text whole from a `read` at that commit (owner 2026-10-08), served from the
  * read cache when it is already held and read from the runner once otherwise (`prepare`). A directory shows as
  * `git show <sha>:<dir>` shows a tree — the runner's writer read a directory that way — from the snapshot's paths.
+ *
+ * A path that is no file or directory of the commit but holds a wildcard (`gitWildcard`) shows as an empty file. Git
+ * takes such a `<sha>:<path>` for a pathspec (`looks_like_pathspec`), and `git show` exits 0 printing nothing: the
+ * runner's writer read an empty file, found no section and no symbol in it, and took a code path's head and a
+ * contract with nothing in them. The documents' build, the maintenance run's comparison and its proposal check all
+ * read through this, so the server reads such a source as the runner does until the runner's path is removed (P11).
  */
 export class WikiDocsSnapshotRepo implements WikiDocRepo {
   private readonly texts = new Map<string, WikiDocShown | null>();
@@ -369,7 +402,7 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
       const slash = rest.indexOf('/');
       children.add(slash < 0 ? rest : `${rest.slice(0, slash)}/`);
     }
-    if (children.size === 0) return null;
+    if (children.size === 0) return gitWildcard(path) ? { text: '', cut: false } : null;
     const listed = [...children].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
     return { text: `tree ${this.sha}:${path}\n\n${listed.map((child) => `${child}\n`).join('')}`, cut: false };
   }
@@ -414,6 +447,15 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
       this.waiting.shift()?.();
     }
   }
+}
+
+/** Whether git reads a path as a pattern: a wildcard in it — `*`, `?` or `[` — that no backslash escapes. */
+function gitWildcard(path: string): boolean {
+  for (let i = 0; i < path.length; i += 1) {
+    if (path[i] === '\\') i += 1;
+    else if (path[i] === '*' || path[i] === '?' || path[i] === '[') return true;
+  }
+  return false;
 }
 
 /**
@@ -485,7 +527,7 @@ export function wikiDocsShownOf(file: WikiRepoFileRead, size: number): WikiDocSh
   if (file.state === 'too_large') return null;
   let text = file.text;
   if (file.state !== 'cut') return { text, cut: false };
-  if (text.endsWith(READ_CUT_MARKER)) text = text.slice(0, -READ_CUT_MARKER.length);
+  text = text.replace(READ_CUT_MARKER, '');
   return { text: text.slice(0, text.lastIndexOf('\n') + 1), cut: true };
 }
 

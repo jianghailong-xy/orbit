@@ -1,0 +1,44 @@
+Delivery commit 09d94a12f = project tip c04e79238 (parent 1) + origin/main 0f07cf72e (parent 2).
+
+While this round ran, origin/main moved: 0f07cf72e -> 220da3f72 -> 7c58911e7 -> 96852b785 -> 756855121.
+96852b785 is main's promotion of this project's own line: the project tip c04e79238 is now an ancestor of origin/main.
+  git merge-base --is-ancestor c04e79238 origin/main: true
+
+Dry run of merging today's origin/main into the delivery commit:
+  git merge-tree --write-tree HEAD origin/main
+  -> tree d0c436702c84fddbff2122c42fd037430e932d25, exit 0, no conflicts.
+
+What that merge would change in the delivery tree: 110 files, all of them main's own new work:
+       17 docs/evidence/project-main-branch-native/shots/mac
+       17 docs/evidence/project-main-branch-native/shots/ios
+       16 src/macos/OrbitKit/Tests/OrbitKitTests
+       12 src/macos/OrbitKit/Sources/OrbitKit/App
+       12 docs/evidence/project-main-branch-native/compare
+        7 docs/evidence/project-main-branch-native/probe-harness
+        5 src/macos/OrbitApp/Sources/OrbitApp/Views
+        3 src/macos/OrbitKit/Sources/OrbitKit/Models
+        3 src/apiserver/src/wiki-worker
+        2 src/shared/src
+        2 src/apiserver/src/wiki
+        2 docs/evidence/project-main-branch-native/shots
+        2 docs/evidence/project-main-branch-native/probe-harness/UITests
+        2 docs/evidence/project-main-branch-native
+        1 src/macos/OrbitApp/Sources/OrbitApp
+        1 src/apiserver/src/common
+        1 runner-release.json
+        1 package.json
+        1 docs/evidence/project-main-branch-native/probe-harness/mac
+        1 docs/evidence/project-main-branch-native/probe-harness/ios
+        1 docs
+        1 contracts
+
+Inputs the three acceptance commands read:
+  src/web             identical
+  package-lock.json   identical
+  scripts             identical
+  package.json         1 file changed, 1 insertion(+), 1 deletion(-)
+  src/shared           2 files changed, 20 insertions(+), 2 deletions(-)  (wikiMaintain.ts is a comment-only change; wikiContract.spec.ts is a shared spec)
+
+So no re-follow was needed: nothing under src/web or the lockfile moved, and no file of this batch changed.
+Per the project rule the remaining main work is covered by the landing merge check
+(npm run build -w @orbit/web && npm run test -w @orbit/web) on the landed state.

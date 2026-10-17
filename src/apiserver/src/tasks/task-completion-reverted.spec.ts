@@ -104,8 +104,8 @@ test('the id that note carries is the public one, not the uuid the column holds'
   assert.ok(detail.includes(TASK_PUBLIC_ID), detail);
   assert.equal(detail.includes(TASK_ID), false, 'the raw uuid reached the stored event');
   // The rest of the note is unchanged — the encoding is the id's alone.
-  assert.match(detail, /从 DONE 被退回 IN_PROGRESS/);
-  assert.match(detail, /此前有 2 次验收记录/);
+  assert.match(detail, /was reverted from DONE to IN_PROGRESS/);
+  assert.match(detail, /2 verification\(s\) were on record before/);
 });
 
 test('the ids the write itself uses stay uuids', async () => {

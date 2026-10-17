@@ -10,13 +10,16 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Dropdown, Modal } from 'antd';
 import type { WikiEntryChanges } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiTitleSummaryFields } from './WikiEntryDrawer';
 import { WikiAim } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Menu } from './ui/Menu';
 import { wikiEntriesQuery, wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -202,9 +205,13 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
               <span className="pos">
                 {wikiOfCount(current + 1, shown.length)}
               </span>
-              <Button disabled={current >= shown.length - 1} onClick={() => setAt(current + 1)}>
+              <Button
+                disabled={current >= shown.length - 1}
+                onClick={() => setAt(current + 1)}
+                icon={<RightOutlined />}
+                iconPlacement="end"
+              >
                 {WIKI_NEXT}
-                <RightOutlined />
               </Button>
             </div>
           )}
@@ -502,19 +509,19 @@ function ReviewCard({
             >
               {WIKI_REVIEW_EDIT}
             </button>
-            <Dropdown
-              trigger={['click']}
-              menu={{
-                items: WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label })),
-                onClick: ({ key }) =>
-                  decide({ opId: op.id, action: 'reject', reason: key as WikiDecision['reason'] }),
-              }}
-            >
-              <button type="button" className="card-action card-action--secondary">
-                {WIKI_REVIEW_REJECT}
-                <DownOutlined className="ic" />
-              </button>
-            </Dropdown>
+            <Menu
+              items={WIKI_REJECT_MENU.map(({ reason, label }) => ({
+                key: reason,
+                label,
+                onSelect: () => decide({ opId: op.id, action: 'reject', reason: reason as WikiDecision['reason'] }),
+              }))}
+              trigger={
+                <button type="button" className="card-action card-action--secondary">
+                  {WIKI_REVIEW_REJECT}
+                  <DownOutlined className="ic" />
+                </button>
+              }
+            />
             <span className="grow" />
             <span className="note">{op.tainted ? WIKI_WEB_DERIVED_NOTE : WIKI_ACCEPT_NOTE}</span>
           </>
@@ -588,20 +595,29 @@ function ProposalEditor({
   };
 
   return (
-    <Modal
+    <Dialog
       open
       title={okText === WIKI_REVIEW_ACCEPT ? WIKI_REVIEW_EDIT : okText}
-      onCancel={onClose}
-      onOk={submit}
-      okText={okText}
-      okButtonProps={{ disabled: Object.keys(edited).length === 0 || title.trim().length === 0 }}
-      confirmLoading={saving}
-      destroyOnHidden
+      onClose={onClose}
+      className="wk-proposal-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={Object.keys(edited).length === 0 || title.trim().length === 0}
+            loading={saving}
+            onClick={() => void submit()}
+          >
+            {okText}
+          </Button>
+        </>
+      }
     >
       <p className="wk-modal-note">{note}</p>
       <WikiTitleSummaryFields title={title} summary={summary} onTitle={setTitle} onSummary={setSummary} />
-      {refusal && <Alert type="error" showIcon title={refusal} style={{ marginTop: 8 }} />}
-    </Modal>
+      {refusal && <Alert type="error" title={refusal} style={{ marginTop: 8 }} />}
+    </Dialog>
   );
 }
 

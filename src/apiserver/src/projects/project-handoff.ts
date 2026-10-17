@@ -128,7 +128,10 @@ export interface HandoffPlan {
   /** WHO — the workspace that would execute it. */
   assigneeId?: string | null;
   listId?: string | null;
-  /** WITH WHAT. */
+  /** WITH WHAT: the engine pin beside the credential pin, two axes since the provider/engine split
+   *  (docs/provider-engine-contract.md §1.2), as the write stores them — the task doors resolve both
+   *  first (§3.5), so a provider named alone arrives with the engine it runs on by default. */
+  engine?: string | null;
   provider?: string | null;
   model?: string | null;
   modelHint?: string | null;
@@ -197,12 +200,18 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
   const typedCompletion = plan.completionCriterion != null;
   const modelSuggestion = plan.modelHint != null || plan.modelHintReason != null;
   const attachmentIds = [...new Set(plan.attachmentIds ?? [])].sort();
+  // The engine pin is bound beside the provider pin: without it a yes to a key on one engine could be
+  // spent on the same key run by another CLI, and the task would land on an engine nobody approved.
+  // Bound as resolved, so two spellings of one run (a provider alone and the same provider on its
+  // default engine; an old OpenCode model and the key it names on OpenCode) are one question. A plan
+  // that pins no engine — one that inherits its workspace's — keeps the identity it always had.
+  const enginePin = plan.engine != null;
   // v5 is retired, not renumbered: 0227 removed the negotiated timeout pair that selected it, so
   // no new plan can reach that shape. Rows that were keyed with it keep the digest they were
   // written with, which is the whole point of an append-only idempotency preimage.
   return createHash('sha256')
     .update(canonicalJson({
-      v: attachmentIds.length ? 7 : modelSuggestion ? 6 : typedCompletion ? 4 : executableAcceptance ? 3 : 2,
+      v: enginePin ? 8 : attachmentIds.length ? 7 : modelSuggestion ? 6 : typedCompletion ? 4 : executableAcceptance ? 3 : 2,
       plan: {
         title: plan.title,
         description: plan.description ?? null,
@@ -221,6 +230,8 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
         labels: [...(plan.labels ?? [])].sort(),
         assigneeId: plan.assigneeId ?? null,
         listId: plan.listId ?? null,
+        // v8 binds the engine pin without changing the identity of a plan that pins none.
+        ...(enginePin ? { engine: plan.engine } : {}),
         provider: plan.provider ?? null,
         model: plan.model ?? null,
         // v6 binds suggestions without changing the identity of older, unsuggested requests.

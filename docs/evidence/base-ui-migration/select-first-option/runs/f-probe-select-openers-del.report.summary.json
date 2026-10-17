@@ -1,0 +1,694 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/probe.config.mjs",
+   "ui-migration/probe-select-openers.browser.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration/probe.config.mjs",
+  "rootDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4521 --strictPort",
+   "cwd": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/",
+   "url": "http://127.0.0.1:4521",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "probe-select-openers.browser.mjs",
+   "file": "probe-select-openers.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "select openers: no value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9057,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-desktop no value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          },
+          {
+           "text": "PROBE chromium-light-desktop no value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"Never\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:55:23.759Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-62ed2cdf464725ecbc30",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: a value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8260,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-desktop a value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"Never\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          },
+          {
+           "text": "PROBE chromium-light-desktop a value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:55:33.406Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-a6dddd45c99283ea86f6",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: first option disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7674,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-desktop first option disabled antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE chromium-light-desktop first option disabled orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:55:41.672Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-6be72ea8191c653cd1b7",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: no value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8600,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-desktop no value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-desktop no value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"Never\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:55:53.149Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-e36427d874a283dfdd07",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: a value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7559,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-desktop a value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"Never\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-desktop a value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:01.803Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-36dc2b306aec593a7b16",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: first option disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8094,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-desktop first option disabled antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-desktop first option disabled orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:09.368Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-6d77306e4d4d8c11c0f3",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: no value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5864,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-desktop no value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE webkit-light-desktop no value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"Never\",\"hovered\":\"Never\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:18.149Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-fb1c481f1515be2eb57b",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: a value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5457,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-desktop a value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"Never\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          },
+          {
+           "text": "PROBE webkit-light-desktop a value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:24.121Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-87c0e6da6685c4aa0289",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: first option disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5193,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-desktop first option disabled antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE webkit-light-desktop first option disabled orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:29.583Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-23afde320a932b9df1be",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: no value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6021,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-desktop no value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-desktop no value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"Never\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"Never\",\"hovered\":\"Never\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:36.577Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-aceb6829fc4e68ab2f04",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: a value",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5766,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-desktop a value antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"Never\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-desktop a value orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"7 | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:42.666Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-b10d3b4ae1e46d5c9177",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    },
+    {
+     "title": "select openers: first option disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5368,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-desktop first option disabled antd {\"arrowUpOpensOn\":\"closed\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"7 days\",\"reopenedOn\":\"closed\",\"hovered\":\"7 days\",\"afterLeaving\":\"7 days\",\"enterAfterLeaving\":\"7 | list closed\"}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-desktop first option disabled orbit {\"arrowUpOpensOn\":\"7 days\",\"clickOpensOn\":\"7 days\",\"afterArrowDown\":\"30 days\",\"reopenedOn\":\"7 days\",\"hovered\":\"7 days\",\"afterLeaving\":\"none\",\"enterAfterLeaving\":\"null | list open\"}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:56:48.441Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-openers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d242c32f8a94ca33a292-359f4ae3897cdc58aea1",
+     "file": "probe-select-openers.browser.mjs",
+     "line": 17,
+     "column": 36
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T01:54:57.161Z",
+  "duration": 116794.94099999999,
+  "expected": 12,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

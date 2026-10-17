@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -1084,7 +1085,9 @@ func TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks(t *testing.T) {
 // a measured one. The same goes for `sourceFullyApplied`, which every NOTHING_TO_LAND carries: false
 // for the empty branch, true for a branch whose every commit the target already had.
 func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
-	t.Parallel()
+	// Not parallel: a reported result is spooled under the runner's home before it is sent
+	// (integration_result_spool.go), and the home is set to a directory of this test's own.
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	report := func(t *testing.T, job IntegrationJobCommand) map[string]interface{} {
 		t.Helper()
 		var result map[string]interface{}
@@ -1099,7 +1102,7 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 			_, _ = w.Write([]byte(`{}`))
 		}))
 		defer srv.Close()
-		runIntegrationJobAndReport(NewTransport(srv.URL, "tok"), job)
+		runIntegrationJobAndReport(context.Background(), NewTransport(srv.URL, "tok"), job)
 		if result == nil {
 			t.Fatal("no result was reported")
 		}
@@ -1330,8 +1333,9 @@ func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T)
 // cannot see: main moved after the check. An owner-confirmed landing re-checks the new tip and
 // merges it (M5) — that is what the owner confirmed. An automatic one lands NOTHING: no merge, no
 // check, no push, no upstreamMoved report (which would move the promotion to RECHECKING, a state
-// whose card promises it lands on its own), and READY, so the owner is asked. The owner-confirmed
-// run of the very same job is the control: it is what the Automatic mark is the difference from.
+// whose card promises it lands on its own), and READY, so the control plane checks it again on the
+// new main or asks the owner. The owner-confirmed run of the very same job is the control: it is
+// what the Automatic mark is the difference from.
 func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 	t.Parallel()
 	r := newIntegrationRepo(t)

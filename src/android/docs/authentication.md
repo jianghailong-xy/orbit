@@ -70,7 +70,7 @@ Every response and storage mutation is checked against the current identity.
 Cleanup completes with cancellation masked; a cancelled caller cannot leave half a session.
 
 Refresh is never automatically retried. The server consumes a token once and replay can
-revoke the account's entire live refresh family. Even a network failure might mean the
+revoke the login session's entire live refresh family. Even a network failure might mean the
 rotation succeeded but its response was lost, so Android signs out on **any** failed refresh.
 A repeated 401 after the single explicit retry signs out only if the retry's token version
 is still current. A delayed rejection after another committed rotation fails only that
@@ -122,19 +122,23 @@ on IO. This does not claim StrongBox or hardware-backed keys on every device; th
 test records actual `KeyInfo` security level. It does not require biometric prompts for
 each request or introduce a direct-boot/background service.
 
-Production addresses require HTTPS with platform certificate verification. Credentials,
-queries and fragments in an instance address are rejected. An address typed without a scheme
-(the login page's default `orbitd.io`) is HTTPS. `/api` suffixes and default
+An instance address may be `https://` or `http://`, on any host and port, in every build, as
+iOS takes it (`e017a6d44`). This is the account owner's decision of 2026-10-15 (card
+34g6JcZwpKTUcwc5WvuVx), made knowing that the password and bearer tokens sent to an `http://`
+instance cross the network unencrypted, and that Android can only permit cleartext for the
+whole app: the main manifest sets `usesCleartextTraffic="true"`, and the debug and
+`updateRehearsal` network security configs permit it in their `base-config`. HTTPS keeps
+platform certificate verification; trust-all certificate managers are not supported.
+Credentials, queries and fragments in an instance address are rejected. An address typed
+without a scheme (the login page's default `orbitd.io`) is HTTPS. `/api` suffixes and default
 ports normalize to the same instance. A reverse-proxy path remains part of identity.
-Debug alone permits HTTP on exact loopback hosts for fixtures; subdomains are excluded.
-Remote cleartext HTTP and trust-all certificate managers are not supported.
 
 Differences to the iOS audit input for A01/A15: full instance/account scoping instead of
 host-only token keys; fail-closed lost-refresh handling; no pre-auto-refresh access-only
 login compatibility (the project supports a fixed current server combination); Android
 Keystore/private storage replaces Keychain. UI alignment and additional account-management
-flows are outside this slice. HTTPS-only production address policy must be included in
-the final supported-server matrix.
+flows are outside this slice. The `http://` production address policy above must be included
+in the final supported-server matrix.
 
 The server `ClientVersionInterceptor` records authenticated Android requests alongside
 web/ios/macos in `client_version`, keyed by user and client kind. An unchanged version
@@ -199,7 +203,8 @@ dialog, which keeps only an address the app would sign in to and offers "Reset t
 Android differences, on purpose: the Server sheet is an Android dialog; Sign In keeps Material's
 ripple; "Cancel sign in" stays while a sign-in is under way; the Build information link (A02)
 stays under the form; the password field is emptied when it is sent; and an address without a
-scheme is HTTPS only (iOS takes `http://` for a bare `localhost`).
+scheme is always HTTPS (iOS takes `http://` for a bare `localhost`). One typed with `http://`
+is kept for any host, as on iOS.
 
 Password sign-in failures read as iOS `LoginFailure` says them (`40a70be24`): 400, 401, 403 and 422
 without a code the app knows are a wrong email or password; an unreachable server, a 5xx and an

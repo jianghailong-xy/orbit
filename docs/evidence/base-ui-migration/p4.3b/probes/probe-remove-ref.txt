@@ -1,0 +1,20 @@
+probe: probe-remove.browser.mjs tree: ref head: 40f79c5ab4618c4718201cd13a096b66fbd5977c projects: chromium-light-phone webkit-dark-phone chromium-light-desktop started: 2026-10-09T14:05:14Z load: 12.07 8.63 6.42 10/4195 3977393
+PROBE ref chromium-light-desktop viewport before "translate(71.5px, 22px) scale(1)"
+PROBE ref chromium-light-desktop button before {"x":903.90625,"y":170.90625,"width":24,"height":24}
+PROBE ref chromium-light-desktop viewport after focus "translate(71.5px, 22px) scale(1)"
+PROBE ref chromium-light-desktop button after focus {"x":903.90625,"y":170.90625,"width":24,"height":24}
+PROBE ref chromium-light-desktop click "ok"
+PROBE ref chromium-light-desktop opened after focus then click 1
+PROBE ref chromium-light-phone viewport before "translate(-6px, 55px) scale(0.75)"
+PROBE ref chromium-light-phone button before {"x":162,"y":275.5625,"width":18,"height":18}
+PROBE ref chromium-light-phone viewport after focus "translate(79.5px, 146.5px) scale(0.75)"
+PROBE ref chromium-light-phone button after focus {"x":247.5,"y":367.0625,"width":18,"height":18}
+PROBE ref chromium-light-phone click "ok"
+PROBE ref chromium-light-phone opened after focus then click 1
+PROBE ref webkit-dark-phone viewport before "translate(-10px, 55px) scale(0.75)"
+PROBE ref webkit-dark-phone button before {"x":158,"y":274.859375,"width":18,"height":18}
+PROBE ref webkit-dark-phone viewport after focus "translate(75.5px, 146.5px) scale(0.75)"
+PROBE ref webkit-dark-phone button after focus {"x":243.5,"y":366.359375,"width":18,"height":18}
+PROBE ref webkit-dark-phone click "ok"
+PROBE ref webkit-dark-phone opened after focus then click 1
+  3 passed (11.1s)

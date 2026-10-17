@@ -6,7 +6,7 @@
  * carries it into the home the session's claim names before it resumes (runner kimi_account_move.go).
  * Kimi's ACP answers a turn its account's usage limit ended as an ordinary end and says nothing of why;
  * that runner reads the limit from the turn's own record and reports it as the turn's error, in the
- * words below (runner kimi_acp.go kimiTurnUsageLimit, pinned to them by kimi_account_move_test.go). On
+ * words below (runner kimi_acp.go kimiFailureSentence, pinned to them by kimi_account_move_test.go). On
  * real PostgreSQL:
  *
  *   (1) Moved by hand: a runner that carries the conversation moves it and re-spawns its engine in

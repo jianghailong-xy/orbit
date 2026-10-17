@@ -1,0 +1,70 @@
+{
+ "scenario": "crash-continue-and-shell-wrapper",
+ "process": "continue",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 2,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<CRASH_WORK>",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "SHELL",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 2,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 402,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/load"
+  },
+  {
+   "t": 10045,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 12145,
+   "channel": "client->agent",
+   "id": 4,
+   "method": "session/prompt"
+  },
+  {
+   "t": 15617,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 15617,
+   "channel": "client->agent",
+   "id": 1,
+   "method": null
+  }
+ ]
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from './batchGraph';
+import { batchPreviewGraph, buildBatchGraph, describeShape, type BatchTaskInput } from './batchGraph';
 
 const chain = (n: number): BatchTaskInput[] =>
   Array.from({ length: n }, (_, i) => ({
@@ -26,7 +26,6 @@ describe('buildBatchGraph', () => {
     const g = buildBatchGraph(fanOut(3));
 
     expect(g.nodes.map((n) => n.layer)).toEqual([0, 1, 1, 1]);
-    expect(g.nodes.map((n) => n.column)).toEqual([0, 0, 1, 2]);
     expect(g.width).toBe(3);
     expect(g.depth).toBe(2);
   });
@@ -117,25 +116,64 @@ describe('describeShape', () => {
   });
 });
 
-describe('shouldDraw', () => {
-  it('draws a shape that stays legible', () => {
-    expect(shouldDraw(buildBatchGraph(fanOut(3)))).toBe(true);
-    expect(shouldDraw(buildBatchGraph(chain(5)))).toBe(true);
+describe('batchPreviewGraph', () => {
+  it('feeds the project page\'s canvas one mark per task and one edge per prerequisite', () => {
+    const { graph } = batchPreviewGraph([
+      { title: 'root', ref: 'r' },
+      { title: 'left', ref: 'l', dependsOnRefs: ['r'] },
+      { title: 'right', ref: 'x', dependsOnRefs: ['r'] },
+    ]);
+
+    expect(graph.marks.map((m) => m.id)).toEqual(['r', 'l', 'x']);
+    expect(graph.marks.map((m) => m.title)).toEqual(['root', 'left', 'right']);
+    expect(graph.edges).toEqual([
+      { sourceMarkId: 'r', targetMarkId: 'l' },
+      { sourceMarkId: 'r', targetMarkId: 'x' },
+    ]);
+    expect(graph.taskCount).toBe(3);
+    expect(graph.folded).toBe(false);
+    expect(graph.truncated).toBe(false);
   });
 
-  it('refuses a fan-out too wide to read', () => {
-    // Six nodes across scale the labels under eight points. The sentence "6 in parallel after 1"
-    // says the same thing and can actually be read.
-    expect(shouldDraw(buildBatchGraph(fanOut(6)))).toBe(false);
-    expect(describeShape(buildBatchGraph(fanOut(6)))).toBe('6 in parallel after 1');
+  it('reads a plan the way the project page will: what nothing holds back is ready to run', () => {
+    const { graph } = batchPreviewGraph([
+      { title: 'root', ref: 'r' },
+      { title: 'mid', ref: 'm', dependsOnRefs: ['r'] },
+      { title: 'join', ref: 'j', dependsOnRefs: ['r', 'm'] },
+    ]);
+
+    expect(graph.marks.map((m) => m.workState)).toEqual(['READY', 'BLOCKED', 'BLOCKED']);
+    // Nothing has been written yet, so no mark claims a status beyond the one creating it gives.
+    expect(graph.marks.every((m) => m.status === 'OPEN' && m.parentTaskId === null)).toBe(true);
   });
 
-  it('refuses a chain too deep to be worth the card', () => {
-    expect(shouldDraw(buildBatchGraph(chain(9)))).toBe(false);
-    expect(describeShape(buildBatchGraph(chain(9)))).toBe('a chain of 9');
+  it('counts what it cannot draw: work waiting on a task that already exists', () => {
+    const { graph, waitsOutside } = batchPreviewGraph([
+      { title: 'a', ref: 'a' },
+      { title: 'plugs in', ref: 'p', dependsOnTaskIds: ['existing-1'] },
+      { title: 'after it', ref: 'q', dependsOnRefs: ['p'] },
+    ]);
+
+    // No edge is invented to a mark that is not on the canvas — `existing-1` has none — and the
+    // task waiting on it is not called ready.
+    expect(graph.edges).toEqual([{ sourceMarkId: 'p', targetMarkId: 'q' }]);
+    expect(graph.marks.map((m) => m.workState)).toEqual(['READY', 'BLOCKED', 'BLOCKED']);
+    expect(waitsOutside).toBe(1);
   });
 
-  it('refuses a batch with no edges — there is no shape to draw', () => {
-    expect(shouldDraw(buildBatchGraph([{ title: 'a' }, { title: 'b' }]))).toBe(false);
+  it('names a task the batch gave no ref by its place in the window', () => {
+    // Nothing can name a ref-less task (a `dependsOnRefs` entry naming nothing is refused), so these
+    // are the roots of two loose chains — and they still need ids of their own to be drawn.
+    const { graph } = batchPreviewGraph([{ title: 'first' }, { title: 'second' }]);
+
+    expect(graph.marks.map((m) => m.id)).toEqual(['#1', '#2']);
+    expect(graph.marks.every((m) => m.workState === 'READY')).toBe(true);
+  });
+
+  it('has nothing to draw for an empty batch', () => {
+    const { graph, waitsOutside } = batchPreviewGraph([]);
+    expect(graph.marks).toEqual([]);
+    expect(graph.edges).toEqual([]);
+    expect(waitsOutside).toBe(0);
   });
 });

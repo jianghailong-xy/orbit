@@ -1,0 +1,246 @@
+{
+ "cli": {
+  "version": "2026.10.14-941492e",
+  "pinned": true,
+  "tarballSha256": "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d",
+  "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+  "indexJsSha256": "27776c587649c9b6fa9671ac8dda2810f29346e66937efe8ac254012d2113482"
+ },
+ "platform": {
+  "os": "linux",
+  "arch": "x64",
+  "kernel": "6.12.107+deb13-amd64",
+  "cpus": 24,
+  "harnessNode": "v26.10.0"
+ },
+ "orbitCommit": "93596417a663ca273433da9c87431dbb7559c573",
+ "lastRunId": "2026-10-17T03-02-26-644Z",
+ "ledger": "p0c",
+ "realPromptsSpent": 7,
+ "realPromptCap": 10,
+ "realPromptsInTheseResults": 7,
+ "realCursorDirsBefore": {
+  "/root/.cursor": null,
+  "/root/.config/cursor": null,
+  "/root/.local/share/cursor-agent": null
+ },
+ "realCursorDirsAfter": {
+  "/root/.cursor": null,
+  "/root/.config/cursor": null,
+  "/root/.local/share/cursor-agent": null
+ },
+ "scenarios": [
+  {
+   "name": "api-key-session-management",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:16:29.231Z",
+   "checks": 32,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "ask-question-plan-mode",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-12-05-187Z",
+   "finishedAt": "2026-10-17T02:14:26.731Z",
+   "checks": 3,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "ask-question",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-08-28-348Z",
+   "finishedAt": "2026-10-17T02:09:59.743Z",
+   "checks": 2,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "background-shell-and-commit",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-05-13-878Z",
+   "finishedAt": "2026-10-17T02:06:55.790Z",
+   "checks": 3,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "credential-stores",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:19:24.816Z",
+   "checks": 10,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "debug-log-location",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:32:26.178Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "directory-variables",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:21:56.108Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "failure-shapes-without-prompt",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-53-37-145Z",
+   "finishedAt": "2026-10-17T02:55:36.903Z",
+   "checks": 17,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "install-and-version",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:15:20.558Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "login-link-and-logout",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:30:51.224Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "mcp-and-hook-sources-at-startup",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:25:47.847Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "network-drop-mid-turn",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-02-50-268Z",
+   "finishedAt": "2026-10-17T02:04:54.299Z",
+   "checks": 3,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "parameterized-model-picker",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:17:03.486Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "process-signals",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:33:59.307Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "repo-config-baseline",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T01-57-19-094Z",
+   "finishedAt": "2026-10-17T01:59:05.046Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "repo-config-with-flags",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-00-36-466Z",
+   "finishedAt": "2026-10-17T02:02:17.520Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "shell-wrapper-env",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T01-55-13-333Z",
+   "finishedAt": "2026-10-17T01:56:18.956Z",
+   "checks": 11,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "signed-out-handshake",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:15:42.589Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "startup-processes-and-network",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:30:34.919Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "team-pin",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:23:42.528Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "usage-api",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-15-08-453Z",
+   "finishedAt": "2026-10-17T02:31:18.363Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  }
+ ],
+ "allPassed": true,
+ "allPassedOrExplained": true
+}

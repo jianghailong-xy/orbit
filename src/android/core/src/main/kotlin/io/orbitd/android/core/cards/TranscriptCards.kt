@@ -24,6 +24,11 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
         addProjection("taskStart", "Task started", CardFamily.SESSION_REQUEST, listOf("taskId", "title"))
         addProjection("projectStarted", "Project started", CardFamily.SESSION_REQUEST, listOf("projectId", "projectTitle", "by"))
         addProjection("openItemDelivery", "Project item delivered", CardFamily.SESSION_REQUEST, listOf("itemId", "kind", "title"))
+        // The owner's answer handed to the coordinator: one line that opens to the words the agent read (`OwnerAnswerLine`).
+        payload.obj("ownerAnswer")?.takeIf(OwnerAnswerLine::isCard)?.let { answer ->
+            add(InteractionCard("record:${event.seq}:ownerAnswer", CardFamily.SESSION_REQUEST, CoordinatorQueue.sent, answer, "",
+                objectId = "${event.seq}", binding = "", status = "Recorded"))
+        }
         addProjection("sessionMessage", "Message from another session", CardFamily.SESSION_REQUEST, listOf("fromSessionId"))
         payload.objects("sessionReplies").forEach { row ->
             if (row.text("requestId").isNullOrBlank() || row.text("fromSessionId").isNullOrBlank() ||

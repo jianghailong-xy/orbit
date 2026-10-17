@@ -7,7 +7,8 @@ import { projectIntegrationQuery } from '../lib/queries';
 import { useIsMobile } from '../lib/useMediaQuery';
 import {
   LANDING_WORDS,
-  LandingRow,
+  LandingHead,
+  landingHead,
   landingJobLines,
   landingJobsTitle,
   type LandingJobLine,
@@ -105,9 +106,14 @@ function LandingJobRow({
       void qc.invalidateQueries({ queryKey: ['project', projectId] });
     },
   });
+  // The row wears the merged line's head, like every other landing row (owner decision 2026-10-11,
+  // board docs/mocks/project-merge-check-row): the mark, the word, the live clock, and the state,
+  // the wait and the freshness in one line under both — then the task it lands.
   const body = (
     <div className="landing-jobs-body">
-      <LandingRow line={job.line} />
+      <LandingHead title={job.line.word} head={landingHead(job.line)} running={job.line.running}
+        timedOut={job.line.timedOut} />
+      {job.line.what ? <div className="landing-jobs-what">{job.line.what}</div> : null}
       {job.detail ? <div className="landing-jobs-detail">{job.detail}</div> : null}
     </div>
   );

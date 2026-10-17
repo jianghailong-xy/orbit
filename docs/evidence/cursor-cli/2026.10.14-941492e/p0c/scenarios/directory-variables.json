@@ -1,0 +1,166 @@
+{
+ "name": "directory-variables",
+ "runId": "2026-10-17T02-15-08-453Z",
+ "startedAt": "2026-10-17T02:19:24.816Z",
+ "finishedAt": "2026-10-17T02:21:56.108Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/directory-variables.ndjson",
+ "protocolLines": 54,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "HOME only: config under ~/.cursor, auth under ~/.config/cursor",
+   "ok": true
+  },
+  {
+   "name": "CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json",
+   "ok": true
+  },
+  {
+   "name": "XDG_CONFIG_HOME (without CURSOR_CONFIG_DIR) moves both config and auth.json to $XDG_CONFIG_HOME/cursor",
+   "ok": true
+  },
+  {
+   "name": "agent-cli-state.json stays in $HOME/.cursor under every layout",
+   "ok": true
+  },
+  {
+   "name": "built-in skills are synced into $HOME/.cursor/skills-cursor under every layout",
+   "ok": true
+  },
+  {
+   "name": "XDG_DATA_HOME / XDG_CACHE_HOME move nothing the CLI writes at startup",
+   "ok": true
+  },
+  {
+   "name": "CURSOR_DATA_DIR gets nothing at startup (projects/<slug>/ appears only when something creates it, e.g. `agent mcp enable`)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "files per layout (after initialize + session/new)": {
+   "home-only": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cache/",
+    "home/.config/",
+    "home/.config/cursor/",
+    "home/.config/cursor/auth.json 600 1050",
+    "home/.cursor/",
+    "home/.cursor/acp-sessions/",
+    "home/.cursor/acp-sessions/<UUID_1>/",
+    "home/.cursor/acp-sessions/<UUID_1>/meta.json 644 102",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/cli-config.json 644 1297",
+    "home/.cursor/skills-cursor/",
+    "home/.cursor/statsig-cache.json 644 938946",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home+CURSOR_CONFIG_DIR": [
+    "cursor-config/",
+    "cursor-config/acp-sessions/",
+    "cursor-config/acp-sessions/<UUID_2>/",
+    "cursor-config/acp-sessions/<UUID_2>/meta.json 644 102",
+    "cursor-config/cli-config.json 644 1297",
+    "cursor-config/statsig-cache.json 644 938946",
+    "cursor-data/",
+    "home/",
+    "home/.cache/",
+    "home/.config/",
+    "home/.config/cursor/",
+    "home/.config/cursor/auth.json 600 1050",
+    "home/.cursor/",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/skills-cursor/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home+CURSOR_DATA_DIR": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cache/",
+    "home/.config/",
+    "home/.config/cursor/",
+    "home/.config/cursor/auth.json 600 1050",
+    "home/.cursor/",
+    "home/.cursor/acp-sessions/",
+    "home/.cursor/acp-sessions/<UUID_3>/",
+    "home/.cursor/acp-sessions/<UUID_3>/meta.json 644 102",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/cli-config.json 644 1297",
+    "home/.cursor/skills-cursor/",
+    "home/.cursor/statsig-cache.json 644 938946",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home+XDG_CONFIG_HOME": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cache/",
+    "home/.cursor/",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/skills-cursor/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-config/cursor/",
+    "xdg-config/cursor/acp-sessions/",
+    "xdg-config/cursor/acp-sessions/<UUID_4>/",
+    "xdg-config/cursor/acp-sessions/<UUID_4>/meta.json 644 102",
+    "xdg-config/cursor/auth.json 600 1050",
+    "xdg-config/cursor/cli-config.json 644 1297",
+    "xdg-config/cursor/statsig-cache.json 644 938946",
+    "xdg-data/"
+   ],
+   "home+XDG_DATA_HOME+XDG_CACHE_HOME": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.config/",
+    "home/.config/cursor/",
+    "home/.config/cursor/auth.json 600 1050",
+    "home/.cursor/",
+    "home/.cursor/acp-sessions/",
+    "home/.cursor/acp-sessions/<UUID_5>/",
+    "home/.cursor/acp-sessions/<UUID_5>/meta.json 644 102",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/cli-config.json 644 1297",
+    "home/.cursor/skills-cursor/",
+    "home/.cursor/statsig-cache.json 644 938946",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "all-variables": [
+    "cursor-config/",
+    "cursor-config/acp-sessions/",
+    "cursor-config/acp-sessions/<UUID_6>/",
+    "cursor-config/acp-sessions/<UUID_6>/meta.json 644 102",
+    "cursor-config/cli-config.json 644 1297",
+    "cursor-config/statsig-cache.json 644 938946",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/skills-cursor/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-config/cursor/",
+    "xdg-config/cursor/auth.json 600 1050",
+    "xdg-data/"
+   ]
+  }
+ }
+}

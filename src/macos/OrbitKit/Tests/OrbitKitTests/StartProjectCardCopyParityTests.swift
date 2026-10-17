@@ -97,6 +97,13 @@ final class StartProjectCardCopyParityTests: XCTestCase {
 
     private var n: String { "\(Self.count)" }
 
+    /// One of this end's sentences about main, as the browser writes it for whichever branch is the
+    /// project's main branch: each `main` put back as the template's `${main}`. A project on main then
+    /// reads the same sentence at both ends.
+    private static func onMainBranch(_ sentence: String) -> String {
+        sentence.replacingOccurrences(of: "main", with: "${main}")
+    }
+
     // MARK: the card
 
     func testTheCardsFixedWordsMatchTheWeb() throws {
@@ -249,9 +256,14 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         assertSentence(web, RunSettings.tasksAtATime(Self.count),
                        [("tasks", "${count === 1 ? 'task' : 'tasks'}")], "the words after the number")
         XCTAssertEqual(RunSettings.tasksAtATime(1), "task at a time")
-        // The Automatic sentence follows the line, and the merge half is the half that changes.
-        XCTAssertTrue(web.contains("return line === 'MAIN' ? RUN_AUTOMATIC_HINT_MAIN : RUN_AUTOMATIC_HINT_PROJECT_BRANCH;"),
+        // The Automatic sentence follows the line, and the merge half is the half that changes. Both
+        // name the project's main branch: this end's two, on a project on main.
+        XCTAssertTrue(web.contains("return line === 'MAIN' ? automaticHintMain(main) : automaticHintProjectBranch(main);"),
                       "the web no longer picks the Automatic sentence by the line")
+        for sentence in [RunSettings.automaticHintMain, RunSettings.automaticHintProjectBranch] {
+            XCTAssertTrue(web.contains("return '\(Self.onMainBranch(sentence))';"),
+                          "the web no longer says \(sentence.debugDescription) of the project's main branch")
+        }
         // The most tasks the number accepts is the door's bound at both ends.
         XCTAssertTrue(try flat(Self.card).contains(
             "export const START_MAX_CONCURRENT_TASKS = \(StartProject.maxConcurrentTasks);"),

@@ -17,8 +17,9 @@ export const WIKI_MAINTENANCE_JOB = {
   /** The budget the task declares for its check, in seconds: the check reads two rows. */
   checkTimeoutSeconds: 300,
   /**
-   * The most ops ended sessions left waiting that one run of an automatic space adopts and verifies
-   * (contract `reviewModes.verification.adoption`): the rest wait for the next run, oldest first.
+   * The most ops ended sessions — and, for a server run, the space's ended runs — left waiting that one
+   * run of an automatic space adopts and verifies (contract `reviewModes.verification.adoption`): the rest
+   * wait for the next run, oldest first.
    */
   adoptOpsMax: 50,
 } as const;
@@ -32,7 +33,11 @@ export const WIKI_MAINTENANCE_JOB = {
  */
 export const WIKI_MAINTAIN_JOB = {
   kind: 'maintain',
-  /** Background work: a fact made the run, and the owner's own asks sort above it (contract `jobs.priority`). */
+  /**
+   * Background work: a fact made the run, and the owner's own asks sort above it (contract `jobs.priority`). It goes
+   * before an articles job of its space made before it that has never been claimed, once (the owner's decision of
+   * 2026-10-10).
+   */
   priority: 0,
   /** The queue's steps: extraction, and the one plan change a run may propose; `plan_*` is the plan's wait limit. */
   steps: { extract: 'extract', planProposal: 'plan_proposal' },
@@ -55,6 +60,16 @@ export const WIKI_MAINTAIN_JOB = {
   repoWaitSeconds: 300,
   /** Reads and diffs in flight at once: each is a fetch in the same checkout on the space's runner. */
   repoOpsInFlight: 2,
+  /**
+   * The most diffs the anchors step makes (`anchorRules.verify.skip`), one a commit the space's anchors were last
+   * checked at, the commits most anchors were checked at first; the anchors checked at the rest are checked again.
+   * A diff is one more operation (~1.6 s), worth it only when it spares more than ~26 anchors' checks (~0.06 s
+   * each). Replayed over the canary's 19 rounds of 2026-10-08/10, four averaged ~44 s a round against ~47 s for
+   * eight and ~53 s for no cap: the commits past the fourth held few anchors, mostly ones that moved again anyway.
+   * A skipped entry keeps its check where it was and a checked one moves to the run's commit, so a run leaves at
+   * most five such commits behind, whatever came before it.
+   */
+  anchorDiffsMax: 4,
   /** The directories under docs/ that hold no design document (`maintenance.job.docs.excluded`). */
   docsExcluded: ['docs/mocks/', 'docs/evidence/'],
 } as const;
@@ -236,7 +251,13 @@ export interface WikiMaintenanceReport {
     /** What the run adopted of what ended sessions left waiting, counted apart from its own ops. */
     adopted?: { ops: number; verified: number; failed: number };
   };
-  anchors?: { entries: number; changed: number; missing: number };
+  /**
+   * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks the run
+   * wrote, and of them the ones left changed or missing; `skipped` the entries whose anchors were all already
+   * checked at the run's commit and were left alone. A run before 2026-10-10 re-checked every entry and
+   * reported no `skipped`.
+   */
+  anchors?: { entries: number; changed: number; missing: number; skipped?: number };
   /** The topic articles a run before criterion 3's revision 3 rewrote; a run now writes the plan's sections (docs). */
   articles?: { written: number; unchanged: number; failed: number };
   docs?: WikiMaintenanceDocsReport;

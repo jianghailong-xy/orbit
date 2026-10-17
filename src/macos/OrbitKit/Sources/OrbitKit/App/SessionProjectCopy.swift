@@ -36,8 +36,12 @@ public enum SessionProjectCopy {
     /// The start row under it, when the coordinator has asked: since when, what it suggests in one
     /// line, and the press that opens the start card.
     public static func startAsked(_ ago: String) -> String { "asked \(ago)" }
-    public static func startSuggestion(_ settings: ProjectStartSettings) -> String {
-        "\(settings.line == .main ? "Directly into main" : "Project branch") · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
+    /// Directly into `main`: the main branch the start card opens with
+    /// (`StartProject.mainBranch(suggested:standing:)`), or — where no integration read is at hand —
+    /// the one the request suggests.
+    public static func startSuggestion(_ settings: ProjectStartSettings, main: String? = nil) -> String {
+        let main = main ?? RunSettings.mainBranchName(settings.upstreamRef)
+        return "\(settings.line == .main ? RunSettings.lineMain(main) : "Project branch") · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
     }
     public static let startReview = "Review and start"
     /// …and when nobody has, beside the owner's own Start….
@@ -56,13 +60,15 @@ public enum SessionProjectCopy {
     /// The project page's landing line, shortened for a row that is not redrawn every second:
     /// "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Nil when nothing is in
     /// flight; a server that sends only the count gets "Landing · N jobs". Web: `sessionProjectLandingLine`.
+    /// A merge and a sync name `main`, the project's main branch by name (the sidebar row's).
     ///
     /// A job whose runner has stopped reporting says so in the state slot — "no report for 11m", or
     /// "no report yet" for one that has never reported, off the same claim lease the project page's
     /// row reads it with (`ProjectPage.landingNoReport`). A fact about the REPORTS: a silent job is
     /// never called a timed-out one here, because a timeout is the job's own verdict and it lives in
     /// the server's `blockingReason`.
-    public static func landingLine(_ integration: ProjectListIntegration?, now: Date) -> SessionLine? {
+    public static func landingLine(_ integration: ProjectListIntegration?, now: Date,
+                                   main: String = RunSettings.defaultMainBranch) -> SessionLine? {
         let count = integration?.activeJobCount ?? 0
         guard let job = integration?.inFlight else {
             return count > 0 ? SessionLine(text: "Landing · \(count) \(count == 1 ? "job" : "jobs")", tone: .queued) : nil
@@ -70,10 +76,10 @@ public enum SessionProjectCopy {
         let heartbeat = job.heartbeatAt.flatMap(RelativeTime.parse)
         let silent = job.state == "RUNNING" && (heartbeat.map { now.timeIntervalSince($0) > 600 } ?? true)
         let running = job.state == "RUNNING" && !silent
-        let word = ProjectPage.integrationJobWords[job.kind ?? ""] ?? "Integration"
+        let word = ProjectPage.integrationJobWords(main)[job.kind ?? ""] ?? "Integration"
         let state = job.state != "RUNNING" ? "queued"
             : silent ? landingSilentWord(minutes: heartbeat.map { Int(max(0, now.timeIntervalSince($0)) / 60) })
-                : (ProjectPage.integrationPhaseWords[job.phase ?? ""] ?? "running")
+                : (ProjectPage.integrationPhaseWords(main)[job.phase ?? ""] ?? "running")
         let text = [count > 1 ? "\(word) \(count) jobs" : word, state,
                     ProjectAttention.elapsedLabel(job.startedAt, now: now), count > 1 ? nil : job.taskTitle]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")

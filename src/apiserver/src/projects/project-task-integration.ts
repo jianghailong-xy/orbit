@@ -10,7 +10,7 @@ import type {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
-import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
+import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 
 /**
@@ -75,12 +75,16 @@ interface TaskIntegrationRow {
   blockingJobKind: string | null;
   blockingTaskTitle: string | null;
   blockingOpenItemId: string | null;
+  /** The generation an OPEN MAIN_SYNC conflict's item is being handled by (H1), while it runs. */
+  syncHandlingGeneration: number | null;
   itemId: string | null;
   itemKind: string | null;
   itemAssignee: string | null;
   itemCreatedAt: Date | null;
   itemHandlingJobId: string | null;
   landedAt: Date | null;
+  /** The project's main branch by name, which ON_UPSTREAM is on; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 const NOT_APPLICABLE: TaskIntegrationView<Date> = {
@@ -91,6 +95,7 @@ const NOT_APPLICABLE: TaskIntegrationView<Date> = {
   jobId: null,
   checksRunningForMs: null,
   landTask: null,
+  mainBranch: null,
 };
 
 const CHECK_NAMES: Record<string, string> = {
@@ -98,11 +103,15 @@ const CHECK_NAMES: Record<string, string> = {
   MERGE_CHECK: 'the merge check',
 };
 
-const RUNNING_ELSEWHERE: Record<string, string> = {
-  LAND_TASK: 'another landing',
-  CHECK_PROMOTION: 'a check of the merge into main',
-  LAND_PROMOTION: 'the merge into main',
-};
+/** The job running on the branch first, by its kind. A merge into main is into the project's main
+ *  branch by name, which is main with no repository bound. */
+function runningElsewhere(main: string): Record<string, string> {
+  return {
+    LAND_TASK: 'another landing',
+    CHECK_PROMOTION: `a check of the merge into ${main}`,
+    LAND_PROMOTION: `the merge into ${main}`,
+  };
+}
 
 /** The sentence a page prints for a reason, built from the facts the row read. */
 function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow): string {
@@ -112,14 +121,21 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
       return 'Not started: a cancel was asked for, so the queue will not run it';
     case 'WAITING_TASK_WORK':
       return 'Waiting to land: the task’s work session is still running, and its branch can still move';
-    case 'WAITING_MAIN_SYNC':
-      return row.blockingTaskTitle
+    case 'WAITING_MAIN_SYNC': {
+      // A conflict the task's own new generation is landing again is still a hold — the claim reads
+      // the item, not that generation (§3.1 M2) — so the reason says so and names the generation
+      // that is resolving it, which is the question this row raises.
+      const resolving = row.syncHandlingGeneration == null
+        ? ''
+        : ` — a new landing (generation ${row.syncHandlingGeneration}) is resolving it`;
+      return (row.blockingTaskTitle
         ? `Waiting for the project line to sync: the landing of “${row.blockingTaskTitle}” could not merge upstream into this branch, and its conflict is still open`
-        : 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open';
+        : 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open') + resolving;
+    }
     case 'WAITING_SERIAL_SLOT': {
       const what = row.blockingTaskTitle
         ? `the landing of “${row.blockingTaskTitle}”`
-        : RUNNING_ELSEWHERE[row.blockingJobKind ?? ''] ?? 'another integration job';
+        : runningElsewhere(row.mainBranch ?? 'main')[row.blockingJobKind ?? ''] ?? 'another integration job';
       return `Waiting to land: ${what} is running on this branch first`;
     }
     case 'WAITING_RUNNER':
@@ -221,7 +237,7 @@ function stateForJob(state: string): TaskIntegrationView['state'] | null {
 
 /** One row folded into the view, in the precedence the module comment states. */
 export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskIntegrationView<Date> {
-  const none = { ...NOT_APPLICABLE, landTask: landTaskOf(row, now) };
+  const none = { ...NOT_APPLICABLE, landTask: landTaskOf(row, now), mainBranch: row.mainBranch };
   if (row.landing === 'ON_UPSTREAM') {
     return { ...none, state: 'ON_UPSTREAM', since: row.landedAt, jobId: row.jobId };
   }
@@ -283,6 +299,7 @@ export async function readTaskIntegrationViews(
   const landing = Prisma.raw(taskLandingSql('t'));
   const isCode = Prisma.raw(isCodeTaskSql('t'));
   const lineStarted = Prisma.raw(lineStartedSql('t'));
+  const mainBranch = Prisma.raw(branchNameSql('pc."upstream_ref"'));
   const ids = Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await prisma.$queryRaw<TaskIntegrationRow[]>(Prisma.sql`
     WITH scoped AS (
@@ -371,10 +388,14 @@ export async function readTaskIntegrationViews(
                 WHEN running_block."ownerId" = ${ownerId}::uuid THEN running_block."taskTitle"
            END AS "blockingTaskTitle",
            CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."openItemId" END AS "blockingOpenItemId",
+           CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."handlingGeneration" END AS "syncHandlingGeneration",
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
            open_item."handling_job_id" AS "itemHandlingJobId",
-           landed_at."at" AS "landedAt"
+           landed_at."at" AS "landedAt",
+           -- The project's main branch by name, the same for every row: read once, as an InitPlan.
+           (SELECT ${mainBranch} FROM "project_codebase" pc
+             WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "mainBranch"
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
       LEFT JOIN open_item ON open_item."task_id" = scoped."taskId"
@@ -413,25 +434,23 @@ export async function readTaskIntegrationViews(
       -- M2: an OPEN item about another task's failed absorb of upstream into the same target holds
       -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3).
       -- Read through the item rather than the failed job, so closing it is what lets the queue move.
+      -- H1 does NOT exempt an item a new generation is handling: claimOne reads this same condition
+      -- and holds those landings too, so the reader says what the claim does with the row
+      -- (WAITING_MAIN_SYNC) and names the generation that is resolving it, rather than reporting a
+      -- queue that would take it on the next heartbeat and will not.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle"
+               ft."title" AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+                    THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
+          LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
          WHERE newest_job."state" = 'QUEUED'
            AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM newest_job."task_id"
-           -- H1 hands an older conflict to the task's new generation. While that generation is
-           -- queued/running, the old card is being worked and must not hold unrelated landings;
-           -- if it stops again, H3 opens a fresh item and this exemption disappears with it.
-           AND NOT EXISTS (
-             SELECT 1
-               FROM "project_integration_job" handling
-              WHERE handling."id" = i."handling_job_id"
-                AND handling."state" IN ('QUEUED', 'RUNNING')
-           )
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref.

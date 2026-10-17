@@ -63,15 +63,15 @@ test('the run is told the criterion it quoted was taken back, and what to quote 
   assert.ok(says.includes(uuidToBase62(TASK)));
   assert.ok(says.includes(uuidToBase62(TO)));
   assert.ok(says.includes(`key ${criterionKeyOf(WITHDRAWN)}`));
-  assert.ok(says.includes('移动时已经收回'));
-  assert.ok(says.includes(`key：${criterionKeyOf(DECLARED)}`));
-  assert.ok(says.includes('「what the target wants」'));
+  assert.ok(says.includes('was taken back by the move'));
+  assert.ok(says.includes(`key: ${criterionKeyOf(DECLARED)}`));
+  assert.ok(says.includes('“what the target wants”'));
   assert.ok(says.includes('task_evidence_submit'));
 
   // A quote of something the move did not take back is not called withdrawn.
   const other = resubmitMessage(moved({ quoted: { key: uuidToBase62(TASK), text: 'its own' } }));
-  assert.ok(!other.includes('移动时已经收回'));
-  assert.ok(other.includes('不是这个任务在项目「Target」'));
+  assert.ok(!other.includes('was taken back by the move'));
+  assert.ok(other.includes('is not the standard this task has to meet in project “Target”'));
 
   // With no standard at all, it is told to state one first.
   const none = resubmitMessage(moved({ standard: { kind: 'NONE' } }));
@@ -81,12 +81,12 @@ test('the run is told the criterion it quoted was taken back, and what to quote 
 
 test('the target coordinator is told the task arrived owing a revision, and who was told', () => {
   const told = arrivalMessage(moved(), [RUN]);
-  assert.ok(told.includes('要重交'));
+  assert.ok(told.includes('to be submitted again'));
   assert.ok(told.includes(`key ${criterionKeyOf(DECLARED)}`));
   assert.ok(told.includes(uuidToBase62(RUN)));
   assert.ok(!told.includes('task_evidence_decide'), 'it is not asked to decide a revision nobody can');
   const nobody = arrivalMessage(moved(), []);
-  assert.ok(nobody.includes('没有运行中的会话'));
+  assert.ok(nobody.includes('has no running session'));
   assert.ok(nobody.includes('task_start'));
 });
 

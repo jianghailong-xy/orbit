@@ -1,0 +1,394 @@
+{
+ "chromium-light-desktop/session-attachment-staged.png": {
+  "differentPixels": 24835,
+  "maxChannelDelta": 53,
+  "pixelsBeyond2": 15147,
+  "pixelsAtMost2": 9688,
+  "allDifferencesBox": {
+   "x": 597,
+   "y": 724,
+   "width": 683,
+   "height": 176
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 612,
+     "y": 732,
+     "width": 657,
+     "height": 166
+    },
+    "pixels": 15147,
+    "maxChannelDelta": 53
+   }
+  ]
+ },
+ "webkit-light-desktop/session-attachment-staged.png": {
+  "differentPixels": 26633,
+  "maxChannelDelta": 53,
+  "pixelsBeyond2": 13991,
+  "pixelsAtMost2": 12642,
+  "allDifferencesBox": {
+   "x": 592,
+   "y": 719,
+   "width": 688,
+   "height": 181
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 612,
+     "y": 731,
+     "width": 657,
+     "height": 169
+    },
+    "pixels": 13991,
+    "maxChannelDelta": 53
+   }
+  ]
+ },
+ "chromium-light-phone/session-attachment-staged.png": {
+  "differentPixels": 15311,
+  "maxChannelDelta": 53,
+  "pixelsBeyond2": 9607,
+  "pixelsAtMost2": 5704,
+  "allDifferencesBox": {
+   "x": 0,
+   "y": 668,
+   "width": 390,
+   "height": 176
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 5,
+     "y": 676,
+     "width": 380,
+     "height": 166
+    },
+    "pixels": 9607,
+    "maxChannelDelta": 53
+   }
+  ]
+ },
+ "webkit-light-phone/session-attachment-staged.png": {
+  "differentPixels": 16075,
+  "maxChannelDelta": 53,
+  "pixelsBeyond2": 9005,
+  "pixelsAtMost2": 7070,
+  "allDifferencesBox": {
+   "x": 0,
+   "y": 663,
+   "width": 390,
+   "height": 181
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 5,
+     "y": 675,
+     "width": 380,
+     "height": 169
+    },
+    "pixels": 9005,
+    "maxChannelDelta": 53
+   }
+  ]
+ },
+ "chromium-dark-phone/session-attachment-menu.png": {
+  "differentPixels": 2071,
+  "maxChannelDelta": 158,
+  "pixelsBeyond2": 2037,
+  "pixelsAtMost2": 34,
+  "allDifferencesBox": {
+   "x": 39,
+   "y": 565,
+   "width": 120,
+   "height": 191
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 81,
+     "y": 743,
+     "width": 78,
+     "height": 13
+    },
+    "pixels": 628,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 607,
+     "width": 46,
+     "height": 16
+    },
+    "pixels": 421,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 659,
+     "width": 37,
+     "height": 12
+    },
+    "pixels": 333,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 701,
+     "width": 31,
+     "height": 12
+    },
+    "pixels": 306,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 565,
+     "width": 26,
+     "height": 12
+    },
+    "pixels": 210,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 39,
+     "y": 657,
+     "width": 17,
+     "height": 18
+    },
+    "pixels": 139,
+    "maxChannelDelta": 87
+   }
+  ]
+ },
+ "chromium-light-phone/session-attachment-menu.png": {
+  "differentPixels": 2073,
+  "maxChannelDelta": 224,
+  "pixelsBeyond2": 2049,
+  "pixelsAtMost2": 24,
+  "allDifferencesBox": {
+   "x": 39,
+   "y": 565,
+   "width": 120,
+   "height": 191
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 81,
+     "y": 743,
+     "width": 78,
+     "height": 13
+    },
+    "pixels": 634,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 607,
+     "width": 46,
+     "height": 16
+    },
+    "pixels": 422,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 659,
+     "width": 37,
+     "height": 12
+    },
+    "pixels": 334,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 701,
+     "width": 31,
+     "height": 12
+    },
+    "pixels": 307,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 565,
+     "width": 26,
+     "height": 12
+    },
+    "pixels": 213,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 39,
+     "y": 657,
+     "width": 17,
+     "height": 18
+    },
+    "pixels": 139,
+    "maxChannelDelta": 117
+   }
+  ]
+ },
+ "webkit-dark-phone/session-attachment-menu.png": {
+  "differentPixels": 2039,
+  "maxChannelDelta": 158,
+  "pixelsBeyond2": 1969,
+  "pixelsAtMost2": 70,
+  "allDifferencesBox": {
+   "x": 26,
+   "y": 546,
+   "width": 250,
+   "height": 232
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 81,
+     "y": 744,
+     "width": 78,
+     "height": 12
+    },
+    "pixels": 582,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 608,
+     "width": 46,
+     "height": 15
+    },
+    "pixels": 404,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 659,
+     "width": 37,
+     "height": 12
+    },
+    "pixels": 341,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 702,
+     "width": 31,
+     "height": 12
+    },
+    "pixels": 296,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 566,
+     "width": 26,
+     "height": 12
+    },
+    "pixels": 207,
+    "maxChannelDelta": 158
+   },
+   {
+    "box": {
+     "x": 39,
+     "y": 657,
+     "width": 17,
+     "height": 18
+    },
+    "pixels": 139,
+    "maxChannelDelta": 87
+   }
+  ]
+ },
+ "webkit-light-phone/session-attachment-menu.png": {
+  "differentPixels": 2035,
+  "maxChannelDelta": 224,
+  "pixelsBeyond2": 1980,
+  "pixelsAtMost2": 55,
+  "allDifferencesBox": {
+   "x": 31,
+   "y": 546,
+   "width": 241,
+   "height": 232
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 81,
+     "y": 744,
+     "width": 78,
+     "height": 12
+    },
+    "pixels": 591,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 608,
+     "width": 46,
+     "height": 15
+    },
+    "pixels": 405,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 659,
+     "width": 37,
+     "height": 12
+    },
+    "pixels": 343,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 81,
+     "y": 702,
+     "width": 31,
+     "height": 12
+    },
+    "pixels": 299,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 82,
+     "y": 566,
+     "width": 26,
+     "height": 12
+    },
+    "pixels": 203,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 39,
+     "y": 657,
+     "width": 17,
+     "height": 18
+    },
+    "pixels": 139,
+    "maxChannelDelta": 117
+   }
+  ]
+ }
+}

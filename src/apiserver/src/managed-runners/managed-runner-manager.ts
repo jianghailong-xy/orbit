@@ -12,26 +12,25 @@ import {
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { ManagedKubeClient } from './kube-client';
+import { KubernetesBackend } from './kubernetes-backend';
 import {
-  KubeApiError,
-  isRetryableKubeError,
-  type ManagedKubeClient,
-  type PersistentVolume,
-  type PersistentVolumeClaim,
-  type Pod,
-  type Secret,
-} from './kube-client';
-import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
+  ManagedRunnerConflict,
+  type ManagedCredential,
+  type ManagedInstance,
+  type ManagedRunnerBackend,
+  type ManagedVolume,
+  type ManagedVolumeBacking,
+  type VerifiedVolume,
+} from './managed-runner-backend';
 import {
   capacityShortMessage,
   computeOf,
-  computeShare,
   readCapacityPool,
   readReservation,
   releaseCapacity,
   reserveCapacity,
   shortDimensions,
-  storageShare,
   syncCapacityPool,
   type CapacityPool,
   type ComputeAmounts,
@@ -39,64 +38,44 @@ import {
   type StorageAmounts,
 } from './managed-runner-capacity';
 import { ownerAccountDisabled } from './managed-runner-eligibility';
-import {
-  observedStop,
-  readFencingReceipt,
-  stopProofFor,
-  type ManagedRunnerPredecessor,
-  type ManagedRunnerStopProof,
-} from './managed-runner-fencing';
+import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
-import {
-  OWNER_ANNOTATION,
-  RUNNER_ANNOTATION,
-  bootstrapCredentialOf,
-  buildManagedPod,
-  buildManagedPvc,
-  buildManagedSecret,
-  managedAdmissionProbeName,
-  managedFencingReceiptName,
-  managedPodName,
-  managedSecretName,
-  podIdentityProblem,
-  podStopConfirmed,
-  podTerminated,
-  pvIdentityProblem,
-  pvcIdentityProblem,
-  secretGeneration,
-  secretIdentityProblem,
-  type ManagedRunnerIdentity,
-} from './managed-runner-resources';
 import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
 import { managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
 
 /**
- * The managed runner manager: drives one mapping's Kubernetes objects towards its desired state
- * (docs/managed-runner-design.md, "Identity and durable mapping" and "Management and execution
- * states"). The persisted mapping is the work queue — a pass reads the row, observes the cluster by
+ * The managed runner manager: drives one mapping's data volume and instance towards its desired
+ * state (docs/managed-runner-design.md, "Identity and durable mapping" and "Management and execution
+ * states"). The persisted mapping is the work queue — a pass reads the row, observes the backend by
  * deterministic name and takes at most one step at a time, each committed as a compare-and-set on
  * the row's `revision` under this replica's lease — so a restart, a second replica or a lost reply
  * resumes from what is recorded and what is observed, never from memory.
  *
- * This version provisions: REQUESTED → PROVISIONING (data PVC, its PV and volume handle, the
- * bootstrap Secret and the runner credential it carries) → STARTING (the one Pod of the current
- * generation, until the runner row has a fresh heartbeat reporting a runtime installed and signed
- * in — the one READY records as `initialProvider`; without one it reports MODEL_UNAVAILABLE) →
- * READY; and FAILED, with a structured cause, when the attempt budget is spent or what the cluster
- * holds is not what the mapping recorded. It never deletes a PVC, a runner row or a workspace. The
- * only objects it deletes, always by UID, are a Pod the kubelet reported stopped, when an explicit
- * retry asked for a fresh start, and the bootstrap Secret of a generation the gate has retired.
+ * Every infrastructure call goes through the run backend (managed-runner-backend.ts):
+ * KubernetesBackend (a Ceph RBD PVC, a bootstrap Secret, a bare Pod) is the one implemented. What
+ * is decided here — the states, admission, the single-writer gate, wake, sleep and a disabled
+ * owner's runner — is the same for every backend.
+ *
+ * This version provisions: REQUESTED → PROVISIONING (data volume, the storage it is bound to and its
+ * handle, the bootstrap credential of the generation and the runner credential it carries) →
+ * STARTING (the one instance of the current generation, until the runner row has a fresh heartbeat
+ * reporting a runtime installed and signed in — the one READY records as `initialProvider`; without
+ * one it reports MODEL_UNAVAILABLE) → READY; and FAILED, with a structured cause, when the attempt
+ * budget is spent or what the backend holds is not what the mapping recorded. It never deletes a
+ * data volume, a runner row or a workspace. The only objects it removes, always by UID, are an
+ * instance whose host reported it stopped, when an explicit retry asked for a fresh start, and the
+ * bootstrap credential of a generation the gate has retired.
  *
  * The single-writer gate (docs/managed-runner-design.md, "Single Pod and single writer protection")
- * is `replacePredecessor`: generation N+1 — a new credential, a new Secret, a new Pod — is issued only
- * after the recorded instance of generation N is proven stopped. Proof is the kubelet's report that
- * every container of that Pod UID stopped, or an operator's fencing receipt bound to that instance
- * and volume (managed-runner-fencing.ts); either way the Pod object must be gone and no
- * VolumeAttachment may hold the volume. A Pod that vanished or was replaced unobserved, a stale
- * heartbeat or an expired lease is not proof: the mapping goes FENCING, its predecessor's credential
- * stops working at once, its disk is kept, and it waits for the proof. No Pod is created at all
- * until a dry run shows the admission guard refusing one it must refuse.
+ * is `replacePredecessor`: generation N+1 — a new credential, a new instance — is issued only after
+ * the recorded instance of generation N is proven stopped. Proof is its host's report that every
+ * process of that instance UID stopped, or an operator's fencing receipt bound to that instance and
+ * volume (managed-runner-fencing.ts); either way the instance object must be gone and nothing may
+ * still hold the volume. An instance that vanished or was replaced unobserved, a stale heartbeat or
+ * an expired lease is not proof: the mapping goes FENCING, its predecessor's credential stops working
+ * at once, its disk is kept, and it waits for the proof. No instance is created at all until the
+ * backend shows its single-instance guard in force.
  *
  * Capacity, wake and sleep (docs/managed-runner-design.md, "Provisioning retry wake and sleep" and
  * "Resource admission model supply and isolation"):
@@ -111,13 +90,13 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  *     instance reports no turn, job, operation or unflushed event and has been idle the profile's
  *     idle interval, drains: claims stop, the instance is asked — in its heartbeat — to stop, and
  *     accepts only while it is still idle and no demand has come; the acceptance and calling the
- *     drain off exclude each other on the row. It then exits on its own, and the kubelet's report
- *     of that stop is the stop proof the single-writer gate needs: the Pod object is released by
- *     UID, the volume detaches, the generation advances and only then is compute released. Runner
- *     row, workspace, PVC and data stay; SLEEPING.
+ *     drain off exclude each other on the row. It then exits on its own, and its host's report of
+ *     that stop is the stop proof the single-writer gate needs: the instance object is released by
+ *     UID, the volume is released, the generation advances and only then is compute released.
+ *     Runner row, workspace, data volume and data stay; SLEEPING.
  *   - Wake: demand (managed-runner-demand.ts, or the sweep below) desires RUNNING again; a sleeping
- *     mapping goes back through admission and provisioning, which adopt the recorded PVC and the
- *     same runner row, and starts the next generation's Pod on them.
+ *     mapping goes back through admission and provisioning, which adopt the recorded volume and the
+ *     same runner row, and starts the next generation's instance on them.
  *
  * A mapping whose owner an administrator disabled is driven to sleep and never towards READY
  * (`whileDisabled`): nothing is created for it, its instance drains and stops through the same gate a
@@ -132,7 +111,7 @@ export type ReconcileOutcome =
   | 'LEASED_ELSEWHERE'
   /** The row changed under this pass; the next pass starts from the new revision. */
   | 'SUPERSEDED'
-  /** Nothing to do until the cluster or the runner moves (claim binding, Pod start, heartbeat). */
+  /** Nothing to do until the backend or the runner moves (volume binding, instance start, heartbeat). */
   | 'WAITING'
   /** A transient failure: the next attempt is scheduled. */
   | 'BACKOFF'
@@ -156,16 +135,6 @@ export interface ManagedRunnerManagerOptions {
   now?: () => Date;
   random?: () => number;
   log?: Pick<Logger, 'warn' | 'error'>;
-}
-
-/** What the cluster holds is not what the mapping recorded: an operator has to look. */
-class Conflict extends Error {
-  constructor(
-    readonly code: string,
-    readonly detail: string,
-  ) {
-    super(detail);
-  }
 }
 
 /** The row moved on under this pass. */
@@ -246,18 +215,25 @@ type DrainAbort = 'DEMAND' | 'WORK' | 'RUNNER_BUSY' | 'TELEMETRY_MISSING' | 'NOT
 
 export class ManagedRunnerManager {
   readonly holder: string;
+  /** Where instances run: every infrastructure call this manager makes. */
+  readonly backend: ManagedRunnerBackend;
   private readonly now: () => Date;
   private readonly random: () => number;
   private readonly log: Pick<Logger, 'warn' | 'error'>;
-  /** This environment's capacity pool, created or brought to the profile's totals once per process. */
+  /** This environment's capacity pool, created or brought to the backend's totals once per process. */
   private pool?: Promise<string>;
 
+  /** On `backend`, with the profile's lifecycle budgets. */
+  constructor(prisma: PrismaService, backend: ManagedRunnerBackend, profile: Pick<ManagedRunnerProfile, 'lifecycle'>, options?: ManagedRunnerManagerOptions);
+  /** On KubernetesBackend over `client` and `profile`: how every caller built a manager before backends. */
+  constructor(prisma: PrismaService, client: ManagedKubeClient, profile: ManagedRunnerProfile, options?: ManagedRunnerManagerOptions);
   constructor(
     private readonly prisma: PrismaService,
-    private readonly kube: ManagedKubeClient,
-    private readonly profile: ManagedRunnerProfile,
+    backend: ManagedRunnerBackend | ManagedKubeClient,
+    private readonly profile: Pick<ManagedRunnerProfile, 'lifecycle'>,
     options: ManagedRunnerManagerOptions = {},
   ) {
+    this.backend = 'name' in backend ? backend : new KubernetesBackend(backend, profile as ManagedRunnerProfile);
     this.holder = options.holder ?? randomUUID();
     this.now = options.now ?? (() => new Date());
     this.random = options.random ?? Math.random;
@@ -360,10 +336,6 @@ export class ManagedRunnerManager {
     }
   }
 
-  private identity(mapping: ManagedRunner): ManagedRunnerIdentity {
-    return { ownerId: mapping.ownerId, runnerId: mapping.runnerId, generation: mapping.generation, namespace: mapping.namespace };
-  }
-
   private async step(mapping: ManagedRunner): Promise<Step> {
     // A disabled owner's mapping goes to sleep whatever it wants and whenever it was to be retried.
     // FAILED, deletion and the states nothing drives are left to the rules below.
@@ -425,15 +397,15 @@ export class ManagedRunnerManager {
       // Each handler below reads the row afresh: the one this step started from may have been
       // advanced by an operation record before the failure.
       const current = await this.reread(mapping.id);
-      if (error instanceof Conflict) {
+      if (error instanceof ManagedRunnerConflict) {
         this.log.warn(`managed runner ${mapping.id}: ${error.code}: ${error.detail}`);
         return this.fail(current, error.code, error.detail);
       }
-      if (isRetryableKubeError(error)) return this.backoff(current, error);
-      if (error instanceof KubeApiError) {
-        this.log.warn(`managed runner ${mapping.id}: Kubernetes answered ${error.status} ${error.reason}: ${error.message}`);
-        const code = error.status === 401 || error.status === 403 ? 'KUBERNETES_FORBIDDEN' : 'KUBERNETES_REJECTED';
-        return this.fail(current, code, `HTTP ${error.status} ${error.reason}`.trim());
+      const failure = this.backend.failure(error);
+      if (failure?.retryable) return this.backoff(current, error);
+      if (failure) {
+        this.log.warn(`managed runner ${mapping.id}: ${failure.log}`);
+        return this.fail(current, failure.code, failure.detail);
       }
       throw error;
     }
@@ -455,12 +427,13 @@ export class ManagedRunnerManager {
   // ── capacity admission ─────────────────────────────────────────────────────────────────────
 
   /**
-   * The pool as it stands now. Its row is created, or brought to the profile's totals, on this
-   * process's first use; after that only its id is kept, and its figures and revision are read afresh
-   * each time — they move with every admission and release, by any replica.
+   * The pool as it stands now: the backend's, keyed by its location. Its row is created, or brought
+   * to the backend's totals, on this process's first use; after that only its id is kept, and its
+   * figures and revision are read afresh each time — they move with every admission and release, by
+   * any replica.
    */
   private async capacityPool(): Promise<CapacityPool> {
-    this.pool ??= syncCapacityPool(this.prisma, this.profile).then((pool) => pool.id).catch((error: Error) => {
+    this.pool ??= syncCapacityPool(this.prisma, this.backend.location, this.backend.capacityBudget()).then((pool) => pool.id).catch((error: Error) => {
       this.pool = undefined;
       throw error;
     });
@@ -489,8 +462,8 @@ export class ManagedRunnerManager {
     const now = this.now();
     const pool = await this.capacityPool();
     const held = readReservation(mapping.reservation);
-    const needStorage = held?.storage ? null : storageShare(this.profile);
-    const needCompute = held?.compute ? null : computeShare(this.profile);
+    const needStorage = held?.storage ? null : this.backend.storageShare();
+    const needCompute = held?.compute ? null : this.backend.computeShare();
     const reservation: ManagedRunnerReservation = {
       version: 1,
       pool: held?.pool ?? pool.id,
@@ -561,23 +534,23 @@ export class ManagedRunnerManager {
   }
 
   private async provisioning(start: ManagedRunner): Promise<Step> {
-    const { mapping, pvc } = await this.ensurePvc(start);
-    if (!mapping.pvcUid) return { next: await this.commit(mapping, { pvcUid: pvc.metadata.uid, ...this.settled(mapping) }) };
-    if (pvc.status?.phase !== 'Bound' || !pvc.spec.volumeName) return this.waitWithin(mapping);
+    const { mapping, volume } = await this.ensureVolume(start);
+    if (!mapping.pvcUid) return { next: await this.commit(mapping, { pvcUid: volume.uid, ...this.settled(mapping) }) };
+    if (!volume.boundTo) return this.waitWithin(mapping);
 
-    const pv = await this.kube.getPersistentVolume(pvc.spec.volumeName);
-    if (!pv) return this.waitWithin(mapping);
-    const pvProblem = pvIdentityProblem(pv, mapping.pvcUid, this.profile, { pvUid: mapping.pvUid, volumeHandle: mapping.volumeHandle });
-    if (pvProblem) throw new Conflict('PV_CONFLICT', pvProblem);
+    const backing = await this.backend.readBacking(volume);
+    if (!backing) return this.waitWithin(mapping);
+    const backingProblem = this.backend.backingProblem(backing, mapping);
+    if (backingProblem) throw new ManagedRunnerConflict('PV_CONFLICT', backingProblem);
     if (!mapping.pvUid || !mapping.volumeHandle) {
-      return { next: await this.commit(mapping, { pvUid: pv.metadata.uid, volumeHandle: pv.spec.csi!.volumeHandle }) };
+      return { next: await this.commit(mapping, { pvUid: backing.uid, volumeHandle: backing.handle }) };
     }
 
-    const retired = await this.replaceRetiredSecret(mapping);
+    const retired = await this.replaceRetiredCredential(mapping);
     if (retired) return retired;
-    const issued = await this.ensureSecret(mapping);
+    const issued = await this.ensureCredential(mapping);
     if (!issued.mapping.podUid) {
-      const adopted = await this.adoptCredential(issued.mapping, issued.secret);
+      const adopted = await this.adoptCredential(issued.mapping, issued.credential);
       if (adopted) return { next: adopted };
     }
     return {
@@ -592,31 +565,30 @@ export class ManagedRunnerManager {
 
   private async starting(mapping: ManagedRunner): Promise<Step> {
     await this.verifyStorage(mapping);
-    const name = managedPodName(mapping.runnerId);
-    let pod = await this.kube.pods.get(name);
-    if (!pod && mapping.podUid) {
+    let instance = await this.backend.readInstance(mapping);
+    if (!instance && mapping.podUid) {
       // The recorded instance is gone, and nothing proves it stopped writing.
-      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.goneUnproven(mapping));
     }
-    if (!pod) {
-      // The one Pod of this generation, created only where the admission guard is known to refuse
-      // any other.
-      await this.requireAdmissionGuard(mapping);
+    if (!instance) {
+      // The one instance of this generation, created only where the backend's single-instance guard
+      // is known to refuse any other.
+      await this.backend.requireInstanceGuard(mapping);
       const begun = await this.beginOperation(mapping, 'CREATE_POD');
-      pod = await this.createOrReadBack(this.kube.pods, buildManagedPod(this.identity(begun), begun.pvcUid!, this.profile));
-      return { next: await this.recordPod(begun, pod) };
+      instance = await this.backend.createInstance(begun);
+      return { next: await this.recordInstance(begun, instance) };
     }
-    if (mapping.podUid && pod.metadata.uid !== mapping.podUid) {
-      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
+    if (mapping.podUid && instance.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', this.replacedUnproven(mapping, instance));
     }
-    this.checkPod(mapping, pod);
-    if (pod.metadata.uid !== mapping.podUid || (pod.spec.nodeName ?? null) !== mapping.nodeName) {
-      return { next: await this.recordPod(mapping, pod) };
+    this.checkInstance(mapping, instance);
+    if (instance.uid !== mapping.podUid || instance.node !== mapping.nodeName) {
+      return { next: await this.recordInstance(mapping, instance) };
     }
-    if (podTerminated(pod)) return this.terminated(mapping, pod);
+    if (instance.terminated) return this.terminated(mapping, instance);
     // A released instance still being removed: wait for it to go, then the gate decides.
-    if (pod.metadata.deletionTimestamp) return this.waitWithin(mapping);
-    const report = pod.status?.phase === 'Running' ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
+    if (instance.removing) return this.waitWithin(mapping);
+    const report = instance.running ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
     if (!report) return this.waitWithin(mapping);
     // READY needs model supply as well as a live instance: the runtime it is found ready with is the
     // one a default workspace with no history starts on, recorded, never guessed later.
@@ -636,15 +608,15 @@ export class ManagedRunnerManager {
 
   private async ready(mapping: ManagedRunner): Promise<Step> {
     await this.verifyStorage(mapping);
-    const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
-    if (!pod) {
-      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+    const instance = await this.backend.readInstance(mapping);
+    if (!instance) {
+      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.goneUnproven(mapping));
     }
-    if (pod.metadata.uid !== mapping.podUid) {
-      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
+    if (instance.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', this.replacedUnproven(mapping, instance));
     }
-    this.checkPod(mapping, pod);
-    if (podTerminated(pod)) return this.terminated(mapping, pod);
+    this.checkInstance(mapping, instance);
+    if (instance.terminated) return this.terminated(mapping, instance);
     // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died,
     // and it authorizes nothing.
     return (await this.beginDrain(mapping)) ?? { done: 'READY' };
@@ -654,8 +626,8 @@ export class ManagedRunnerManager {
 
   /**
    * What the authorized instance last reported, if it may be believed: it declares it can sleep, it
-   * heartbeated recently, and the report is fresh and comes from the generation and Pod recorded now.
-   * Null otherwise — missing or stale telemetry never lets anything sleep.
+   * heartbeated recently, and the report is fresh and comes from the generation and instance recorded
+   * now. Null otherwise — missing or stale telemetry never lets anything sleep.
    */
   private async instanceReport(mapping: ManagedRunner, now: Date): Promise<StoredManagedWorkload | null> {
     const runner = await this.prisma.runner.findUnique({
@@ -720,40 +692,38 @@ export class ManagedRunnerManager {
    * again — by demand, by work in the records, by the instance reporting work or no longer reporting,
    * or by the drain budget running out unaccepted; never while the owner's account is disabled. Once
    * it accepts it exits on its own; nothing here stops it. Its stop then goes through the
-   * single-writer gate's own rules: the kubelet's report of every container stopped is recorded as
-   * the stop proof, the Pod object is released by UID, and the mapping sleeps only once the object is
-   * gone and the volume detached. A Pod that vanished or was replaced unobserved, or was made terminal
-   * by the control plane, fences, as anywhere else.
+   * single-writer gate's own rules: its host's report of every process stopped is recorded as the
+   * stop proof, the instance object is released by UID, and the mapping sleeps only once the object
+   * is gone and the volume released. An instance that vanished or was replaced unobserved, or was
+   * declared terminal by anything but its host, fences, as anywhere else.
    */
   private async draining(mapping: ManagedRunner, ownerDisabled = false): Promise<Step> {
-    const name = managedPodName(mapping.runnerId);
-    const pod = await this.kube.pods.get(name);
+    const instance = await this.backend.readInstance(mapping);
     const predecessor = this.predecessorOf(mapping);
-    if (!pod) {
+    if (!instance) {
       const proof = stopProofFor(mapping.fencingReceipt, predecessor);
-      if (!proof) return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
-      const { pvc } = await this.verifyStorage(mapping);
-      const attached = (await this.kube.listVolumeAttachments()).filter((va) => va.spec.source.persistentVolumeName === pvc.spec.volumeName);
-      if (attached.length > 0) return { done: 'DRAINING' };
+      if (!proof) return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.goneUnproven(mapping));
+      const holders = await this.backend.volumeHolders(await this.verifyStorage(mapping));
+      if (holders.length > 0) return { done: 'DRAINING' };
       return { next: await this.fallAsleep(mapping, proof) };
     }
-    if (pod.metadata.uid !== mapping.podUid) {
-      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
+    if (instance.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', this.replacedUnproven(mapping, instance));
     }
-    this.checkPod(mapping, pod);
+    this.checkInstance(mapping, instance);
     await this.verifyStorage(mapping);
-    if (podTerminated(pod)) {
-      if (!podStopConfirmed(pod)) {
-        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${pod.metadata.uid} is ${pod.status?.phase}, but not by its kubelet's report`);
+    if (instance.terminated) {
+      if (!instance.stopConfirmed) {
+        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.stopUnconfirmed(instance));
       }
       let current = mapping;
       if (!stopProofFor(mapping.fencingReceipt, predecessor)) {
-        current = await this.commit(mapping, { fencingReceipt: observedStop(predecessor, pod, this.now()) as unknown as Prisma.InputJsonValue });
+        current = await this.commit(mapping, { fencingReceipt: this.backend.observedStop(predecessor, instance, this.now()) as unknown as Prisma.InputJsonValue });
       }
-      if (pod.metadata.deletionTimestamp) return { done: 'DRAINING' };
-      // Released by UID: a successor under the same name is never deleted.
+      if (instance.removing) return { done: 'DRAINING' };
+      // Released by UID: a successor under the same name is never removed.
       const begun = await this.beginOperation(current, 'DELETE_POD');
-      await this.kube.pods.delete(name, { uid: mapping.podUid! });
+      await this.backend.removeInstance(mapping);
       return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
     }
     const now = this.now();
@@ -808,10 +778,10 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The drained instance is proven stopped, its Pod object gone and its volume detached: generation N
-   * is retired on that proof and N+1 reserved, exactly as the single-writer gate advances (its
-   * credential replaced by one nobody holds), and in the same transaction its compute share goes back
-   * to the pool. The storage share, the PVC, the runner row and the workspace stay. SLEEPING — and if
+   * The drained instance is proven stopped, its object gone and its volume released: generation N is
+   * retired on that proof and N+1 reserved, exactly as the single-writer gate advances (its credential
+   * replaced by one nobody holds), and in the same transaction its compute share goes back to the
+   * pool. The storage share, the data volume, the runner row and the workspace stay. SLEEPING — and if
    * demand came while it drained, the next step wakes it at once with that demand.
    */
   private async fallAsleep(mapping: ManagedRunner, proof: ManagedRunnerStopProof): Promise<ManagedRunner> {
@@ -878,21 +848,21 @@ export class ManagedRunnerManager {
    * A step for a mapping whose owner an administrator disabled (`User.disabledAt`, docs/google-sign-in-
    * design.md §5.5). Its runner is refused at every door — a claim answered 403 ACCOUNT_DISABLED is a
    * permanent failure to the runner, which stops claiming, drains and exits on its own — and the
-   * mapping is driven to sleep, never towards READY: no PVC, Secret or Pod is created and nothing is
-   * admitted.
+   * mapping is driven to sleep, never towards READY: no volume, credential or instance is created and
+   * nothing is admitted.
    *
    *   - An instance, recorded or found under its name, drains: the drain a sleep takes, except that it
-   *     is never called off and waits for no idle report. It ends as a sleep ends: the kubelet's report
-   *     of the stop is recorded as the proof, the Pod object is deleted by UID, and only once it is
-   *     gone and the volume detached is the generation retired and compute given back (`draining`,
-   *     `fallAsleep`). A Pod gone or made terminal without that report fences, as anywhere.
-   *   - Without one: SLEEPING at once, compute it holds given back — unless a Pod create may still
-   *     commit, which keeps the share and the mapping where they are until a Pod is seen.
+   *     is never called off and waits for no idle report. It ends as a sleep ends: its host's report of
+   *     the stop is recorded as the proof, the instance object is removed by UID, and only once it is
+   *     gone and the volume released is the generation retired and compute given back (`draining`,
+   *     `fallAsleep`). An instance gone or declared terminal without that report fences, as anywhere.
+   *   - Without one: SLEEPING at once, compute it holds given back — unless an instance create may
+   *     still commit, which keeps the share and the mapping where they are until an instance is seen.
    *   - Asleep, it stays asleep: a wake desired before the account was disabled is dropped.
    *   - FENCING still waits for its proof; once it is proven, the next step puts the mapping to sleep.
    *
-   * The PVC with its storage share, the runner row and the default workspace stay. Enabled again, it
-   * is an ordinary sleeping mapping: demand wakes it on the same volume and runner.
+   * The data volume with its storage share, the runner row and the default workspace stay. Enabled
+   * again, it is an ordinary sleeping mapping: demand wakes it on the same volume and runner.
    */
   private async whileDisabled(mapping: ManagedRunner): Promise<Step> {
     switch (mapping.managementState) {
@@ -911,9 +881,9 @@ export class ManagedRunnerManager {
   /** REQUESTED, WAITING_CAPACITY, PROVISIONING, STARTING or READY, for a disabled owner (see `whileDisabled`). */
   private async stopForDisabledOwner(mapping: ManagedRunner): Promise<Step> {
     if (!mapping.podUid && mapping.pvcUid) {
-      // A Pod created and never recorded — a create whose answer was lost — is found under its name.
-      const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
-      if (pod) return { next: await this.recordPod(mapping, pod) };
+      // An instance created and never recorded — a create whose answer was lost — is found under its name.
+      const instance = await this.backend.readInstance(mapping);
+      if (instance) return { next: await this.recordInstance(mapping, instance) };
       if (mapping.resourceOperationKind === 'CREATE_POD' && mapping.resourceOperationState === 'PENDING') return { done: 'WAITING' };
     }
     const now = this.now();
@@ -944,7 +914,7 @@ export class ManagedRunnerManager {
     return {
       runnerId: mapping.runnerId,
       generation: mapping.generation,
-      podName: mapping.podName ?? managedPodName(mapping.runnerId),
+      podName: mapping.podName ?? this.backend.names(mapping.runnerId).instance,
       podUid: mapping.podUid!,
       nodeName: mapping.nodeName,
       pvcUid: mapping.pvcUid!,
@@ -952,17 +922,30 @@ export class ManagedRunnerManager {
     };
   }
 
+  /** The operator details of the gate's findings, in the backend's words. */
+  private goneUnproven(mapping: ManagedRunner): string {
+    return `${this.backend.terms.instance} ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`;
+  }
+
+  private replacedUnproven(mapping: ManagedRunner, instance: ManagedInstance): string {
+    return `${this.backend.terms.instance} ${mapping.podUid} was replaced by ${instance.uid} without a stop proof`;
+  }
+
+  private stopUnconfirmed(instance: ManagedInstance): string {
+    return `${this.backend.terms.instance} ${instance.uid} is ${instance.phase}, but not by ${this.backend.terms.stopReport}`;
+  }
+
   /**
-   * The recorded Pod is terminal. With the kubelet's report of it, that report is recorded as the
-   * stop proof and the mapping fails retryable: an explicit retry replaces the instance. A Pod the
-   * control plane made terminal for its node proves nothing about the node: FENCING.
+   * The recorded instance is terminal. With its host's report of it, that report is recorded as the
+   * stop proof and the mapping fails retryable: an explicit retry replaces the instance. One declared
+   * terminal by anything but its host proves nothing about the host: FENCING.
    */
-  private async terminated(mapping: ManagedRunner, pod: Pod): Promise<Step> {
-    if (!podStopConfirmed(pod)) {
-      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${pod.metadata.uid} is ${pod.status?.phase}, but not by its kubelet's report`);
+  private async terminated(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
+    if (!instance.stopConfirmed) {
+      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.stopUnconfirmed(instance));
     }
-    const proof = stopProofFor(mapping.fencingReceipt, this.predecessorOf(mapping)) ?? observedStop(this.predecessorOf(mapping), pod, this.now());
-    return this.fail(mapping, 'POD_TERMINATED', `Pod ${pod.metadata.uid} is ${pod.status?.phase}`, {
+    const proof = stopProofFor(mapping.fencingReceipt, this.predecessorOf(mapping)) ?? this.backend.observedStop(this.predecessorOf(mapping), instance, this.now());
+    return this.fail(mapping, 'POD_TERMINATED', `${this.backend.terms.instance} ${instance.uid} is ${instance.phase}`, {
       fencingReceipt: proof as unknown as Prisma.InputJsonValue,
     });
   }
@@ -973,44 +956,43 @@ export class ManagedRunnerManager {
    * do because the instance is still running and the mapping is not fencing — a retry waits on it.
    */
   private async replacePredecessor(mapping: ManagedRunner): Promise<Step | null> {
-    const name = managedPodName(mapping.runnerId);
     const predecessor = this.predecessorOf(mapping);
-    const pod = await this.kube.pods.get(name);
-    if (pod && pod.metadata.uid !== mapping.podUid) {
-      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
+    const instance = await this.backend.readInstance(mapping);
+    if (instance && instance.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', this.replacedUnproven(mapping, instance));
     }
     let proof = stopProofFor(mapping.fencingReceipt, predecessor);
-    if (pod) {
-      if (podStopConfirmed(pod)) {
+    if (instance) {
+      if (instance.stopConfirmed) {
         let current = mapping;
-        if (!proof) current = await this.commit(mapping, { fencingReceipt: observedStop(predecessor, pod, this.now()) as unknown as Prisma.InputJsonValue });
-        if (pod.metadata.deletionTimestamp) return { done: 'WAITING' };
-        // Released by UID: a successor under the same name is never deleted.
+        if (!proof) current = await this.commit(mapping, { fencingReceipt: this.backend.observedStop(predecessor, instance, this.now()) as unknown as Prisma.InputJsonValue });
+        if (instance.removing) return { done: 'WAITING' };
+        // Released by UID: a successor under the same name is never removed.
         const begun = await this.beginOperation(current, 'DELETE_POD');
-        await this.kube.pods.delete(name, { uid: mapping.podUid! });
+        await this.backend.removeInstance(mapping);
         return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
       }
-      if (podTerminated(pod)) {
-        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${pod.metadata.uid} is ${pod.status?.phase}, but not by its kubelet's report`);
+      if (instance.terminated) {
+        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.stopUnconfirmed(instance));
       }
       // Still there and not stopped: a retry waits on it; a fencing mapping waits for its removal.
       return mapping.managementState === 'FENCING' ? { done: 'FENCING' } : null;
     }
-    // The Pod object is gone.
-    const { pvc, pv } = await this.verifyStorage(mapping);
+    // The instance object is gone.
+    const storage = await this.verifyStorage(mapping);
     if (!proof) {
       if (mapping.managementState !== 'FENCING') {
-        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.goneUnproven(mapping));
       }
-      const received = await this.receivedFencing(mapping, predecessor, pv);
+      const received = await this.receivedFencing(mapping, predecessor, storage.backing);
       if (!received) return { done: 'FENCING' };
       proof = received.proof;
       mapping = received.mapping;
     }
-    const attached = (await this.kube.listVolumeAttachments()).filter((va) => va.spec.source.persistentVolumeName === pvc.spec.volumeName);
-    if (attached.length > 0) {
+    const holders = await this.backend.volumeHolders(storage);
+    if (holders.length > 0) {
       if ((mapping.lastError as { code?: unknown } | null)?.code !== 'VOLUME_STILL_ATTACHED') {
-        await this.commit(mapping, { lastError: { ...managedRunnerReason('VOLUME_STILL_ATTACHED'), detail: attached.map((va) => va.metadata.name).join(', ') } });
+        await this.commit(mapping, { lastError: { ...managedRunnerReason('VOLUME_STILL_ATTACHED'), detail: holders.join(', ') } });
       }
       return { done: mapping.managementState === 'FENCING' ? 'FENCING' : 'WAITING' };
     }
@@ -1018,22 +1000,23 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * A fencing receipt for this predecessor, read from its ConfigMap and recorded once accepted. An
-   * unacceptable one is reported on the mapping (what was wrong goes to the log) and changes nothing.
+   * A fencing receipt for this predecessor, read where the backend has an operator leave it and
+   * recorded once accepted. An unacceptable one is reported on the mapping (what was wrong goes to the
+   * log) and changes nothing.
    */
   private async receivedFencing(
     mapping: ManagedRunner,
     predecessor: ManagedRunnerPredecessor,
-    pv: PersistentVolume,
+    backing: ManagedVolumeBacking,
   ): Promise<{ mapping: ManagedRunner; proof: ManagedRunnerStopProof } | null> {
-    const configMap = await this.kube.configMaps.get(managedFencingReceiptName(mapping.runnerId));
-    if (!configMap) return null;
-    const verdict = readFencingReceipt(configMap, predecessor, pv, this.now());
+    const receipt = await this.backend.readFencingReceipt(mapping, predecessor, backing, this.now());
+    if (!receipt) return null;
+    const { verdict } = receipt;
     if (!verdict.ok) {
       const detail = verdict.problems.join('; ');
       const stored = mapping.lastError as { code?: unknown; detail?: unknown } | null;
       if (stored?.code !== 'FENCING_RECEIPT_INVALID' || stored.detail !== detail) {
-        this.log.warn(`managed runner ${mapping.id}: fencing receipt ${configMap.metadata.name} not accepted: ${detail}`);
+        this.log.warn(`managed runner ${mapping.id}: fencing receipt ${receipt.source} not accepted: ${detail}`);
         await this.commit(mapping, { lastError: { ...managedRunnerReason('FENCING_RECEIPT_INVALID'), detail } });
       }
       return null;
@@ -1046,8 +1029,8 @@ export class ManagedRunnerManager {
    * FENCING: no instance of this mapping is authorized until a stop is proven. In the same
    * transaction the runner credential the predecessor holds is replaced by one nobody holds, so the
    * predecessor's requests fail from now on whatever state the mapping later passes through; the
-   * next generation's credential arrives with its own Secret. The disk, the Secret and the Pod
-   * object stay where they are.
+   * next generation's credential arrives with its own bootstrap credential. The disk, the bootstrap
+   * credential and the instance object stay where they are.
    */
   private async fence(mapping: ManagedRunner, code: string, detail: string): Promise<Step> {
     if (mapping.managementState === 'FENCING') {
@@ -1083,8 +1066,9 @@ export class ManagedRunnerManager {
 
   /**
    * The gate opens: generation N is retired on `proof`, and N+1 is reserved in the same
-   * compare-and-set — no Pod recorded, a fresh attempt budget, REQUESTED. The retired credential is
-   * replaced by one nobody holds; N+1's is issued with its own Secret once N's is removed.
+   * compare-and-set — no instance recorded, a fresh attempt budget, REQUESTED. The retired credential
+   * is replaced by one nobody holds; N+1's is issued with its own bootstrap credential once N's is
+   * removed.
    */
   private async advance(mapping: ManagedRunner, proof: ManagedRunnerStopProof): Promise<ManagedRunner> {
     const now = this.now();
@@ -1121,128 +1105,95 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The bootstrap Secret of a generation the gate retired: removed, by UID, before this generation's
-   * is issued under the same name. Its credential stopped working when the generation advanced.
+   * The bootstrap credential of a generation the gate retired: removed, by UID, before this
+   * generation's is issued under the same name. It stopped working when the generation advanced.
    */
-  private async replaceRetiredSecret(mapping: ManagedRunner): Promise<Step | null> {
+  private async replaceRetiredCredential(mapping: ManagedRunner): Promise<Step | null> {
     if (mapping.podUid) return null;
-    const name = managedSecretName(mapping.runnerId);
-    const secret = await this.kube.secrets.get(name);
-    const generation = secret ? secretGeneration(secret) : null;
-    if (!secret || generation === null || generation >= mapping.generation) return null;
-    const said = secret.metadata.annotations ?? {};
-    // Not this runner's: ensureSecret reports the conflict.
-    if (said[OWNER_ANNOTATION] !== mapping.ownerId || said[RUNNER_ANNOTATION] !== mapping.runnerId) return null;
-    if (secret.metadata.deletionTimestamp) return this.waitWithin(mapping);
+    const credential = await this.backend.readCredential(mapping);
+    if (!credential || credential.generation === null || credential.generation >= mapping.generation) return null;
+    // Not this runner's: ensureCredential reports the conflict.
+    if (credential.ownerId !== mapping.ownerId || credential.runnerId !== mapping.runnerId) return null;
+    if (credential.removing) return this.waitWithin(mapping);
     const begun = await this.beginOperation(mapping, 'DELETE_SECRET');
-    await this.kube.secrets.delete(name, { uid: secret.metadata.uid });
+    await this.backend.removeCredential(mapping, credential);
     return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
-  }
-
-  /**
-   * Proof that the environment's admission guard is in force (managed-runner-admission.ts): a dry
-   * run of a Pod it must refuse — this generation's template under another name — comes back
-   * refused by it. Admitted, or refused by anything else, nothing is created.
-   */
-  private async requireAdmissionGuard(mapping: ManagedRunner): Promise<void> {
-    const probe = buildManagedPod(this.identity(mapping), mapping.pvcUid!, this.profile);
-    probe.metadata.name = managedAdmissionProbeName(mapping.runnerId);
-    try {
-      await this.kube.pods.create(probe, { dryRun: true });
-    } catch (error) {
-      if (error instanceof KubeApiError && error.message.includes(MANAGED_ADMISSION_DENIAL_MARKER)) return;
-      if (isRetryableKubeError(error)) throw error;
-      throw new Conflict('ADMISSION_GUARD_UNVERIFIED', `the admission probe was refused, but not by the guard: ${(error as Error).message}`);
-    }
-    throw new Conflict('ADMISSION_GUARD_MISSING', 'a Pod the single-Pod admission guard must refuse was admitted by a dry run');
   }
 
   // ── resources ──────────────────────────────────────────────────────────────────────────────
 
-  /** The mapping's PVC: created once, adopted by identity, never recreated once its UID is recorded. */
-  private async ensurePvc(mapping: ManagedRunner): Promise<{ mapping: ManagedRunner; pvc: PersistentVolumeClaim }> {
+  /** The mapping's data volume: created once, adopted by identity, never recreated once its UID is recorded. */
+  private async ensureVolume(mapping: ManagedRunner): Promise<{ mapping: ManagedRunner; volume: ManagedVolume }> {
     let current = mapping;
-    let pvc = await this.kube.persistentVolumeClaims.get(mapping.pvcName);
-    if (!pvc) {
-      if (mapping.pvcUid) throw new Conflict('PVC_MISSING', `PVC ${mapping.pvcName} (${mapping.pvcUid}) is gone`);
+    let volume = await this.backend.readVolume(mapping);
+    if (!volume) {
+      if (mapping.pvcUid) throw new ManagedRunnerConflict('PVC_MISSING', `${this.backend.terms.volume} ${mapping.pvcName} (${mapping.pvcUid}) is gone`);
       current = await this.beginOperation(mapping, 'CREATE_PVC');
-      pvc = await this.createOrReadBack(this.kube.persistentVolumeClaims, buildManagedPvc(this.identity(current), this.profile));
+      volume = await this.backend.createVolume(current);
     }
-    const problem = pvcIdentityProblem(pvc, this.identity(current), this.profile, current.pvcUid);
-    if (problem) throw new Conflict('PVC_CONFLICT', problem);
-    return { mapping: current, pvc };
+    const problem = this.backend.volumeProblem(volume, current);
+    if (problem) throw new ManagedRunnerConflict('PVC_CONFLICT', problem);
+    return { mapping: current, volume };
   }
 
-  /** The recorded PVC and PV, unchanged: checked on every pass once the instance is being started. */
-  private async verifyStorage(mapping: ManagedRunner): Promise<{ pvc: PersistentVolumeClaim; pv: PersistentVolume }> {
-    const pvc = await this.kube.persistentVolumeClaims.get(mapping.pvcName);
-    if (!pvc) throw new Conflict('PVC_MISSING', `PVC ${mapping.pvcName} (${mapping.pvcUid}) is gone`);
-    const problem = pvcIdentityProblem(pvc, this.identity(mapping), this.profile, mapping.pvcUid);
-    if (problem) throw new Conflict('PVC_CONFLICT', problem);
-    if (pvc.status?.phase !== 'Bound' || !pvc.spec.volumeName) throw new Conflict('PVC_CONFLICT', 'the recorded PVC is no longer bound');
-    const pv = await this.kube.getPersistentVolume(pvc.spec.volumeName);
-    if (!pv) throw new Conflict('PV_CONFLICT', `PV ${pvc.spec.volumeName} is gone`);
-    const pvProblem = pvIdentityProblem(pv, mapping.pvcUid!, this.profile, { pvUid: mapping.pvUid, volumeHandle: mapping.volumeHandle });
-    if (pvProblem) throw new Conflict('PV_CONFLICT', pvProblem);
-    return { pvc, pv };
+  /** The recorded volume and its storage, unchanged: checked on every pass once the instance is being started. */
+  private async verifyStorage(mapping: ManagedRunner): Promise<VerifiedVolume> {
+    const { terms } = this.backend;
+    const volume = await this.backend.readVolume(mapping);
+    if (!volume) throw new ManagedRunnerConflict('PVC_MISSING', `${terms.volume} ${mapping.pvcName} (${mapping.pvcUid}) is gone`);
+    const problem = this.backend.volumeProblem(volume, mapping);
+    if (problem) throw new ManagedRunnerConflict('PVC_CONFLICT', problem);
+    if (!volume.boundTo) throw new ManagedRunnerConflict('PVC_CONFLICT', `the recorded ${terms.volume} is no longer bound`);
+    const backing = await this.backend.readBacking(volume);
+    if (!backing) throw new ManagedRunnerConflict('PV_CONFLICT', `${terms.backing} ${volume.boundTo} is gone`);
+    const backingProblem = this.backend.backingProblem(backing, mapping);
+    if (backingProblem) throw new ManagedRunnerConflict('PV_CONFLICT', backingProblem);
+    return { volume, backing };
   }
 
   /**
-   * The bootstrap Secret of the mapping's generation. A new one carries a fresh credential; once an
-   * instance has been started no new credential is ever issued under it here.
+   * The bootstrap credential of the mapping's generation. A new one carries a fresh credential; once
+   * an instance has been started no new credential is ever issued under it here.
    */
-  private async ensureSecret(mapping: ManagedRunner): Promise<{ mapping: ManagedRunner; secret: Secret }> {
+  private async ensureCredential(mapping: ManagedRunner): Promise<{ mapping: ManagedRunner; credential: ManagedCredential }> {
     let current = mapping;
-    const name = managedSecretName(mapping.runnerId);
-    let secret = await this.kube.secrets.get(name);
-    if (!secret) {
-      if (mapping.podUid) throw new Conflict('SECRET_MISSING', `Secret ${name} is gone after Pod ${mapping.podUid} was started`);
+    let credential = await this.backend.readCredential(mapping);
+    if (!credential) {
+      if (mapping.podUid) {
+        const { terms } = this.backend;
+        throw new ManagedRunnerConflict(
+          'SECRET_MISSING',
+          `${terms.credential} ${this.backend.names(mapping.runnerId).credential} is gone after ${terms.instance} ${mapping.podUid} was started`,
+        );
+      }
       current = await this.beginOperation(mapping, 'CREATE_SECRET');
-      secret = await this.createOrReadBack(this.kube.secrets, buildManagedSecret(this.identity(current), generateToken(32)));
+      credential = await this.backend.issueCredential(current, generateToken(32));
     }
-    const problem = secretIdentityProblem(secret, this.identity(current));
-    if (problem) throw new Conflict('SECRET_CONFLICT', problem);
-    return { mapping: current, secret };
+    const problem = this.backend.credentialProblem(credential, current);
+    if (problem) throw new ManagedRunnerConflict('SECRET_CONFLICT', problem);
+    return { mapping: current, credential };
   }
 
-  /**
-   * Create `object`; whatever the answer, a failure is followed by a read of the same name. An
-   * object found there is returned for the caller's identity check — a timed-out create that did
-   * commit is adopted, never created twice — and only when nothing is there is the error passed on.
-   */
-  private async createOrReadBack<T extends PersistentVolumeClaim | Secret | Pod>(
-    resource: { create(object: T): Promise<T>; get(name: string): Promise<T | null> },
-    object: T,
-  ): Promise<T> {
-    try {
-      return await resource.create(object);
-    } catch (error) {
-      const found = await resource.get(object.metadata.name);
-      if (found) return found;
-      throw error;
-    }
+  /** An instance under the fixed name that is not this generation's is a conflict for an operator.
+   *  (One that replaced the recorded instance UID is the single-writer gate's: callers fence first.) */
+  private checkInstance(mapping: ManagedRunner, instance: ManagedInstance): void {
+    const problem = this.backend.instanceProblem(instance, mapping);
+    if (problem) throw new ManagedRunnerConflict('POD_CONFLICT', problem);
   }
 
-  /** A Pod under the fixed name that is not this generation's template is a conflict for an operator.
-   *  (One that replaced the recorded Pod UID is the single-writer gate's: callers fence first.) */
-  private checkPod(mapping: ManagedRunner, pod: Pod): void {
-    const problem = podIdentityProblem(pod, this.identity(mapping), mapping.pvcUid!);
-    if (problem) throw new Conflict('POD_CONFLICT', problem);
-  }
-
-  private async recordPod(mapping: ManagedRunner, pod: Pod): Promise<ManagedRunner> {
-    this.checkPod(mapping, pod);
+  private async recordInstance(mapping: ManagedRunner, instance: ManagedInstance): Promise<ManagedRunner> {
+    this.checkInstance(mapping, instance);
     return this.commit(mapping, {
-      podName: pod.metadata.name,
-      podUid: pod.metadata.uid,
-      nodeName: pod.spec.nodeName ?? null,
+      podName: instance.name,
+      podUid: instance.uid,
+      nodeName: instance.node,
       ...this.settled(mapping),
     });
   }
 
-  /** The runner row's credential is the Secret's: its hash, set before any instance exists. */
-  private async adoptCredential(mapping: ManagedRunner, secret: Secret): Promise<ManagedRunner | null> {
-    const tokenHash = sha256(bootstrapCredentialOf(secret)!);
+  /** The runner row's credential is the bootstrap credential's: its hash, set before any instance exists. */
+  private async adoptCredential(mapping: ManagedRunner, credential: ManagedCredential): Promise<ManagedRunner | null> {
+    const tokenHash = sha256(credential.token!);
     const runner = await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: { tokenHash: true } });
     if (runner?.tokenHash === tokenHash) return null;
     const now = this.now();
@@ -1315,7 +1266,11 @@ export class ManagedRunnerManager {
     return row;
   }
 
-  /** Record the one resource operation in flight before it is sent, so a restart knows it may exist. */
+  /**
+   * Record the one resource operation in flight before it is sent, so a restart knows it may exist.
+   * The kinds keep their first, Kubernetes names for every backend: they are stored, and the admission
+   * guard reads CREATE_POD. PVC is the data volume, SECRET the bootstrap credential, POD the instance.
+   */
   private beginOperation(
     mapping: ManagedRunner,
     kind: 'CREATE_PVC' | 'CREATE_SECRET' | 'CREATE_POD' | 'DELETE_POD' | 'DELETE_SECRET',
@@ -1365,9 +1320,9 @@ export class ManagedRunnerManager {
   /**
    * FAILED, or a disabled owner's mapping put to sleep with no instance. Its compute share goes back
    * to the pool in the same transaction when no instance of this generation exists or can exist —
-   * none recorded and no Pod create in flight, so there is nothing whose stop would have to be proven
-   * first. A recorded or possibly created Pod keeps it: that one is released only through the stop
-   * gate. A retry, or a wake, is admitted again from REQUESTED.
+   * none recorded and no instance create in flight, so there is nothing whose stop would have to be
+   * proven first. A recorded or possibly created instance keeps it: that one is released only through
+   * the stop gate. A retry, or a wake, is admitted again from REQUESTED.
    */
   private async commitReleasingCompute(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput): Promise<void> {
     const held = readReservation(mapping.reservation);

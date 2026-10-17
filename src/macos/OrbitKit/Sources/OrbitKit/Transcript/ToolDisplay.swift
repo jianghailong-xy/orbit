@@ -40,8 +40,9 @@ public enum ToolBody: Equatable, Sendable {
     case none
     case command(String)     // a shell command, rendered with a `$` prompt
     case code(String)        // file content / a monospace blob
-    case markdown(String)    // a sub-agent prompt, a plan, a question — rendered as prose
+    case markdown(String)    // a sub-agent prompt, a plan — rendered as prose
     case diff([[DiffLine]])  // one hunk for Edit, many for MultiEdit
+    case question([AskQuestion])  // AskUserQuestion: drawn with how it ended (`QuestionRecords`)
 }
 
 /// Everything the view needs to render one tool call's folded row + expanded detail.
@@ -54,7 +55,7 @@ public struct ToolDisplay: Equatable, Sendable {
     public let path: PathParts?      // a file path → bold filename + dimmed parent dir
     public let meta: String?         // trailing badge (line range, edit count)
     public let body: ToolBody
-    /// Whether the card should start expanded (plans, questions, shell). A failure deliberately
+    /// Whether the card should start expanded (plans, shell). A failure deliberately
     /// does not: the input is what has the lines, the reason is four, and on a phone one failed
     /// heredoc fills the screen. The red glyph on the folded row says it happened; a tap says why.
     public let autoOpen: Bool
@@ -201,10 +202,14 @@ public struct ToolDisplay: Equatable, Sendable {
                                body: (plan?.isEmpty == false) ? .markdown(plan!) : .none, autoOpen: true)
 
         case "AskUserQuestion":
-            let (summary, body) = questionDisplay(input["questions"])
+            // Folded, it is already the record — what was asked and how it was answered, read off the
+            // result (`QuestionRecords`) — so it does not open itself; a tap replays every option.
+            let questions = Approvals.parseQuestions(from: input)
+            let headers = questions.compactMap(\.header).filter { !$0.isEmpty }
             return ToolDisplay(label: "Question", symbol: "questionmark.circle", tone: .agent,
-                               summary: summary, summaryMono: false, path: nil, meta: nil,
-                               body: body, autoOpen: true)
+                               summary: headers.isEmpty ? nil : headers.joined(separator: "  ·  "),
+                               summaryMono: false, path: nil, meta: nil,
+                               body: questions.isEmpty ? .none : .question(questions), autoOpen: false)
 
         // Orbit's own two writes, described by what they did rather than by the JSON they were
         // sent. Once an approval is decided this row is all that survives of it, and a folded
@@ -410,21 +415,6 @@ public struct ToolDisplay: Equatable, Sendable {
             }
         }
         return .code(lines.joined(separator: "\n"))
-    }
-
-    private static func questionDisplay(_ v: JSONValue?) -> (String?, ToolBody) {
-        guard case .array(let qs)? = v, !qs.isEmpty else { return (nil, .none) }
-        let headers = qs.compactMap { $0["header"]?.stringValue }.filter { !$0.isEmpty }
-        let blocks = qs.map { q -> String in
-            let question = q["question"]?.stringValue ?? q["header"]?.stringValue ?? ""
-            var opts: [String] = []
-            if case .array(let arr)? = q["options"] { opts = arr.compactMap { $0["label"]?.stringValue } }
-            var block = "**\(question)**"
-            if !opts.isEmpty { block += "\n" + opts.map { "- \($0)" }.joined(separator: "\n") }
-            return block
-        }
-        return (headers.isEmpty ? nil : headers.joined(separator: "  ·  "),
-                blocks.isEmpty ? .none : .markdown(blocks.joined(separator: "\n\n")))
     }
 
     private static func kvSummary(_ input: JSONValue) -> String? {

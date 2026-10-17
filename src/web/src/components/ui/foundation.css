@@ -40,6 +40,7 @@
   --orbit-badge-warning: #ff8800;
   --orbit-badge-warning-bg: #fff7e6;
   --orbit-alert-warning-border: #ffce7a;
+  --orbit-alert-info-border: #adceff;
   --orbit-badge-blue: #0958d9;
   --orbit-badge-blue-bg: #e6f4ff;
   --orbit-badge-green: #389e0d;
@@ -54,6 +55,7 @@
   --orbit-badge-purple-bg: #f9f0ff;
   --orbit-control-on-primary: #ffffff;
   --orbit-control-hover-bg: rgba(0, 0, 0, 0.04);
+  --orbit-dialog-close-hover-bg: rgba(0, 0, 0, 0.06);
   --orbit-fill-alter: rgba(0, 0, 0, 0.02);
   --orbit-control-disabled-text: rgba(0, 0, 0, 0.25);
   --orbit-control-disabled-bg: rgba(0, 0, 0, 0.04);
@@ -111,6 +113,7 @@
   --orbit-badge-warning: #c18d35;
   --orbit-badge-warning-bg: #271f15;
   --orbit-alert-warning-border: #513f20;
+  --orbit-alert-info-border: #1d305b;
   --orbit-badge-blue: #3c89e8;
   --orbit-badge-blue-bg: #111a2c;
   --orbit-badge-green: #6abe39;
@@ -124,6 +127,7 @@
   --orbit-badge-purple: #854eca;
   --orbit-badge-purple-bg: #1a1325;
   --orbit-control-hover-bg: rgba(255, 255, 255, 0.08);
+  --orbit-dialog-close-hover-bg: rgba(255, 255, 255, 0.12);
   --orbit-fill-alter: rgba(255, 255, 255, 0.04);
   --orbit-control-disabled-text: rgba(255, 255, 255, 0.25);
   --orbit-control-disabled-bg: rgba(255, 255, 255, 0.08);

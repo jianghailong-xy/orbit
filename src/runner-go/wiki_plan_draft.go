@@ -36,7 +36,7 @@ import (
 // what was written; symbols and headings checked against the tree (0.7% of the sample's 5,600 references
 // were not there); protected documents and moved sections checked, since a revision moved sections out of
 // protected documents; the count held to its target (a revision asked for 30 stopped at 40); and the
-// numbers of documents in the text resolved against the catalogue they were written for, so a `见 3.3`
+// numbers of documents in the text resolved against the catalogue they were written for, so a `see 3.3`
 // that now points at a merged-away document is caught rather than kept.
 
 // ── What the runner door answers ────────────────────────────────────────────────────────────────
@@ -689,7 +689,7 @@ func (r *wikiPlanRun) ask(attempt int, step, unit, prompt string, parses func(st
 		}
 		if err == nil {
 			err = errors.New("the answer does not follow the format it was asked for")
-			prompt += "\n\n（注意：严格按上面的输出格式输出，不要别的内容。）"
+			prompt += "\n\n(Note: output exactly in the output format above, and nothing else.)"
 		}
 		last = err
 		r.say("%s %s: %v; asking again.", step, unit, err)
@@ -853,7 +853,7 @@ func (r *wikiPlanRun) writeBodies(attempt int, units []*wikiPlanUnit) error {
 		byCat[unit.Cat] = append(byCat[unit.Cat], unit)
 	}
 	catalogue := r.catalogueText()
-	prefix := r.detailMaterials() + "\n# 文档目录\n" + catalogue + "\n"
+	prefix := r.detailMaterials() + "\n# Document catalogue\n" + catalogue + "\n"
 	if err := r.parallel(len(cats), func(i int) error {
 		c := cats[i]
 		var ids []string
@@ -880,7 +880,7 @@ func (r *wikiPlanRun) writeBodies(attempt int, units []*wikiPlanUnit) error {
 	refs := r.currentRefs()
 	return r.parallel(len(units), func(i int) error {
 		unit := units[i]
-		answer, err := r.ask(attempt, "outline", unit.Slug, r.docMaterials(unit)+"\n# 文档目录\n"+catalogue+"\n"+r.outlinePrompt(unit), func(text string) bool {
+		answer, err := r.ask(attempt, "outline", unit.Slug, r.docMaterials(unit)+"\n# Document catalogue\n"+catalogue+"\n"+r.outlinePrompt(unit), func(text string) bool {
 			_, sections, _ := parseWikiPlanDocBody(text)
 			return len(sections) > 0
 		})
@@ -1008,7 +1008,7 @@ func (r *wikiPlanRun) number() {
 	}
 }
 
-// currentRefs is the catalogue as it stands, number → slug: what a body written now means by `见 3.2`.
+// currentRefs is the catalogue as it stands, number → slug: what a body written now means by `see 3.2`.
 func (r *wikiPlanRun) currentRefs() map[string]string {
 	out := map[string]string{}
 	for _, unit := range r.units {
@@ -1145,12 +1145,12 @@ func (a wikiPlanAssembled) headerOf(unit *wikiPlanUnit) wikiPlanHeader {
 			}
 			text := out.Text
 			if len(ids) > 0 {
-				text += "（见 " + strings.Join(ids, "、") + "）"
+				text += " (see " + strings.Join(ids, ", ") + ")"
 			}
 			h.ScopeOut = append(h.ScopeOut, text)
 		}
 		if doc.Length.Min > 0 {
-			h.Length = fmt.Sprintf("%d–%d 字", doc.Length.Min, doc.Length.Max)
+			h.Length = fmt.Sprintf("%d–%d characters", doc.Length.Min, doc.Length.Max)
 		}
 		return h
 	}
@@ -1221,11 +1221,11 @@ func (r *wikiPlanRun) errorLines(errs []wikiPlanGateError, last wikiPlanAssemble
 			i, _ := strconv.Atoi(m[1])
 			if i < len(last.plan.Docs) {
 				doc := last.plan.Docs[i]
-				where = fmt.Sprintf("%s《%s》", last.units[i].ID, doc.Title)
+				where = fmt.Sprintf("%s «%s»", last.units[i].ID, doc.Title)
 				if m[2] != "" {
 					j, _ := strconv.Atoi(m[2])
 					if j < len(doc.Sections) {
-						where += fmt.Sprintf(" 第 %d 节「%s」", j+1, doc.Sections[j].Title)
+						where += fmt.Sprintf(", section %d «%s»", j+1, doc.Sections[j].Title)
 					}
 				}
 				if tail := strings.TrimPrefix(m[3], "."); tail != "" {
@@ -1233,7 +1233,7 @@ func (r *wikiPlanRun) errorLines(errs []wikiPlanGateError, last wikiPlanAssemble
 				}
 			}
 		}
-		fmt.Fprintf(&b, "- [%s] %s：%s\n", e.Check, where, e.Message)
+		fmt.Fprintf(&b, "- [%s] %s: %s\n", e.Check, where, e.Message)
 	}
 	return b.String()
 }

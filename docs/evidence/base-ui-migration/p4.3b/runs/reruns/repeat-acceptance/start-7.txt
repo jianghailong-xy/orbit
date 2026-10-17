@@ -1,0 +1,12 @@
+tree start 5034a3e9f run 7 2026-10-09T11:32:52Z load 27.60 30.08 29.38
+cgroup: 0::/system.slice/run-p3211627-i53512015.scope oom_score_adj 500
+
+ RUN  v5.0.2 /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/start/src/web
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  19:32:53
+   Duration  6.27s (tests 47%, transform 31%, import 17%, environment 5%)
+
+exit=0

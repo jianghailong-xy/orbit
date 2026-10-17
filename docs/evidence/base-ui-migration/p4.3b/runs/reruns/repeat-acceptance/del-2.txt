@@ -1,0 +1,16 @@
+tree del e21fad172 run 2 2026-10-09T11:29:43Z load 23.77 27.30 28.29
+cgroup: 0::/system.slice/run-p3181965-i53482353.scope oom_score_adj 500
+
+ RUN  v5.0.2 /root/.orbit/worktrees/ba9b2bbb-b78b-5991-855c-183de0d5d9e3/src/web
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  19:29:46
+   Duration  10.82s (tests 38%, transform 34%, import 22%, environment 5%)
+
+  Transform  transforming modules took 3.64s · 34% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+exit=0

@@ -84,7 +84,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// is a committed fact that cannot change.
         case acceptanceConfirmationReceipt(confirmed: RecordedStandardSetConfirmation)
         /// One revision of one task's completion evidence. The revision is part of the address
-        /// because the door's compare-and-set is against it: a newer revision is its own card.
+        /// because the door's compare-and-set is against it: a newer revision is its own card. A
+        /// revision waiting for a paused coordinator, or handed to it since, keeps this same card,
+        /// anchored the same way — the card draws it folded, or as one line
+        /// (`EvidenceDecisions.standing`).
         case evidenceDecision(taskID: String, evidenceRevision: String)
         /// One OWNER_CONFIRMED task's run waiting on its owner, by the report the door's
         /// compare-and-set is against: a later report is its own card, and the earlier one becomes a
@@ -569,7 +572,9 @@ public enum TranscriptRows {
         // behind it.
         rows.append(contentsOf: state.pendingApprovals.map(TranscriptRow.approval))
         if showWorkingIndicator { rows.append(.working) }
-        rows.append(contentsOf: state.queued.map(TranscriptRow.queued))
+        // …except the reader's own messages still on their way, which the tray above the composer
+        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here.
+        rows.append(contentsOf: state.queued.filter { !PendingTray.holds($0) }.map(TranscriptRow.queued))
         // Zero-height tail row: a stable `scrollTo` target that always sits below the last message
         // (the last item's own id moves as it streams).
         rows.append(.bottom)

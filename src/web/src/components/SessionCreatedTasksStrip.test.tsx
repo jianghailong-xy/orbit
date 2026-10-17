@@ -412,6 +412,77 @@ describe('what the session waits on', () => {
     expect(one('.ct-row .ct-eye-ico')?.classList.contains('is-stale')).toBe(true);
   });
 
+  /** The session that runs `task`, as the watch read names it: its own title, and the task (`targetTask`). */
+  const runOf = (task: SessionCreatedTaskRow, over: Partial<WatchTargetView> = {}): WatchTargetView =>
+    target(encodeId('00000000-0000-7000-8000-0000000000f1'), {
+      targetKind: 'SESSION',
+      targetTitle: `Task: ${task.title}`,
+      targetStatus: { status: 'RUNNING', running: true, queued: false },
+      targetTask: { id: task.id, title: task.title, status: { status: task.status, running: task.running, queued: task.queued } },
+      ...over,
+    });
+  const AWAIT_SESSION: WatchView['predicate'] = {
+    kind: 'ANY_OF',
+    operands: [
+      { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' },
+      { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_NEEDS_ATTENTION' },
+    ],
+  };
+
+  it('draws a task and its run session, waited on apart, as the task’s one row with one eye', async () => {
+    const items = [row(1, { status: 'IN_PROGRESS', running: true }), row(2, { status: 'DONE' })];
+    await mount(created({ total: 2, running: 1, done: 1, items }), [
+      waits('TASK_AWAIT', [target(items[0].id)]),
+      waits('SESSION_AWAIT', [runOf(items[0])], { predicate: AWAIT_SESSION }),
+    ]);
+    expect(one('.ct-watching')?.textContent?.trim()).toBe('1');
+    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    await click(one('.bg-tray-row'));
+    expect(all('.ct-row .ct-title').map((t) => t.textContent)).toEqual(['Task 1', 'Task 2']);
+    expect(all('.ct-row').map((r) => r.querySelectorAll('.ct-eye .anticon-eye').length)).toEqual([1, 0]);
+    expect(one('.watch-say')).toBeNull();
+  });
+
+  it('adds the run of a task created elsewhere as that task: its own title and pill, never the session’s', async () => {
+    const elsewhere = row(9, { title: 'iOS: share sheet saves the image to Photos', status: 'IN_PROGRESS', running: true });
+    await mount(created({ total: 1, done: 1, items: [row(1, { status: 'DONE' })] }), [
+      waits('W', [runOf(elsewhere)], { predicate: AWAIT_SESSION }),
+    ]);
+    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    await click(one('.bg-tray-row'));
+    const rows = all('.ct-row');
+    expect(rows.map((r) => r.querySelector('.ct-title')?.textContent)).toEqual([
+      'iOS: share sheet saves the image to Photos',
+      'Task 1',
+    ]);
+    expect(rows[0].querySelector('.ct-age')?.textContent).toBe('elsewhere');
+    expect(rows[0].querySelector('.status-pill')?.textContent).toBe('Running');
+    expect(rows[0].getAttribute('href')).toBe(`/tasks/${elsewhere.id}`);
+  });
+
+  it('turns both eyes orange and opens on the unchecked line when a run-session watch goes unchecked', async () => {
+    const items = [row(1, { status: 'IN_PROGRESS', running: true }), row(2, { status: 'DONE' })];
+    await mount(created({ total: 2, running: 1, done: 1, items }), [
+      waits('W', [runOf(items[0])], {
+        predicate: AWAIT_SESSION,
+        lastEvaluatedAt: new Date(Date.now() - 12 * MINUTE).toISOString(),
+      }),
+    ]);
+    expect(one('.ct-watching')?.classList.contains('is-stale')).toBe(true);
+    await click(one('.bg-tray-row'));
+    expect(one('.ct-list')?.firstElementChild?.textContent).toBe('Not checked for 12m — the resume may be late.');
+    expect(all('.ct-row .ct-eye-ico').map((eye) => eye.classList.contains('is-stale'))).toEqual([true]);
+  });
+
+  it('leaves a run session to the Watching strip when an older server names no task for it', async () => {
+    const items = [row(1, { status: 'IN_PROGRESS', running: true }), row(2, { status: 'DONE' })];
+    await mount(created({ total: 2, running: 1, done: 1, items }), [
+      waits('W', [runOf(items[0], { targetTask: undefined })], { predicate: AWAIT_SESSION }),
+    ]);
+    expect(one('.ct-watching')).toBeNull();
+    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+  });
+
   it('leaves out a watch that only notifies the person', async () => {
     const items = [row(1), row(2)];
     await mount(created({ total: 2, items }), [

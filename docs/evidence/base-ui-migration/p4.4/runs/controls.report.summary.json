@@ -1,0 +1,1517 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/controls.config.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/controls.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/.controls-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4175 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/",
+   "url": "http://127.0.0.1:4175",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "controls.browser.mjs",
+   "file": "controls.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7824,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:53:53.751Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-dc4841ad186cedb83459",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7248,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:01.631Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-360441424e88234115f9",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2314,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:08.885Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-a82299bf175ad3e573b4",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3512,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:11.204Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-fc25d81fa14d60de8b1d",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7275,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:14.993Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-8cea31dfd30d2ebff1a7",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6986,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:22.321Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-cc5a342ae5ed61151834",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2130,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:29.312Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-797b868a5233333db773",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2751,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:31.446Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-8d6606e871e509cd65d9",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7508,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:34.482Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-c6e44aac6c60637e2c1c",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6952,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:42.041Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-eb3a1c47845e22c40027",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2181,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:48.998Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-33b50a01e57924ed9e93",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3613,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:51.184Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-26827d5a8bd89d48e359",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7002,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:54:55.307Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-ac7b5419f99da60db816",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6772,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:02.370Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-fbbd3dfb2775a9b020f9",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2173,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:09.147Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-362eafe6facccf5fa59e",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2774,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:11.325Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-45a27d85029add90af68",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 13773,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:14.532Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-c47e152783b9a4cc295a",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9918,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:28.442Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-d52d868a611579657c9a",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3795,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:38.366Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-4f7f2be7240b89af0b08",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4352,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:42.165Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-07b8c31ae6affe4a843b",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12457,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:47.284Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-a923e9d4ed851fc13fdc",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8435,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:55:59.895Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-d31f773013e35cb93476",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3011,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:08.336Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-5813702d06d6ca5c4226",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3030,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:11.352Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-c01dc9db3ca2f4f9ad34",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 20475,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:14.974Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-57a42e24b02d71df20cf",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8832,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:35.557Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-6e646c0ba33ddc1b62ff",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4047,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:44.393Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-4941097086df7370d48e",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5000,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:48.447Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-a773075399a203064bc0",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 19604,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:56:56.106Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-b47a16da5cfbdf5c6e93",
+     "file": "controls.browser.mjs",
+     "line": 103,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10842,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:57:15.809Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-dfc5042182807a65b647",
+     "file": "controls.browser.mjs",
+     "line": 213,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5638,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:57:26.665Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-9eb61e1fb31c832f97ac",
+     "file": "controls.browser.mjs",
+     "line": 248,
+     "column": 1
+    },
+    {
+     "title": "a focused field under the pointer and the 601\u2013960px font size match AntD",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4339,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T22:57:32.319Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focused-hover-and-breakpoint",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-e832cf52873af8782ea6",
+     "file": "controls.browser.mjs",
+     "line": 331,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T22:53:48.729Z",
+  "duration": 228377.769,
+  "expected": 32,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

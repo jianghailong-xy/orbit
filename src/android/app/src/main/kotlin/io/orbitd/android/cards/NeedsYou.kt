@@ -5,11 +5,15 @@ import io.orbitd.android.core.realtime.SessionSnapshot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectDoc
 import io.orbitd.android.projects.ProjectDone
+import io.orbitd.android.projects.RunSettings
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
 /** One of the four owner items a session row carries (OrbitKit `SessionOwnerItem`, §7.6 V13). */
-data class OwnerItem(val itemId: String, val kind: String, val title: String, val since: String)
+/** `mainBranch` is the project's main branch, short — what a merge approval merges into — null with no repository bound. `need` is
+ * the short reason an escalated item carries, which the session row says after "Escalated to you" (A08-17). */
+data class OwnerItem(val itemId: String, val kind: String, val title: String, val since: String, val mainBranch: String? = null,
+    val need: String? = null)
 
 /** What the cross-session bar says, and where its press goes (OrbitKit `NeedsYouBanner`): the session that has
  * waited longest, or — when one of the four owner items is waiting — the card that item is. */
@@ -71,8 +75,9 @@ object NeedsYouLogic {
     }
 
     /** The rows a conversation's needs-you bar counts, read off its session snapshot: the rail's cards, then the coordinator's
-     * "Is this project done?" while it asks (iOS `doneCardAsking`: a request or `RECORD_AS_DONE`, not yet recorded). */
-    fun belowRows(sessionId: String, snapshot: SessionSnapshot): List<BelowRow> {
+     * "Is this project done?" while it asks (iOS `doneCardAsking`: a request or `RECORD_AS_DONE`, not yet recorded). [answered] are
+     * the answers sent in this window, whose questions no longer count (A08-13). */
+    fun belowRows(sessionId: String, snapshot: SessionSnapshot, answered: Map<String, JsonObject> = emptyMap()): List<BelowRow> {
         val project = snapshot.detail.text("projectId")
         val doc = snapshot.standing["project"] as? JsonObject
         val asking = if (project == null || doc == null) null else {
@@ -80,7 +85,7 @@ object NeedsYouLogic {
             val slot = ProjectDone.slot(doc, live, snapshot.detail.text("waitingKind"), null)
             if (slot is ProjectDone.Slot.Done && !ProjectDone.recorded(doc, null)) doneKey(project) else null
         }
-        return belowRows(CardCatalog.session(sessionId, snapshot), asking)
+        return belowRows(CardCatalog.session(sessionId, snapshot, answered = answered), asking)
     }
 
     /** The address the coordinator's done card is drawn under (`CardFocus`). */
@@ -91,9 +96,11 @@ object NeedsYouLogic {
     fun needsYou(row: JsonObject): Boolean =
         ((row.number("pendingApprovals") ?: 0) > 0 && row.text("waitingKind") != "START_REQUEST") || ownerItems(row).isNotEmpty()
 
-    fun ownerItems(row: JsonObject): List<OwnerItem> = row.objects("ownerItems").mapNotNull { item ->
+    fun ownerItems(row: JsonObject): List<OwnerItem> = ownerItems(row.objects("ownerItems"))
+
+    fun ownerItems(items: List<JsonObject>): List<OwnerItem> = items.mapNotNull { item ->
         OwnerItem(item.text("itemId") ?: return@mapNotNull null, item.text("kind") ?: "UNKNOWN",
-            item.text("title").orEmpty(), item.text("since").orEmpty())
+            item.text("title").orEmpty(), item.text("since").orEmpty(), item.text("mainBranch"), item.text("need"))
     }
 
     /** The cross-session bar for a screen showing [focused], or null when nothing elsewhere is waiting. An owner item wins
@@ -108,20 +115,39 @@ object NeedsYouLogic {
         return NeedsYouBanner(elsewhere.size, target, text(elsewhere.size, target))
     }
 
-    /** The words the bar and a session row share for one of the four; null for a kind this build does not know. */
-    fun kindWord(kind: String): String? = when (kind) {
-        "PROMOTION_APPROVAL" -> "Approve merge to main"
+    /** The words the bar and a session row share for one of the four; null for a kind this build does not know. A merge approval
+     * names the branch it merges into, [main]. */
+    fun kindWord(kind: String, main: String = RunSettings.defaultMainBranch): String? = when (kind) {
+        "PROMOTION_APPROVAL" -> "Approve merge to $main"
         "COORDINATOR_QUESTION" -> "Question from coordinator"
         "ESCALATED" -> "Escalated to you"
         "FUSE_PAUSED" -> "Paused"
         else -> null
     }
 
+    /** The word of the item that has waited longest, for a row the server says waits on one of the four (OrbitKit
+     * `oldestItemWord`); null when none is a kind this build knows. An unparseable instant sorts last, as for the bar. An escalated
+     * item says its need as well — "Escalated to you · the check on the combined tree failed" — where the bar says the word alone. */
+    fun oldestItemWord(items: List<OwnerItem>): String? = items.mapNotNull { item -> word(item)?.let { itemWord(item, it) to (parse(item.since) ?: Instant.MAX) } }
+        .fold(null as Pair<String, Instant>?) { oldest, next -> if (oldest == null || next.second < oldest.second) next else oldest }?.first
+
+    /** What separates the word for a kind from the need an escalated item carries (the browser's `OWNER_ITEM_NEED_SEPARATOR`). */
+    const val needSeparator = " · "
+
+    /** One item's word on a session row: the kind's word, and for an escalated item its need after it, when it has one. */
+    fun itemWord(item: OwnerItem, base: String): String {
+        val need = item.need?.trim()?.takeIf { it.isNotEmpty() && item.kind == "ESCALATED" } ?: return base
+        return base + needSeparator + need
+    }
+
     /** "Approve merge to main · Integration line": which of the four, and which project. */
     fun ownerItemText(item: OwnerItem, project: String?): String {
-        val what = kindWord(item.kind) ?: "Needs you"
+        val what = word(item) ?: "Needs you"
         return if (project.isNullOrEmpty()) what else "$what · $project"
     }
+
+    /** An item's word, its merge named by the main branch the item carries. */
+    private fun word(item: OwnerItem) = kindWord(item.kind, RunSettings.mainBranchName(item.mainBranch))
 
     /** The card an owner item is drawn as in its coordinator conversation (`CardFocus` addresses). */
     fun cardKey(item: OwnerItem): String = if (item.kind == "PROMOTION_APPROVAL") "promotion:" else "item:${item.itemId}"

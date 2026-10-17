@@ -5,7 +5,9 @@
  * through, which its row's `runtime` says — an Anthropic-compatible endpoint borrows Claude Code, an
  * OpenAI Responses one Codex, Moonshot's own API Kimi, Google's Gemini API Antigravity. An engine
  * runs every key whose dialect it speaks. The four CLIs above each speak one; OpenCode speaks all
- * four (one AI SDK provider per dialect), so every such key also runs there.
+ * four (one AI SDK provider per dialect), so every such key also runs there. A Cursor User API Key
+ * speaks a fifth, Cursor's own, which is no model API: only Cursor CLI can spend it
+ * (docs/cursor-runtime-contract.md §9), so OpenCode cannot (openCodeDialect).
  *
  * A session's `provider` stays its engine — `opencode` — because the claim SQL, its trigger and the
  * runner capability gate all route on it. The key an OpenCode session spends is named inside its
@@ -14,7 +16,10 @@
  * as a provider of that name. Mirrored in Swift (`OpenCodeKeys`); keep the two in sync.
  */
 
-export type KeyDialect = 'anthropic' | 'openai' | 'openai-compatible' | 'gemini';
+export type KeyDialect = 'anthropic' | 'openai' | 'openai-compatible' | 'gemini' | 'cursor';
+
+/** The dialects OpenCode speaks, one AI SDK provider each: every dialect but Cursor's. */
+export type OpenCodeDialect = Exclude<KeyDialect, 'cursor'>;
 
 /** The dialect a configured key's endpoint speaks, from the runtime its row borrows. DeepSeek
  *  Harness rows hold DeepSeek's Anthropic-compatible endpoint; anything unknown speaks nothing. */
@@ -29,13 +34,21 @@ export function keyDialect(runtime?: string | null): KeyDialect | null {
       return 'openai-compatible';
     case 'antigravity':
       return 'gemini';
+    case 'cursor':
+      return 'cursor';
     default:
       return null;
   }
 }
 
+/** The dialect of a key OpenCode can spend, or null: a runtime nothing speaks, or a Cursor key. */
+export function openCodeDialect(runtime?: string | null): OpenCodeDialect | null {
+  const dialect = keyDialect(runtime);
+  return dialect === 'cursor' ? null : dialect;
+}
+
 /** The AI SDK package OpenCode drives each dialect with, all bundled in OpenCode itself. */
-export const OPENCODE_DIALECT_NPM: Record<KeyDialect, string> = {
+export const OPENCODE_DIALECT_NPM: Record<OpenCodeDialect, string> = {
   anthropic: '@ai-sdk/anthropic',
   openai: '@ai-sdk/openai',
   'openai-compatible': '@ai-sdk/openai-compatible',
@@ -47,7 +60,7 @@ export const OPENCODE_DIALECT_NPM: Record<KeyDialect, string> = {
  * the API version themselves (ANTHROPIC_BASE_URL, GOOGLE_GEMINI_BASE_URL); the SDKs expect it in the
  * URL. The OpenAI-style rows already carry `/v1`, as OPENAI_BASE_URL and Kimi's base URL do.
  */
-export function openCodeBaseUrl(dialect: KeyDialect, baseUrl: string): string {
+export function openCodeBaseUrl(dialect: OpenCodeDialect, baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '');
   if (dialect === 'anthropic') return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
   if (dialect === 'gemini') return /\/v1(beta)?$/.test(trimmed) ? trimmed : `${trimmed}/v1beta`;

@@ -2,6 +2,8 @@ import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AgentProvider,
+  ENGINE_CLI_NAMES,
   KIMI_LOGIN_REGION_V1,
   KIMI_REGIONS,
   type KimiRegion,
@@ -10,6 +12,7 @@ import {
   type RunnerLoginState,
 } from '@orbit/shared';
 import { api } from '../api';
+import { copyText } from '../lib/clipboard';
 import { runnersQuery } from '../lib/queries';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
@@ -41,6 +44,7 @@ export const ENGINE_NAME: Record<LoginEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 export function GoogleSignInTerms() {
@@ -184,6 +188,7 @@ export function RunnerSignIn({
   const [watched, setWatched] = useState(false);
   // Set once this card has started a sign-in itself — see `mine` below.
   const [startedHere, setStartedHere] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const adding = accountName !== undefined;
   // The tab parked by the click, waiting for a URL to point at. Cleared once it has one.
   const tab = useRef<Window | null>(null);
@@ -484,14 +489,26 @@ export function RunnerSignIn({
   }
 
   if (status === 'awaiting_code' && s?.url) {
+    const signInUrl = s.url;
     return (
       <div className="rsi">
         {/* A rejected code lands back here with the SAME url still valid — the CLI keeps waiting
             on that challenge — so the message is what tells the user anything changed. */}
         {s.message && <div className="rsi-warn">{s.message}</div>}
-        <a className="rsi-open" href={s.url} target="_blank" rel="noopener noreferrer">
-          <ExportOutlined /> Open the sign-in page
-        </a>
+        <div className="rsi-actions">
+          <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
+            <ExportOutlined /> Open the sign-in page
+          </a>
+          <button
+            className="rsi-link"
+            type="button"
+            onClick={() => {
+              void copyText(signInUrl).then((ok) => { if (ok) setCopiedUrl(signInUrl); });
+            }}
+          >
+            {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
+          </button>
+        </div>
         <div className="rsi-hint">
           Approve it there, then paste the code the page gives you:
         </div>

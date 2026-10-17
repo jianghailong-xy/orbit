@@ -20,6 +20,8 @@ interface HarnessOptions {
   earlierExecutable?: boolean;
   existingTurn?: Record<string, unknown> | null;
   startingTurn?: Record<string, unknown> | null;
+  /** Somebody already pressed Stop on the live turn (`stopOvertookTarget`). */
+  stopFiled?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -51,7 +53,7 @@ function harness(options: HarnessOptions = {}) {
     $queryRaw: async () => {
       rawCall += 1;
       if (rawCall === 1) return [{ id: SESSION_ID }];
-      return (liveLeaseChecks.shift() ?? false) ? [{ id: TARGET_ID }] : [];
+      return (liveLeaseChecks.shift() ?? false) ? [{ id: TARGET_ID, seq: 1 }] : [];
     },
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
@@ -66,7 +68,9 @@ function harness(options: HarnessOptions = {}) {
         }
         return null;
       },
-      findFirst: async () => ({ seq: 1 }),
+      // The interrupt turn a Stop filed after the live turn, if any; otherwise the seq allocation read.
+      findFirst: async ({ where }: { where?: { kind?: string } } = {}) =>
+        where?.kind === 'interrupt' ? (options.stopFiled ? { id: 'the-stop' } : null) : { seq: 1 },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
         return { id: 'turn-new', seq: 2, ...data };
@@ -146,6 +150,25 @@ test('CURRENT_WORK rejects when there is no live target and never becomes a mess
   await assert.rejects(send(h, 'CURRENT_WORK'), (error: unknown) =>
     (error as { response?: { reason?: string } }).response?.reason === 'NO_CURRENT_WORK');
   assert.equal(h.created.length, 0);
+});
+
+test('CURRENT_WORK sent after a Stop of the live turn is refused, so the sender queues it instead', async () => {
+  // Typed after pressing Stop, it is the next instruction. Steered into the stopping turn it would be
+  // written off with it; refused, the composer re-sends it as NEXT_TURN, which runs once that turn ends.
+  const h = harness({ stopFiled: true });
+  let charged = 0;
+  await assert.rejects(
+    send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; }),
+    (error: unknown) => {
+      const response = (error as { response?: { code?: string; reason?: string } }).response;
+      return response?.code === 'CURRENT_WORK_UNAVAILABLE' && response.reason === 'NO_CURRENT_WORK';
+    },
+  );
+  assert.equal(h.created.length, 0, 'a steer was filed into the turn being stopped');
+  assert.equal(charged, 0);
+  // The re-send it gets is an ordinary next-turn message.
+  const queued = await send(harness({ stopFiled: true }), 'NEXT_TURN');
+  assert.equal(queued.kind, 'message');
 });
 
 test('CURRENT_WORK reports an expired lease instead of silently queueing', async () => {

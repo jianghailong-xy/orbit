@@ -260,6 +260,7 @@ final class AppModel {
             // the console (`NavState.selectConsole`); clearing pops the console that is there —
             // never a draft or a deeper frame.
             if let id = newValue {
+                focusConsoleOnOwnerItem(id)
                 nav.selectConsole(.console(sessionID: id, origin: .list))
             } else if case .console = nav.path.last {
                 nav.pop()
@@ -621,9 +622,16 @@ final class AppModel {
         catch { errorText = "Couldn't save preferences." }
     }
 
-    /// Keep a model pick available to the next draft immediately, then sync it. Serialize writes
-    /// so quickly choosing two models cannot leave the account remembering the older choice.
-    func rememberDefaultModel(_ model: String, for provider: String) {
+    /// Keep a model pick available to the next draft immediately, then sync it. Remembered per engine
+    /// and provider — `<engine>:<provider>` (docs/provider-engine-contract.md §6.5): one key's model on
+    /// Claude Code is not its model on DeepSeek Harness. Serialize writes so quickly choosing two models
+    /// cannot leave the account remembering the older choice.
+    func rememberDefaultModel(_ model: String, engine: String, provider: String) {
+        let key = AgentDefaults.defaultModelKey(engine: engine, provider: provider)
+        rememberDefaultModel(model, key: key)
+    }
+
+    private func rememberDefaultModel(_ model: String, key provider: String) {
         guard let api, defaultModels[provider] != model else { return }
         pendingDefaultModels[provider] = model
         let previous = defaultModelWrite
@@ -866,6 +874,9 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        #if os(iOS)
+        disablePush()   // reads the access token, so before the store is cleared below
+        #endif
         // Best-effort server-side revoke of the refresh token before we drop it locally. Capture the
         // token by value and hand it to the async call so clearing the store below can't race the read.
         if let baseURL, let api, let refreshToken = tokenStore.refreshToken(for: baseURL) {
@@ -1872,6 +1883,33 @@ final class AppModel {
         openNeedsYouSession(s)
     }
 
+    /// A session ROW's press in the compact shell: open the conversation, and — when the row is
+    /// waiting on one of the four owner items (§7.6 V13) — land on the card the row's own line
+    /// named. The row already says which item ("Escalated to you · …"), so opening the conversation
+    /// without it would leave the reader to find the card the line they pressed was about.
+    ///
+    /// The three-column shells carry the same act in `selectedAgentSessionID`'s setter, which is
+    /// where their `List(selection:)` lands: one behaviour, both shapes.
+    func openSessionRow(_ s: Session) {
+        focusConsoleOnOwnerItem(s.id)
+        push(.console(sessionID: s.id, origin: .list))
+    }
+
+    /// Point the console a row is about to open at the card the row says it is waiting on, if it is
+    /// waiting on one. Read off the LIST's own snapshot — the same rows the row's line was derived
+    /// from — and a no-op for a conversation waiting on nothing: the console's own read of the item
+    /// list runs on appear, and this only tells it where to land first.
+    ///
+    /// It is NOT an entrance of its own and does not touch the stack: the two rows that call it
+    /// (`openSessionRow`, and the selection setter the three-column shells write) have already
+    /// decided which frame goes up.
+    private func focusConsoleOnOwnerItem(_ sessionID: String) {
+        guard let session = sessions.first(where: { $0.id == sessionID }),
+              let item = NeedsYouLogic.oldestOwnerItem([session])?.item else { return }
+        consoleRegistry?.model(for: sessionID, agentID: session.agent?.id ?? session.agentId)
+            .focus(ownerItem: item)
+    }
+
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents
     /// section. Out of range (fewer agents than the digit pressed) is a no-op. Mirrors the sidebar's
     /// agent-selection binding.
@@ -2404,6 +2442,10 @@ final class AppModel {
     /// The open items of the project whose sessions page is showing, read only while nobody has
     /// started it: what the progress card's start row is drawn from (`StartProject.pageRow`).
     private(set) var projectSessionsOpenItems: ProjectOpenItemsView?
+    /// The project as its sessions page's ending is drawn from, read only while the project is done
+    /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
+    /// conversation's settled card keeps.
+    private(set) var projectSessionsDone: ProjectDoneSubject?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2484,6 +2526,7 @@ final class AppModel {
             projectSessionsIntegrationReadAt = nil
             projectSessionsIntegrationReadFailed = false
             projectSessionsOpenItems = nil
+            projectSessionsDone = nil
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
@@ -2592,6 +2635,25 @@ final class AppModel {
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items
+    }
+
+    /// One poll of what the page's ending is drawn from (docs/mocks/project-done-sessions-page,
+    /// owner decision 2026-10-10): the project document's own subject — the same read, and the same
+    /// card, the conversation's settled branch keeps — while the project is done. The sidebar's rows
+    /// are the Open projects, so a row that is not Open, or none at all, is the state that may be
+    /// done; the document is the only read that says which. A project that is not done reads nothing
+    /// and keeps nothing, and a read that fails keeps the last answer rather than drawing none.
+    func loadProjectDone(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
+        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
+        guard row?.status != .open else {
+            if projectSessionsAddress == address { projectSessionsDone = nil }
+            return
+        }
+        let document = try? await api.projectCriteria(projectID: address.projectID)
+        guard projectSessionsAddress == address, !Task.isCancelled, let document else { return }
+        projectSessionsDone = document.doneSubject
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which

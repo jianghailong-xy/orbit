@@ -34,18 +34,17 @@ import kotlinx.serialization.json.*
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** Settings' own pages; "workspace" is the workspace list's gear and "runners" the Runners row. */
+/** Settings' own pages; "workspace" is the workspace list's gear and "infrastructure" the Machines & models row, with its pool and key
+ * pages one push further. */
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
     notifications: @Composable () -> Unit, about: @Composable () -> Unit) {
-    val runner: (String) -> Unit = { open(OrbitRoute(Destination.RUNNER, it)) }
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
-        "providers" -> ProviderManagement(api, revision, route.recordId, open, back)
+        "infrastructure" -> InfrastructureSettings(api, revision, route.recordId, open, back)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
-        "runners" -> RunnersList(api, revision, runner)
         "sharing" -> SharingSettings(api, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
@@ -64,12 +63,17 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
 fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
     "profile" -> "Edit profile"; "password" -> "Change password"
-    "providers" -> record?.takeIf { it.startsWith("key:") }?.let { providerKeyTitle(it.removePrefix("key:")) } ?: "Providers"
-    "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
+    // A pool's page and a DeepSeek key's are titled by its name once read, as iOS titles them.
+    "infrastructure" -> when {
+        record?.startsWith("key:") == true -> providerKeyTitle(record.removePrefix("key:"))
+        record != null -> poolTitle(record.substringAfter(':'))
+        else -> null
+    } ?: Infrastructure.TITLE
+    "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
-/** SettingsHome: "3 of 4 online" — how many of the account's machines can take work right now. */
+/** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
 internal fun settingsRunnersValue(runners: List<JsonObject>): String =
     if (runners.isEmpty()) "None" else "${runners.count { it.flag("online") }} of ${runners.size} online"
 
@@ -87,6 +91,15 @@ internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for
 internal fun smartModelSelection(preferences: JsonObject?): Boolean =
     (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
+/** SettingsCopy's session recaps switch (SettingsHome.sessionRecaps): what a session list shows instead of the raw last reply. */
+internal const val SESSION_RECAPS = "Session recaps"
+internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
+
+/** UserPreferences.showRecaps: on unless the account turned it off; absent — or a value this build cannot read — means on, so
+ * only opting out is ever written. */
+internal fun sessionRecapsEnabled(preferences: JsonObject?): Boolean =
+    (preferences?.get("recaps") as? JsonPrimitive)?.booleanOrNull != false
+
 /** The server as the sign-in screen asked for it: the host, and the port when it is not the scheme's own. */
 internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrNull()?.let {
     if (it.port == HttpUrl.defaultPort(it.scheme)) it.host else "${it.host}:${it.port}"
@@ -101,6 +114,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     deviceAlerts: () -> Boolean?) {
     val appearance = LocalAppearanceChanged.current
     val smartSelectionChanged = LocalSmartSelectionChanged.current
+    val recapsChanged = LocalSessionRecapsChanged.current
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val scope = rememberCoroutineScope()
@@ -108,7 +122,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val preferences = user?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
     val photo = rememberAccountPhoto(api, user)
     val instance = remember(api) { settingsInstanceName(api.handle.account.server) }
-    var runners by remember(api) { mutableStateOf<String?>(null) }
+    // The Infrastructure row's value is what its page's Needs you holds: the machines, and the pools — a Codex one of the account's
+    // own with its people and keys, which say whether it can run. Shown once the machines are read, as on iOS.
+    var runners by remember(api) { mutableStateOf<List<JsonObject>?>(null) }
+    val infrastructure = remember(api) { InfrastructureModel(api) }
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
@@ -124,11 +141,13 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         alerts = deviceAlerts()
         // Each row's value is its own read; only an answer the server gave is shown.
         launch {
-            try { runners = settingsRunnersValue(providerObjects(api.get("runners"))) }
+            try { runners = providerObjects(api.get("runners")) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
+        launch { infrastructure.loadPools() }
+        launch { infrastructure.loadShared() }
         launch {
-            try { sharedLinks = settingsSharedLinksValue(sharingList(api.get("share-links")).list("links").count { it.text("state") == "ACTIVE" }) }
+            try { sharedLinks = settingsSharedLinksValue(sharingLinks(api).count { it.text("state") == "ACTIVE" }) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
         launch {
@@ -145,6 +164,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             when (key) {
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
+                "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
             }
         }
     }
@@ -182,13 +202,20 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md); absent means on.
             SettingsSwitch("Suggested replies", R.drawable.ic_suggestion, (preferences["promptSuggestions"] as? JsonPrimitive)?.booleanOrNull != false,
                 record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
+            // The server's rolling recap on a session's list row (0418); absent means on. One switch for the whole account, so
+            // turning it off holds on the phone and on the web at once — the moment the server has taken the change, the lists
+            // behind Settings redraw without it.
+            SettingsSwitch(SESSION_RECAPS, R.drawable.ic_contents, sessionRecapsEnabled(preferences), record.ready,
+                hint = SESSION_RECAPS_HINT) { preference("recaps", JsonPrimitive(it)) }
             // Off unless the account turned it on; written alone (iOS 9fb3ae6ee), its glyph beside its name (614a21410).
             SettingsSwitch(SMART_MODEL_SELECTION, R.drawable.ic_sparkles, smartModelSelection(preferences), record.ready,
                 hint = SMART_MODEL_SELECTION_HINT) { preference("modelRouting", JsonPrimitive(it)) }
         }
-        SettingsGroup("Machines & models") {
-            SettingsLink("Runners", R.drawable.ic_runner, runners) { page("runners") }
-            SettingsLink("Providers", R.drawable.ic_provider) { page("providers") }
+        SettingsGroup("Machines & models", footer = Infrastructure.SUBTITLE) {
+            val needsYou = runners?.let { infrastructure.attention(it, System.currentTimeMillis()).size } ?: 0
+            // What needs a person is said in amber, as the mock's row says it.
+            SettingsLink(Infrastructure.TITLE, R.drawable.ic_runner, runners?.let { Infrastructure.settingsValue(needsYou, it) },
+                valueColor = if (needsYou > 0) Ink.amber else null) { page("infrastructure") }
         }
         SettingsGroup("Preferences") {
             SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
@@ -228,19 +255,22 @@ private fun SettingsIcon(icon: Int) = Icon(painterResource(icon), null, tint = M
 @Composable
 private fun settingsRowColors() = ListItemDefaults.colors(containerColor = Color.Transparent)
 
+/** A group of rows under its header, and — where it has one — the line under it (SettingsHome.footer). */
 @Composable
-private fun SettingsGroup(title: String, rows: @Composable ColumnScope.() -> Unit) {
+private fun SettingsGroup(title: String, footer: String? = null, rows: @Composable ColumnScope.() -> Unit) {
     Text(title, Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp).semantics { heading() },
         style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Column(content = rows)
     }
+    footer?.let { Text(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }
 
 @Composable
-private fun SettingsLink(title: String, icon: Int, value: String? = null, open: () -> Unit) {
+private fun SettingsLink(title: String, icon: Int, value: String? = null, valueColor: Color? = null, open: () -> Unit) {
     ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
-        trailingContent = value?.let { { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
+        trailingContent = value?.let { { Text(it, color = valueColor ?: MaterialTheme.colorScheme.onSurfaceVariant) } },
         modifier = Modifier.clickable(role = Role.Button, onClick = open))
 }
 

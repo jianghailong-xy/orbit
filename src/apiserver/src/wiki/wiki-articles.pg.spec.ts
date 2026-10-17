@@ -595,7 +595,7 @@ test('a write keeps only footnotes to the topic\'s entries, deletes a sentence l
   expectStatus(article, 200, 'the owner reads the article');
   assert.equal(article.body.kind, 'article');
   assert.equal(article.body.title, '数据库写入治理');
-  assert.deepEqual(article.body.topic, { slug: 'database', title: '数据库与 Prisma', category: 'data', categoryTitle: 'Data & backend' });
+  assert.deepEqual(article.body.topic, { slug: 'database', title: 'Database & Prisma', category: 'data', categoryTitle: 'Data & backend' });
   assert.deepEqual(article.body.blocks, [
     {
       heading: null,

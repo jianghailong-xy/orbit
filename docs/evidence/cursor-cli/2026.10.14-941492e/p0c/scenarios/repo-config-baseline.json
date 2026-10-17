@@ -1,0 +1,387 @@
+{
+ "name": "repo-config-baseline",
+ "runId": "2026-10-17T01-57-19-094Z",
+ "startedAt": "2026-10-17T01:57:19.098Z",
+ "finishedAt": "2026-10-17T01:59:05.046Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 2,
+   "at": "2026-10-17T01:57:26.923Z",
+   "note": "repo configs (baseline)"
+  }
+ ],
+ "protocol": "protocol/repo-config-baseline.ndjson",
+ "protocolLines": 364,
+ "fixtures": [
+  "repo-config-baseline/repo"
+ ],
+ "checks": [
+  {
+   "name": "session/new succeeds with no flags",
+   "ok": true,
+   "detail": {
+    "exit": null,
+    "stderr": ""
+   }
+  },
+  {
+   "name": "the turn ran",
+   "ok": true
+  },
+  {
+   "name": "the repo's .cursor/cli.json widens the allowlist: `touch` runs without a permission request",
+   "ok": true
+  },
+  {
+   "name": "the repo's .claude/settings.json permissions are not read on the ACP path (`mkdir`, allowed only there, asks)",
+   "ok": true,
+   "detail": [
+    "`mkdir made-dir`",
+    "`printf '%s\\n' '# probe' >> app.py`"
+   ]
+  },
+  {
+   "name": "repo .cursor/hooks.json never runs in ACP",
+   "ok": true
+  },
+  {
+   "name": "repo .cursor/worktrees.json, environment.json and .envrc never run",
+   "ok": true
+  },
+  {
+   "name": "the repo's .cursor/mcp.json server does not start (never approved)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "repo configuration": {
+   "variant": "baseline",
+   "args": [],
+   "stopReason": "end_turn",
+   "markersAtStartup": 0,
+   "hookEventsBySource": {
+    "data-project-hooks": [
+     "afterAgentThought",
+     "preToolUse",
+     "beforeShellExecution",
+     "afterShellExecution",
+     "postToolUse",
+     "beforeReadFile"
+    ],
+    "home-cursor-hooks": [
+     "afterAgentThought",
+     "preToolUse",
+     "beforeShellExecution",
+     "afterShellExecution",
+     "postToolUse",
+     "beforeReadFile"
+    ]
+   },
+   "markers": [
+    "data-project-hooks:afterAgentThought",
+    "home-cursor-hooks:afterAgentThought",
+    "data-project-hooks:preToolUse",
+    "home-cursor-hooks:preToolUse",
+    "data-project-hooks:beforeShellExecution",
+    "home-cursor-hooks:beforeShellExecution",
+    "data-project-hooks:afterShellExecution",
+    "home-cursor-hooks:afterShellExecution",
+    "data-project-hooks:postToolUse",
+    "home-cursor-hooks:postToolUse",
+    "data-project-hooks:afterAgentThought",
+    "home-cursor-hooks:afterAgentThought",
+    "data-project-hooks:preToolUse",
+    "home-cursor-hooks:preToolUse",
+    "data-project-hooks:beforeShellExecution",
+    "home-cursor-hooks:beforeShellExecution",
+    "data-project-hooks:afterShellExecution",
+    "home-cursor-hooks:afterShellExecution",
+    "data-project-hooks:postToolUse",
+    "home-cursor-hooks:postToolUse",
+    "data-project-hooks:afterAgentThought",
+    "home-cursor-hooks:afterAgentThought",
+    "data-project-hooks:preToolUse",
+    "home-cursor-hooks:preToolUse",
+    "data-project-hooks:beforeShellExecution",
+    "home-cursor-hooks:beforeShellExecution",
+    "data-project-hooks:afterShellExecution",
+    "home-cursor-hooks:afterShellExecution",
+    "data-project-hooks:postToolUse",
+    "home-cursor-hooks:postToolUse",
+    "data-project-hooks:afterAgentThought",
+    "home-cursor-hooks:afterAgentThought",
+    "data-project-hooks:preToolUse",
+    "home-cursor-hooks:preToolUse",
+    "data-project-hooks:beforeReadFile",
+    "home-cursor-hooks:beforeReadFile",
+    "data-project-hooks:postToolUse",
+    "home-cursor-hooks:postToolUse",
+    "data-project-hooks:afterAgentThought",
+    "home-cursor-hooks:afterAgentThought",
+    "data-project-hooks:preToolUse",
+    "home-cursor-hooks:preToolUse",
+    "data-project-hooks:preToolUse",
+    "home-cursor-hooks:preToolUse",
+    "data-project-hooks:beforeReadFile",
+    "home-cursor-hooks:beforeReadFile",
+    "data-project-hooks:beforeReadFile",
+    "home-cursor-hooks:beforeReadFile",
+    "data-project-hooks:postToolUse",
+    "home-cursor-hooks:postToolUse",
+    "data-project-hooks:postToolUse",
+    "home-cursor-hooks:postToolUse",
+    "data-project-hooks:afterAgentThought",
+    "home-cursor-hooks:afterAgentThought"
+   ],
+   "permissionRequests": [
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`mkdir made-dir`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_2>-1\nfc_<UUID_3>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: mkdir"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`printf '%s\\n' '# probe' >> app.py`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_4>-2\nfc_<UUID_5>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: printf"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    }
+   ],
+   "codewordsInStoredContext": {
+    "agents": true,
+    "claude": true,
+    "claudeLocal": true,
+    "cursorrules": true,
+    "ruleAlways": true,
+    "ruleGlob": false,
+    "ruleAgent": false,
+    "nestedAgents": false,
+    "skill": true,
+    "command": false,
+    "userRule": false,
+    "homeAgents": false,
+    "configDirRule": false
+   },
+   "codewordsInAnswer": {
+    "agents": true,
+    "claude": true,
+    "claudeLocal": true,
+    "cursorrules": true,
+    "ruleAlways": true,
+    "ruleGlob": false,
+    "ruleAgent": true,
+    "nestedAgents": true,
+    "skill": true,
+    "command": false,
+    "userRule": false,
+    "homeAgents": false,
+    "configDirRule": false
+   },
+   "answer": "I'll run the five steps in order, starting with creating `hooked.txt`.The nested rule surfaced a codeword. I'll read the fixture rule and skill so the final list includes every `P0-` string.P0-CURSORRULES-LIME, P0-RULE-ALWAYS-FIG, P0-CLAUDE-KIWI, P0-CLAUDELOCAL-PLUM, P0-AGENTS-MANGO, P0-SKILL-GUAVA, P0-NESTED-AGENTS-CHERRY, P0-RULE-AGENT-PEAR",
+   "mcpServersStarted": [
+    "home-cursor-mcp"
+   ],
+   "availableCommands": [
+    "copy-request-id",
+    "multi-model-review",
+    "simplify",
+    "worktree",
+    "apply-worktree",
+    "delete-worktree",
+    "best-of-n",
+    "p0cmd",
+    "autopilot",
+    "create-hook",
+    "create-rule",
+    "create-skill",
+    "create-subagent",
+    "goal",
+    "loop",
+    "migrate-to-skills",
+    "new-repo",
+    "origin",
+    "rename-chat",
+    "sdk",
+    "share",
+    "shell",
+    "split-to-prs",
+    "statusline",
+    "update-cli-config",
+    "p0skill"
+   ],
+   "programs": [
+    "cursor-agent acp",
+    "bash <P0_ROOT>/cli/2026.10. acp",
+    "basename <P0_ROOT>/cli/2026.10.",
+    "realpath <P0_ROOT>/cli/2026.10.",
+    "dirname <P0_ROOT>/cli/2026.10.",
+    "node --use-system-ca --version",
+    "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+    "git rev-parse --show-toplevel",
+    "direnv export json",
+    "rg --files --follow --max-depth",
+    "git rev-parse --is-inside-work-tree",
+    "git rev-parse --show-prefix",
+    "git check-ignore -z --stdin",
+    "git ls-files -co --exclude-standard",
+    "rg --files --hidden --no-require-git",
+    "node /root/.orbit/worktrees/fd64b854-",
+    "git config --get remote.origin.url",
+    "node <P0_ROOT>/cli/2026.10. worker-server",
+    "npx -y typescript-language-server --stdio",
+    "node /usr/local/bin/npx -y typescript-language-server",
+    "sh -c 'typescript-language-server' --s",
+    "typescript-language-server --stdio",
+    "node <P0_ROOT>/runs/2026-10 --stdio",
+    "git --no-optional-locks status --short",
+    "git rev-parse --abbrev-ref HEAD",
+    "bash -O extglob -ilc",
+    "id -u",
+    "run-parts --list --regex",
+    "grep -viE _proxy=|CURSOR_SANDBOX|SUDO_ASKP",
+    "grep -vE",
+    "tr -d \\n",
+    "base64",
+    "bash -O extglob -c",
+    "cat",
+    "base64 -d",
+    "mark.sh home-cursor-hooks afterAgentThought",
+    "head -c 2000",
+    "tr -d \\\\000",
+    "base64 -w0",
+    "mark.sh data-project-hooks preToolUse",
+    "mark.sh data-project-hooks beforeShellExecution",
+    "mark.sh home-cursor-hooks beforeShellExecution",
+    "touch hooked.txt",
+    "mark.sh data-project-hooks afterShellExecution",
+    "mark.sh home-cursor-hooks afterShellExecution",
+    "mark.sh data-project-hooks postToolUse",
+    "mark.sh home-cursor-hooks postToolUse",
+    "mark.sh data-project-hooks afterAgentThought",
+    "mark.sh home-cursor-hooks preToolUse",
+    "mkdir made-dir",
+    "mark.sh data-project-hooks beforeReadFile",
+    "mark.sh home-cursor-hooks beforeReadFile"
+   ],
+   "hookEnvironment": [
+    {
+     "home": "<RUN>/slots/a/home",
+     "xdgConfig": "<RUN>/slots/a/xdg-config",
+     "cursorConfigDir": "<RUN>/slots/a/cursor-config",
+     "canary": "inherited"
+    }
+   ],
+   "tools": [
+    {
+     "title": "`touch hooked.txt`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "`mkdir made-dir`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "`printf '%s\\n' '# probe' >> app.py`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Read sub/note.txt",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Read .cursor/rules/agent.mdc",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Read .cursor/skills/p0skill/SKILL.md",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    }
+   ]
+  },
+  "hook sources that did run": [
+   "data-project-hooks",
+   "home-cursor-hooks"
+  ],
+  "codewords present in the stored model context": {
+   "agents": true,
+   "claude": true,
+   "claudeLocal": true,
+   "cursorrules": true,
+   "ruleAlways": true,
+   "ruleGlob": false,
+   "ruleAgent": false,
+   "nestedAgents": false,
+   "skill": true,
+   "command": false,
+   "userRule": false,
+   "homeAgents": false,
+   "configDirRule": false
+  }
+ }
+}
