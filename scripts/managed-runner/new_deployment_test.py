@@ -149,7 +149,15 @@ class NewDeploymentTest(unittest.TestCase):
 
         calls = self.calls()
         self.assertIn("network create --driver bridge --opt com.docker.network.bridge.enable_icc=false orbit-managed-runners", calls)
-        self.assertIn("compose up -d --build --wait --wait-timeout 900", calls)
+        # Built, the database up, its migrations applied, then the stack: the apiserver's first boot has none left.
+        started = [c for c in calls if c.startswith(("compose build", "compose up", "compose run"))]
+        self.assertEqual([c.split(" sh -c ")[0] for c in started], [
+            "compose build",
+            "compose up -d --wait --wait-timeout 300 postgres",
+            "compose run --rm --no-deps apiserver",
+            "compose up -d --wait --wait-timeout 900",
+        ])
+        self.assertIn("migrate deploy", started[2])
         self.assertFalse([c for c in calls if c.startswith(("build", "push", "image push", "login"))], calls)
 
     def test_a_fresh_install_builds_the_managed_runner_image_here_and_pushes_nothing(self):

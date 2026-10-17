@@ -263,8 +263,17 @@ if [ "$ENABLE_EXISTING" -eq 1 ]; then
   docker compose build docker-channel
   docker compose up -d --wait --wait-timeout 300 --no-deps docker-channel apiserver
 else
-  echo "==> Building and starting the stack (the apiserver applies database migrations on boot)"
-  docker compose up -d --build --wait --wait-timeout 900
+  echo "==> Building the images"
+  docker compose build
+  # A new database takes every migration at once, which on a slow disk outlasts the apiserver's health
+  # check at its first boot; applied first, the apiserver starts with nothing left to apply. The same
+  # command its image runs at boot, resolving the Prisma CLI rather than naming its path.
+  echo "==> Starting the database and applying the migrations"
+  docker compose up -d --wait --wait-timeout 300 postgres
+  docker compose run --rm --no-deps apiserver sh -c \
+    'cd src/apiserver && node "$(node -p '"'"'require.resolve("prisma/build/index.js")'"'"')" migrate deploy'
+  echo "==> Starting the stack"
+  docker compose up -d --wait --wait-timeout 900
 fi
 docker compose ps
 if [ "$MANAGED" -eq 1 ]; then
