@@ -157,17 +157,18 @@ if instrument fcm_token googleIssuesTheTokenAndARotatedTokenIsRegisteredAgain; t
   payload='{"kind":"agent-message","title":"A10 receive path","body":"Firebase receiver to Orbit notification (root broadcast, not FCM)."}'
   printf "am broadcast -f 0x20 -n %s/com.google.firebase.iid.FirebaseInstanceIdReceiver -a com.google.android.c2dm.intent.RECEIVE --es google.message_id a10-%s --es version 1 --es type alert --es registrationKey %s --es eventId %s --es notificationKey %s --es sentAt %s --es payload '%s'\n" \
     "$package" "$event" "$(stats "['registrationKey']")" "$event" "$event" "$(date -u +%FT%T.000Z)" "$payload" > "$build/broadcast.sh"
-  adbx -s "$serial" root > /dev/null
-  timeout 60 "$adb" -s "$serial" wait-for-device 9>&-
+  # Restarting adbd (root, unroot) drops every adb reverse mapping; the woken app reads authority from the fixture.
+  adbd_restart() { adbx -s "$serial" "$1" > /dev/null; timeout 60 "$adb" -s "$serial" wait-for-device 9>&-
+    adbx -s "$serial" reverse "tcp:$port" "tcp:$port" > /dev/null; }
+  adbd_restart root
   adbx -s "$serial" push "$build/broadcast.sh" /data/local/tmp/a10-fcm/broadcast.sh > /dev/null
   adbx -s "$serial" shell sh /data/local/tmp/a10-fcm/broadcast.sh > "$output/receive-broadcast.txt" 2>&1 || true
-  adbx -s "$serial" unroot > /dev/null
-  timeout 60 "$adb" -s "$serial" wait-for-device 9>&-
   received=FAIL
   for attempt in {1..60}; do
     if adbx -s "$serial" shell dumpsys notification --noredact | grep -q "orbit:$(stats "['registrationKey']"):$event"; then received=PASS; break; fi
     sleep 1
   done
+  adbd_restart unroot
   adbx -s "$serial" exec-out screencap -p > "$output/receive-path-tray.png" || true
   adbx -s "$serial" shell cmd statusbar expand-notifications > /dev/null 2>&1 || true
   sleep 2
