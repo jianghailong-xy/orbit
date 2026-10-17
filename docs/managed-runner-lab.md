@@ -169,6 +169,9 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
 | `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
 | `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
+| `test-server.sh start\|stop\|status` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`. |
+| `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
+| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. |
 
 A test window:
 
@@ -206,6 +209,52 @@ Reports are in `/mnt/data/managed-runner-lab/state/smoke-RUN_ID.json` (the first
 `logs/state-destroyed-…/` when it was destroyed). The last run's two claims stay in `orbit-mr-test`
 as retained test data: `mr-data-640deaf2-…` (RWO, with the probe data) and `mr-data-13282595-…`
 (RWOP). Deleting a claim leaves a released PV and its RBD image (`Retain`).
+
+## Runner image (T03)
+
+Recorded 2026-10-17 by task T03. The optional runner image ([deploy/managed-runner](../deploy/managed-runner/README.md))
+was built on the host and run in the lab through its **standalone enrollment path**: one owner
+enrollment on the first start, then the identity retained on the volume on every rebuild. The
+test server ran with `ORBIT_MANAGED_RUNNERS_ENABLED` unset, so the manager's own Pod, the
+admission guard and generation-bound credentials are not part of this record (T02a, T04).
+
+```sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+sudo scripts/managed-runner/lab/start.sh && sudo scripts/managed-runner/lab/test-server.sh start
+docker buildx build --file deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" \
+  --output type=docker,dest=/mnt/data/image.tar,name=orbit-managed-runner:TAG .   # clean checkout; nothing is pushed
+R=scripts/managed-runner/lab/runner-image.py
+python3 $R import /mnt/data/image.tar          # into the guest's k3s containerd; the Pod uses imagePullPolicy Never
+python3 $R owner && python3 $R enroll t03 && python3 $R start t03 --image docker.io/library/orbit-managed-runner:TAG
+python3 $R workspace t03 && python3 $R provider t03 --fake    # or --key-file for a real key
+python3 $R session t03 --provider SLUG --model deepseek-v4-flash --attach FILE --prompt TEXT
+python3 $R snapshot t03 && python3 $R stop t03 && python3 $R start t03 --image ... && python3 $R snapshot t03
+```
+
+The Pod follows [runner-pod.yaml.example](../deploy/managed-runner/runner-pod.yaml.example) for the
+standalone path: init container `init-volume` (root, `CHOWN FOWNER DAC_OVERRIDE` only), runner UID
+10001 with a read-only root, no capabilities, `RuntimeDefault` seccomp, no service account token,
+`restartPolicy: Never`, 240 s grace, an RBD claim `t03-data` (`runner-data`, RWO, 5 GiB) at
+`/var/lib/orbit` and an `emptyDir` `/tmp`. It reaches the test server at `https://10.0.2.2:13711`; the
+lab CA comes from a ConfigMap through `SSL_CERT_DIR`, which Go reads besides the image's public roots.
+
+| Check | Result |
+| --- | --- |
+| Build | The image had never been built. The first build failed at `apt-get update` (the slim Node base has no OpenSSL CA file until the `openssl` package arrives), and the second produced `/usr/local/share/orbit` with mode 0644 (`COPY --chmod`), unreadable for UID 10001. Both are fixed. Builds took 101–170 s in a 5 GiB-capped buildx builder; the archive is 500 MB. Final image `r4-6bfe0a871`: manifest `sha256:7e20b93f…6d1ba`, config `sha256:feda0de7…b76`. Its `tool-versions.json`: Go 1.27.1, Node v26.10.0, Codex 0.158.0, Claude Code 2.1.300, git 2.47.3, Python 3.13.5, ripgrep 14.1.1, SQLite 3.46.1, tini 0.19.0. |
+| Engine | The image had only Codex, and an Anthropic-dialect key (DeepSeek's) runs on `claude`, `opencode` or `dsh`: such a session failed as soon as it was claimed. Claude Code 2.1.300 is now in the image (native binary, `DISABLE_AUTOUPDATER=1`). |
+| Git identity | A fresh volume had no git identity, so the runner's commits failed (`unable to auto-detect email address`), the `autoInitGit` baseline of a managed default workspace among them. The image now sets `Orbit Runner <runner@orbit.invalid>` in `/etc/gitconfig`: the runner's real `autoInitGit` baseline in a new workspace was authored with it, with no `GIT_*` variable set; a repository identity overrides it (build check and `image-smoke.py --fixture-git-identity`). |
+| Import | `k3s ctr images import` of the archive: 37–39 s. The VM's unit grew to 3.6–3.9 GiB of host RAM (page cache), back to under 2 GiB a minute after `provision.sh trim`. |
+| First start | 16.6 s from Pod creation to `Running` (init included); `orbit register` ran once, its doctor output took 8 s, then `orbit run`; the first real heartbeat came 30 s later (registration also stamps `lastHeartbeatAt`, so it alone proves nothing). `/var/lib/orbit` is ext4 on `/dev/rbd*`; home 0700, `config.json` 0600. |
+| Recreation | Six recreations on the same claim and RBD image, two of them onto a newer image (r2 → r3 → r4): the same runner (public id and UUID), the same `enrolledAt`, `config.json` byte-identical (no token rotation), one runner of that name throughout. Pod `Running` in 6–17 s, first heartbeat 36–50 s after creation. Worktrees (with an uncommitted file), the workspace repository, `runs/*/meta.json`, Claude transcripts and the uploads of open sessions were byte-identical after each. |
+| Wrong expected ID | Passing the owner API's public id as `ORBIT_RUNNER_EXPECTED_ID` made the entrypoint refuse to start (exit 1, no registration, no state change); it takes the UUID that `orbit-container check` prints, which the message now says. |
+| Uploads | An attachment of a message turn lands in `uploads/<session>/` with its SHA-256; a shell turn downloads none. At the next start the runner removes the uploads of sessions that are no longer open (FAILED, ended): `gc: removed orphan uploads dir`. |
+| Continuation | A session reclaimed after recreation (and after both image upgrades) resumed with `--resume`: its next request carried the whole earlier conversation, read from the transcript on the volume (checked with `fake-model.py`, which is not a model). |
+| Drain, idle | SIGTERM to exit: 1.5–2.3 s; the idle sessions detach as resumable. |
+| Drain, turn in flight | A turn held open for 60 s when SIGTERM came: the runner waited, the answer and `turn_end` reached the server, the session detached, exit 0 after 49.8 s. |
+| Drain, turn too long | A turn held for 150 s: at the runner's 100 s deadline it was torn down (`interrupt`, reason `runner_restart`), exit 0 after 101.5 s; the session stayed `RUNNING`, and the next Pod re-delivered the turn, which completed. |
+| Drain, landing in flight | A `LAND_TASK` integration job's merge check (330 s) was running when SIGTERM came. The runner stopped heartbeating at once (its last beat preceded the signal), detached its sessions, then waited for the job with no time limit: the kubelet killed it at the end of the 240 s grace (exit 137, Pod gone after 241.3 s). The server kept the job `RUNNING` until its heartbeat was 10 minutes old; the next Pod took it over 10 min 26 s after that heartbeat, ran it again from the start and landed it at 08:05:12, about 10.5 minutes later than it would have. The killed attempt's scratch worktree `_integrate-<job>` stayed on the volume until the rerun removed it. |
+| Least privilege | In the runner: UID/GID 10001, every capability set empty, `NoNewPrivs`, seccomp filter, read-only root; no service account token, Docker socket, kubeconfig or credential variable; tini is PID 1 and `orbit run` gets only the fixed paths and update switches. |
+| Real engine session | Pending: the owner's DeepSeek key file does not exist yet. |
 
 ## Known limits
 

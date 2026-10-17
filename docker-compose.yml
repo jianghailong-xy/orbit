@@ -223,6 +223,16 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
+      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
+      # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
+      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+    volumes:
+      # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
     depends_on:
       postgres:
         condition: service_healthy
@@ -311,6 +321,33 @@ services:
       - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # Managed runners on this host's Docker (docs/self-hosting.md, "Managed runners"): the restricted Docker channel
+  # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
+  # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
+  # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
+  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
+  # (scripts/install-server.sh) and an upgrade never does.
+  docker-channel:
+    profiles: [managed-runners-docker]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/docker-channel/Dockerfile
+    image: orbit-docker-channel:local
+    container_name: orbit-docker-channel
+    restart: unless-stopped
+    logging: *logging
+    network_mode: none
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
+    healthcheck:
+      # Serving: its socket takes a connection. Every request on it still needs the token.
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
       interval: 5s
       timeout: 5s
       retries: 6

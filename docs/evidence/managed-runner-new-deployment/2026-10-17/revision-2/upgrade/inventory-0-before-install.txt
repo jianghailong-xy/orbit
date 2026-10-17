@@ -1,0 +1,10 @@
+== before install 2026-10-17T12:03:35Z
+-- containers
+-- volumes
+-- networks
+bridge	bridge
+host	host
+none	null
+-- images
+nginx:alpine	892bb2152464
+postgres:16-alpine	721873c34ceb

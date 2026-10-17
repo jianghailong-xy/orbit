@@ -119,11 +119,20 @@ export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
 
 # wiki-worker runs the apiserver's image with another command, so naming it builds nothing twice: it
 # keeps this list and the recreate list below the same services.
-echo "==> Building images from source (apiserver and wiki-worker, web)"
+SERVICES="apiserver wiki-worker web"
+# Managed runners stay as this deployment's .env has them: this script never writes .env. A deployment
+# whose .env switched on the managed-runners-docker profile (a fresh install's scripts/install-server.sh
+# does) runs the Docker channel, which is rebuilt and recreated with the rest. Without that profile,
+# Compose does not list the service and nothing is added. (grep reads to the end, unlike -q: an early exit
+# could stop Compose mid-list with SIGPIPE, which pipefail would read as no channel.)
+if $DC config --services 2>/dev/null | grep -x docker-channel >/dev/null; then
+  SERVICES="$SERVICES docker-channel"
+fi
+echo "==> Building images from source ($SERVICES)"
 if [ "$NO_CACHE" -eq 1 ]; then
-  $DC build --no-cache apiserver wiki-worker web
+  $DC build --no-cache $SERVICES
 else
-  $DC build apiserver wiki-worker web
+  $DC build $SERVICES
 fi
 
 echo "==> Applying migrations before recreating services"
@@ -143,7 +152,7 @@ fi
 # relative bind-mount path differs from the installed checkout — that has already once served
 # production an empty database.
 echo "==> Recreating apiserver, wiki-worker and presentation services"
-$DC up -d --wait --no-deps apiserver wiki-worker web gateway
+$DC up -d --wait --no-deps $SERVICES gateway
 
 echo "==> Stack status"
 $DC ps

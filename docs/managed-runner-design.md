@@ -73,6 +73,12 @@ Keep `.env.example`, root Compose, `/upgrade`, release workflows, installation s
 `ORBIT_MANAGED_RUNNERS_ENABLED=false`; no default entry point forwards an inherited session variable
 as an opt-in or installs Kubernetes, Rook, Ceph, CSI, or managed workloads.
 
+Revised by the account owner on 2026-10-17 for new deployments ("Implementation record: new
+deployments"): the code's default stays off, and so does every deployment whose `.env` does not say
+`true`, but a fresh install writes the switch on with the Docker backend and its Compose profile.
+`/upgrade` never writes it. The default entry points may reference the Docker backend, and still
+reference or install nothing of Kubernetes, Rook, Ceph or CSI.
+
 ## Identity and durable mapping
 
 For an enrolled user, the mapping is:
@@ -447,6 +453,13 @@ sandbox/VM runtime and its Ceph attach path. Confirm whether separate tenant nam
 at rest, egress mediation, and backup key isolation are required; do not claim the invited-test
 profile satisfies unspecified public isolation requirements.
 
+For the Docker backend of a new deployment, the account owner decided on 2026-10-17 that every
+account is eligible by default, those created by open sign-up included, except a disabled one. The
+owner is aware that the containers share the host's kernel, which is no strong isolation from a
+malicious public user, and the deployer bears that risk; the deployment documentation
+([self-hosting](self-hosting.md#isolation-and-its-limits)) says so. The rule is `EVERY_ACCOUNT` in
+`managed-runner-eligibility.ts`, asked only about accounts that are not disabled.
+
 ## Retention explicit deletion and backup
 
 Sleeping, stopping, moving nodes, replacing images, login retry, disabling the feature, and deleting
@@ -548,7 +561,9 @@ Subsequent implementation places optional templates under `deploy/managed-runner
 operations under a separate managed-runner test entry point. These paths are proposed, not installed
 by this design. They must not be imported by root Compose, `/upgrade`, default start/release scripts,
 or normal installation. Application templates refer to an already approved StorageClass/CSI and
-never install a backend as a side effect. Infrastructure variants have separate entry points.
+never install a backend as a side effect. Infrastructure variants have separate entry points. (Since
+2026-10-17 the Docker backend's channel and image are the exception, in a Compose profile a fresh
+install switches on: "Implementation record: new deployments".)
 
 Before any mutating test command, the operator supplies an authorized environment manifest naming
 the exact kubeconfig context/API server identity, namespace allowlist, node allowlist, test Ceph
@@ -934,3 +949,54 @@ Left to later work, or not shown here:
   interval (`diskCheckSeconds`, at least 10 s).
 - The Recovery row's change is in the shared state machine, so it holds for Kubernetes too. Only the
   Docker pg spec tests it (its case 10); no Kubernetes spec or lab (L0) run does yet.
+
+## Implementation record: new deployments
+
+Recorded 2026-10-17 for the second phase's task D3. The account owner decided that a new deployment runs managed
+runners with the Docker backend, while an existing deployment, orbitd.io included, keeps them as its `.env` has
+them: the code's default stays off. The operator's side is [self-hosting](self-hosting.md#managed-runners).
+
+The two paths, as the repository had them:
+
+| Path | Before D3 | Now |
+| --- | --- | --- |
+| Fresh install | No server install script (`src/web/public/install.sh` installs a runner). README's Quick Start, [self-hosting](self-hosting.md) and the [first-run checklist](first-run.md) had the operator clone, `cp .env.example .env`, write `JWT_SECRET` and `PROVIDER_SECRET_KEY` with `openssl rand` and `sed`, and `docker compose up -d --build` root Compose; the first visitor creates the administrator at `/setup` (`POST /api/auth/bootstrap`, which signs in through `completeLogin` like a password sign-in). | `scripts/install-server.sh` does those steps for a checkout with neither `.env` nor `data/postgres`. It builds the managed runner image from `deploy/managed-runner/image` (or takes `--managed-runner-image`), creates the network `orbit-managed-runners` (bridge, inter-container traffic off, not internal), writes `data/managed-runners` (the channel's token, `channel.json`, and `profile.json` with `"backend": "docker"`), appends `ORBIT_MANAGED_RUNNERS_ENABLED=true`, `ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners` and `COMPOSE_PROFILES=managed-runners-docker` to `.env`, applies the migrations, then starts the stack. `--no-managed-runners` writes the switch `false` instead. The manual path stays documented and leaves the switch off. |
+| Upgrade | `/upgrade`: `.claude/skills/upgrade/upgrade.sh` and `.agents/skills/upgrade/scripts/upgrade.sh` rebuild apiserver, wiki worker and web from the checkout and recreate them with the gateway; self-hosting's "Upgrading" checks out a release and runs `docker compose up -d --build`. Neither writes `.env`. | Still never writes `.env`, so the switch stays as it was: off wherever `.env` does not say `true`. Where `.env` turns on the `managed-runners-docker` profile, both copies also rebuild and recreate `docker-channel`. Switching managed runners on for a deployment installed without them is an administrator's explicit `scripts/install-server.sh --enable-managed-runners`, which edits only those lines of `.env`. |
+
+| Area | As implemented |
+| --- | --- |
+| Root Compose | `docker-channel`, the restricted channel, built from `deploy/managed-runner/docker-channel/Dockerfile` (Python's standard library and `channel.py`), under the `managed-runners-docker` profile: no network, the only Docker socket mount, the managed runners' directory at `/var/lib/orbit-managed-runners`, and a health check on its socket. The apiserver reads `ORBIT_MANAGED_RUNNERS_ENABLED` (default `false`) and its profile at a fixed path in that directory, mounted read-only; where `.env` names no directory, `/dev/null` stands in and nothing is created on the host. Without the profile, Compose runs the same six services as before. |
+| Network | A runner reaches the apiserver as a runner on another machine does, through the gateway's published port 2086, at the gateway address of `orbit-managed-runners` (Docker 29.8.2 lets a container on an ICC-off bridge reach the host's published port there, and nothing else on the host's container networks). |
+| Eligibility | Every account, open sign-up included, except a disabled one: `EVERY_ACCOUNT`, asked only about accounts that are not disabled (C6b). Self-hosting states that a container shares the host's kernel, is not a strong boundary against a malicious user, and that the deployer bears that risk. |
+| Boundary tests | `test/compose-topology.test.mjs` pins the channel's whole definition and the apiserver's four new lines, allows its one profile, and gives the Docker socket to no other service; its counterexamples cover each. `scripts/managed-runner/deployment_boundary_test.py` lets the default entry points name the Docker channel and the image, and still nothing else of `deploy/managed-runner` and nothing of Kubernetes, Rook, Ceph or CSI; neither `/upgrade` copy names the switch or writes `.env`. `scripts/managed-runner/new_deployment_test.py` runs the install script and both `/upgrade` copies against a fake `docker`. |
+
+Verified on 2026-10-17 in two isolated Docker hosts on the HPC machine (`docker:29.8.2-dind`, capped, outside the
+runner's cgroup; nothing of an existing deployment touched). The branch carries T03's image fix: its tip d856cde9b
+(198f6d6cc, d856cde9b, Claude Code), merged as e7b149183 with none of T03's files changed, so the install builds a
+working image from the branch's own `deploy/managed-runner/image`
+([evidence](evidence/managed-runner-new-deployment/2026-10-17/README.md)):
+
+- At e7b149183, a fresh install with no flags built the managed runner image itself (`sha256:b89d6f3f9c44…`, source
+  e7b149183, with Codex and Claude Code) and came up healthy with the switch, the directory and the profile in
+  `.env`. The first account's sign-in made its runner at once (STARTING 3 s later, the runner online 30 s later),
+  READY after an operator's placeholder Codex sign-in. Switched off, a new account's sign-in made nothing
+  (`MANAGED_RUNNER_DISABLED`, ensure 404), and the first account's volume stayed, its container still running.
+- The previous version (c291f9af6), upgraded to e7b149183 with `/upgrade`, kept `.env` byte for byte and managed
+  runners off: three accounts' sign-ins made nothing, only the apiserver, wiki worker and web were built and
+  recreated, and no channel, network, image, container or volume of managed runners appeared.
+- Earlier runs at 6f51ce21d, with T03's image named by `--managed-runner-image`, showed the same and also that
+  `/upgrade` of a new deployment rebuilds `docker-channel` and keeps `.env`, and that `--enable-managed-runners`
+  switches an upgraded deployment on, its administrator's next sign-in getting a READY runner. The first of them, at
+  af6047e9c, failed: a new database's 428 migrations outlasted the apiserver's health check at its first boot on
+  that disk, which is why the install now applies them first.
+
+Left to later work, or not shown here:
+
+- A real engine session on a managed runner (D4); the channel's refusals, the containers' limits, backups and
+  failure handling (D5).
+- An upgrade does not rebuild the managed runner image, whose runner does not update itself: a deployment's
+  runners keep the image `channel.json` and `profile.json` name until an administrator builds another and names
+  its ID in both.
+- The manual path's `docker compose up -d --build --wait` still applies a new database's migrations at the
+  apiserver's first boot, and on a slow disk the pinned health check can give up first; the install script avoids
+  it, the checklist does not. This predates D3.
