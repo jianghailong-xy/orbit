@@ -1033,6 +1033,12 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emit(evError, map[string]interface{}{"message": message})
 		return stFailed, true, false
 	}
+	// A conversation the session has talked in stays on the account or key it was opened on (D5): one its
+	// workspace has since been moved off is refused here, before anything starts or is checked.
+	identity := cursorCredentialIdentity(p.job)
+	if refusal := cursorIdentityRefusal(p.scratchDir, p.job, identity); refusal != "" {
+		return fail(refusal)
+	}
 	// A dispatched API key is checked before anything starts on it, and again when Cursor will not open a
 	// conversation on it; each answer is kept on the key.
 	report := func(sessionID string, report CursorKeyCheckReport) error {
@@ -1138,7 +1144,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		return fail(cursorOpenFailure(p.ctx, *launch, p.job, method, err, report))
 	}
 	p.job.RuntimeSessionID = sessionID
-	writeSessionMeta(p.scratchDir, p.job, p.execDir)
+	writeCursorSessionMeta(p.scratchDir, p.job, p.execDir, identity)
 	if err := app.configure(initCtx, sessionID, p.job.Agent); err != nil {
 		return fail(cursorConfigureFailure(err))
 	}
