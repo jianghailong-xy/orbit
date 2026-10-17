@@ -109,6 +109,12 @@ export interface RunnerObjects {
   /** Open items of the project assigned to its coordinator: one to resolve, one to hand over. */
   coordinatorItemId: string;
   handOverItemId: string;
+  /**
+   * The task both items are failures of: one of the project's own that nothing is attempting, so that
+   * both stay owed (`openItemOwed`) and the escalation tick's backstop leaves them open. No case names
+   * it; it is here so that the write trap counts it among A's ids.
+   */
+  failedTaskId: string;
   /** A watch `callingSessionId` observes. */
   watchId: string;
   /** The account's own model providers, by the slug the runner door names them by. */
