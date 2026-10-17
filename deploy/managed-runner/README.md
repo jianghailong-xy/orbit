@@ -154,7 +154,9 @@ Do not run this until those resources and actions are explicitly authorized. Do 
 replacement or force-delete a predecessor. Stop claims through SIGTERM/SIGINT, await the original
 drain, prove process cessation/unmount, then recreate the fixed Pod against the same PVC. The template
 gives **240 seconds** termination grace for the existing 100-second turn drain and 170-second
-supervisor/lease/event envelope. It has no preStop sleep. Tini forwards the signal to the foreground
+supervisor/lease/event envelope, which also bounds the work the heartbeat started: a landing still
+checking after 100 seconds is stopped and handed back for immediate re-dispatch, and the heartbeat
+keeps beating until then. It has no preStop sleep. Tini forwards the signal to the foreground
 runner, which owns signaling/draining its engine children; do not broadcast a signal to the whole
 process group and prematurely kill active turns. Budget expiry or uncertain old-node status requires
 operator reconciliation/fencing, not a second writer. Keep the original PVC on sleep or failure.
