@@ -1188,8 +1188,9 @@ model ManagedRunner {
   resourceOperationId    String?                  @map("resource_operation_id")
   resourceOperationKind  String?                  @map("resource_operation_kind")
   resourceOperationState String?                  @map("resource_operation_state")
-  /// Bounded retry of transient failures: attempts spent, when the next may start, and the startup
-  /// deadline STARTING is held to. All from the configured profile, persisted so a restart keeps them.
+  /// Bounded retry of transient failures and of restarts after an instance stopped: attempts spent in
+  /// a row, when the next may start, and the startup deadline STARTING is held to. All from the
+  /// configured profile, persisted so a restart keeps them.
   attempt            Int                          @default(0)
   nextAttemptAt      DateTime?                    @map("next_attempt_at") @db.Timestamptz(3)
   startupDeadlineAt  DateTime?                    @map("startup_deadline_at") @db.Timestamptz(3)
