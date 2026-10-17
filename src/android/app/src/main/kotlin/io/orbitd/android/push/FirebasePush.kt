@@ -48,9 +48,10 @@ class OrbitFirebaseMessagingService : FirebaseMessagingService() {
     private val push get() = (application as OrbitApplication).push
     override fun onMessageReceived(message: RemoteMessage) {
         if (!push.configured) return
-        // D09 P07 timing on a target phone (`adb logcat -v epoch -s OrbitPush`): FCM's send time beside this receipt.
-        Log.i(TAG, "received eventId=${message.data["eventId"]} type=${message.data["type"]} fcmSentTime=${message.sentTime} " +
-            "priority=${message.priority}/${message.originalPriority}")
+        // D09 P07 timing on a target phone (`adb logcat -v epoch -s OrbitPush`): the server's and FCM's send times
+        // beside this receipt, keyed by the event.
+        Log.i(TAG, "received eventId=${message.data["eventId"]} type=${message.data["type"]} sentAt=${message.data["sentAt"]} " +
+            "fcmSentTime=${message.sentTime} priority=${message.priority}/${message.originalPriority}")
         if (!process { push.receive(message.data) }) PushWorker.enqueue(this, message.data, message.priority == RemoteMessage.PRIORITY_HIGH)
     }
     override fun onNewToken(token: String) {
