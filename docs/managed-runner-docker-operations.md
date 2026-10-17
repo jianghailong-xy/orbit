@@ -22,7 +22,7 @@ whose checkout and Docker data root are on different filesystems
 | Which account has which runner, volume and generation, and in which state | Postgres table `managed_runner` | The [Postgres backups](postgres-backup-restore.md) |
 | The Docker channel's token, `channel.json`, the apiserver's `profile.json`, and the channel's state directory (a credential until its container starts, the disk-limit records, fencing receipts) | `data/managed-runners` (mode 0700) | Copy it with the Postgres backups. It holds a secret: the channel's token. |
 | A generation's bootstrap volume `mr-boot-<runner uuid>-g<generation>` | Docker volume | Nothing to keep: each generation gets a new one, removed with its container. |
-| The channel's disk probe: an empty anonymous volume, mounted read-only in `docker-channel` at `/var/lib/orbit-docker-volumes` | Docker volume | Nothing to keep: Compose makes it with the channel's container. |
+| The channel's disk probe: an empty anonymous volume, mounted read-only in `docker-channel` at `/var/lib/orbit-docker-volumes` | Docker volume | Nothing to keep: Compose makes it with the channel's container and keeps it when it recreates the channel. Once the channel has been recreated, `docker compose down -v` leaves it behind, empty: `docker volume rm` it. |
 | The managed runner image | Local image, named by its ID in `channel.json` and `profile.json` | Rebuild it from the commit (`docker build -f deploy/managed-runner/image/Dockerfile …`), or keep a `docker save` of it. |
 
 A data volume backup holds what the account signed in with (engine credentials) and the runner's credential. Treat

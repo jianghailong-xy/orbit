@@ -1117,7 +1117,7 @@ class Channel:
             # Every container of this instance, in any state: each one holds its volume until it is removed.
             count = len(self.docker.containers(labels=[f"{INSTANCE_LABEL}={self.config['instanceId']}"]))
             if count >= self.max_containers:
-                raise Refused(429, "CONTAINER_LIMIT", f"this instance has {count} containers, its limit (limits.maxContainers "
+                raise Refused(429, "CONTAINER_LIMIT", f"containers of this instance: {count}, at its limit (limits.maxContainers "
                               f"{self.max_containers}); another is made only once one of them is removed")
             try:
                 self.docker.create_container(name, spec)
