@@ -48,7 +48,11 @@ export interface LinkPreviewWatching {
   active: number;
   /** PAUSED watches. */
   paused: number;
-  /** Targets still in the set (not GONE) across the ACTIVE watches, each counted once. */
+  /**
+   * Targets still in the set (not GONE) across the ACTIVE watches, each counted once. A session target
+   * that runs a task (`WatchTargetView.targetTask`) counts as that task, so a task and its run session
+   * are one target.
+   */
   targets: number;
 }
 
