@@ -112,12 +112,15 @@ managed_runners_preflight() {
   MR_PROFILE_IMAGE="$(managed_runner_image_in "$MR_DIR/profile.json")" || exit 1
 }
 
+# Without a provenance attestation, as the install builds it: BuildKit makes a new one for every build, and in
+# Docker's containerd image store that gives the same image a new ID each time, so a re-run that built nothing new
+# would still switch. The ID then names the image's content alone.
 managed_runner_image_build() {
   echo "==> Building the managed runner image from deploy/managed-runner/image ($MR_TAG, local, never pushed)"
   if [ "$NO_CACHE" -eq 1 ]; then
-    docker build --no-cache -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$ORBIT_SOURCE_SHA" -t "$MR_TAG" .
+    docker build --no-cache --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$ORBIT_SOURCE_SHA" -t "$MR_TAG" .
   else
-    docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$ORBIT_SOURCE_SHA" -t "$MR_TAG" .
+    docker build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$ORBIT_SOURCE_SHA" -t "$MR_TAG" .
   fi
   MR_IMAGE="$(docker image inspect -f '{{.Id}}' "$MR_TAG")"
   if ! [[ "$MR_IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]]; then

@@ -185,7 +185,7 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         head = self.git("rev-parse", "HEAD")
         calls = self.calls()
-        self.assertIn(f"build -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
+        self.assertIn(f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
                       "-t orbit-managed-runner:local .", calls)
         self.assertIn("image inspect -f {{.Id}} orbit-managed-runner:local", calls)
         self.assertFalse([c for c in calls if re.match(r"(image )?push|login|compose up", c)], calls)
@@ -338,7 +338,7 @@ class NewDeploymentTest(unittest.TestCase):
                 calls = self.calls()
                 head = self.git("rev-parse", "HEAD")
                 images = "compose build apiserver wiki-worker web docker-channel"
-                runner = (f"build -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
+                runner = (f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
                           "-t orbit-managed-runner:local .")
                 self.assertLess(calls.index(images), calls.index(runner), calls)
                 self.assertIn("image inspect -f {{.Id}} orbit-managed-runner:local", calls)
@@ -390,7 +390,8 @@ class NewDeploymentTest(unittest.TestCase):
 
     def test_nothing_is_switched_when_the_upgrade_stops_before_its_services_are_recreated(self):
         head = self.git("rev-parse", "HEAD")
-        image = f"build -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} -t orbit-managed-runner:local ."
+        image = (f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={head} "
+                 "-t orbit-managed-runner:local .")
         for upgrade in UPGRADES:
             failures = [image, "compose build *"]
             if upgrade.startswith(".agents/"):
