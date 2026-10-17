@@ -180,7 +180,7 @@ const DAY = 24 * HOUR;
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
 
-const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
+const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 const LOGIN_NAME: Record<LoginEngine, string> = {
   claude: RUNNER_LOGIN_CLAUDE,
   codex: RUNNER_LOGIN_CODEX,
@@ -188,8 +188,10 @@ const LOGIN_NAME: Record<LoginEngine, string> = {
   antigravity: 'Antigravity',
   cursor: ENGINE_CLI_NAME.cursor,
 };
-/** Every engine a runner reports on, in the order its page lists them. */
-const REPORTED_ENGINES = (Object.keys(ENGINE_CLI_NAME) as ReportedEngine[]).filter(webShowsEngine);
+/** Every engine a runner reports on, in the order its page lists them — Cursor CLI on a runner that
+ *  knows it (webShowsEngine). */
+const reportedEngines = (runner: AttentionRunner): ReportedEngine[] =>
+  (Object.keys(ENGINE_CLI_NAME) as ReportedEngine[]).filter((engine) => webShowsEngine(engine, [runner]));
 
 /** The RunnerRepoHealth states that block every merge into the checkout, and what it is stuck in.
  *  `dirty` is not one: a stray edit still lets merges fast-forward around it. */
@@ -643,7 +645,7 @@ function cannotSelfUpdateItem(
 
 /** An installed CLI whose update note is a warning (runnerEngines' updateNoteOf). */
 function engineUpdateItems(runner: AttentionRunner, nowMs: number): AttentionItem[] {
-  return REPORTED_ENGINES.flatMap((engine): AttentionItem[] => {
+  return reportedEngines(runner).flatMap((engine): AttentionItem[] => {
     const health = runner.engines?.find((e) => e.engine === engine);
     if (!health?.installed) return [];
     const note = updateNoteOf(health.update, nowMs);
