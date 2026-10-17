@@ -1,0 +1,155 @@
+TAP version 13
+# coordinator-pg-isolation database=pccspec_d2it user=pccspec_ server=172.17.0.3/32:5432 system_identifier=7697552334331584553 version=16.15
+# [Nest] 354040  - 10/17/2026, 4:34:29 PM    WARN [PushService] APNs not configured — iOS pushes disabled
+# [Nest] 354040  - 10/17/2026, 4:34:29 PM    WARN [PushService] FCM not configured — Android pushes disabled
+# \# setup {"instanceId":"d2it-1017083206f4","image":"sha256:1964876d4628b238bbb9e96f4ecf6db7d1ba69c7d3154226bb50a54b0bfafa5a","network":"orbit-mr-d2it-1017083206f4","server":"http://172.18.0.1:45093"}
+# \# (0) channel refusals {"refusals":24,"codes":["UNAUTHENTICATED","PARAMETER_REFUSED","NAME_REFUSED","IMAGE_REFUSED","VOLUME_REFUSED","SINGLE_CONTAINER_GUARD","LIMIT_REFUSED","NOT_FOUND","NOT_MANAGED"]}
+# Subtest: the Docker backend on real Docker
+    # Subtest: (0) the channel refuses what it must, on real Docker, and nothing changes
+    ok 1 - (0) the channel refuses what it must, on real Docker, and nothing changes
+      ---
+      duration_ms: 123.969783
+      type: 'test'
+      ...
+# \# (1) template {"container":"mr-01a148ff-9266-76cf-bca2-740a4be859ce","mounts":3,"capDrop":["ALL"],"nanoCpus":500000000,"memory":536870912,"pids":512}
+# [Nest] 354040  - 10/17/2026, 4:35:02 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: generation 1 retired (OBSERVED_STOP); generation 2 reserved
+# \# (1) crash and retry {"exitCode":137,"finishedAt":"2026-10-17T08:35:01.978289054Z","generation":2,"pvcUid":"30b94e1e-6f9e-484c-a98d-a2e68fd9529f"}
+    # Subtest: (1) provisioning; an abnormal exit and the owner's retry on the same volume
+    ok 2 - (1) provisioning; an abnormal exit and the owner's retry on the same volume
+      ---
+      duration_ms: 62711.363685
+      type: 'test'
+      ...
+# \# (2) seeded {"files":"bb2e1338b609bdb88a28d54edc4e5da7066b489b4634ccefedada527fc5c3e8e  blob-1;0a277d99913de1e1455bef6ae45639680d57d5d7c99239dd3b2f150e02c38455  blob-2;61dc75a77e8c679745798fc6bd1eb0475f9333af65ca1b27a1f2c4e95cbecd03  note.txt;","integrity":"ok","rows":"5000|320000","dump":"cf713fde6ca0a8f49ce017afd625242d400dcc1e69c93c908230fdb04c223d34"}
+# [Nest] 354040  - 10/17/2026, 4:36:33 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle; draining generation 2 to sleep
+# \# (2) exited, not removed {"exitCode":0,"finishedAt":"2026-10-17T08:37:03.325025562Z","poolReserved":{"cpu_millis_reserved":1000,"memory_bytes_reserved":1073741824,"pods_reserved":2,"active_users_reserved":2,"durable_bytes_reserved":536870912}}
+# [Nest] 354040  - 10/17/2026, 4:37:03 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 2 stopped (OBSERVED_STOP), compute released, volume kept
+# \# (2) asleep {"drainedAt":"2026-10-17T08:36:33.684Z","sleptAt":"2026-10-17T08:37:03.693Z","exitCode":0,"poolReleased":{"cpu_millis_reserved":500,"memory_bytes_reserved":536870912,"pods_reserved":1,"active_users_reserved":1,"durable_bytes_reserved":536870912}}
+    # Subtest: (2) idle sleep: compute released only after Docker's exit report and the removal; the same data on waking
+    ok 3 - (2) idle sleep: compute released only after Docker's exit report and the removal; the same data on waking
+      ---
+      duration_ms: 90313.682772
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:37:04 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 3)
+# \# (3) woken by a message {"generation":3,"wokeInSeconds":31,"integrity":"ok","sessionId":"de114f97-b26c-42c6-87fc-275343f27f15","runClaimedAt":"2026-10-17T08:37:04.573Z","statusAfterClaim":"FAILED","assignedRunnerId":"01a148ff-9266-76cf-bca2-740a4be859ce"}
+# [Nest] 354040  - 10/17/2026, 4:37:35 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle and asked to sleep; draining generation 3 to sleep
+# [Nest] 354040  - 10/17/2026, 4:38:04 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 3 stopped (OBSERVED_STOP), compute released, volume kept
+    # Subtest: (3) a new message wakes it on the same volume, with the same files and database, and the woken runner claims it
+    ok 4 - (3) a new message wakes it on the same volume, with the same files and database, and the woken runner claims it
+      ---
+      duration_ms: 60875.563798
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:38:05 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 4)
+# \# (4) woken by a task {"generation":4,"task":"34hOIQ4UA8MGaG14vHol9","sessionId":"5bb3c17b-e26e-595d-9034-033427cca2c2","runClaimedAt":"2026-10-17T08:38:05.611Z","statusAfterClaim":"RUNNING","assignedRunnerId":"01a148ff-9266-76cf-bca2-740a4be859ce"}
+# [Nest] 354040  - 10/17/2026, 4:39:05 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle and asked to sleep; draining generation 4 to sleep
+# [Nest] 354040  - 10/17/2026, 4:39:36 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 4 stopped (OBSERVED_STOP), compute released, volume kept
+    # Subtest: (4) a runnable task wakes it, and the woken runner claims the task's run
+    ok 5 - (4) a runnable task wakes it, and the woken runner claims the task's run
+      ---
+      duration_ms: 91425.321451
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:39:36 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 5)
+# \# (5) woken by a scheduled wakeup {"generation":5,"sessionId":"a42cd81d-c9e0-40e0-8056-8058ce5ada6f","runClaimedAt":"2026-10-17T08:39:36.884Z","statusAfterClaim":"FAILED","assignedRunnerId":"01a148ff-9266-76cf-bca2-740a4be859ce"}
+# [Nest] 354040  - 10/17/2026, 4:40:07 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle and asked to sleep; draining generation 5 to sleep
+# [Nest] 354040  - 10/17/2026, 4:40:37 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 5 stopped (OBSERVED_STOP), compute released, volume kept
+    # Subtest: (5) scheduled work wakes it: a session's due wakeup, delivered by the scheduled-wakeup worker
+    ok 6 - (5) scheduled work wakes it: a session's due wakeup, delivered by the scheduled-wakeup worker
+      ---
+      duration_ms: 60814.45412
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:40:37 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 6)
+# [Nest] 354040  - 10/17/2026, 4:41:02 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-9278-726f-846d-acf5e2450349: idle; draining generation 1 to sleep
+# \# (6) concurrent wakes {"wakes":8,"generation":6,"containers":1,"maxAtOnce":1}
+    # Subtest: (6) concurrent wakes, and a second manager racing the first: one new generation, one container
+    ok 7 - (6) concurrent wakes, and a second manager racing the first: one new generation, one container
+      ---
+      duration_ms: 30726.333294
+      type: 'test'
+      ...
+# \# (7) everything stopped {"container":"exited"}
+# [Nest] 354040  - 10/17/2026, 4:41:10 PM    WARN [PushService] APNs not configured — iOS pushes disabled
+# [Nest] 354040  - 10/17/2026, 4:41:10 PM    WARN [PushService] FCM not configured — Android pushes disabled
+# [Nest] 354040  - 10/17/2026, 4:41:11 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: generation 6 retired (OBSERVED_STOP); generation 7 reserved
+# [Nest] 354040  - 10/17/2026, 4:41:32 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-9278-726f-846d-acf5e2450349: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept
+# \# (7) recovered {"generation":7,"integrity":"ok","rows":"5242|350976"}
+    # Subtest: (7) a host restart: the runner killed mid-write, the channel killed, the manager stopped; all back, it recovers
+    ok 8 - (7) a host restart: the runner killed mid-write, the channel killed, the manager stopped; all back, it recovers
+      ---
+      duration_ms: 34657.035353
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:41:42 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle and asked to sleep; draining generation 7 to sleep
+# [Nest] 354040  - 10/17/2026, 4:42:12 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 7 stopped (OBSERVED_STOP), compute released, volume kept
+# [Nest] 354040  - 10/17/2026, 4:42:12 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 8)
+# \# (8) manager stopped mid-wake {"state":"STARTING","podUid":null}
+# [Nest] 354040  - 10/17/2026, 4:42:12 PM    WARN [PushService] APNs not configured — iOS pushes disabled
+# [Nest] 354040  - 10/17/2026, 4:42:12 PM    WARN [PushService] FCM not configured — Android pushes disabled
+# \# (8) finished after the restart {"generation":8}
+    # Subtest: (8) the manager restarted mid-wake finishes it with one container
+    ok 9 - (8) the manager restarted mid-wake finishes it with one container
+      ---
+      duration_ms: 60877.743906
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:42:43 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle and asked to sleep; draining generation 8 to sleep
+# [Nest] 354040  - 10/17/2026, 4:43:13 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 8 stopped (OBSERVED_STOP), compute released, volume kept
+# [Nest] 354040  - 10/17/2026, 4:43:13 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 9)
+# [Nest] 354040  - 10/17/2026, 4:43:13 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: transient failure 1/8: the Docker channel could not be reached: connect ECONNREFUSED /mnt/data/tmp/34hJ7RZ7ry2RDPmFprsev/it/1017083206f4/channel.sock
+# \# (9) channel down {"state":"PROVISIONING","attempt":1}
+# \# (9) woken once the channel was back {"generation":9}
+    # Subtest: (9) the channel down during a wake: transient, and the wake completes once it is back
+    ok 10 - (9) the channel down during a wake: transient, and the wake completes once it is back
+      ---
+      duration_ms: 61977.054169
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:43:45 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-9278-726f-846d-acf5e2450349: waking for demand (generation 2)
+# [Nest] 354040  - 10/17/2026, 4:44:16 PM    WARN [ManagedRunnerManager] managed runner 01a14908-81d1-716e-9304-ee231f68a43d: WAITING_CAPACITY: short of cpu, memory, pods, attachments, activeUsers
+# \# (10) third runner waiting {"reason":"MANAGED_RUNNER_CAPACITY_UNAVAILABLE","poolReserved":{"cpu_millis_reserved":1000,"memory_bytes_reserved":1073741824,"pods_reserved":2,"active_users_reserved":2,"durable_bytes_reserved":536870912}}
+# [Nest] 354040  - 10/17/2026, 4:44:25 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-9278-726f-846d-acf5e2450349: idle and asked to sleep; draining generation 2 to sleep
+# [Nest] 354040  - 10/17/2026, 4:44:46 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-9278-726f-846d-acf5e2450349: asleep; generation 2 stopped (OBSERVED_STOP), compute released, volume kept
+# [Nest] 354040  - 10/17/2026, 4:44:46 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: idle; draining generation 9 to sleep
+# [Nest] 354040  - 10/17/2026, 4:45:15 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: asleep; generation 9 stopped (OBSERVED_STOP), compute released, volume kept
+# \# (10) third runner started after a release {"bobSleptAt":"2026-10-17T08:44:46.759Z","liveWhenCarolWasCreated":1,"carolReadyAt":"2026-10-17T08:50:18.808Z","poolReserved":{"cpu_millis_reserved":500,"memory_bytes_reserved":536870912,"pods_reserved":1,"active_users_reserved":1,"durable_bytes_reserved":805306368}}
+    # Subtest: (10) capacity: the third runner waits, and starts once a slot is given back
+    ok 11 - (10) capacity: the third runner waits, and starts once a slot is given back
+      ---
+      duration_ms: 393341.741315
+      type: 'test'
+      ...
+# [Nest] 354040  - 10/17/2026, 4:50:18 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: waking for demand (generation 10)
+# [Nest] 354040  - 10/17/2026, 4:51:17 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: generation 10 retired (OBSERVED_STOP); generation 11 reserved
+# [Nest] 354040  - 10/17/2026, 4:51:17 PM    WARN [ManagedRunnerManager] managed runner 01a148ff-926a-72dd-b9c9-527bb11b6f5f: the Docker channel answered 409 VOLUME_OVER_LIMIT: mr-data-01a148ff-9266-76cf-bca2-740a4be859ce holds 346105301 bytes, over its 268435456-byte limit; no container is started on it
+# \# (11) disk limit {"eviction":"container 05efc5aa-80d4-45a3-9b2f-17df5165e843 is exited (exit 0; stopped: its volume held 346105301 bytes, over its 268435456-byte limit)","refusal":"This runner's data volume is over its disk limit, so no instance is started on it. An operator has to free space on it or raise its limit; then it can be retried."}
+    # Subtest: (11) a volume over its disk limit: its container is stopped, and no container is started on it
+    ok 12 - (11) a volume over its disk limit: its container is stopped, and no container is started on it
+      ---
+      duration_ms: 59161.195073
+      type: 'test'
+      ...
+# \# inventory {"mappings":3,"maxContainersPerVolume":{"01a148ff-9266-76cf-bca2-740a4be859ce":1,"01a148ff-9275-71ab-a08e-91125366d737":1,"01a14908-81ce-70be-bd5a-186769789da3":1}}
+    # Subtest: the database and Docker agree, and this process never opened the Docker socket
+    ok 13 - the database and Docker agree, and this process never opened the Docker socket
+      ---
+      duration_ms: 6.00731
+      type: 'test'
+      ...
+    1..13
+ok 1 - the Docker backend on real Docker
+  ---
+  duration_ms: 1009053.084376
+  type: 'test'
+  ...
+1..1
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1099318.297584

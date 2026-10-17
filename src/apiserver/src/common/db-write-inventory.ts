@@ -2740,6 +2740,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
     why: 'A PostgreSQL-spec fixture helper for the managed runner capacity, wake and sleep specs. It writes what a managed runner\'s heartbeat route would record — the beat, a signed-in runtime, the managed capabilities and the instance\'s workload — onto the runner row of a mapping those specs created, and is imported by those specs alone, never by an application module or reachable from an HTTP route.',
   },
   {
+    path: 'managed-runners/docker-backend.it.ts',
+    why: 'The Docker backend\'s real-Docker integration test, run only by scripts/managed-runner/docker-backend-it.py against the disposable PostgreSQL that script creates and migrates; `coordinator-pg-test-safety` refuses any other database. Its writes seed the owners, sessions and tasks a wake needs, as a PostgreSQL spec\'s do. tsconfig.json keeps it out of the application build, and nothing imports it.',
+  },
+  {
     path: 'auth/tenant-isolation-fixtures.ts',
     why: 'The tenant isolation census\'s fixtures: the accounts and every object they hold, written straight into their tables as each spec of their own writes them, for the census\'s two PostgreSQL specs to send across accounts. Imported by those specs alone, never by an application module or reachable from an HTTP route.',
   },
