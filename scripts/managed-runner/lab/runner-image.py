@@ -27,6 +27,12 @@ lab's Secrets and in the test server's provider store.
   wait NAME SESSION [--status S] [--timeout S]
   events NAME SESSION              the session's events, written beside the state
   runners NAME                     the owner's runners as the test server sees them
+  project NAME --merge-check CMD   a project on the workspace, PROJECT_BRANCH line, merge check CMD
+  task NAME --title T --provider SLUG --model M
+                                   an OWNER_CONFIRMED task in it, run at once on the runner
+  end NAME SESSION / confirm NAME TASK
+                                   end the task's session; confirm the task (DONE queues LAND_TASK)
+  integration NAME                 the project's integration view: jobs in flight, landings
 """
 
 import argparse
@@ -555,6 +561,57 @@ def cmd_events(args):
     out({'session': session_view(args.session), 'events': len(events), 'types': kinds, 'file': str(path)})
 
 
+# ---- an integration job on the runner (a task landing on a project line) -----------------------
+
+def cmd_project(args):
+    """A project on the runner's workspace whose PROJECT_BRANCH line runs MERGE_CHECK on landing."""
+    lab = state(args.name)
+    workspace = api('GET', f"/workspaces/{lab['workspaceId']}")
+    if not workspace.get('repoUrl'):
+        raise SystemExit('the workspace has no repoUrl yet: give its repository an origin and wait a heartbeat')
+    project = api('POST', '/projects', {'title': f'{args.name} landing probe', 'workspaceId': lab['workspaceId'],
+                                        'goal': 'Land one task through the project line on the lab runner.'})
+    line = api('PATCH', f"/projects/{project['id']}/integration",
+               {'line': 'PROJECT_BRANCH', 'upstreamRef': 'refs/heads/master', 'mergeCheckCommand': args.merge_check,
+                'mergeCheckTimeoutSeconds': args.check_timeout})
+    lab['projectId'] = project['id']
+    save_state(args.name, lab)
+    out({'projectId': project['id'], 'repoUrl': workspace['repoUrl'],
+         'integration': {key: line.get(key) for key in ('line', 'ref', 'upstreamRef', 'mergeCheckCommand', 'repository')}})
+
+
+def cmd_task(args):
+    lab = state(args.name)
+    task = api('POST', '/tasks', {'projectId': lab['projectId'], 'assigneeId': lab['workspaceId'], 'title': args.title,
+                                  'description': args.title, 'completionCriterion': 'OWNER_CONFIRMED',
+                                  'engine': 'claude', 'provider': args.provider, 'model': args.model})
+    run = api('POST', f"/tasks/{task['id']}/execute", {'triggerId': str(uuid.uuid4())})
+    lab.setdefault('tasks', {})[task['id']] = {'sessionId': run.get('sessionId'), 'createdAt': now()}
+    lab.setdefault('sessions', {})[run.get('sessionId')] = {'title': args.title, 'createdAt': now(), 'taskId': task['id']}
+    save_state(args.name, lab)
+    out({'taskId': task['id'], 'sessionId': run.get('sessionId'), 'status': task.get('status')})
+
+
+def cmd_end(args):
+    api('POST', f'/sessions/{args.session}/end')
+    out({'ended': args.session, 'requestedAt': now()})
+
+
+def cmd_confirm(args):
+    answer = api('POST', f'/tasks/{args.task}/owner-confirmation', {'decision': 'CONFIRM'})
+    out({'confirmedAt': now(), 'answer': {key: answer.get(key) for key in ('status', 'taskId', 'decision')}
+         if isinstance(answer, dict) else answer})
+
+
+def cmd_integration(args):
+    lab = state(args.name)
+    view = api('GET', f"/projects/{lab['projectId']}/integration")
+    out({'at': now(), 'line': view.get('line'), 'ref': view.get('ref'), 'locked': view.get('locked'),
+         'inFlightJobs': view.get('inFlightJobs'),
+         'landTasks': [{'taskId': item.get('taskId'), 'landTask': (item.get('integration') or {}).get('landTask')}
+                       for item in view.get('landTasks') or []]})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -597,12 +654,29 @@ def main():
     events = sub.add_parser('events')
     events.add_argument('name')
     events.add_argument('session')
+    project = sub.add_parser('project')
+    project.add_argument('name')
+    project.add_argument('--merge-check', required=True)
+    project.add_argument('--check-timeout', type=int, default=900)
+    task = sub.add_parser('task')
+    task.add_argument('name')
+    task.add_argument('--title', required=True)
+    task.add_argument('--provider', required=True)
+    task.add_argument('--model', required=True)
+    end = sub.add_parser('end')
+    end.add_argument('name')
+    end.add_argument('session')
+    confirm = sub.add_parser('confirm')
+    confirm.add_argument('name')
+    confirm.add_argument('task')
+    sub.add_parser('integration').add_argument('name')
     args = parser.parse_args()
     if args.command == 'wait' and not args.status:
         args.status = ['AWAITING_INPUT']
     {'import': cmd_import, 'owner': cmd_owner, 'enroll': cmd_enroll, 'start': cmd_start, 'stop': cmd_stop,
      'snapshot': cmd_snapshot, 'workspace': cmd_workspace, 'provider': cmd_provider, 'session': cmd_session,
-     'turn': cmd_turn, 'wait': cmd_wait, 'events': cmd_events, 'runners': cmd_runners}[args.command](args)
+     'turn': cmd_turn, 'wait': cmd_wait, 'events': cmd_events, 'runners': cmd_runners, 'project': cmd_project,
+     'task': cmd_task, 'end': cmd_end, 'confirm': cmd_confirm, 'integration': cmd_integration}[args.command](args)
 
 
 if __name__ == '__main__':
