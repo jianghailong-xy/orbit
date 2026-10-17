@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T21:57:27.048+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+    "ensure": false,
+    "kind": "modelUnavailable",
+    "moving": true,
+    "retry": false,
+    "signIn": true,
+    "startsNewSession": false,
+    "title": "Your managed runner needs a model"
+  },
+  "owner": "carol",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hhrlQmmkpxJaHZB6QbB",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T21:57:05.353Z",
+    "managementState": "STARTING",
+    "reason": {
+      "code": "MODEL_UNAVAILABLE",
+      "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+      "retryable": true
+    },
+    "retryAfter": null,
+    "revision": 15,
+    "runnerId": "34hhrlQOb3MVDzFDVV6sP",
+    "runnerPublicId": "34hhrlQOb3MVDzFDVV6sP",
+    "usable": false,
+    "workspaceId": "34hhrlQmmkpxJaHZB6QbB",
+    "workspacePublicId": "34hhrlQmmkpxJaHZB6QbB"
+  }
+}

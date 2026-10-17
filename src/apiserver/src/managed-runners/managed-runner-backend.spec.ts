@@ -10,14 +10,14 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { FakeKubeCluster, tripwireKubeClientFactory } from '../test-support/fake-kube-client';
 import { MemoryRunBackend } from '../test-support/memory-run-backend';
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
-import { KubeAmbiguousError, KubeApiError, type PersistentVolumeClaim, type Pod } from './kube-client';
+import { KubeAmbiguousError, KubeApiError, KubeUnreachableError, type PersistentVolumeClaim, type Pod } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
 import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
 import { MANAGED_RUNNER_BACKENDS, ManagedRunnerConflict } from './managed-runner-backend';
 import { capacityBudget, computeShare, storageShare } from './managed-runner-capacity';
 import { ManagedRunnerManager } from './managed-runner-manager';
 import { parseManagedRunnerProfile, type ManagedRunnerProfile } from './managed-runner-profile';
-import { managedAdmissionProbeName, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
+import { MANAGED_STOP_REPORT_FINALIZER, managedAdmissionProbeName, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
 import { createManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerService } from './managed-runner.service';
 
@@ -226,7 +226,11 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
 
   cluster.calls.length = 0;
   await backend.removeInstance(running);
-  assert.deepEqual(cluster.calls, [{ op: 'delete', kind: 'pods', name: managedPodName(RUNNER) }]);
+  assert.deepEqual(cluster.calls, [
+    { op: 'delete', kind: 'pods', name: managedPodName(RUNNER) },
+    { op: 'get', kind: 'pods', name: managedPodName(RUNNER) },
+    { op: 'patch', kind: 'pods', name: managedPodName(RUNNER) },
+  ], 'deleted by UID, then its stop-report finalizer taken off');
   assert.equal(await backend.readInstance(running), null);
   assert.deepEqual(await backend.volumeHolders(verified), [], 'released once no Pod uses it');
 
@@ -236,6 +240,52 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
   const declared = (await backend.readInstance(mapping({ ...recorded, podUid: again.uid })))!;
   assert.deepEqual([declared.terminated, declared.stopConfirmed], [true, false]);
   assert.equal(await backend.readFencingReceipt(recorded, predecessor, backing, new Date()), null, 'no receipt left');
+});
+
+test('a Pod deleted by anyone stays, ended, with its kubelet\'s report, until the manager takes its finalizer off', async () => {
+  const profile = testManagedRunnerProfile();
+  const cluster = new FakeKubeCluster(profile.kubernetes.namespace);
+  const backend = new KubernetesBackend(cluster.client(), profile);
+  const recorded = mapping({ pvcUid: '0195c0de-0000-7000-8000-0000000000c1' });
+  const name = managedPodName(RUNNER);
+
+  const instance = await backend.createInstance(recorded);
+  assert.deepEqual(cluster.object<Pod>('pods', name)!.metadata.finalizers, [MANAGED_STOP_REPORT_FINALIZER]);
+  const running = mapping({ ...recorded, podUid: instance.uid, podName: instance.name, nodeName: instance.node });
+
+  // An operator's `kubectl delete` (an eviction, a drain): the kubelet stops the runner and reports it, and the object stays.
+  await cluster.deletePod(name);
+  const deleted = (await backend.readInstance(running))!;
+  assert.deepEqual(
+    { uid: deleted.uid, terminated: deleted.terminated, stopConfirmed: deleted.stopConfirmed, removing: deleted.removing, exit: deleted.exit },
+    { uid: instance.uid, terminated: true, stopConfirmed: true, removing: false, exit: { code: 0, outOfMemory: false } },
+    'ended by its kubelet\'s report, and waiting for the manager: not going by itself',
+  );
+  assert.ok(cluster.object<Pod>('pods', name)!.metadata.deletionTimestamp);
+
+  // Once the manager has recorded that stop: deleted by UID (it already is), the finalizer off, and gone.
+  await backend.removeInstance(running);
+  assert.equal(await backend.readInstance(running), null, 'the stop recorded and the finalizer off: gone');
+
+  // Deleted while its node cannot answer: no report, so it is being removed, and stays.
+  const again = await backend.createInstance(recorded);
+  cluster.kubeletReportsDeletions = false;
+  await cluster.deletePod(name);
+  const unreported = (await backend.readInstance(mapping({ ...recorded, podUid: again.uid })))!;
+  assert.deepEqual([unreported.terminated, unreported.stopConfirmed, unreported.removing], [false, false, true]);
+  // Made terminal by the control plane (PodGC): ended, not confirmed, and still held for the manager.
+  cluster.markFailedByControlPlane(name);
+  const declared = (await backend.readInstance(mapping({ ...recorded, podUid: again.uid })))!;
+  assert.deepEqual([declared.terminated, declared.stopConfirmed, declared.removing], [true, false, false]);
+  assert.ok(cluster.object<Pod>('pods', name), 'the object stays until its finalizer comes off');
+
+  // By UID only: with another Pod under the name, nothing of it is deleted, and its finalizer stays.
+  cluster.remove('pods', name);
+  const successor = await backend.createInstance(recorded);
+  await assert.rejects(backend.removeInstance(mapping({ ...recorded, podUid: again.uid })), (e: unknown) => e instanceof KubeApiError && e.status === 409);
+  assert.equal(cluster.object<Pod>('pods', name)?.metadata.uid, successor.uid, 'the successor is untouched');
+  assert.deepEqual(cluster.object<Pod>('pods', name)!.metadata.finalizers, [MANAGED_STOP_REPORT_FINALIZER]);
+  assert.equal(cluster.count('patch'), 1, 'only the recorded Pod was ever patched');
 });
 
 test('KubernetesBackend proves the admission guard before a Pod, and words failures as the manager did', async () => {
@@ -258,6 +308,7 @@ test('KubernetesBackend proves the admission guard before a Pod, and words failu
   assert.equal(cluster.count('create'), 0, 'a probe is only ever a dry run');
 
   assert.deepEqual(backend.failure(new KubeAmbiguousError('timed out')), { retryable: true });
+  assert.deepEqual(backend.failure(new KubeUnreachableError('connect ECONNREFUSED 127.0.0.1:16443')), { retryable: true, unreachable: true }, 'no request reached the API server');
   assert.deepEqual(backend.failure(new KubeApiError(429, 'TooManyRequests', 'slow down')), { retryable: true });
   assert.deepEqual(backend.failure(new KubeApiError(503, 'ServiceUnavailable', 'later')), { retryable: true });
   assert.deepEqual(backend.failure(new KubeApiError(403, 'Forbidden', 'pods is forbidden')), {
