@@ -281,6 +281,11 @@ func helpFor(cmd string) string {
 }
 
 func main() {
+	// A session process's keeper (session_scope.go), ahead of everything below: the environment it was
+	// started with is the session process's, and goes to it untouched.
+	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
+		os.Exit(runSessionScope(os.Args[2:]))
+	}
 	// Services installed by an older Orbit release have a baked PATH that predates one or more
 	// official per-user engine directories. Refresh the current process too: doctor/install may
 	// correctly find ~/.opencode/bin/opencode, and every later exec must see that same binary
