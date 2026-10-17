@@ -1043,8 +1043,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		launch = &spec
 	}
 	if !cursorLaunchSignsIn(launch.Env) {
-		return fail("Failed to authenticate: Cursor CLI is not signed in on this runner, and this session brings no Cursor API key. " +
-			"Sign in with: " + cursorLoginHint())
+		return fail(cursorSignedOutMessage())
 	}
 	// What the session's permission mode cannot be held to is refused before anything starts: a mode
 	// Cursor CLI has no equivalent of, a denylist, an MCP server it would drop, and — in every mode but
