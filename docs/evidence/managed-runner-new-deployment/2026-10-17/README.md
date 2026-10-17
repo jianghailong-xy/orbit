@@ -5,6 +5,25 @@ with the Docker backend, and an existing deployment keeps them as its `.env` has
 [docs/managed-runner-design.md](../../../managed-runner-design.md), "Implementation record: new deployments"; the
 operator's side is [docs/self-hosting.md](../../../self-hosting.md), "Managed runners".
 
+## Revision 2: the default path (`revision-2/`)
+
+Revision 1 (below) was sent back: its fresh install named T03's image with `--managed-runner-image`, while the
+image this branch's own `deploy/managed-runner/image` built still exited at start in a Docker container and carried
+no Claude Code. As the coordinator asked, the branch merged T03's tip d856cde9b (`orbit/task-runner-73447c`,
+carrying 198f6d6cc, d856cde9b, Claude Code and the apt certificate fix) with `git merge --no-ff`, as e7b149183,
+changing none of T03's files. Both hosts were then reset from scratch (the stacks, their databases, every managed
+container, volume and network and every built image removed; only base images and the build cache kept) and both
+runs repeated at e7b149183, with the kit's [old-install.sh](kit/old-install.sh) no longer echoing generated values.
+
+| Step (UTC) | What happened |
+| --- | --- |
+| Fresh install (12:01:21–12:24:20) | `scripts/install-server.sh`, no flags: it built the managed runner image from the tip's own `deploy/managed-runner/image`, `orbit-managed-runner:local` = `sha256:b89d6f3f9c440a5e60c0b6a5302bbf5be3156daae19d663332e63e00970f2fd5`, revision label and `tool-versions.json` `sourceSha` e7b149183, with Codex 0.158.0 and Claude Code 2.1.300 ([image-built-by-install.txt](revision-2/fresh/image-built-by-install.txt)); created the ICC-off network; wrote `data/managed-runners` and `.env` (0600, the switch, the directory, the profile); applied the migrations; started all seven services healthy; "managed runners are enabled in orbit-3362a4ba", the channel serving that image ([install.log.gz](revision-2/fresh/install.log.gz), [config-after-install.txt](revision-2/fresh/config-after-install.txt)). No managed container or volume before a sign-in ([inventory-0b-after-install.txt](revision-2/fresh/inventory-0b-after-install.txt)). |
+| First account (12:24:46–12:30:20) | `/setup`'s bootstrap: REQUESTED at once, STARTING 12:24:49 (volume, credential, container), the runner ONLINE 12:25:19, MODEL_UNAVAILABLE 12:25:22; an operator signed Codex in with a placeholder key, and the runner was READY and usable at 12:30:20 (`initialProvider` codex), in container `mr-01a149d2-…` on the install's image, its default workspace bound ([status-transitions.jsonl](revision-2/fresh/status-transitions.jsonl), [inventory-1-after-first-login.txt](revision-2/fresh/inventory-1-after-first-login.txt)). |
+| Switched off (12:30:50) | `ORBIT_MANAGED_RUNNERS_ENABLED=false`, `docker compose up -d --wait apiserver`: capabilities `enabled: false`; a new account's sign-in NOT_PROVISIONED, its ensure 404; after 45 s still the one row, the first account's volumes kept and its container running ([steps.jsonl](revision-2/fresh/steps.jsonl), [inventory-2-after-switching-off.txt](revision-2/fresh/inventory-2-after-switching-off.txt)). |
+| Previous version (12:03:51–12:09:49) | c291f9af6 installed as its README says ([previous-version-install.log.gz](revision-2/upgrade/previous-version-install.log.gz)). Its first `docker compose up -d --build` stopped on "container orbit-apiserver is unhealthy" (the first boot's migrations outlasting the health check on this disk; the README path predates D3), and the wrapper's `docker compose up -d --wait` after the apiserver became healthy brought every service up. Two accounts signed in: NOT_PROVISIONED, capabilities `enabled: false`, no row, no managed resource; `.env` sha256 `d691d1d4…` ([config-1-previous-version.txt](revision-2/upgrade/config-1-previous-version.txt)). |
+| `/upgrade` to e7b149183 (12:10:21–12:21:27) | The checkout moved to e7b149183 and its `.claude/skills/upgrade/upgrade.sh` ran: exit 0, "Building images from source (apiserver wiki-worker web)"; apiserver, wiki-worker and web recreated, postgres and gateway left running, pgbackup untouched ([upgrade.log.gz](revision-2/upgrade/upgrade.log.gz)). |
+| After the upgrade | `.env` byte for byte as before (`d691d1d4…` both); the apiserver with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and `/dev/null` at its read-only mount; no `data/managed-runners`, no `docker-channel`, no `orbit-managed-runners` network, no channel or managed runner image ([config-2-after-upgrade.txt](revision-2/upgrade/config-2-after-upgrade.txt)). The two accounts and a new third one signed in: NOT_PROVISIONED; the third's ensure 404; no row after 45 s. Volumes, networks and container names as before the upgrade ([inventory-3-after-upgrade-and-sign-ins.txt](revision-2/upgrade/inventory-3-after-upgrade-and-sign-ins.txt), [inventory-diff-upgrade.txt](revision-2/upgrade/inventory-diff-upgrade.txt)). |
+
 ## Where it ran
 
 - Two isolated Docker hosts on the HPC machine, `d3-fresh-dind` and `d3-upgrade-dind`: `docker:29.8.2-dind`
@@ -15,7 +34,7 @@ operator's side is [docs/self-hosting.md](../../../self-hosting.md), "Managed ru
 - The host's own Docker gained the pulled `docker:29.8.2-dind` image and those two containers, labelled
   `orbit.test=d3-34hJ7RbezzIdkzud1OBz2`, and nothing else. It runs no Orbit deployment (only other sessions' test
   databases), and neither did anything here touch orbitd.io.
-- The managed runner image was built inside the fresh host from T03's branch `orbit/task-runner-73447c` at
+- In revision 1, the managed runner image was built inside the fresh host from T03's branch `orbit/task-runner-73447c` at
   `d856cde9b35b3c91d1b3acbaa34aacebd21fed03`, which carries 198f6d6cc (the instance file a Docker container
   needs): `orbit-managed-runner:t03-d856cde9b` =
   `sha256:7d6bd8f205e93e31591df5f03e84074a58b325787b62ad1a9f7de41074c48b08`, revision label as above, never pushed
@@ -28,7 +47,7 @@ operator's side is [docs/self-hosting.md](../../../self-hosting.md), "Managed ru
   file here, the compressed logs included, for the channel tokens, the deployments' secrets, the runner
   credentials and the passwords found none.
 
-## Fresh install: the D3 tip at 6f51ce21d (`fresh/`)
+## Revision 1, fresh install: the D3 tip at 6f51ce21d with T03's image named (`fresh/`)
 
 | Step (UTC) | What happened |
 | --- | --- |
@@ -40,7 +59,7 @@ operator's side is [docs/self-hosting.md](../../../self-hosting.md), "Managed ru
 
 | `/upgrade` of this deployment (11:38:20–11:41:35) | Its checkout moved to the final tip's fix 58e46b2d0 and `.claude/skills/upgrade/upgrade.sh` ran with the `managed-runners-docker` profile on in `.env`: exit 0, "Building images from source (apiserver wiki-worker web docker-channel)" — Compose lists the channel mid-list, which the fix reads to the end — the channel rebuilt to the same image and left running, `.env` byte for byte as before (sha256 `ce1c1157…`, the switch still `false` as the administrator left it) ([upgrade-of-new-deployment.log.gz](fresh/upgrade-of-new-deployment.log.gz)). |
 
-## Upgrade from the previous version (`upgrade/`)
+## Revision 1, upgrade from the previous version (`upgrade/`)
 
 | Step (UTC) | What happened |
 | --- | --- |

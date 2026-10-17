@@ -5,11 +5,12 @@
 set -u
 cd /work/orbit
 echo "+ git rev-parse HEAD: $(git rev-parse HEAD)"
-set -x
+# The README's commands, echoed as written: no `set -x`, which would print the generated values.
+echo '+ cp .env.example .env'
 cp .env.example .env
+echo '+ jwt_secret="$(openssl rand -base64 32)"; provider_secret_key="$(openssl rand -base64 32)"'
 jwt_secret="$(openssl rand -base64 32)"
 provider_secret_key="$(openssl rand -base64 32)"
-set +x
 sed -i \
   -e "s|^JWT_SECRET=.*$|JWT_SECRET=\"${jwt_secret}\"|" \
   -e "s|^PROVIDER_SECRET_KEY=.*$|PROVIDER_SECRET_KEY=\"${provider_secret_key}\"|" \

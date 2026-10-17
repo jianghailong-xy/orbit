@@ -971,23 +971,24 @@ The two paths, as the repository had them:
 | Boundary tests | `test/compose-topology.test.mjs` pins the channel's whole definition and the apiserver's four new lines, allows its one profile, and gives the Docker socket to no other service; its counterexamples cover each. `scripts/managed-runner/deployment_boundary_test.py` lets the default entry points name the Docker channel and the image, and still nothing else of `deploy/managed-runner` and nothing of Kubernetes, Rook, Ceph or CSI; neither `/upgrade` copy names the switch or writes `.env`. `scripts/managed-runner/new_deployment_test.py` runs the install script and both `/upgrade` copies against a fake `docker`. |
 
 Verified on 2026-10-17 in two isolated Docker hosts on the HPC machine (`docker:29.8.2-dind`, capped, outside the
-runner's cgroup; nothing of an existing deployment touched), with the managed runner image built from T03's
-branch at d856cde9b, which carries 198f6d6cc
+runner's cgroup; nothing of an existing deployment touched). The branch carries T03's image fix: its tip d856cde9b
+(198f6d6cc, d856cde9b, Claude Code), merged as e7b149183 with none of T03's files changed, so the install builds a
+working image from the branch's own `deploy/managed-runner/image`
 ([evidence](evidence/managed-runner-new-deployment/2026-10-17/README.md)):
 
-- A fresh install at 6f51ce21d came up healthy with the switch, the directory and the profile in `.env`. The
-  first account's sign-in made its runner at once (STARTING 3 s later, the runner online 30 s later); with Codex
-  signed in by an operator with a placeholder key it was READY, its default workspace bound to it, the database's
-  one row matching the one labelled container and volume. The first attempt, at af6047e9c, had failed: a new
-  database's 428 migrations outlasted the apiserver's health check at its first boot on that disk, which is why
-  the install now applies them first.
-- Switched off, a new account's sign-in made nothing (`MANAGED_RUNNER_DISABLED`, ensure 404), and the first
-  account's volume stayed, its container still running. `/upgrade` of that deployment then rebuilt
-  `docker-channel` with the rest and left `.env` byte for byte as it was.
-- The previous version (c291f9af6) upgraded to 6f51ce21d with `/upgrade` kept `.env` byte for byte and managed
-  runners off: three accounts' sign-ins made nothing, and no channel, network, image, container or volume of
-  managed runners appeared. `--enable-managed-runners` then switched them on, and the administrator's next
-  sign-in got a READY runner.
+- At e7b149183, a fresh install with no flags built the managed runner image itself (`sha256:b89d6f3f9c44…`, source
+  e7b149183, with Codex and Claude Code) and came up healthy with the switch, the directory and the profile in
+  `.env`. The first account's sign-in made its runner at once (STARTING 3 s later, the runner online 30 s later),
+  READY after an operator's placeholder Codex sign-in. Switched off, a new account's sign-in made nothing
+  (`MANAGED_RUNNER_DISABLED`, ensure 404), and the first account's volume stayed, its container still running.
+- The previous version (c291f9af6), upgraded to e7b149183 with `/upgrade`, kept `.env` byte for byte and managed
+  runners off: three accounts' sign-ins made nothing, only the apiserver, wiki worker and web were built and
+  recreated, and no channel, network, image, container or volume of managed runners appeared.
+- Earlier runs at 6f51ce21d, with T03's image named by `--managed-runner-image`, showed the same and also that
+  `/upgrade` of a new deployment rebuilds `docker-channel` and keeps `.env`, and that `--enable-managed-runners`
+  switches an upgraded deployment on, its administrator's next sign-in getting a READY runner. The first of them, at
+  af6047e9c, failed: a new database's 428 migrations outlasted the apiserver's health check at its first boot on
+  that disk, which is why the install now applies them first.
 
 Left to later work, or not shown here:
 
