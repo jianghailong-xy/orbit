@@ -106,7 +106,10 @@ ephemeral-storage limit:
 
 The data is kept: nothing is deleted to enforce the limit. Writes between two checks can overshoot
 it; `diskCheckSeconds` bounds how long. `/tmp` is a tmpfs counted in the container's memory limit,
-and the root filesystem is read-only, so the data volume is the only disk a runner can fill.
+and the root filesystem is read-only, so the data volume is the only disk a runner can fill. A
+container over its limit is stopped even when the record of why cannot be written (a full disk under
+the state directory). Measured overshoots, tuning, and how a runner comes back are in
+[the operations runbook](../../../docs/managed-runner-docker-operations.md#a-runners-volume-is-over-its-limit).
 
 ## Fencing receipt
 

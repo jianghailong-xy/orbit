@@ -10,6 +10,7 @@ themselves are exercised on a real daemon by the Docker backend's integration ru
 """
 
 import copy
+import errno
 import hashlib
 import http.client
 import importlib.util
@@ -415,6 +416,19 @@ class AuthenticationAndRoutesTest(ChannelFixture):
         status, body = self.call("PUT", f"/v1/volumes/mr-data-{RUNNER}", raw=b"{not json")
         self.assertEqual((status, body["code"]), (400, "BODY_REFUSED"))
 
+    def test_an_identity_with_a_trailing_newline_is_not_canonical(self):
+        # A `$` anchor also matches before a final newline: "<uuid>\n" once named a credential file and an owner label.
+        status, body = self.call("PUT", f"/v1/credentials/{RUNNER}%0A", {"ownerId": OWNER, "generation": 1, "token": "c" * 32})
+        self.assertEqual((status, body["code"]), (400, "NAME_REFUSED"))
+        self.assertEqual(list((Path(self.config["stateDir"]) / "credentials").iterdir()), [])
+        status, body = self.call("PUT", f"/v1/volumes/mr-data-{RUNNER}", {"ownerId": OWNER + "\n", "runnerId": RUNNER, "limitBytes": 1024})
+        self.assertEqual((status, body["code"]), (400, "PARAMETER_REFUSED"))
+        self.assertNotIn(f"mr-data-{RUNNER}", self.docker.volumes_by_name)
+        status, body = self.call("PUT", f"/v1/credentials/{RUNNER}", {"ownerId": OWNER, "generation": 1, "token": "c" * 32 + "\n"})
+        self.assertEqual((status, body["code"]), (400, "PARAMETER_REFUSED"))
+        self.assertEqual(self.call("GET", f"/v1/fencing-receipts/{RUNNER}%0A")[1]["code"], "NAME_REFUSED")
+        self.assertEqual(self.call("DELETE", f"/v1/credentials/{RUNNER}?uid={uuid.uuid4()}%0A")[1]["code"], "PARAMETER_REFUSED")
+
 
 class VolumeTest(ChannelFixture):
     def test_a_data_volume_is_created_once_with_this_instance_s_labels(self):
@@ -697,6 +711,19 @@ class DiskLimitTest(ChannelFixture):
         self.assertEqual((status, body["code"]), (409, "VOLUME_OVER_LIMIT"))
         self.channel.config["volumeLimitOverrides"][data] = 20 * 2 ** 30
         self.assertEqual(self.call("POST", "/v1/containers", self.request(volume["uid"]))[0], 201, "an operator's override lets it start")
+
+    def test_a_full_state_disk_does_not_keep_an_over_limit_container_running(self):
+        self.running_container()
+        self.docker.sizes[f"mr-data-{RUNNER}"] = 10 * 2 ** 30 + 1
+        stopped = threading.Event()
+        self.docker.stop_hook = stopped.set
+
+        def no_space(path, value):
+            raise OSError(errno.ENOSPC, "No space left on device", str(path))
+
+        self.ch.durable_write = no_space  # the eviction record cannot be written: the disk it is on is full
+        self.assertEqual(self.channel.enforce_disk_limits(), [f"mr-{RUNNER}"])
+        self.assertTrue(stopped.wait(5), "stopped although the reason could not be kept")
 
 
 class RestartTest(ChannelFixture):
