@@ -1,0 +1,125 @@
+{
+  "at": "2026-10-17T20:18:52.173+00:00",
+  "kept": [
+    {
+      "generation": 1,
+      "podUid": "9d9277e3-a0fb-43bd-930d-ebd3c9725b87",
+      "tokenSha256Prefix": "5333a5705321"
+    }
+  ],
+  "mapping": {
+    "generation": 1,
+    "podUid": "9d9277e3-a0fb-43bd-930d-ebd3c9725b87",
+    "state": "FENCING"
+  },
+  "results": [
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "no instance declaration",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "no instance declaration",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "no instance declaration",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the current generation, another Pod UID",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the current generation, another Pod UID",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the current generation, another Pod UID",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the next generation",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the next generation",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the next generation",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    }
+  ]
+}
