@@ -71,16 +71,16 @@ class FcmTokenDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a10@example.test")
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
-        Log.i("A10Fcm", "Sign In pressed; auth ${app.session.state.value::class.simpleName}")
         compose.onNodeWithText("Sign In").performScrollTo().performClick()
-        await("signed in", 30_000) { app.session.state.value as? AuthState.SignedIn }
-        capture("fcm-after-sign-in")
+        // Waits that need the UI go through the compose rule, which drives recomposition; a plain wait would leave
+        // PushNoticeHost's effect, and with it the permission request, unrun.
+        compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn }
         // The configured build asks once after the first sign-in (owner decision 34bbkPvI56b7ZUi8cJjX4).
         val allow = await("system notification permission request", 30_000) { permissionButton() }
         capture("fcm-permission-request")
         assertTrue(allow.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         // Google's token comes over the network; the registration carries it to the server.
-        await("registration with Google's token", 90_000) { app.push.registration.activeBinding() }
+        compose.waitUntil(90_000) { app.push.registration.activeBinding() != null }
         val first = tokens()
         assertTrue("Every registered token has the FCM shape", first.all { it.getValue("fcmShape").jsonPrimitive.boolean })
         assertEquals("One token before rotation", 1, first.map { it.getValue("sha256") }.toSet().size)
@@ -92,8 +92,9 @@ class FcmTokenDeviceTest {
         val before = app.push.registration.activeBinding()!!
         Tasks.await(FirebaseMessaging.getInstance().deleteToken(), 60, TimeUnit.SECONDS)
         val rotated = sha(Tasks.await(FirebaseMessaging.getInstance().token, 60, TimeUnit.SECONDS))
-        await("registration with the rotated token", 60_000) {
-            app.push.registration.activeBinding()?.takeIf { it.registrationKey != before.registrationKey && tokens().last().getValue("sha256").jsonPrimitive.content == rotated }
+        compose.waitUntil(60_000) {
+            app.push.registration.activeBinding()?.registrationKey.let { it != null && it != before.registrationKey } &&
+                tokens().last().getValue("sha256").jsonPrimitive.content == rotated
         }
         val after = tokens()
         assertNotEquals(first.last().getValue("sha256"), after.last().getValue("sha256"))
@@ -103,6 +104,7 @@ class FcmTokenDeviceTest {
     /** A new process restores the binding of the rotated token; sign-out unregisters it before the session ends. */
     @Test fun signOutUnregistersTheRestoredBinding() {
         assertFalse(app is PushTestApplication)
+        runBlocking { app.session.restore() } // as the messaging service does in a process without an Activity
         val binding = await("restored binding", 20_000) {
             app.push.registration.activeBinding().takeIf { app.session.state.value is AuthState.SignedIn }
         }
