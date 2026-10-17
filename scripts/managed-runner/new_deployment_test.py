@@ -41,8 +41,10 @@ printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
 case "$*" in
   "compose version") echo "Docker Compose version v5.0.0" ;;
   "compose config --services")
-    echo postgres; echo pgbackup; echo apiserver; echo web; echo wiki-worker; echo gateway
-    grep -qx 'COMPOSE_PROFILES=managed-runners-docker' .env 2>/dev/null && echo docker-channel ;;
+    # In the order Compose lists them: the channel, when its profile is on, before the services after it.
+    echo postgres; echo apiserver; echo wiki-worker
+    grep -qx 'COMPOSE_PROFILES=managed-runners-docker' .env 2>/dev/null && echo docker-channel
+    echo web; echo gateway; echo pgbackup ;;
   "compose logs apiserver") echo "[ManagedRunners] managed runners are enabled in orbit-fixture (Docker instance orbit-fixture)" ;;
   "image inspect -f {{.Id}} "*) echo "$FAKE_IMAGE_ID" ;;
   "network inspect -f {{index .Options \"com.docker.network.bridge.enable_icc\"}} "*) echo false ;;

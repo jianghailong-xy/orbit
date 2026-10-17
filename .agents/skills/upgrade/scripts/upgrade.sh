@@ -123,8 +123,9 @@ SERVICES="apiserver wiki-worker web"
 # Managed runners stay as this deployment's .env has them: this script never writes .env. A deployment
 # whose .env switched on the managed-runners-docker profile (a fresh install's scripts/install-server.sh
 # does) runs the Docker channel, which is rebuilt and recreated with the rest. Without that profile,
-# Compose does not list the service and nothing is added.
-if $DC config --services 2>/dev/null | grep -qx docker-channel; then
+# Compose does not list the service and nothing is added. (grep reads to the end, unlike -q: an early exit
+# could stop Compose mid-list with SIGPIPE, which pipefail would read as no channel.)
+if $DC config --services 2>/dev/null | grep -x docker-channel >/dev/null; then
   SERVICES="$SERVICES docker-channel"
 fi
 echo "==> Building images from source ($SERVICES)"
