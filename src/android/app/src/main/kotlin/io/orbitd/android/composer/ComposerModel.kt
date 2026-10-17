@@ -7,6 +7,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.SteerDelivery
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
 import kotlinx.coroutines.*
@@ -336,6 +337,30 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 mutable.update { it.copy(steered = it.steered + id) }
                 refresh()
             } finally { mutable.update { it.copy(steering = it.steering - id) } }
+        }
+    }
+    /**
+     * Put back in the composer (web `restoreUndelivered`, and `takeBackUndelivered` for a receipt): the words of a steer that was not
+     * delivered, back in the box under any draft as Withdraw returns them — an explicit press, so a draft keeps its place above them.
+     * Nothing is sent. A steer known only from the server's receipt names its turn ([discard]), which is then discarded (DELETE
+     * …/turns/:turnId) and its row gone from the tail; one the server keeps is said, and the words stay in the box.
+     */
+    fun putBack(words: String, discard: String? = null) {
+        if (!state.value.loaded || (words.isBlank() && discard == null)) return
+        val id = discard?.let { ObjectId.canonical(it) ?: it }
+        if (id != null && (id in state.value.withdrawing || id in state.value.withdrawn)) return
+        mutable.update { it.copy(draft = if (words.isBlank()) it.draft else it.draft.under(words.trim()),
+            withdrawing = if (id == null) it.withdrawing else it.withdrawing + id) }
+        launch {
+            try {
+                if (words.isNotBlank()) persist()
+                if (discard == null) return@launch
+                try { api.mutation("turns/$discard", method = HttpMethod.DELETE) }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) { OrbitToasts.show(SteerDelivery.COULDNT_DISCARD, detail = failure(e), tone = ToastTone.ERROR); return@launch }
+                mutable.update { it.copy(withdrawn = it.withdrawn + id!!) }
+                refresh()
+            } finally { if (id != null) mutable.update { it.copy(withdrawing = it.withdrawing - id) } }
         }
     }
     private fun failure(e: Exception) = if (e is ApiError) e.messages.firstOrNull() ?: directoryError(e) else directoryError(e)
