@@ -102,6 +102,7 @@ func init() {
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		cursorKeyCheckCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -744,6 +745,12 @@ func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) erro
 // key goes by its fingerprint only.
 func (t *Transport) cursorKeyCheck(sessionID string, b CursorKeyCheckReport) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/cursor-key-check", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheckResult answers a heartbeat-delivered CursorKeyCheckCommand: what Cursor said of the key,
+// by the check it answers and the key's fingerprint.
+func (t *Transport) cursorKeyCheckResult(b CursorKeyCheckResult) error {
+	return t.do(nil, "POST", "/runner/cursor-key-check-result", b, nil, 15*time.Second)
 }
 
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code

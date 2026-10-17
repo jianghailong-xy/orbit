@@ -9,7 +9,10 @@ import {
   keyDialect,
   providerPreset,
   RunEventType,
+  type CursorKeyCheckAnswer,
+  type CursorKeyCheckOutcome,
   type CursorKeyCheckState,
+  type CursorKeyRecheckAnswer,
   type PlanUsageSnapshot,
   type ProviderKeyUsage,
   type ProviderPreset,
@@ -36,6 +39,7 @@ import { readLastUsed } from './provider-last-used';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
+import { cursorKeyCheckers, cursorKeyCheckRelay } from './cursor-key-check-relay';
 import { openCodeKeyModel } from '@orbit/shared';
 import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
@@ -81,6 +85,38 @@ export interface UsableProvider {
   label?: string;
   models?: unknown;
   defaultModel?: string | null;
+}
+
+/** Why a Cursor key check came to NO_RUNNER: no runner of the caller's can check one, those that can are
+ *  all busy checking other keys, or the one asked did not answer in time. */
+type CursorKeyCheckMiss = 'none' | 'busy' | 'silent';
+
+/** What a Cursor key check came to, in words a client may show as they stand: for a key being connected,
+ *  or for a saved one checked again. Never the key. */
+function cursorKeyCheckAnswer(outcome: CursorKeyCheckOutcome, why: CursorKeyCheckMiss | undefined, saved: boolean): CursorKeyCheckAnswer {
+  const message = (() => {
+    switch (outcome) {
+      case 'VALID':
+        return 'Cursor accepted this key.';
+      case 'INVALID':
+        return saved
+          ? 'Cursor rejected this key: “The provided API key is invalid.” Save a new key for it, then check it again.'
+          : 'Cursor rejected this key: “The provided API key is invalid.” Check it on cursor.com and paste it again.';
+      case 'UNREACHABLE':
+        return 'Couldn’t reach Cursor from the runner that checks keys. The key itself may be fine.';
+      case 'NO_RUNNER':
+        if (why === 'busy') return 'Your runners are already checking other Cursor keys. Try again in a moment.';
+        if (why === 'silent') {
+          return saved
+            ? 'The runner asked to check this key didn’t answer in time. Try again.'
+            : 'The runner asked to check this key didn’t answer in time. Save the key anyway, or try again.';
+        }
+        return 'No runner of yours can check Cursor keys right now: that takes one that is online, with Cursor CLI '
+          + 'installed and an Orbit runner new enough to check keys. '
+          + (saved ? 'The key is checked before a session starts on it.' : 'Save the key anyway, and it is checked before a session starts on it.');
+    }
+  })();
+  return { ok: outcome === 'VALID', keyCheck: outcome, message };
 }
 
 /** The engines a key's row runs on (shared providerEngines.ts): its protocol, its preset and endpoint,
@@ -741,6 +777,76 @@ export class ProvidersService {
   }
 
   /**
+   * Check one of the caller's own Cursor keys again ("Check Again"): asked of a runner of theirs as a key
+   * being connected is (checkCursorKey), and what Cursor answered kept on the key as its last check, by
+   * recordCursorKeyCheck's rule — a compare-and-set on the ciphertext read before asking, so an answer
+   * about a key replaced while it was being checked is kept on nothing. NO_RUNNER keeps nothing: no check
+   * was made. Scoped like every write: a shared row, or another user's, reads as not-found.
+   */
+  async recheckCursorKey(ownerId: string, id: string): Promise<CursorKeyRecheckAnswer> {
+    const row = await this.getScoped(ownerId, id);
+    if (keyDialect(row.runtime) !== 'cursor') {
+      throw new BadRequestException({ code: 'NOT_A_CURSOR_KEY', message: 'Only a Cursor API key is checked on a runner' });
+    }
+    let key: string;
+    try {
+      key = decryptSecret(row.apiKeyEnc).trim();
+    } catch {
+      throw new ConflictException('This key cannot be read here any more; save it again');
+    }
+    const { outcome, why } = await this.checkCursorKey(ownerId, key);
+    let recorded = false;
+    if (outcome !== 'NO_RUNNER') {
+      const { count } = await this.prisma.modelProvider.updateMany({
+        where: { id: row.id, apiKeyEnc: row.apiKeyEnc, runtime: AgentProvider.CURSOR },
+        data: { keyCheckState: outcome, keyCheckedAt: new Date() },
+      });
+      recorded = count > 0;
+      if (recorded) this.publishChanged(row.ownerId, row.id);
+    }
+    const now = await this.prisma.modelProvider.findUnique({
+      where: { id: row.id },
+      select: { keyCheckState: true, keyCheckedAt: true },
+    });
+    return {
+      ...cursorKeyCheckAnswer(outcome, why, true),
+      recorded,
+      keyCheckState: (now?.keyCheckState as CursorKeyCheckState | null | undefined) ?? null,
+      keyCheckedAt: now?.keyCheckedAt?.toISOString() ?? null,
+    };
+  }
+
+  /** A runner's answer to a Cursor key it was handed to check (POST /runner/cursor-key-check-result):
+   *  settles the check somebody is waiting on, when it is that runner's and about that key. */
+  answerCursorKeyCheck(runnerId: string, result: { checkId: string; state: string; keyFingerprint: string }): { accepted: boolean } {
+    return { accepted: cursorKeyCheckRelay.answer(runnerId, result) };
+  }
+
+  /**
+   * Whether Cursor accepts `apiKey`, asked of a runner of `ownerId`'s by Cursor CLI's `agent models`
+   * (cursor-key-check-relay.ts): the most recently heard from of those that can ask, woken to take it on a
+   * heartbeat now. NO_RUNNER, and why, when none can, when they are all busy checking other keys, or when
+   * the one asked did not answer in time.
+   */
+  private async checkCursorKey(
+    ownerId: string,
+    apiKey: string,
+  ): Promise<{ outcome: CursorKeyCheckOutcome; why?: CursorKeyCheckMiss }> {
+    const runners = await this.prisma.runner.findMany({
+      where: { ownerId },
+      select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true },
+    });
+    const checkers = cursorKeyCheckers(runners);
+    if (checkers.length === 0) return { outcome: 'NO_RUNNER', why: 'none' };
+    const runner = checkers.find((r) => cursorKeyCheckRelay.hasRoom(r.id));
+    if (!runner) return { outcome: 'NO_RUNNER', why: 'busy' };
+    const answer = cursorKeyCheckRelay.ask(runner.id, apiKey);
+    this.realtime.notifyRunnerWake(runner.id);
+    const state = await answer;
+    return state ? { outcome: state } : { outcome: 'NO_RUNNER', why: 'silent' };
+  }
+
+  /**
    * Delete a key. Allowed whatever used it (§3.6): a session keeps the engine it runs on — recorded
    * first for one an older replica wrote — and waits, as on a disabled key, until it is moved onto
    * another credential that engine runs; it never falls back to the runner's own sign-in. The retired
@@ -940,19 +1046,25 @@ export class ProvidersService {
    * Anthropic's on Claude Code, OpenCode and DeepSeek Harness alike, so one sent as the retired `dsh`
    * runtime is probed exactly as one sent as `claude` (docs/provider-engine-contract.md §3.7).
    */
-  async testConnection(dto: {
-    baseUrl: string;
-    apiKey: string;
-    model?: string;
-    runtime?: string;
-  }): Promise<{ ok: boolean; status?: number; message: string }> {
-    // A Cursor key is no model API this side can probe: Cursor CLI checks it on a runner with `agent
-    // models` (docs/cursor-runtime-contract.md §9), and the key is never sent anywhere from here.
+  async testConnection(
+    dto: {
+      baseUrl: string;
+      apiKey: string;
+      model?: string;
+      runtime?: string;
+    },
+    ownerId?: string,
+  ): Promise<{ ok: boolean; status?: number; message: string; keyCheck?: CursorKeyCheckOutcome }> {
+    // A Cursor key is no model API this side can probe, and is never sent anywhere from here: a runner of
+    // the caller's asks Cursor CLI's `agent models` with it (checkCursorKey).
     if (dto.runtime === AgentProvider.CURSOR) {
-      throw new BadRequestException({
-        code: 'CURSOR_KEY_CHECKED_ON_RUNNER',
-        message: 'A Cursor API key cannot be tested from here: Cursor CLI checks it on a runner before a session starts on it',
-      });
+      const key = dto.apiKey.trim();
+      if (!key) throw new BadRequestException('Paste the Cursor API key to check');
+      // Checked on a runner of the caller's own: asked on nobody's behalf, there is none to ask.
+      const { outcome, why } = ownerId
+        ? await this.checkCursorKey(ownerId, key)
+        : { outcome: 'NO_RUNNER' as const, why: 'none' as const };
+      return cursorKeyCheckAnswer(outcome, why, false);
     }
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();

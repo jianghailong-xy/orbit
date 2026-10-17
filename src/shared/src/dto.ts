@@ -557,6 +557,55 @@ export interface ProviderKeyUsage {
 export const CURSOR_KEY_CHECK_STATES = ['VALID', 'INVALID', 'UNREACHABLE'] as const;
 export type CursorKeyCheckState = (typeof CURSOR_KEY_CHECK_STATES)[number];
 
+/**
+ * What a check of a Cursor API key somebody asked for came to: on connect (POST /providers/test with
+ * `runtime: 'cursor'`) or again for a saved key (POST /providers/mine/:id/key-check, "Check Again").
+ * The server never uses the key itself: a runner of theirs asks Cursor CLI's `agent models` with it
+ * (docs/cursor-runtime-contract.md §9). Either what Cursor answered, as that runner read it
+ * (CURSOR_KEY_CHECK_STATES), or NO_RUNNER: no runner of theirs could ask — none is online with the
+ * pinned Cursor CLI and a runner release that declares `cursor-key-check/v1`, or the one asked did not
+ * answer in time. Only INVALID says anything against the key: a client offers to save it anyway on
+ * UNREACHABLE and NO_RUNNER, and the key is checked again before a session starts on it.
+ */
+export const CURSOR_KEY_CHECK_OUTCOMES = [...CURSOR_KEY_CHECK_STATES, 'NO_RUNNER'] as const;
+export type CursorKeyCheckOutcome = (typeof CURSOR_KEY_CHECK_OUTCOMES)[number];
+
+/** The answer to a Cursor key check somebody asked for. */
+export interface CursorKeyCheckAnswer {
+  /** True for VALID alone. */
+  ok: boolean;
+  keyCheck: CursorKeyCheckOutcome;
+  /** What happened, in a sentence a client may show as it stands. Never carries the key. */
+  message: string;
+}
+
+/** The answer to Check Again: the check's own, and the saved key's last check as it stands after it. */
+export interface CursorKeyRecheckAnswer extends CursorKeyCheckAnswer {
+  /** Whether this check's answer was kept on the key: never for NO_RUNNER, nor for an answer about a key
+   *  replaced while it was being checked. */
+  recorded: boolean;
+  keyCheckState: CursorKeyCheckState | null;
+  keyCheckedAt: string | null;
+}
+
+/** Control plane → runner, on the heartbeat of a process that declares `cursor-key-check/v1`: a Cursor
+ *  API key to ask `agent models` with, in a throwaway home with credentials in memory, and to answer by
+ *  POST /runner/cursor-key-check-result. Handed over once; the key is written to no file, log or event
+ *  on either side. */
+export interface CursorKeyCheckCommand {
+  checkId: string;
+  apiKey: string;
+}
+
+/** Runner → control plane: what Cursor answered a CursorKeyCheckCommand's key with, and the key it was
+ *  about by its fingerprint, never the key. An answer the runner cannot read is no verdict on the key,
+ *  and is reported UNREACHABLE: the key could not be checked. */
+export interface CursorKeyCheckResult {
+  checkId: string;
+  state: CursorKeyCheckState;
+  keyFingerprint: string;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -934,6 +983,10 @@ export interface RunnerHeartbeatResponse {
    *  (managedRunner.ts): with nothing to do, stop claiming, drain and exit. Absent otherwise, so
    *  every other runner sees the response shape it always had. */
   managedSleep?: ManagedRunnerSleepRequest;
+  /** Cursor API keys somebody is waiting to have checked (CursorKeyCheckCommand): sent only to a
+   *  process that declared `cursor-key-check/v1`, each handed over once. Absent otherwise, so every
+   *  other runner sees the response shape it always had. */
+  cursorKeyChecks?: CursorKeyCheckCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */

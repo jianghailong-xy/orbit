@@ -104,7 +104,9 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     // an engine that wouldn't answer is never shown as signed in.
     const auth = entry.engine !== 'dsh' && (entry.auth === 'yes' || entry.auth === 'no') ? entry.auth : 'unknown';
     const dsh = entry.engine === 'dsh' ? sanitizeDshHealth(entry.dsh) : undefined;
-    const installationError = entry.engine === 'dsh' ? dshDiagnosticCode(entry.installationError) : undefined;
+    const installationError = entry.engine === 'dsh'
+      ? dshDiagnosticCode(entry.installationError)
+      : entry.engine === 'cursor' ? cursorInstallationCode(entry.installationError) : undefined;
     // Antigravity alone says which credential `auth` is about, and carries the quota its Google
     // accounts read (docs/antigravity-runtime-contract.md §16.6): Default's while the runner's own
     // sign-in answers yes, every other account's under `accounts`.
@@ -147,6 +149,17 @@ function dshDiagnosticCode(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const code = value.split(':', 1)[0];
   return DSH_DIAGNOSTIC_CODES.includes(code) ? code : undefined;
+}
+
+/** Why the pinned Cursor CLI cannot run here, by the code that leads the runner's message
+ *  (cursor_health.go): CURSOR_NOT_INSTALLED, CURSOR_VERSION_INCOMPATIBLE (another build),
+ *  CURSOR_PLATFORM_UNSUPPORTED, CURSOR_INSTALL_FAILED — any CURSOR_ code, so a code this side has not
+ *  heard of still says the build is not ready. Kept without the words after it, which name paths on the
+ *  machine. What tells the runners that can check a Cursor key (cursor-key-check-relay.ts). */
+function cursorInstallationCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.split(':', 1)[0];
+  return /^CURSOR_[A-Z_]{1,60}$/.test(code) ? code : undefined;
 }
 
 function sanitizeDshHealth(value: unknown): DshRuntimeHealth | undefined {
