@@ -3,11 +3,15 @@
 
 Inherits the fixed A08 session/card HTTP fixture without editing it. Adds only the
 Android push registration contract and canonical directory reminder count.
+--bundle-id io.orbitd.android serves the release-package FCM check; tokens are kept
+only as a SHA-256 prefix, a length and whether they have the FCM shape.
 """
 import argparse
+import hashlib
 import importlib.util
 import json
 import pathlib
+import re
 import uuid
 from http.server import ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -27,6 +31,7 @@ def snapshot():
 
 
 cards.snapshot = snapshot
+BUNDLE_ID = 'io.orbitd.android.debug'
 
 
 def reset():
@@ -55,7 +60,7 @@ class Handler(cards.Handler):
             push = cards.state['push']
             if path.endswith('/register'):
                 if (body.get('platform') != 'android' or body.get('environment') != 'production'
-                        or body.get('bundleId') != 'io.orbitd.android.debug' or not body.get('token')):
+                        or body.get('bundleId') != BUNDLE_ID or not body.get('token')):
                     return self.reply({'message': 'Invalid Android registration'}, 400)
                 try:
                     if uuid.UUID(body['installationId']).version != 4:
@@ -65,6 +70,10 @@ class Handler(cards.Handler):
                 push.update(installationId=body['installationId'], bundleId=body['bundleId'],
                             platform='android', environment='production', registrationKey=str(uuid.uuid4()))
                 push['registerCount'] += 1
+                token = body['token']
+                push.setdefault('tokens', []).append(dict(
+                    sha256=hashlib.sha256(token.encode()).hexdigest()[:16], length=len(token),
+                    fcmShape=re.fullmatch(r'[A-Za-z0-9_-]+:APA91b[A-Za-z0-9_-]+', token) is not None))
                 return self.reply({'ok': True, 'registrationKey': push['registrationKey']})
             push['unregisterCount'] += 1
             if body.get('registrationKey') == push.get('registrationKey'):
@@ -75,5 +84,7 @@ class Handler(cards.Handler):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18770)
+    parser.add_argument('--bundle-id', default=BUNDLE_ID)
     args = parser.parse_args()
+    BUNDLE_ID = args.bundle_id
     ThreadingHTTPServer(('127.0.0.1', args.port), Handler).serve_forever()

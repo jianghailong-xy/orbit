@@ -39,6 +39,7 @@ printf 'scope=A10 controlled notification/navigation; injected messages and toke
   "$phases" "$(date -u +%FT%TZ)" >> "$output/result.txt"
 serial=''
 emulator_pid=''
+started_unit=false
 fixture_pid=''
 owns_reverse=false
 installed=false
@@ -68,6 +69,7 @@ cleanup() {
     wait "$emulator_pid" 2>/dev/null || true
     timeout 20 "$adb" -s "$serial" wait-for-disconnect > /dev/null 2>&1 9>&- || failed=1
   fi
+  if [[ "$started_unit" == true ]]; then systemctl stop orbit-android-emulator.service 9>&- || failed=1; fi
   (( result == 0 && (failed != 0 || failures != 0) )) && result=1
   printf 'phase_failures=%s\ncleanup_failed=%s\nexit_code=%s\nfinished_utc=%s\n' "$failures" "$failed" "$result" "$(date -u +%FT%TZ)" >> "$output/result.txt"
   exit "$result"
@@ -75,7 +77,13 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "$target" =~ ^(29|3[0-6])$ ]]; then
-  if [[ "$target" == 36 ]]; then serial=emulator-5554
+  if [[ "$target" == 36 ]]; then
+    serial=emulator-5554
+    # The shared API 36 emulator is a systemd unit started on demand; one this run starts is stopped again.
+    if ! adbx devices | grep -q "^$serial[[:space:]]"; then
+      systemctl start orbit-android-emulator.service 9>&-
+      started_unit=true
+    fi
   else
     serial=emulator-5556
     if adbx devices | grep -q "^$serial[[:space:]]"; then echo 'Port 5556 in use; pass its serial explicitly' >&2; exit 75; fi
