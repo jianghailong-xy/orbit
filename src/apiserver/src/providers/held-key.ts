@@ -1,4 +1,4 @@
-import { AgentProvider, keyDialect, openCodeKeyOf, type KeyDialect } from '@orbit/shared';
+import { AgentProvider, openCodeDialect, openCodeKeyOf, type OpenCodeDialect } from '@orbit/shared';
 import { Prisma, type ModelProvider } from '@prisma/client';
 import { isBuiltinProvider, runsOnOpenCode, usableProviderScope } from './custom-provider';
 import { presetDefaultModel } from './preset-overlay';
@@ -7,9 +7,10 @@ import { decryptSecret } from './provider-crypto';
 /**
  * A key the server itself holds and may spend on a call it makes for one of its people: the endpoint
  * its row stores for its CLI, the dialect that endpoint speaks, the key, and the API model to ask for.
+ * Never a Cursor key: its dialect is no model API, and Cursor CLI alone spends it.
  */
 export interface HeldKey {
-  dialect: KeyDialect;
+  dialect: OpenCodeDialect;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -58,8 +59,9 @@ export type HeldKeyRow = Pick<
 /**
  * The key a configured row lends a call the server makes for a session, with the model to ask for —
  * `model` when given, else the row's default — or null when the server may not spend it: a disabled
- * row, a Claude subscription token, which Anthropic serves to its own clients only (the rule an
- * OpenCode run is held to, runsOnOpenCode), an endpoint on an internal host, nothing to ask for, and —
+ * row, a Claude subscription token, which Anthropic serves to its own clients only, and a Cursor key,
+ * which only Cursor CLI can spend (the rules an OpenCode run is held to, runsOnOpenCode), an endpoint on
+ * an internal host, nothing to ask for, and —
  * for the session's own provider (`ownProvider`) — a DeepSeek Harness row, whose model values are its
  * catalogue's opaque tokens rather than API ids.
  */
@@ -73,7 +75,7 @@ export function heldKeyOf(row: HeldKeyRow, model: string | undefined, ownProvide
   }
   const asked = model || presetDefaultModel(row)?.trim() || undefined;
   if (!asked) return null;
-  const dialect = keyDialect(row.runtime)!;
+  const dialect = openCodeDialect(row.runtime)!;
   return {
     dialect,
     baseUrl: row.baseUrl,

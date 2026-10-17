@@ -440,9 +440,11 @@ async function finishUnworkable(
 
 /**
  * A claim of an automatic landing the owner's authorization no longer covers: ended as READY
- * without going to a runner — the very result a runner reports when it finds main moved — so the
- * promotion goes back to the owner as the card they were spared (M-T12). Answers with the aftermath,
- * because that card is owed its delivery and this caller is the only one that knows it opened.
+ * without going to a runner — the very result a runner reports when it finds main moved — and
+ * decided where that result is applied (`automaticLandingCameBack`), which reads the authorization
+ * again: gone, and the promotion goes back to the owner as the card they were spared (M-T12).
+ * Answers with the aftermath, because that card is owed its delivery and this caller is the only one
+ * that knows it opened.
  */
 async function finishHandedBack(
   prisma: PrismaService,

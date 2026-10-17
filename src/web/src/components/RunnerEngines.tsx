@@ -68,7 +68,7 @@ import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
 import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
-import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
+import { ago, engineVersionNumber, updateNoteOf, webShowsEngine } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { DshRunnerStatus } from './DshRunnerStatus';
@@ -77,7 +77,7 @@ import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './Runne
 import { useRunnerTokenRotation } from './RunnerTokenRotation';
 import type { Runner } from './TasksSidePanel';
 
-const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
+const ENGINES = (Object.keys(ENGINE_NAME) as LoginEngine[]).filter(webShowsEngine);
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';

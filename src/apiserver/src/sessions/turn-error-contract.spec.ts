@@ -52,7 +52,10 @@ function makeService(opts: {
       findMany: async () => [],
       updateMany: async () => ({ count: 0 }),
       findUnique: async () => null,
-      findFirst: async () => (opts.steerRow ? { id: TURN_ID } : null),
+      // The steer the runner holds: on its way into the running turn, typed by the reader.
+      findFirst: async () => (opts.steerRow
+        ? { id: TURN_ID, status: 'IN_FLIGHT', deliveryStatus: null, clientTurnId: 'typed', senderSessionId: null }
+        : null),
       deleteMany: async () => ({ count: opts.deleted ?? 0 }),
       count: async () => opts.executable ?? 1,
       create: async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', seq: 2, ...data }),
@@ -80,15 +83,16 @@ async function refusal(fn: () => Promise<unknown>) {
   assert.fail('expected a refusal');
 }
 
-test('withdrawing a steer says it is already on its way, not that it is missing', async () => {
+test('withdrawing a steer the engine holds says it is already on its way, not that it is missing', async () => {
+  // No runner here has declared the way to ask the engine for it back (steer-withdraw.ts).
   const service = makeService({ deleted: 0, steerRow: true });
 
   const err = await refusal(() => service.cancelQueuedTurn(OWNER_ID, SESSION_ID, TURN_ID));
 
   assert.ok(err instanceof ConflictException);
-  // The delete matched nothing because a steer is not withdrawable — the engine may be reading
-  // it as we ask — and NOT because the turn moved or never existed.
-  assert.match(err.message, /written into the running turn/);
+  // The delete matched nothing because this steer is with the engine and nothing can ask for it
+  // back — and NOT because the turn moved or never existed.
+  assert.match(err.message, /already has this message and can't give it back/);
   assert.doesNotMatch(err.message, /not found/);
 });
 

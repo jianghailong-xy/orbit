@@ -323,10 +323,11 @@ object ProjectPage {
     fun coordinatorPill(status: JsonObject): Pill {
         val session = status.obj("coordination")?.obj("session")
         if (status.text("state") == "LIVE" && session != null && !coordinatorFinished(status)) {
+            // What waits on the reader (cards and owner decisions, both in `pendingApprovals`) comes before
+            // Working; a turn that ended on its own is the resting state and reads Idle (owner, 2026-10-15).
             if ((session.number("pendingApprovals") ?: 0) > 0) return Pill("Needs you", TagTone.WARNING)
             val run = session.text("runState")
             if (run == "RUNNING" || (run == "AWAITING_INPUT" && session.flag("engineTurnActive"))) return Pill("Working", TagTone.BRAND)
-            if (run == "AWAITING_INPUT") return Pill("Needs you", TagTone.WARNING)
             return Pill("Idle", TagTone.NEUTRAL)
         }
         if (coordinatorFinished(status)) return Pill("Completed", TagTone.NEUTRAL)
@@ -365,7 +366,8 @@ object ProjectPage {
         return if (f.flag("paused")) "$count · paused" else count
     }
     fun selfStartedFraction(f: JsonObject): Float? { val limit = f.number("limit")?.takeIf { it > 0 } ?: return null; return min(1f, f.n("selfStartedToday").toFloat() / limit) }
-    fun coordinatorPress(finished: Boolean, needsReply: Boolean) = if (finished || !needsReply) "Open coordinator" else "Reply to coordinator"
+    fun coordinatorPress(finished: Boolean, waiting: Int) =
+        if (finished || waiting == 0) "Open coordinator" else "Review $waiting request${if (waiting == 1) "" else "s"}"
     fun dispatchNote(openTaskCount: Int?, finished: Boolean): Pair<String, String> {
         if (finished) return "Open work" to when (openTaskCount) {
             null -> "A completed conversation is told nothing new, and this project still points at it."
@@ -792,6 +794,15 @@ object StartProjectCopy {
         val automatic = if (suggestedOff) "$automaticByDefault ($coordinatorSuggestedOff)." else "$automaticByDefault."
         return (listOf(automatic) + (if (asked) listOf(restSuggested) else emptyList()) + changeLater).joinToString(" ")
     }
+    /** How a start's record says what it was pressed with, in one read-only line: "Automatic · project/cards · Main branch: main ·
+     * Merge check: Set · At most 2 tasks at a time". [branch] is the project branch, named when tasks land on it. */
+    fun settingsLine(draft: Draft, branch: String): String = listOfNotNull(
+        if (draft.automatic) RunSettings.automatic else "${RunSettings.automatic} off",
+        if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else branch,
+        draft.upstream?.let { "${RunSettings.mainBranch}: $it" },
+        "${RunSettings.mergeCheck}: ${if (draft.hasMergeCheck) RunSettings.mergeCheckSet else RunSettings.mergeCheckNone}",
+        "${RunSettings.atMost} ${draft.maxConcurrentTasks} ${RunSettings.tasksAtATime(draft.maxConcurrentTasks)}",
+    ).joinToString(" · ")
 
     // What still comes to the owner under the Automatic switch.
     const val comesToYou = "Comes to you"

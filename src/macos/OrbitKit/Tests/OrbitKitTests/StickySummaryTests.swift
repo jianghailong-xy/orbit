@@ -109,4 +109,13 @@ final class StickySummaryTests: XCTestCase {
         XCTAssertEqual(opening.label, StickySummary.yourQuestion)
         XCTAssertEqual(opening.text, "\(pasted)\n\nwhat does this mean?")
     }
+
+    /// The iPhone's capsule keeps the arrow and drops "Your question" — the words beside it are the
+    /// person's own — and leaves every card's label as the card has it.
+    func testTheCompactLabelDropsOnlyWhoseQuestionItIs() {
+        XCTAssertEqual(StickySummary.compactLabel(StickySummary.of(text: "部署").label), "↑")
+        for card in ["↑ Task started", "↑ Project started", "↑ Exception item"] {
+            XCTAssertEqual(StickySummary.compactLabel(card), card)
+        }
+    }
 }

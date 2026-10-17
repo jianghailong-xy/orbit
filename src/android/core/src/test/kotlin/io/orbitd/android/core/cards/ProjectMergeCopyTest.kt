@@ -56,6 +56,18 @@ class ProjectMergeCopyTest {
         assertEquals(emptyList<String>() to 2, PromotionCards.taskTitles(candidate("READY")))
     }
 
+    /** The checking card's last line (owner decision 2026-10-15): what a pass leads to, said only while the candidate is CHECKING. */
+    @Test fun theCheckingCardSaysWhatAPassLeadsTo() {
+        assertEquals("Merges on its own when it passes.", PromotionCards.onPassMerges)
+        assertEquals("Asks you when it passes.", PromotionCards.onPassAsks)
+        assertEquals(PromotionCards.onPassMerges, PromotionCards.onPassLine(candidate("CHECKING", extra = ""","onPass":"MERGE"""")))
+        assertEquals(PromotionCards.onPassAsks, PromotionCards.onPassLine(candidate("CHECKING", extra = ""","onPass":"ASK"""")))
+        assertNull("a server older than onPass", PromotionCards.onPassLine(candidate("CHECKING")))
+        assertNull(PromotionCards.onPassLine(candidate("CHECKING", extra = ""","onPass":null""")))
+        assertNull("said only while it checks", PromotionCards.onPassLine(candidate("READY", extra = ""","onPass":"MERGE"""")))
+        assertNull("no candidate read", PromotionCards.onPassLine(null))
+    }
+
     // MARK: the conversation's one line
 
     @Test fun theConversationsLineIsOrangeOnlyWhileItWaitsOnTheReader() {

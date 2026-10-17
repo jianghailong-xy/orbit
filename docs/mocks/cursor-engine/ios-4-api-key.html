@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- Design board iOS 4 (T0, Cursor engine): a Cursor API key on iOS — the API keys list and the key's own page,
+     valid and rejected. iOS adds and edits keys on the web only (ProvidersOverview: "Adding or changing a key
+     happens on the web."). 393 × 852 pt on ../antigravity-accounts/kit.css; drawn from today's
+     InfrastructureSections.swift and DeepSeekKeyPageView (ProviderPoolViews.swift). Android follows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 4 · Cursor API key: the keys list and the key page</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+<style>.warn-t { color: #b35a00; } .ph.dark .warn-t { color: #ff9f0a; }</style>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:1980px">
+  <h1 class="m-h1 zh">iOS 4 · Cursor API key：列表写它只跑 Cursor CLI；点进去是 key 页（能跑什么、最近一次检查）；被 Cursor 拒绝时列表和 key 页都写出来</h1>
+  <p class="m-sub zh">iOS 今天没有厂商画廊，也没有 key 表单：「Adding or changing a key happens on the web.」——本板不新增，加 Cursor key 走 Web 4 的表单。iOS 做三件事：API keys 列表里 Cursor key 写「Auto · Cursor CLI」；点进去有一页（今天只有 DeepSeek key 能点进去，Cursor key 照它的样子）；最近一次 <code>agent models</code> 检查被拒时，列表尾部写橙色「Rejected」，key 页写原因和「Check Again」。连不上 Cursor 时写「Couldn’t check」，不说 key 坏了。Android 跟这张稿。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Infrastructure → API keys，和 Cursor key 页</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>API keys</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>API keys：两把 Cursor key</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Cursor（检查通过）</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Cursor 2（被拒）</div><div id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const listNow = iSection({ header: 'API keys', rows: [
+  keyRow({ brand: 'deepseek', title: 'DeepSeek', subs: ['DeepSeek V4 Pro', 'Claude Code · OpenCode · DeepSeek Harness'], trailing: '¥110.00', chevron: true }),
+  keyRow({ brand: 'gemini', title: 'Gemini', subs: ['Gemini 3.8 Flash', 'Antigravity CLI · OpenCode'] }),
+  keyRow({ brand: 'kimi', title: 'Kimi (Moonshot)', subs: ['Kimi K2.7 Code', 'Kimi Code · OpenCode'] }),
+  keyRow({ brand: 'glm', title: 'Z.AI (GLM)', subs: ['GLM-5.2', 'Claude Code · OpenCode'] }),
+], footer: KEYS_FOOTER });
+const listAfter = iSection({ header: 'API keys', rows: [
+  keyRow({ brand: 'deepseek', title: 'DeepSeek', subs: ['DeepSeek V4 Pro', 'Claude Code · OpenCode · DeepSeek Harness'], trailing: '¥110.00', chevron: true }),
+  keyRow({ brand: 'gemini', title: 'Gemini', subs: ['Gemini 3.8 Flash', 'Antigravity CLI · OpenCode'] }),
+  keyRow({ brand: 'kimi', title: 'Kimi (Moonshot)', subs: ['Kimi K2.7 Code', 'Kimi Code · OpenCode'] }),
+  keyRow({ brand: 'glm', title: 'Z.AI (GLM)', subs: ['GLM-5.2', 'Claude Code · OpenCode'] }),
+  keyRow({ brand: 'cursor', title: 'Cursor', subs: ['Auto', 'Cursor CLI'], chevron: true, id: 'k1' }),
+  keyRow({ brand: 'cursor', title: 'Cursor 2', subs: ['Auto', 'Cursor CLI'], trailing: '<span class="warn-t">Rejected</span>', chevron: true, id: 'k2' }),
+], footer: KEYS_FOOTER });
+document.getElementById('p1').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph1', body: listNow });
+document.getElementById('p2').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph2', body: listAfter });
+
+const keyPage = (label, check, checkFooter, extra = '') =>
+  iSection({ header: 'Works with', id: 'works', rows: [iRow({ mark: iEng('cursor', 26), title: 'Cursor CLI', sub: 'Billed to this key’s Cursor plan', chevron: false })],
+    footer: 'Pick it for a Cursor CLI session in the composer’s model menu → Provider. It runs no other engine.' })
+  + iSection({ header: 'Check', id: 'check', rows: [iKV('Last check', check), ...(extra ? [extra] : [])], footer: checkFooter })
+  + iSection({ header: 'Key', rows: [iKV('Protocol', 'Cursor API'), iKV('Default model', 'Auto'), iKV('Endpoint', 'api2.cursor.sh')],
+    footer: 'Adding or changing a key happens on the web. Turning it off there stops it on Cursor CLI.' });
+document.getElementById('p3').innerHTML = sheetPhone({ title: 'Cursor', id: 'ph3', body: keyPage('Cursor', 'Valid · 4 min ago', 'A runner with Cursor CLI checks the key with Cursor (no request is spent).') });
+document.getElementById('p4').innerHTML = sheetPhone({ title: 'Cursor 2', id: 'ph4', body: keyPage('Cursor 2', '<span class="warn-t">Rejected · 4 min ago</span>',
+  'Cursor said “The provided API key is invalid.” Paste a new key on the web, then check again.', '<div class="r btn" id="again">Check Again</div>') });
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  ring(ph('ph2'), '#k1', 1, 2);
+  ring(ph('ph2'), '#k2', 2, 2);
+  ring(ph('ph3'), '#works', 3, 3);
+  ring(ph('ph3'), '#check', 4, 3);
+  ring(ph('ph4'), '#check', 5, 3);
+});
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>Cursor key 行</b>：默认模型「Auto」，第二行是能跑的 engine——只有「Cursor CLI」。可以点进去（今天只有 DeepSeek key 能点）。'],
+  [2, '<b>被拒</b>：尾部橙色「Rejected」，同 DeepSeek 余额读不到时的「Unavailable」位置。'],
+  [3, '<b>Works with</b>：一行 Cursor CLI，「Billed to this key’s Cursor plan」；footer 写只跑 Cursor CLI。'],
+  [4, '<b>Check</b>：最近一次 <code>agent models</code> 的结果和时间（新增一节）。'],
+  [5, '<b>被拒时</b>：引 Cursor 原话，告诉去 Web 换 key；「Check Again」重新检查。连不上 Cursor 时写「Couldn’t check · 12 min ago」，footer 说是网络，不说 key 坏了。'],
+  ['·', '<b>不新增</b>：iOS 不加厂商画廊和 key 表单（今天就没有；加 key 在 Web 上）。要不要给 iOS 补 key 表单是另一件事，不在本项目范围。'],
+]);
+</script>
+</body>
+</html>

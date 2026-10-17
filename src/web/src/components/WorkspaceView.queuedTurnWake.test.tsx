@@ -240,7 +240,8 @@ async function mountQueue(): Promise<void> {
   });
   await waitForUi(() => {
     expect(mounted().querySelector('.watch-wake')).not.toBeNull();
-    expect(mounted().querySelector('.chat-queued')).not.toBeNull();
+    // The message the reader typed behind it waits in the tray above the composer.
+    expect(mounted().querySelector('.pending-tray-row')).not.toBeNull();
   });
 }
 
@@ -279,16 +280,14 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     expect(line.querySelector('.chat-queued-why')).toBeNull();
     expect([...line.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Withdraw wake']);
 
-    // The message typed behind it is drawn as it always was.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    const bubble = bubbles[0];
-    expect(bubble.className).toBe('chat-msg chat-user chat-queued');
-    expect(bubble.querySelector('.md')?.textContent?.trim()).toBe(TYPED);
-    const meta = bubble.querySelector('.chat-queued-meta')!;
-    expect(meta.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
-    expect(meta.querySelector('.chat-queued-why')).toBeNull();
-    expect([...meta.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
+    // The message typed behind it is the reader's: a row of the tray above the composer, with its
+    // way back.
+    expect(mounted().querySelectorAll('.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
+    expect(rows[0].querySelector('.pending-tray-state')?.textContent).toBe('Queued for next turn');
+    expect(rows[0].querySelector('[aria-label="Withdraw"]')).not.toBeNull();
   });
 
   it('asks before withdrawing it, withdraws only it, and puts none of it in the composer', async () => {
@@ -317,7 +316,7 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     expect(cancelMock).toHaveBeenCalledTimes(1);
     // The watch's words were never the user's to edit and send again.
     expect(composer()?.value).toBe('');
-    expect(mounted().querySelector('.chat-queued')?.textContent).toContain(TYPED);
+    expect(mounted().querySelector('.pending-tray-row')?.textContent).toContain(TYPED);
   });
 
   it('is left out when Stop folds the queue back into the composer', async () => {
@@ -331,7 +330,11 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       // What was typed comes back to be edited and resent; the watch's words do not come with it.
       expect(composer()?.value).toBe(TYPED);
     });
@@ -387,7 +390,11 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       expect(composer()?.value).toBe(TYPED);
     });
   });
@@ -417,9 +424,9 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     expect(steered!.querySelectorAll('a')).toHaveLength(0);
     expect(cancelMock).not.toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-steered-wake');
 
-    // The same Cancel on a message somebody typed still hands it back, so the empty composer above
-    // is the rule and not a Cancel that restores nothing.
-    await click(cancelIn(bubbleSaying(TYPED)));
+    // Withdrawing a message somebody typed — from the tray — still hands it back, so the empty
+    // composer above is the rule and not a Cancel that restores nothing.
+    await click(mounted().querySelector('.pending-tray-row [aria-label="Withdraw"]')!);
     await waitForUi(() => expect(composer()?.value).toBe(TYPED));
   });
 });

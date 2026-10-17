@@ -24,8 +24,8 @@ object BackgroundWakeCard {
     const val outputTail = "Output tail"
     const val expandOutput = "Show full output"
     const val collapseOutput = "Show less"
-    const val sentIntoThisTurn = "Sent into this turn"
-    const val sentIntoThisTurnHere = "Sent into this turn"
+    const val readInThisTurn = "Read in this turn"
+    const val readInThisTurnHere = "Read in this turn"
 
     fun jobs(wake: JsonObject) = wake.objects("jobs")
     fun wakeups(wake: JsonObject) = wake.objects("wakeups")
@@ -97,15 +97,15 @@ object BackgroundWakeCard {
     fun steerState(steer: Boolean, delivery: String?, undelivered: Boolean): String? {
         if (!steer || undelivered || delivery == "failed" || delivery == "unconfirmed") return null
         return when (delivery) {
-            "written" -> "Delivering…"
-            "acknowledged" -> sentIntoThisTurn
+            "written" -> "Waiting to be read"
+            "acknowledged" -> readInThisTurn
             "requeued" -> "Queued for next turn instead"
             else -> "Sending…"
         }
     }
 
     /** The receipt as this card says it: the delivery's own words, the confirmed one included, as iOS and the web say it (bab3256a7). */
-    fun steerReceipt(state: String?) = if (state == sentIntoThisTurn) sentIntoThisTurnHere else state
+    fun steerReceipt(state: String?) = if (state == readInThisTurn) readInThisTurnHere else state
 
     /** "8s", "12m", "2h 5m", "3d" — a span (OrbitKit `WatchProjection.duration`). */
     fun duration(seconds: Long): String {

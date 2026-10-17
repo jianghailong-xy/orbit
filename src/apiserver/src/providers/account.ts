@@ -50,6 +50,7 @@ export const ACCOUNT_CHOICE = {
   claude: 'claudeAccount',
   antigravity: 'antigravityAccount',
   kimi: 'kimiAccount',
+  cursor: 'cursorAccount',
 } as const satisfies Record<AccountEngine, string>;
 
 export const ACCOUNT_PINNED = {
@@ -57,4 +58,5 @@ export const ACCOUNT_PINNED = {
   claude: 'claudeAccountPinned',
   antigravity: 'antigravityAccountPinned',
   kimi: 'kimiAccountPinned',
+  cursor: 'cursorAccountPinned',
 } as const satisfies Record<AccountEngine, string>;

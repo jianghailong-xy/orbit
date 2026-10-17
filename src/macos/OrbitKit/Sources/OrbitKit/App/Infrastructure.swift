@@ -186,12 +186,13 @@ public enum Infrastructure {
     /// accounts; each enabled key under every engine the server says it runs on (`engines`) — a DeepSeek
     /// key under Claude Code, OpenCode and DeepSeek Harness, a Claude subscription token under Claude Code
     /// alone — with the model a session on it starts on there; its pools that can start a session (one
-    /// that is unavailable is in Needs you instead).
+    /// that is unavailable is in Needs you instead). Not an engine these apps don't draw yet
+    /// (`ProviderEngines.appleShowsEngine`).
     public static func engineCards(runners: [Runner], keys: [ConfiguredProvider],
                                    pools: [ProviderPool]) -> [EngineCard] {
         let online = runners.filter { $0.online == true }
         let harness = harnessModel(online)
-        return ProviderEngines.names.map { engine, _ in
+        return ProviderEngines.all.filter(ProviderEngines.appleShowsEngine).map { engine in
             // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
             let machines = engine == "dsh" ? [] : online.compactMap { runner -> String? in
                 let count = logins(runner, engine)

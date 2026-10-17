@@ -107,7 +107,8 @@ Options:
   --model MODEL
   --engine ENGINE          The CLI that runs the session, and the session's for life: claude
                            (Claude Code), codex (Codex), kimi (Kimi Code), antigravity
-                           (Antigravity CLI), opencode (OpenCode) or dsh (DeepSeek Harness)
+                           (Antigravity CLI), opencode (OpenCode), dsh (DeepSeek Harness)
+                           or cursor (Cursor CLI)
   --provider SLUG          Where its credential comes from: an engine's own sign-in on the
                            runner (its name), opencode (OpenCode's own configuration), an
                            account pool or an API key ('orbit provider list'). Named alone, it
@@ -717,11 +718,12 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 		return fmt.Errorf("no transcript found for Claude session %s on this machine", claudeID)
 	}
 	// A previous import can leave a copy under a dead checkout; try candidates until one
-	// parses, and report the last refusal when none does.
+	// parses, and report the last refusal when none does. A line the parse skips goes
+	// unreported here: the runner's import step logs it, and stdout is this command's output.
 	var sourceCwd string
 	var lastErr error
 	for _, cand := range matches {
-		cwd, _, _, err := parseImportTranscript(cand)
+		cwd, _, _, err := parseImportTranscript(cand, nil)
 		if err != nil {
 			lastErr = err
 			continue

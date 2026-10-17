@@ -1333,8 +1333,9 @@ func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T)
 // cannot see: main moved after the check. An owner-confirmed landing re-checks the new tip and
 // merges it (M5) — that is what the owner confirmed. An automatic one lands NOTHING: no merge, no
 // check, no push, no upstreamMoved report (which would move the promotion to RECHECKING, a state
-// whose card promises it lands on its own), and READY, so the owner is asked. The owner-confirmed
-// run of the very same job is the control: it is what the Automatic mark is the difference from.
+// whose card promises it lands on its own), and READY, so the control plane checks it again on the
+// new main or asks the owner. The owner-confirmed run of the very same job is the control: it is
+// what the Automatic mark is the difference from.
 func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 	t.Parallel()
 	r := newIntegrationRepo(t)

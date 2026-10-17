@@ -68,11 +68,14 @@ test('Auto and Bypass are honored by supported runtimes; DeepSeek Harness honors
     [AgentProvider.OPENCODE]: { u: 'allow', h: true },
     [AgentProvider.ANTIGRAVITY]: { u: 'allow', h: true },
     [AgentProvider.DSH]: { u: 'allow', h: true },
+    // Cursor CLI's Bypass is `--force`; its Auto is refused (CURSOR_PERMISSION_MODES).
+    [AgentProvider.CURSOR]: { u: 'allow', h: true },
   };
   for (const mode of [PermissionMode.AUTO, PermissionMode.BYPASS]) {
     for (const provider of Object.values(AgentProvider)) {
       const semantics = derivePermissionSemantics(provider, mode);
-      const want = provider === AgentProvider.DSH && mode === PermissionMode.BYPASS
+      const want = (provider === AgentProvider.DSH && mode === PermissionMode.BYPASS)
+        || (provider === AgentProvider.CURSOR && mode === PermissionMode.AUTO)
         ? { u: 'deny', h: false }
         : expected[provider];
       assert.deepEqual({ u: semantics.unapproved, h: semantics.honored }, want, `${provider}/${mode}`);

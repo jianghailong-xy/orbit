@@ -354,7 +354,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     // The card was drawn from a payload that names POINTER, and the card says so.
     expect(container.innerHTML).toContain('Coordinating Website Revamp');
 
-    await press(/Reply to coordinator/);
+    await press(/^Open coordinator$/);
 
     // One write, to the resolve-or-create door, with the empty body that lets the server pick.
     expect(posts).toHaveLength(1);
@@ -490,7 +490,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
       Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w1' }),
     );
     await mount(section());
-    await press(/Reply to coordinator/);
+    await press(/^Open coordinator$/);
 
     expect(landedOn).toBe(`/sessions/${SERVED}`);
     // Said somewhere that survives the navigation — the page it was pressed on is gone.
@@ -504,7 +504,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
       Promise.resolve({ sessionId: SERVED, created: false, workspaceId: 'w1' }),
     );
     await mount(section());
-    await press(/Reply to coordinator/);
+    await press(/^Open coordinator$/);
 
     expect(landedOn).toBe(`/sessions/${SERVED}`);
     expect(document.body.textContent ?? '').not.toMatch(/did not come with it/i);
@@ -547,7 +547,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
       ),
     );
     await mount(section());
-    await press(/Reply to coordinator/);
+    await press(/^Open coordinator$/);
 
     // The server's own sentence, and the write it names...
     expect(container.textContent).toMatch(/rebind this project/i);
@@ -564,7 +564,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     // is exactly the right thing to offer — which is what makes the case above a decision.
     serve(liveStatus(), () => Promise.reject(new ApiError('Service Unavailable', 503)));
     await mount(section());
-    await press(/Reply to coordinator/);
+    await press(/^Open coordinator$/);
 
     expect(container.textContent).toContain('Service Unavailable');
     expect(buttonLabels().some((l) => /^Retry$/i.test(l))).toBe(true);

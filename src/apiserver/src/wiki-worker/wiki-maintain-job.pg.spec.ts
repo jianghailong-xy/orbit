@@ -103,6 +103,12 @@
  *  29. a record that arrives between two page reads is read with its session — the run asks about it once, with the newest read,
  *      where the two differing asks used to be refused as asked before with another call and fail the whole run — and the fact
  *      that read commits waits past the cursor, for the next run.
+ *  30. an anchor check whose write takes seconds (2026-10-16 and 2026-10-17, the canary's runs 6e62f826 and 34cadf93: a
+ *      statement of one entry's transaction ran past Prisma's 5 s, the `wikiEntry.findFirst` after it found the transaction
+ *      expired — P2028, 6674 and 6002 ms — and each run failed as content): an UPDATE held six seconds is recorded inside
+ *      the changeset's budget the transaction has now; one held past that budget is P2028, which is the platform's — the job
+ *      is queued again, the run not ended, nothing counted — and the replay checks only the entries the timeout left
+ *      unchecked.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -2590,6 +2596,135 @@ test('a refusal of the run\'s own ends it failed, counts it against the space an
   assert.ok(run.endedAt);
   const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
   assert.equal(cursor.consecutiveFailures, 1, 'a failure of the work is counted against the space');
+});
+
+// ── An anchor check's write that takes seconds (2026-10-16 and 2026-10-17, P2028) ─────────────
+
+/**
+ * Hold one entry's row from a connection of the case's own — FOR SHARE, which the plain UPDATE of an anchor check
+ * waits on — until `ms` after that UPDATE begins to wait, then let it go: one statement of the entry's anchor-check
+ * transaction takes `ms`. That is what the canary's two failed runs met (6e62f826 at 16:37:35, 34cadf93 at 02:38:31):
+ * one statement of one entry's transaction ran past Prisma's 5 s, and the next one, `wikiEntry.findFirst`, found the
+ * transaction expired (5000 ms, 6674 and 6002 ms passed). The lock is the controllable way to make that statement
+ * slow here; production logged no lock wait. `waited` answers how long the UPDATE was held.
+ */
+async function holdEntryWrite(entryId: string, ms: number): Promise<{ waited: Promise<number>; release: () => Promise<void> }> {
+  const holder = new Client({ connectionString: URL_, connectionTimeoutMillis: 5_000 });
+  const watcher = new Client({ connectionString: URL_, connectionTimeoutMillis: 5_000 });
+  await holder.connect();
+  await watcher.connect();
+  const { rows: [{ pid }] } = await holder.query<{ pid: number }>('SELECT pg_backend_pid() AS "pid"');
+  await holder.query('BEGIN');
+  await holder.query('SELECT 1 FROM "wiki_entry" WHERE "id" = $1 FOR SHARE', [entryId]);
+  let released = false;
+  const release = async (): Promise<void> => {
+    if (released) return;
+    released = true;
+    await holder.query('ROLLBACK').catch(() => undefined);
+    await holder.end().catch(() => undefined);
+    await watcher.end().catch(() => undefined);
+  };
+  const waited = (async () => {
+    while (!released) {
+      const { rows: [row] } = await watcher.query<{ n: number }>(
+        'SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids("pid"))', [pid],
+      );
+      if (row.n > 0) {
+        const from = Date.now();
+        await delay(ms);
+        await release();
+        return Date.now() - from;
+      }
+      await delay(20);
+    }
+    return -1;
+  })().catch(() => -1);
+  return { waited, release };
+}
+
+/** Three entries' anchors: one path each, which the runner this spec plays finds verified. */
+const THREE_PATHS = [1, 2, 3].map(() => [{ type: 'path', path: ANCHOR_REPO.file }]);
+
+test('an anchor check whose write waits six seconds is recorded: its transaction has a changeset\'s budget, not Prisma\'s 5 s (the canary\'s runs 6e62f826 and 34cadf93)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the anchors step is what this case is about.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  const ids = await anchoredEntries(h, fx.spaceId, '0b5e5000', THREE_PATHS);
+  const hold = await holdEntryWrite(ids[1]!, 6_000);
+  try {
+    // Rounds enough for the hold and the run around it on a fast host, where a round is a few tens of milliseconds.
+    await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { checkAnchor: checkAnchorAgainstRepo }, 2_000);
+  } finally {
+    await hold.release();
+  }
+  const waited = await hold.waited;
+  assert.ok(waited > 5_000, `the entry's UPDATE was held ${waited} ms: past the 5 s Prisma gives a transaction by default`);
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchor check's transaction expired: ${job.error ?? ''}`);
+  for (const id of ids) {
+    const entry = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id }, select: { anchorState: true } });
+    assert.equal(entry.anchorState, 'verified', `entry ${id} is checked`);
+  }
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  assert.deepEqual((run.report as { anchors?: unknown }).anchors, { entries: 3, changed: 0, missing: 0, skipped: 0 });
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(cursor.consecutiveFailures, 0, 'nothing is counted against the space');
+});
+
+test('an anchor check held past its budget times out as P2028, which is the platform\'s: the job is queued again, nothing is counted, and the replay checks what is left', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  const ids = await anchoredEntries(h, fx.spaceId, '0b5e5001', THREE_PATHS);
+  const play: RunnerPlay = { checkAnchor: checkAnchorAgainstRepo };
+  const which = worker(h);
+  // Past even a changeset's budget: the transaction is closed under the check, and the next statement says so.
+  const hold = await holdEntryWrite(ids[1]!, 16_000);
+  try {
+    // One claim and no other, so the row is read as the timed-out attempt left it, before a pass takes it again.
+    await which.executor.runOnce();
+    const deadline = Date.now() + 90_000;
+    while ((await jobOf(h, fx.jobId)).state === 'running') {
+      assert.ok(Date.now() < deadline, 'the attempt did not end');
+      await which.queue.runOnce();
+      await runRepoOps(h, play);
+      await delay(25);
+    }
+  } finally {
+    await hold.release();
+  }
+  const waited = await hold.waited;
+  assert.ok(waited > 15_000, `the entry's UPDATE was held ${waited} ms: past the transaction's 15 s`);
+
+  const first = await jobAfterStop(h, fx.jobId);
+  assert.equal(first.state, 'queued', `a transaction the database closed under the run is the platform's to retry: ${first.error ?? ''}`);
+  assert.equal(first.failure_kind, 'infra');
+  assert.equal(first.attempts, 1, 'the attempt is counted like any infra failure, and backed off');
+  assert.match(first.error ?? '', /^anchors: [\s\S]*wikiEntry\.findFirst\(\)[\s\S]*expired transaction[\s\S]*timeout for this transaction was 15000 ms/u);
+  assert.ok(runLog.some((line) => line.startsWith('stopped at anchors (infra): ')), runLog.join('\n'));
+  const open = await runRow(h, fx.runId);
+  assert.deepEqual({ outcome: open.outcome, endedAt: open.endedAt, failureKind: open.failureKind }, { outcome: null, endedAt: null, failureKind: null }, 'the run is not ended');
+  const before = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(before.consecutiveFailures, 0, 'an infrastructure failure is not counted against the space');
+  // The entry before the held one committed its own transaction; the held one rolled back whole, and the one after it was never reached.
+  const states = await Promise.all(ids.map(async (id) => (await h.prisma.wikiEntry.findFirstOrThrow({ where: { id }, select: { anchorState: true } })).anchorState));
+  assert.deepEqual(states, ['verified', 'unchecked', 'unchecked']);
+
+  // The replay: the entry checked at this commit is left alone, the other two are checked, and the report counts each once.
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), play);
+  const job = await jobAfterStop(h, fx.jobId);
+  assert.deepEqual({ state: job.state, attempts: job.attempts }, { state: 'succeeded', attempts: 1 }, job.error ?? '');
+  assert.equal(await anchorsSent(h, fx.jobId), 3 + 2, 'the replay sends the two entries the timeout left unchecked, and not the one it had recorded');
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  assert.deepEqual((run.report as { anchors?: unknown }).anchors, { entries: 3, changed: 0, missing: 0, skipped: 0 });
+  const ended = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(ended.consecutiveFailures, 0);
 });
 
 // ── Stopping (2026-10-09) ───────────────────────────────────────────────────────────────────────

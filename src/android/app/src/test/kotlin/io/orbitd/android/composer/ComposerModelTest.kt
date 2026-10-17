@@ -633,4 +633,68 @@ class ComposerModelTest {
         assertNull(draft.state.value.switchNote)
         assertEquals("Applies when this session starts.", draft.state.value.notice)
     }
+
+    /** Send's other way while a turn runs (docs/mocks/steer-tray): queued for the next turn, it says so; an ordinary send leaves where it
+     * goes to the server, as every send before it did. */
+    @Test fun queueingForTheNextTurnSaysSoAndASendOtherwiseLeavesItToTheServer() = runTest {
+        val rig = Rig(this)
+        rig.detail = """{"id":"s","status":"RUNNING","runState":"RUNNING","assignedRunnerId":"r","provider":"claude","capabilities":{"canSend":true,"canResume":false}}"""
+        val model = rig.start()
+        model.edit("then push it to main", 0, 0); model.send(queueForNextTurn = true); runCurrent()
+        model.edit("and tag it", 0, 0); model.send(); runCurrent()
+        val bodies = rig.sends.values.map { Wire.json.parseToJsonElement(it).jsonObject }
+        assertEquals("NEXT_TURN", bodies.single { it.text("content") == "then push it to main" }.text("intent"))
+        assertNull("no intent goes out unless asked for", bodies.single { it.text("content") == "and tag it" }["intent"])
+    }
+
+    /** The tray's Withdraw: the server takes the turn back, its words return under whatever the box holds, and the row is gone before
+     * the listing says so. */
+    @Test fun aWithdrawnMessagesWordsComeBackUnderTheDraft() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.withdraw("t-1", "then push it to main", steer = false, engine = "claude"); runCurrent()
+        assertEquals("then push it to main", model.state.value.draft.text)
+        model.edit("a draft", 7, 7)
+        model.withdraw("t-2", "!npm test", steer = true, engine = "claude"); runCurrent()
+        assertEquals("a draft\n\n!npm test", model.state.value.draft.text)
+        assertEquals("the cursor after them", "a draft\n\n!npm test".length, model.state.value.draft.selectionStart)
+        assertEquals(listOf(listOf("sessions", "s", "turns", "t-1"), listOf("sessions", "s", "turns", "t-2")),
+            rig.calls.filter { it.method == HttpMethod.DELETE }.map { it.path })
+        assertEquals(listOf("t-1", "t-2").map { io.orbitd.android.navigation.ObjectId.canonical(it) ?: it }.toSet(), model.state.value.withdrawn)
+        assertTrue(model.state.value.withdrawing.isEmpty())
+        // A message of pictures alone hands nothing back, and a second press on one taken back asks nothing.
+        model.withdraw("t-3", null, steer = false, engine = "claude"); model.withdraw("t-3", null, steer = false, engine = "claude"); runCurrent()
+        assertEquals("a draft\n\n!npm test", model.state.value.draft.text)
+        assertEquals(3, rig.calls.count { it.method == HttpMethod.DELETE })
+        // The words were kept, as everything the box holds is.
+        model.close(); assertEquals("a draft\n\n!npm test", rig.cold().state.value.draft.text)
+    }
+
+    /** Put back in the composer: a steer that was not delivered gives its words back under whatever the box holds, and nothing is sent.
+     * One known only from the server's receipt is discarded as well — once, however often it is pressed — and gone before the listing
+     * says so. */
+    @Test fun aSteerPutBackComesBackUnderTheDraftAndSendsNothing() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.edit("a draft", 7, 7)
+        model.putBack("then push it to main"); runCurrent()
+        assertEquals("a draft\n\nthen push it to main", model.state.value.draft.text)
+        assertEquals("the cursor after them", "a draft\n\nthen push it to main".length, model.state.value.draft.selectionStart)
+        assertTrue("nothing sent, nothing discarded", rig.calls.none { it.method == HttpMethod.DELETE || it.path.last() in setOf("turns", "resume") })
+        model.putBack("and tag the release", discard = "t-9"); model.putBack("and tag the release", discard = "t-9"); runCurrent()
+        assertEquals("a draft\n\nthen push it to main\n\nand tag the release", model.state.value.draft.text)
+        assertEquals(listOf(listOf("sessions", "s", "turns", "t-9")), rig.calls.filter { it.method == HttpMethod.DELETE }.map { it.path })
+        assertEquals(setOf(io.orbitd.android.navigation.ObjectId.canonical("t-9") ?: "t-9"), model.state.value.withdrawn)
+        assertTrue(model.state.value.withdrawing.isEmpty())
+        assertTrue("still nothing sent", rig.calls.none { it.path.last() in setOf("turns", "resume") })
+        // The words were kept, as everything the box holds is.
+        model.close(); assertEquals("a draft\n\nthen push it to main\n\nand tag the release", rig.cold().state.value.draft.text)
+    }
+
+    /** The tray's Steer: the message goes into the running turn, and is drawn on its way there until the listing says so. */
+    @Test fun aSteeredMessageIsOnItsWayIntoTheTurnUntilTheListingSaysSo() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.steer("t-4"); runCurrent()
+        assertEquals(1, rig.calls.count { it.method == HttpMethod.POST && it.path == listOf("sessions", "s", "turns", "t-4", "steer") })
+        assertEquals(setOf(io.orbitd.android.navigation.ObjectId.canonical("t-4") ?: "t-4"), model.state.value.steered)
+        assertTrue(model.state.value.steering.isEmpty())
+    }
 }

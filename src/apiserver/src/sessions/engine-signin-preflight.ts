@@ -1,5 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import {
+  AgentProvider,
+  ENGINE_CLI_NAMES,
   ENGINE_SIGNED_OUT,
   type EngineSignedOutRefusal,
   type LoginEngine,
@@ -18,11 +20,14 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /** What each CLI's own sign-in costs, for a machine whose owner has a terminal on it. Antigravity
- *  has none: `agy` signed in at a terminal keeps that login where Orbit's sessions never look. */
-const LOGIN_COMMANDS: Record<Exclude<LoginEngine, 'antigravity'>, string> = {
+ *  has none: `agy` signed in at a terminal keeps that login where Orbit's sessions never look. Nor has
+ *  Cursor CLI yet: where its sessions read a login is still to be decided (contract §8.4, D4), and its
+ *  sign-in is not judged here (LOGIN_ENGINES). */
+const LOGIN_COMMANDS: Record<Exclude<LoginEngine, 'antigravity' | 'cursor'>, string> = {
   claude: 'claude auth login',
   codex: 'codex login --device-auth',
   kimi: 'kimi login',
@@ -43,6 +48,8 @@ const CREDENTIAL_ENV_KEYS: Record<LoginEngine, { any: string[] } | { all: string
   codex: { any: ['OPENAI_API_KEY', 'OPENAI_BASE_URL'] },
   kimi: { all: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY'] },
   antigravity: { any: ['GEMINI_API_KEY'] },
+  // Either starts a session without any stored login (docs/cursor-runtime-contract.md §2.3).
+  cursor: { any: ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN'] },
 };
 
 /** The runner fields this reads — a subset of the Prisma row. */
@@ -193,15 +200,16 @@ export function signedOutEngineRefusal(args: {
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;
   /** The accounts this session's workspace pins it to, one per engine that keeps accounts
-   *  (Workspace.codexAccount / claudeAccount / antigravityAccount / kimiAccount). Absent or null is
-   *  Default. */
+   *  (Workspace.codexAccount / claudeAccount / antigravityAccount / kimiAccount / cursorAccount).
+   *  Absent or null is Default. */
   accounts?: WorkspaceAccountChoices | null;
   runner: EnginePreflightRunner;
   nowMs?: number;
 }): string | null {
   if (args.bringsOwnCredentials) return null;
   const runtime = args.runtime;
-  if (!isLoginEngine(runtime)) return null;
+  // Cursor CLI's sign-in is not one a runner reports yet, so nothing here can judge it.
+  if (!isLoginEngine(runtime) || runtime === 'cursor') return null;
   if (bringsOwnEnvCredential(runtime, args.workspaceEnv)) return null;
 
   const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;

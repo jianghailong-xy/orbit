@@ -1,0 +1,30 @@
+{
+ "name": "permission-auto-review",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "startedAt": "2026-10-16T17:47:22.185Z",
+ "finishedAt": "2026-10-16T17:48:10.412Z",
+ "passed": false,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 16,
+   "at": "2026-10-16T17:47:31.603Z",
+   "note": "--auto-review: write/shell/mcp/fetch"
+  }
+ ],
+ "protocol": "protocol/permission-auto-review.ndjson",
+ "protocolLines": 156,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "scenario ran to completion",
+   "ok": false,
+   "detail": "Error: no such table: meta |     at ScenarioContext.storeBlobs (file://<SCRIPTS>/lib/harness.mjs:181:23) |     at Object.run (file://<SCRIPTS>/scenarios/real.mjs:350:25) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {}
+}

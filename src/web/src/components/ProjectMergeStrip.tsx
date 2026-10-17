@@ -31,6 +31,7 @@ import {
   promotionBranchLine,
   promotionChecksSummary,
   promotionMergingStatus,
+  promotionOnPassLine,
   promotionPageCounts,
   promotionPageTitle,
   promotionTaskTitles,
@@ -151,10 +152,13 @@ export function ProjectMergeStrip({
   const press = (door: 'confirm' | 'decline' | 'cancel'): void => {
     if (current) decide.mutate({ door, candidate: current });
   };
+  // What the check running now leads to: the Automatic setting's merge, or the asking card.
+  const onPass = shape === 'checking' ? promotionOnPassLine(current) : null;
 
   return (
     <div className={`session-project-merge is-${shape}`} data-shape={shape}>
       {shape === 'checking' ? landing : null}
+      {onPass ? <div className="session-project-merge-note">{onPass}</div> : null}
       {shape === 'asking' && current ? (
         <>
           <div className="session-project-merge-head">

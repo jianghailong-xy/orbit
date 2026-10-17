@@ -34,6 +34,10 @@ const (
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
+	// This runner's claude loop takes a `withdraw` turn: it asks the CLI to drop a steer it has
+	// not read yet and answers with what the CLI said (claude_withdraw.go). Without it the control
+	// plane refuses every withdrawal of a steer this runner holds, as it always has.
+	sessionClaudeSteerWithdrawV1 = "session-claude-steer-withdraw-v1"
 	// These runtimes expose an authoritative history-compaction boundary. The control plane may
 	// therefore attach full project-coordinator context once per engine/compaction epoch instead
 	// of spending it on every user message. Kimi/OpenCode intentionally do not claim this yet.
@@ -74,6 +78,7 @@ func init() {
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		sessionCurrentWorkRoutingV1,
+		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,
@@ -97,6 +102,7 @@ func init() {
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		cursorKeyCheckCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -238,6 +244,7 @@ func isLeaseOwnershipError(err error) bool {
 // request, so the heartbeat persists it as the provider:<name> capabilities the dsh gate also reads.
 // It states protocol support only: whether dsh is installed on this machine is its health report's
 // (dsh_health.go), and a session started without it fails with that report's repair, not as Claude.
+// Cursor CLI is added to it only while this runner can run its sessions (supportedProvidersHeader).
 const runnerSupportedProviders = "claude,codex,opencode,antigravity,dsh"
 
 func NewTransport(baseURL, token string) *Transport {
@@ -293,7 +300,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
 	req.Header.Set(runnerOSHeader, runtime.GOOS)
-	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
+	req.Header.Set("X-Orbit-Supported-Providers", supportedProvidersHeader())
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
 	req.Header.Set(runnerWriteContractDigestHeader, runnerWriteContractDigest)
@@ -731,6 +738,19 @@ func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*Impo
 // the caller's to log, and the session keeps the title it has.
 func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/naming", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheck reports what `agent models` answered when asked with the Cursor API key a session was
+// dispatched with (cursor_launch.go checkCursorSessionKey), which the control plane keeps on the key. The
+// key goes by its fingerprint only.
+func (t *Transport) cursorKeyCheck(sessionID string, b CursorKeyCheckReport) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/cursor-key-check", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheckResult answers a heartbeat-delivered CursorKeyCheckCommand: what Cursor said of the key,
+// by the check it answers and the key's fingerprint.
+func (t *Transport) cursorKeyCheckResult(b CursorKeyCheckResult) error {
+	return t.do(nil, "POST", "/runner/cursor-key-check-result", b, nil, 15*time.Second)
 }
 
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code

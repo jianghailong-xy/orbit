@@ -572,6 +572,50 @@ button.toast--pill:focus-visible {
   }
 }
 
+/* ---- Viewing Orbit as another user (ImpersonationBanner) ---- */
+/* A band over every page while an administrator looks at another user's Orbit. Everything sized to
+   the viewport is shortened by its height rather than drawn under it, so the band hides nothing. */
+:root:has(.impersonation-banner) {
+  --impersonation-bar: 36px;
+  --app-vh: calc(100svh - var(--impersonation-bar));
+}
+.impersonation-banner {
+  box-sizing: border-box;
+  height: var(--impersonation-bar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.impersonation-banner-text {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+.impersonation-banner-prefix {
+  flex: none;
+  margin-right: 0.3em;
+}
+.impersonation-banner-who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.impersonation-banner-left {
+  flex: none;
+  margin-left: 0.3em;
+}
+@media (max-width: 480px) {
+  .impersonation-banner-prefix {
+    display: none;
+  }
+}
+
 /* ---- App shell: side nav | main region (master/detail) ---- */
 .app-shell {
   display: flex;
@@ -6225,6 +6269,231 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-box-shell:has(.composer-model-chip[data-popup-open], .orbit-select[data-open]) {
   border-color: var(--error);
 }
+/* The messages nothing has read yet (PendingTray): a card tucked behind the composer's top edge,
+   one row each (docs/mocks/steer-tray). 18px in from the composer's sides with 16px corners, its
+   foot runs 22px under the composer — positioned and later in the page, so drawn over it — and the
+   two read as one stack. Four rows show; more scroll inside it, and an opened row may take more. */
+.pending-tray {
+  position: relative;
+  margin: 0 18px -22px;
+  padding: 3px 0 22px;
+  max-height: calc(4 * 42px + 25px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  background: var(--bg-raised);
+}
+.pending-tray:has(.pending-tray-text.is-open) {
+  max-height: 50vh;
+}
+.pending-tray-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 8px 0 14px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-1);
+}
+.pending-tray-row + .pending-tray-row {
+  border-top: 1px solid var(--border-subtle);
+}
+/* Where it is going: blue ↳ into the turn running now, grey ≡ for the next one. */
+.pending-tray-icon {
+  flex: none;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+}
+.pending-tray-icon.is-current {
+  color: var(--brand);
+}
+.pending-tray-icon svg,
+.pending-tray-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.pending-tray .orbit-image {
+  flex: none;
+  display: inline-flex;
+  border-radius: 6px;
+}
+.pending-tray .orbit-image-cover {
+  display: none;
+}
+/* Under the Image component's own `.orbit-image .orbit-image-img`, which fills its box's width. */
+.pending-tray-thumb,
+.pending-tray .orbit-image .pending-tray-thumb {
+  flex: none;
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  object-fit: cover;
+  object-position: left top;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.pending-tray-thumb.chat-image-loading {
+  width: 26px;
+  height: 26px;
+  background: var(--fill-muted);
+}
+.pending-tray-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* The words on one line; pressed, they open in place. */
+.pending-tray-text {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+.pending-tray-text[aria-expanded] {
+  cursor: pointer;
+}
+.pending-tray-text.is-open {
+  padding: 8px 0;
+  max-height: 30vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pending-tray-text.is-files {
+  color: var(--text-2);
+}
+/* A queued `!cmd`, as the queue has always drawn one (.chat-queued-cmd). */
+.pending-tray-text.is-shell {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  color: var(--error);
+}
+.pending-tray-state {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pending-tray-actions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.pending-tray-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pending-tray-btn.is-icon {
+  width: 28px;
+  padding: 0;
+  color: var(--text-3);
+}
+.pending-tray-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.pending-tray-btn:focus-visible,
+.pending-tray-text:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+/* A press is out for this row (Withdrawing…, or a Steer on its way): dimmed, nothing to press. */
+.pending-tray-row.is-busy .pending-tray-icon,
+.pending-tray-row.is-busy .pending-tray-text,
+.pending-tray-row.is-busy .orbit-image {
+  opacity: 0.5;
+}
+/* Phone: the state goes under the words, and every target is a finger's 36px. */
+@media (max-width: 600px) {
+  .pending-tray {
+    margin: 0 12px -22px;
+  }
+  .pending-tray-row {
+    min-height: 50px;
+    padding: 4px 4px 4px 12px;
+    gap: 9px;
+  }
+  .pending-tray-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+  }
+  .pending-tray-btn {
+    height: 36px;
+  }
+  .pending-tray-btn.is-icon {
+    width: 36px;
+  }
+}
+/* Send, which a turn in progress lets be held for the other way to send (the queue offer). Held on a
+   phone it must not select or call up the system's own menu instead. */
+.composer-send-hold {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.composer-send-hold .composer-send {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.composer-queue-offer {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 24px rgba(31, 35, 41, 0.12);
+}
+.composer-queue-offer button {
+  display: block;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.composer-queue-offer button:hover,
+.composer-queue-offer button:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+}
 /* Drop-to-upload hint: covers the whole session pane while files are dragged over it. Sits
    inset from the pane edges with a translucent scrim so the conversation still shows through. */
 .workspace-dropzone {
@@ -7404,6 +7673,14 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-3);
+}
+/* The way to take a steer back sits in that same 12px line. On a touch screen it keeps its size
+   and takes the height a finger needs; the margin gives the padding back, so the line stays put. */
+@media (hover: none) {
+  .chat-steer-state .chat-undelivered-retry {
+    padding: 8px 0;
+    margin: -8px 0 -8px 8px;
+  }
 }
 .chat-copy {
   display: inline-flex;
@@ -10195,6 +10472,86 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
   color: var(--text-2);
   font-size: 13px;
+}
+/* The owner's answer handed to the coordinator (components/OwnerAnswerLine.tsx): the same pill, saying
+   the same thing, opening to the words the agent read. Dashed while it still waits on the queue. */
+.owner-answer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.owner-answer-fold {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.owner-answer-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 6px auto;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 13px;
+  list-style: none;
+  cursor: pointer;
+}
+.owner-answer-line::-webkit-details-marker {
+  display: none;
+}
+.owner-answer-line:focus-visible {
+  outline: 2px solid var(--orbit-focus-color);
+  outline-offset: 2px;
+}
+.owner-answer.is-queued .owner-answer-line {
+  border: 1px dashed var(--border);
+}
+.owner-answer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.owner-answer-chev {
+  flex: none;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+.owner-answer-fold[open] .owner-answer-chev {
+  transform: rotate(90deg);
+}
+.owner-answer-told {
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.owner-answer-told-head {
+  color: var(--text-3);
+}
+.owner-answer-told pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.owner-answer-undelivered {
+  color: var(--warning);
+  font-size: 12px;
+}
+.owner-answer-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 2px;
 }
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
@@ -14149,10 +14506,10 @@ button.chat-jump-start:hover {
     touch-action: pan-y;
   }
 
-  /* Fixed top bar carrying the drawer toggle. */
+  /* Fixed top bar carrying the drawer toggle, under the band while one is shown. */
   .app-topbar {
     position: fixed;
-    top: 0;
+    top: var(--impersonation-bar, 0px);
     left: 0;
     right: 0;
     height: 48px;
@@ -14190,7 +14547,7 @@ button.chat-jump-start:hover {
      region fills the full width and the page stops overflowing sideways. */
   .app-nav {
     position: fixed;
-    top: 0;
+    top: var(--impersonation-bar, 0px);
     left: 0;
     bottom: 0;
     z-index: 60;
@@ -20228,19 +20585,176 @@ div.landing-jobs-open {
 .admin-signin-error {
   color: var(--error);
 }
-.admin-signin-badges {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* Admin → Users: one row an account — who, how they sign in, whether they can, when they last used
+   Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
+   (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
+   whatever the side nav's width: Created first, then Sign-in, Status and Last active. */
+.admin-users-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-.admin-users-created {
+.admin-users-head .page-title {
+  margin: 0;
+}
+.admin-users-sub {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.admin-users-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-users-search {
+  width: 240px;
+}
+.admin-users-frame {
+  container: admin-users / inline-size;
+}
+.admin-users-table thead th {
+  padding: 10px 12px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.admin-users-table thead th::before {
+  display: none;
+}
+.admin-users-table td {
+  padding: 12px;
+  vertical-align: middle;
+}
+.admin-users-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.admin-users-who > .orbit-avatar {
+  flex: none;
+}
+.admin-users-who-text {
+  min-width: 0;
+  max-width: 280px;
+}
+.admin-users-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-weight: 500;
+  line-height: 20px;
+}
+.admin-users-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-users-email {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-users-signin,
+.admin-users-active,
+.admin-users-table td.admin-users-col-created {
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.admin-users-pending {
+  color: var(--warning);
+  white-space: nowrap;
+}
+.admin-users-quiet {
+  color: var(--text-4);
+}
+.admin-users-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.admin-users-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-solid);
+}
+.admin-users-status-off {
+  color: var(--error);
+}
+.admin-users-status-off::before {
+  background: var(--error);
+}
+.admin-users-table .admin-users-col-actions {
+  width: 1%;
+  text-align: right;
   white-space: nowrap;
 }
 .admin-user-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px;
+}
+/* A disabled account reads as set aside; its Enable and menu do not. */
+.admin-users-off .admin-users-who,
+.admin-users-off .admin-users-signin,
+.admin-users-off .admin-users-active,
+.admin-users-table .admin-users-off td.admin-users-col-created {
+  opacity: 0.55;
+}
+.admin-users-table td.admin-users-none {
+  padding: 32px 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+/* Each step is the width the columns still shown need at most (a 280px account, its widest text in
+   every other column, Enable or View as beside the menu), with some to spare. */
+@container admin-users (max-width: 929px) {
+  .admin-users-table .admin-users-col-created {
+    display: none;
+  }
+}
+@container admin-users (max-width: 819px) {
+  .admin-users-table .admin-users-col-signin {
+    display: none;
+  }
+}
+@container admin-users (max-width: 679px) {
+  .admin-users-table .admin-users-col-status {
+    display: none;
+  }
+}
+@container admin-users (max-width: 589px) {
+  .admin-users-table .admin-users-col-active {
+    display: none;
+  }
+}
+@container admin-users (max-width: 479px) {
+  .admin-users-who-text {
+    max-width: 200px;
+  }
+}
+@media (max-width: 768px) {
+  .admin-users-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-users-search {
+    flex: 1;
+    width: auto;
+  }
 }
 /* Add user: the fields stacked 8px apart. */
 .admin-user-form {
@@ -20925,13 +21439,18 @@ div.landing-jobs-open {
   flex: none;
   font-size: 12px;
 }
+/* The label hugs what the line says — the native row's HStack has no Spacer either. On auto margin it
+   floated to the trailing edge, a thousand pixels from the job it names on a wide window, reading as a
+   column of its own; hover brightens it a step, with the row's background under the pointer. */
 .bgwake-details-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  margin-left: auto;
   font-size: 12px;
+}
+.bgwake-row:hover .bgwake-details-label {
+  color: var(--text-2);
 }
 .bgwake-caret {
   flex: none;
@@ -23038,7 +23557,7 @@ button.project-open-item-action:disabled {
 .wk-toc-sep { height: 1px; background: var(--border-subtle); margin: 8px 8px 0; }
 
 .wk-contents-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, .4); }
-.wk-contents { position: fixed; top: 0; left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
+.wk-contents { position: fixed; top: var(--impersonation-bar, 0px); left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
                display: flex; flex-direction: column; background: var(--bg-raised); box-shadow: 2px 0 16px rgba(0, 0, 0, .18); }
 .wk-contents-h { display: flex; align-items: center; gap: 8px; height: 52px; flex: none; padding: 0 8px 0 16px;
                  border-bottom: 1px solid var(--border-subtle); }

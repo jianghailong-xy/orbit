@@ -45,7 +45,13 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false,
     /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */
-    val switchNote: String? = null)
+    val switchNote: String? = null,
+    /** The tray's presses, by canonical turn id (docs/mocks/steer-tray): a Withdraw — or a Put back's discard of a receipt — asked and
+     * not yet answered, and a Steer. */
+    val withdrawing: Set<String> = emptySet(), val steering: Set<String> = emptySet(),
+    /** What the server confirmed before the queue's listing or the runner says so: a message sent into the running turn, drawn on its
+     * way there, and one taken back, gone from the tray — or, put back, from the tail. */
+    val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet())
 
 /** Where a credential comes from, as the Provider menu groups it (docs/provider-engine-contract.md §1.3): the engine's own
  * sign-in on the runner, OpenCode's own configuration there, an account pool, or one of the user's keys. */
@@ -448,9 +454,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      * each with its credentials and the one a pick of it lands on: the first of [preferred] it holds that can run (the draft's pick,
      * then what the workspace last ran), else its own sign-in, else the first credential that can run. An engine with nothing to run
      * on here is left out — except DeepSeek Harness on a runner that could run it: with no DeepSeek key yet it offers the connection.
+     * One this app does not draw yet (ProviderEngines.androidShowsEngine) is never listed.
      */
     fun engines(preferred: List<Pair<String?, String?>> = emptyList(), antigravityKey: Boolean = false): List<EngineOption> =
-        ProviderEngines.ALL_ENGINES.mapNotNull { engine ->
+        ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).mapNotNull { engine ->
             val options = credentials(engine, antigravityKey)
             if (options.isEmpty()) {
                 return@mapNotNull if (engine == ProviderEngines.DSH && dshBlocker() != "Update runner")

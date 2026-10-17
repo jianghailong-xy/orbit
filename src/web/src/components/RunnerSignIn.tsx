@@ -2,6 +2,8 @@ import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AgentProvider,
+  ENGINE_CLI_NAMES,
   KIMI_LOGIN_REGION_V1,
   KIMI_REGIONS,
   type KimiRegion,
@@ -42,6 +44,7 @@ export const ENGINE_NAME: Record<LoginEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 export function GoogleSignInTerms() {

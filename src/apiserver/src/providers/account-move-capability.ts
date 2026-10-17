@@ -1,9 +1,9 @@
 /**
  * What a runner declares when it carries a session's conversation onto another of its accounts — the
  * one kind a session is moved on, between Codex accounts (CODEX_HOMEs), Claude Code accounts
- * (CLAUDE_CONFIG_DIRs), Antigravity Google accounts or Kimi Code accounts (KIMI_CODE_HOMEs). Kept apart
- * from the runner controller that reads the rest of the declared capabilities, so the sessions service
- * can ask the same question without importing it.
+ * (CLAUDE_CONFIG_DIRs), Antigravity Google accounts, Kimi Code accounts (KIMI_CODE_HOMEs) or Cursor
+ * CLI accounts. Kept apart from the runner controller that reads the rest of the declared
+ * capabilities, so the sessions service can ask the same question without importing it.
  */
 
 /** Runner carries a Codex session's thread onto the account its claim names when that is not the one
@@ -24,6 +24,10 @@ export const ANTIGRAVITY_ACCOUNT_LOGIN_V1 = 'antigravity-account-login/v1';
  *  its claim names. A runner that does not declare it would resume the session from the other
  *  account's directory, where its conversation is not, so a session is not moved there on it. */
 export const KIMI_ACCOUNT_MOVE_V1 = 'kimi-account-move/v1';
+/** Cursor CLI's: whether a Cursor conversation continues on another account's login is not known yet
+ *  (docs/cursor-runtime-contract.md §13.2, D5). No runner declares this until it is shown to, so until
+ *  then a Cursor CLI session is not moved to another account on any runner (§13.3). */
+export const CURSOR_ACCOUNT_MOVE_V1 = 'cursor-account-move/v1';
 
 /** What a runner declares before a session of `engine` is moved onto another of its accounts. */
 export const ACCOUNT_MOVE_CAPABILITY = {
@@ -31,4 +35,5 @@ export const ACCOUNT_MOVE_CAPABILITY = {
   claude: CLAUDE_ACCOUNT_MOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   kimi: KIMI_ACCOUNT_MOVE_V1,
+  cursor: CURSOR_ACCOUNT_MOVE_V1,
 } as const;

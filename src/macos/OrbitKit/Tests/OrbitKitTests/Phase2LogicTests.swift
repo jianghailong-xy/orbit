@@ -228,35 +228,55 @@ final class Phase2LogicTests: XCTestCase {
         }
     }
 
+    /// A session record for the composer predicates — only the fields the stop decision reads.
+    private func session(_ status: RunStatus, engineTurnActive: Bool? = nil,
+                         subagents: Int? = nil, bg: Int? = nil) -> Session {
+        Session(id: "s1", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
+                pendingApprovals: nil, branch: nil, updatedAt: nil,
+                runningBgCount: bg, runningSubagentCount: subagents, engineTurnActive: engineTurnActive)
+    }
+
     func testShowsInterrupt() {
         // Convenience: the idle-composer case (nothing staged to send), which is when the single
         // button morphs to Stop.
-        func idle(session: RunStatus?, stream: RunStatus) -> Bool {
-            ComposerLogic.showsInterrupt(session: session, stream: stream,
+        func idle(session s: Session?, stream: RunStatus) -> Bool {
+            ComposerLogic.showsInterrupt(session: s, stream: stream,
                                          hasText: false, hasAttachments: false, replying: false)
         }
-        // The authoritative session status wins: a running session morphs to Stop even when the
+        // The authoritative session record wins: a running session morphs to Stop even when the
         // stream status is stale — the exact cold-open case (opening an already-running session
         // never replays a `.running` event into the reducer, so the old `state.status`-only gate
         // hid the button and interrupting was impossible).
-        XCTAssertTrue(idle(session: .running, stream: .awaitingInput))
-        XCTAssertTrue(idle(session: .running, stream: .pending))
-        XCTAssertTrue(idle(session: .running, stream: .running))
-        // A non-running authoritative status stays Send, even if the stream is a stale `.running`
-        // (e.g. the turn just ended but the reducer missed the un-replayed terminal transition).
-        XCTAssertFalse(idle(session: .awaitingInput, stream: .running))
-        XCTAssertFalse(idle(session: .cancelled, stream: .running))
+        XCTAssertTrue(idle(session: session(.running), stream: .awaitingInput))
+        XCTAssertTrue(idle(session: session(.running), stream: .pending))
+        XCTAssertTrue(idle(session: session(.running), stream: .running))
+        // A turn the ENGINE started for itself (AWAITING_INPUT + engineTurnActive) streams tools and
+        // replies for its whole duration while the status stays parked, and the runner asks the
+        // engine to interrupt unconditionally for exactly this case — so it gets the Stop too
+        // (web's `isGenerating`).
+        XCTAssertTrue(idle(session: session(.awaitingInput, engineTurnActive: true), stream: .awaitingInput))
+        // Work that outlives a parked turn — a sub-agent/workflow or a background process still
+        // running — also gets a Stop. DELIBERATE (web's `outlivingSessionWork`), not an oversight.
+        XCTAssertTrue(idle(session: session(.awaitingInput, subagents: 1), stream: .awaitingInput))
+        XCTAssertTrue(idle(session: session(.awaitingInput, bg: 2), stream: .awaitingInput))
+        // A genuinely idle authoritative record stays Send — parked with nothing generating and
+        // nothing left running — even if the stream is a stale `.running` (e.g. the turn just ended
+        // but the reducer missed the un-replayed terminal transition).
+        XCTAssertFalse(idle(session: session(.awaitingInput), stream: .running))
+        XCTAssertFalse(idle(session: session(.awaitingInput, engineTurnActive: false), stream: .running))
+        XCTAssertFalse(idle(session: session(.awaitingInput, subagents: 0, bg: 0), stream: .awaitingInput))
+        XCTAssertFalse(idle(session: session(.cancelled), stream: .running))
         // No session record yet (a fresh deep link before the list loads): fall back to the stream.
         XCTAssertTrue(idle(session: nil, stream: .running))
         XCTAssertFalse(idle(session: nil, stream: .awaitingInput))
 
         // Anything staged to send keeps it a Send button (web parity) so a follow-up queues mid-turn,
         // even while the session is running.
-        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .running, stream: .running,
+        XCTAssertFalse(ComposerLogic.showsInterrupt(session: session(.running), stream: .running,
                                                     hasText: true, hasAttachments: false, replying: false))
-        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .running, stream: .running,
+        XCTAssertFalse(ComposerLogic.showsInterrupt(session: session(.running), stream: .running,
                                                     hasText: false, hasAttachments: true, replying: false))
-        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .running, stream: .running,
+        XCTAssertFalse(ComposerLogic.showsInterrupt(session: session(.running), stream: .running,
                                                     hasText: false, hasAttachments: false, replying: true))
     }
 

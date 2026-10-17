@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
 import {
   NO_LONGER_ON_OFFER,
+  ON_PASS_ASKS,
+  ON_PASS_MERGES,
   isMergeJob,
   mergeCardShape,
   moreTasks,
@@ -12,6 +14,7 @@ import {
   promotionBranchLine,
   promotionChecksSummary,
   promotionMergingStatus,
+  promotionOnPassLine,
   promotionChangesLine,
   promotionEventLine,
   promotionPageCounts,
@@ -73,6 +76,19 @@ describe('the merge card on the project sessions view', () => {
     expect(mergeCardShape(candidate({ state: 'DECLINED' }), null)).toBeNull();
     expect(isMergeJob({ kind: 'LAND_PROMOTION' })).toBe(true);
     expect(isMergeJob({})).toBe(false);
+  });
+
+  it('says under the merge check what a pass leads to, while there is a check to say it of', () => {
+    expect(ON_PASS_MERGES).toBe('Merges on its own when it passes.');
+    expect(ON_PASS_ASKS).toBe('Asks you when it passes.');
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING', onPass: 'MERGE' }))).toBe(ON_PASS_MERGES);
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING', onPass: 'ASK' }))).toBe(ON_PASS_ASKS);
+    // A server older than the answer, and one that has none for this candidate.
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING' }))).toBeNull();
+    expect(promotionOnPassLine(candidate({ state: 'CHECKING', onPass: null }))).toBeNull();
+    // Past the check there is nothing left to say about one.
+    expect(promotionOnPassLine(candidate({ state: 'READY', onPass: 'MERGE' }))).toBeNull();
+    expect(promotionOnPassLine(null)).toBeNull();
   });
 
   it('says what is asked of main, with the branch under it', () => {

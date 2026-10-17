@@ -30,6 +30,8 @@ final class ProjectMergeCopyParityTests: XCTestCase {
             ("NEEDS_YOU", PromotionCards.needsYouBadge),
             ("DETAILS", PromotionCards.details),
             ("PAGE_NOTHING_TO_DO", PromotionCards.pageNothingToDo),
+            ("ON_PASS_MERGES", PromotionCards.onPassMerges),
+            ("ON_PASS_ASKS", PromotionCards.onPassAsks),
         ]
         for (name, copy) in constants {
             XCTAssertTrue(web.contains("export const \(name) = '\(copy)';"),

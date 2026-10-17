@@ -143,8 +143,13 @@ describe('Admin → Users → access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(container!.textContent).toContain('dev@example.test'));
     await settle();
 
+    // In the row's menu of every other action, which opens from the keyboard (jsdom's click has no pointer behind it).
     const dev = [...container.querySelectorAll<HTMLElement>('tbody tr')].find((row) => row.textContent?.includes('dev@example.test'))!;
-    await click(button(dev, 'Access tokens'), 'Access tokens');
+    await click(dev.querySelector('button[aria-label="More actions for dev@example.test"]'), 'the menu');
+    await click(
+      [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((item) => item.textContent?.trim() === 'Access tokens'),
+      'Access tokens',
+    );
     await vi.waitFor(() => expect(dialog() && tokenTableRows().length).toBeTruthy());
     expect(listUserAccessTokens).toHaveBeenCalledWith('U2');
     expect(nameOf(dialog()!)).toBe('Access tokens — dev@example.test');
