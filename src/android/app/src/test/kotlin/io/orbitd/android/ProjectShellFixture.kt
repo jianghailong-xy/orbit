@@ -72,6 +72,11 @@ internal object ProjectShell {
     @Volatile var holdMembers: CompletableDeferred<Unit>? = null
     /** Launch's `attention` in `GET projects`, which the drawer's count is read from; none by default. */
     @Volatile var attention: String? = null
+    // A05f: the drawer's order and running mark.
+    /** Quiet's `attention` in `GET projects`; none by default. */
+    @Volatile var quietAttention: String? = null
+    /** Whether Launch's coordinator has a turn under way (`engineTurnActive`), which the Open list draws as its spinner. */
+    @Volatile var coordinatorWorking = false
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
@@ -80,6 +85,7 @@ internal object ProjectShell {
         landTasks = null; plan = null
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
+        quietAttention = null; coordinatorWorking = false
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
@@ -97,7 +103,8 @@ internal object ProjectShell {
     private fun session(id: String) = when (id) {
         COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release","projectId":"$LAUNCH",${member("COORDINATOR")}${
             if (mergeWaiting) ""","projectTitle":"Launch","waitingKind":"OWNER_ITEM","ownerItems":[{"itemId":"i-merge","kind":"PROMOTION_APPROVAL",
-                "title":"Merge 4 tasks into main?","since":"${ago(130)}"}]""" else ""}""", lastTurnAt = ago(30))
+                "title":"Merge 4 tasks into main?","since":"${ago(130)}"}]""" else ""}${if (coordinatorWorking) ""","engineTurnActive":true""" else ""}""",
+            lastTurnAt = ago(30))
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}""", lastTurnAt = ago(2))
         WAITING -> row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
         PLAIN -> row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
@@ -168,7 +175,8 @@ internal object ProjectShell {
             }
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
             path == "projects/sidebar" -> ok(sidebar())
-            path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"}]""")
+            path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"${
+                quietAttention?.let { ""","attention":$it""" }.orEmpty()}}]""")
             path == "projects/$LAUNCH" -> ok(project)
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)

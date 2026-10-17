@@ -244,9 +244,10 @@ final class TaskRunHandoffWiringTests: XCTestCase {
         XCTAssertTrue(detail.contains("model.route(to: .session(sessionID))"),
                       "the detail carries the sessions, so it links to the run itself")
         // The live run's press already says where it goes; the sentence that stood under it said the
-        // same thing again (the owner's redesign, 2026-09-26). Only a press that cannot be taken says why.
+        // same thing again (the owner's redesign, 2026-09-26). A press that cannot be taken says why;
+        // one that can says only that it is the task's only start (TaskDetailWiringTests).
         XCTAssertFalse(detail.contains("Text(entry.hint)"))
-        XCTAssertTrue(detail.contains("let hint = runDisabledHint(task)"))
+        XCTAssertTrue(detail.contains(": runDisabledHint(task)"))
         XCTAssertTrue(detail.contains("Task { _ = await tasks.execute(task.id) }"))
         XCTAssertFalse(detail.contains("task.status == .failed ? \"Retry\" : \"Run\""))
 

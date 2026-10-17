@@ -1,0 +1,69 @@
+/* Board chrome + the deltas of each option. Everything product-facing comes from app.css
+   (the real src/web/src/index.css); only what a proposal would change is written here. */
+
+* { box-sizing: border-box; }
+body { background: #e9eaee; margin: 0; }
+.board { width: 2140px; padding: 34px 40px 52px; font-size: 15px; color: #16161a; }
+h1 { font-size: 30px; line-height: 1.28; margin: 0 0 12px; letter-spacing: -.01em; }
+h2 { font-size: 21px; margin: 0 0 14px; display: flex; align-items: center; gap: 12px; }
+.lede { font-size: 16px; line-height: 1.75; color: #4a4f57; max-width: 1980px; margin: 0 0 10px; }
+.lede b, .cap b { color: #16161a; }
+code { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; background: #dfe0e5; border-radius: 4px; padding: 1px 5px; }
+.tag { flex: none; font-size: 13.5px; font-weight: 600; padding: 6px 11px; border-radius: 8px; }
+.tag.now { background: #ffe1dc; color: #b3261e; }
+.tag.rec { background: #dfe8ff; color: #2346c4; }
+.tag.alt { background: #efe3ff; color: #6a2bb8; }
+.tag:not(.now):not(.rec):not(.alt) { background: #e6e8ec; color: #3a3f47; }
+
+.section { background: #f6f7f9; border-radius: 22px; padding: 24px 28px 22px; margin-top: 24px; }
+.pane { background: #fff; border: 1px solid #e3e6eb; border-radius: 14px; padding: 0 16px 16px; position: relative; }
+.pane-bar { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 0 4px; border-bottom: 1px solid #f1f2f5; }
+.pane-title { font-size: 12.5px; color: #8f959e; }
+.pane-hint { font-size: 12px; color: #b3b7bd; }
+.stream { padding: 14px 18px 6px; }
+.row-note { font-size: 12px; color: #a2a7ae; margin: 10px 0 2px; }
+.cap { font-size: 14.5px; line-height: 1.7; color: #4a4f57; margin: 14px 0 0; max-width: 1980px; }
+.foot { font-size: 14px; line-height: 1.7; color: #6b7078; margin: 22px 0 0; }
+
+/* a real hover, frozen */
+.mock-hover { background: var(--bg-sunken); }
+
+/* antd's runtime variables for the tool icon square */
+.chat-tool-card { --tone: #646a73; --tone-bg: #f1f1f4; }
+
+/* ── 方案 B delta: the caret leads the row ────────────────────────────────── */
+.mock-caret .bgwake-row { padding: 3px 10px 3px 13px; }
+.mock-caret .bgwake-caret { flex: none; display: inline-flex; align-self: center; width: 1em; font-size: 10px; color: var(--text-4); }
+.mock-caret .bgwake-row:hover .bgwake-caret { color: var(--text-2); }
+/* the open state swaps the glyph itself instead of rotating the trailing caret */
+.mock-caret .bgwake-fold[open] > .bgwake-row .bgwake-caret { transform: none; }
+.mock-caret .bgwake-body { margin-left: 48px; }
+.mock-caret .bgwake-tail { margin-left: 48px; }
+/* ≤600px, applied here by hand because the pane sits inside a wide board */
+.mock-phone .bgwake-row { flex-wrap: wrap; }
+.mock-phone .bgwake-name { order: 1; flex-basis: 100%; padding-left: 38px; }
+
+/* ── ① 改动前: the rule as it stood before the change, kept so the pane stays a record ── */
+.mock-before .bgwake-details-label { margin-left: auto; }
+/* the shipped hover rule, frozen for the static shot */
+.mock-hover .bgwake-details-label { color: var(--text-2); }
+
+/* ── the measure under 现状 ───────────────────────────────────────────────── */
+.measure { position: relative; height: 34px; margin-top: 2px; }
+.measure-seg { position: absolute; top: 8px; border-top: 1.5px dashed #f08a24; }
+.measure-end { position: absolute; top: 3px; height: 11px; border-left: 1.5px solid #f08a24; }
+.measure-label { position: absolute; top: 13px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 12px; color: #8a5300; background: #fff0d1; border-radius: 6px; padding: 1px 7px; }
+.measure-left { position: absolute; top: 13px; font-size: 12px; color: #a2a7ae; }
+
+/* ── the grammar strip's caret guide ──────────────────────────────────────── */
+#grammar { position: relative; }
+#grammar .guide { position: absolute; top: 6px; border-left: 1.5px dashed #4d8bf0; opacity: .75; }
+
+/* the jump-out line of the caret row under the pointer */
+.mock-caret .bgwake-row .bgwake-caret, .chat-tool-caret { vertical-align: middle; }
+
+#grammar .g-row + .g-row { margin-top: 12px; }
+
+/* the two 443px panes side by side */
+.phone-row { display: flex; gap: 24px; align-items: flex-start; }

@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 6
+    private static let schemaVersion = 7
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -42,6 +42,8 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// pasted eaten out of it, and a bubble already on disk is never split again — so drop those too.
     /// v6: quota failures carried by `error` events now become auto-retry cards. Old snapshots keep
     /// them as plain error rows and never reclassify them, so re-fetch the tail to apply the fix.
+    /// v7: an interrupt row says when the runner's restart cut the turn off (`runnerRestart`). Old
+    /// snapshots drew every interrupt as a Stop and would go on doing so, so re-fetch those too.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {
