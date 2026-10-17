@@ -71,6 +71,10 @@ type cursorRunOptions struct {
 	// names: a later process of the session finds what an earlier one left.
 	sameHome bool
 	execDir  string
+	// scratch is the session's scratch directory, which keeps its record (meta.json): a claim writes the
+	// record there before the session's engine starts, as runInteractiveSession does. A new one when empty,
+	// and nothing written before the engine.
+	scratch string
 	// approve decides each approval card the session files, in the order filed; nil denies every one.
 	approve func(card cursorTestCard) cursorTestDecision
 	// onCard hears each card as it is filed, and says what to deliver next.
@@ -207,7 +211,15 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := cursorRun{job: job, spec: spec, scratch: t.TempDir(), fake: fake}
+	run := cursorRun{job: job, spec: spec, scratch: opts.scratch, fake: fake}
+	if run.scratch == "" {
+		run.scratch = t.TempDir()
+	} else {
+		if err := os.MkdirAll(run.scratch, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeSessionMeta(run.scratch, job, execDir)
+	}
 	var mu sync.Mutex
 	leaseMoved := false // a cursorLeaseLost was answered
 	inbox := make(chan RunInboxResponse, 16)
