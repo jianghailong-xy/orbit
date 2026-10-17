@@ -302,20 +302,22 @@ The Compose services come back by their restart policy. Managed runner container
   for twice `lifecycle.backoffMaxSeconds` (10 minutes by default) starts that count again, so a host restart is its
   first.
 
-Measured in the drills, on an isolated Docker host: one runner ready with a SQLite writer running, one just put to
-sleep, and two restarts (a restart of the Docker host, and a power cut of it).
+Measured in the drills (task D7), on an isolated Docker host: one runner ready with a SQLite writer running, one just
+put to sleep, and two restarts (a restart of the Docker host, and a power cut of it). Nobody pressed Retry.
 
 | | Graceful restart (`docker restart`) | Power cut (`docker kill`, then start) |
 | --- | --- | --- |
 | Docker's report of the running container | exited 0, `FinishedAt` at its stop | exited 255, `FinishedAt` when the daemon came back |
-| What the manager did | `FAILED` `POD_TERMINATED`, that report recorded as the stop proof | the same |
-| After the owner's Retry | the next generation on the same volume, `READY` | the same |
+| What the manager did | `POD_TERMINATED … with exit code 0, not out of memory; starting generation 2 on the same volume in 10 s (attempt 1 of 5)`; that report recorded as the stop proof, the container removed, the next generation started | the same with exit code 255, `in 8 s (attempt 1 of 5)` |
+| The runner READY again | 75 s after the restart began, 45 s after the API answered again | 69 s after the power cut, 47 s after the API answered again |
+| Its identity | the same runner, volume and volume UID; the next generation | the same |
+| What its owner read meanwhile | "The runner instance stopped, so it is being started again on the same data volume." | the same |
 | The sleeping runner | woken afterwards on its volume, `READY` | the same |
-| Containers per volume, sampled every 0.5 s, and in Docker's events | never more than one | never more than one |
-| Data | every committed row of the writer there (763 rows), `integrity_check` `ok`, every file unchanged | every committed row there (1147), `integrity_check` `ok`, every file unchanged |
+| Containers per volume, sampled about every 0.6 s, and in Docker's events | never more than one | never more than one |
+| Data | every committed row of the writer there (251), `integrity_check` `ok`, every file unchanged | every committed row there (768), `integrity_check` `ok`, every file unchanged |
 
-After a restart, every account whose runner was running has to press Retry. The manager does not do it for them,
-and no operator route does it either.
+The power cut's runner had been up for more than twice `backoffMaxSeconds`, so its restart was attempt 1 again, after
+the graceful restart's attempt 1.
 
 #### After a real power loss
 

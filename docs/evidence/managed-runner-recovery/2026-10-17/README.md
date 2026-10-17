@@ -1,0 +1,103 @@
+# Managed runners recover by themselves, say why they stopped, wait for a held volume, retry a restored one (2026-10-17)
+
+Task D7 (34hXCW6iauoWaquGQj7DO) of project 34ZteKCnYMpKY46f63Leb, criterion 12. It fixes the four manager findings
+D5 left (task 34hJ7S9C3isVnzIDDfSHD, comment 34hWz8rMyOKjy5FPziROS, items 1–4;
+[D5's evidence](../../managed-runner-docker-security/2026-10-17/README.md)). The design record is
+[docs/managed-runner-design.md](../../../managed-runner-design.md), "Implementation record: failure recovery and
+visibility"; the operator's side is [the runbook](../../../managed-runner-docker-operations.md).
+
+## What changed
+
+All in the state machine both run backends share (`src/apiserver/src/managed-runners/managed-runner-manager.ts`), with
+two small backend additions (`exit` on an observed instance; Docker's `VOLUME_IN_USE` create refusal read as
+`ManagedVolumeHeld`):
+
+| D5 finding | Now |
+| --- | --- |
+| 1. A host or Docker restart leaves every running runner `FAILED POD_TERMINATED` until its owner presses Retry | A stop with the host's report is followed by the restart an owner's retry would have made: after the backoff of its attempt, the stopped instance removed by UID, the volume released, the next generation on the same volume and runner. Each stop spends one of `maxAttempts`; a crash loop still ends `FAILED`. A runner up for twice `backoffMaxSeconds` starts its count again. A stop nobody reported still fences. |
+| 2. Failures are silent; OOM only in the database | One warn line per stop with the exit code and whether it ran out of memory. Owner reasons `POD_RESTARTING` / `POD_RESTARTING_OUT_OF_MEMORY` while it restarts, `POD_TERMINATED` / `POD_OUT_OF_MEMORY` once the budget is spent. |
+| 3. A wake while another container refers to the volume fails at once (`DOCKER_CHANNEL_REFUSED`, `VOLUME_IN_USE`) | No instance is created on a held volume: STARTING waits (`VOLUME_IN_USE`), nothing spent, no startup deadline, and goes on by itself once it is free. |
+| 4. `PVC_MISSING` has no way back | The manager looks for the recorded volume each pass; restored as recorded it becomes `PVC_RESTORED`, retryable, and the retry starts the runner on it. |
+
+## Where it ran
+
+- **`d7-dind`**, an isolated Docker host ([kit/dind-up.sh](kit/dind-up.sh)), as D5 ran one: a `docker:29.8.2-dind`
+  container on the HPC machine with its own dockerd (29.8.2, Compose v5.6.0), privileged for that dockerd, capped at
+  6 GiB and 8 CPUs with OOM score 1000, outside the Orbit runner's cgroup, `/run` a tmpfs as a host's is, labelled
+  `orbit.test=d7-34hXCW6iauoWaquGQj7DO`, its data root and work directory under `/mnt/data/tmp/34hXCW6iauoWaquGQj7DO`,
+  its deployment's gateway published on host 127.0.0.1:17086 only. Restarting it restarts its dockerd and everything
+  in it, and nothing else: the HPC host and its Docker daemon were never restarted.
+- In it, a default deployment from a clone of this branch: `scripts/install-server.sh` with no flags at the project
+  line's tip 1f5bc9cec (17 minutes, "managed runners are enabled in orbit-5260bc6c"), then `/upgrade` as the default
+  path runs it (`.claude/skills/upgrade/upgrade.sh --no-pull`, the checkout detached at the commit) to fb93b9403, the
+  D7 manager and its tests ([deployment-after-upgrade.txt](dind/deployment-after-upgrade.txt): the apiserver build
+  carries the new reasons, the runner image `sha256:f0600d1a…` was built from fb93b9403, the default lifecycle is 5
+  attempts and a 10–300 s backoff). It took 42 minutes on a disk another task's test host was busy with. The restore
+  drill ran again after a second `/upgrade` to e51574350 (below).
+- Two accounts, `a` (the administrator) and `b`, each with its managed runner READY at generation 1. No model: the
+  owner's key file `/mnt/data/managed-runner-lab/secrets/deepseek-api-key` does not exist (the directory is empty), so,
+  as in D2–D6, an operator signed Codex in inside each runner's container with a placeholder key, which READY needs.
+- [kit/drill.py](kit/drill.py) drove everything through the deployment's own API and read Docker and PostgreSQL
+  inside the test host; `drill.py sample` listed every container and the data volumes it refers to about every
+  0.6 s throughout ([dind/volume-samples.jsonl.gz](dind/volume-samples.jsonl.gz)), and a recorder kept Docker's own
+  events ([dind/docker-events.jsonl.gz](dind/docker-events.jsonl.gz)).
+
+## The same rules on both backends: `managed-runner-recovery.pg.spec.ts`
+
+Each case runs twice, with the same manager, owner service and assertions: on Kubernetes (the in-memory namespace of
+`test-support/fake-kube-client.ts`, the single-Pod admission guard installed) and on Docker (`DockerBackend` over
+`test-support/fake-docker-channel.ts`), against a real PostgreSQL migrated from empty.
+
+| Case | What it holds |
+| --- | --- |
+| (1) restart | A READY runner's instance stops with its host's report (exit 255): `BACKOFF` with the stop proof recorded, `REQUESTED`, the stopped instance kept through the backoff; one `POD_TERMINATED` warning with `exit code 255, not out of memory`; the owner's display "waking" with the restart's sentence, no Retry offered. Then, with nobody asking: READY as generation 2 on the same runner, workspace, volume UID and handle, the stopped instance removed once, the volume never made again, generation 1's credential dead, `lastRequestKey` unchanged. After every pass: never more than one instance on the volume, exactly one compute share reserved. A stop nobody reported (the instance gone) still fences. |
+| (2) crash loop | Stops in READY, then twice in STARTING before the instance ever reports in: two restarts, then `FAILED POD_TERMINATED` at attempt 3 of 3, retryable, the stopped instance and its compute kept; the owner's retry starts afresh (attempt 0, generation 4). Two quick stops leave READY at attempt 2; up for twice `backoffMaxSeconds`, the next stop is attempt 1 and restarts. |
+| (3) out of memory | Exit 137 with the host's OOM mark: `POD_RESTARTING_OUT_OF_MEMORY`, said through the whole restart until READY, logged `exit code 137, out of memory`; again and again: `FAILED POD_OUT_OF_MEMORY` with its own sentence. The mark on an exit 255 is not out of memory. |
+| (4) asked to sleep | An instance that stops after its owner asked for sleep goes to sleep: SLEEPING, generation 2, the instance removed, compute back to 0. |
+| (5) held volume | A wake while another node's attachment (Kubernetes) or another container (Docker) holds the volume: STARTING, `VOLUME_IN_USE`, no instance, attempt 0, no deadline; five passes past the startup deadline write nothing and fail nothing; one warning. Freed, it starts by itself with a deadline from then. Docker: a holder between the look and the create (the channel's `VOLUME_IN_USE`) is the same wait, the create settled. |
+| (6) restored volume | A volume lost while asleep fails the wake `PVC_MISSING`, not retryable (the retry answers 409), looked at each pass with nothing written; another volume under its name stays `PVC_MISSING` with the detail saying so; restored as recorded but still held (as by the restore's own container), still `PVC_MISSING`, the detail "back as recorded, and still held", no Retry offered; free: `PVC_RESTORED`, Retry offered, no longer looked for; the retry starts the runner on the same volume UID and handle, the volume never made again. |
+
+On the previous manager and backends (the four source files of 1f5bc9cec, everything else of this branch), all 12
+cases fail ([pg-spec-control/](pg-spec-control/recovery-spec-on-the-previous-manager.txt)): (1)–(3) `FAILED` where a
+restart was due; (4) `FAILED` for a runner asked to sleep; (5) Kubernetes created the Pod while another node's
+attachment held the volume (READY), Docker failed `DOCKER_CHANNEL_REFUSED`; (6) the failed mapping was never looked
+at again. The only compile error there is the test backend's new `exit` field, which the old interface lacks.
+
+## On real Docker: D2's integration test, with the new expectations
+
+`scripts/managed-runner/docker-backend-it.py --build-image` ran `src/apiserver/src/managed-runners/docker-backend.it.ts`
+on the HPC host's own Docker (29.8.2), as D2 ran it: the whole apiserver in one process, the real channel as its child,
+the managed runner image built from this branch at 6d52998e3 (`sha256:eacfd7e4…`, [image.txt](real-docker-it/image.txt)),
+its real runner in every container, a disposable PostgreSQL, everything labelled `orbit.test=d2-it-10171655c27a`
+inside a `systemd-run --scope -p MemoryMax=6G` outside the Orbit runner's cgroup. **14 of 14 passed in 1101 s**
+([it.tap](real-docker-it/it.tap), [steps.jsonl](real-docker-it/steps.jsonl)). Everything it made was removed
+([cleanup.txt](real-docker-it/cleanup.txt): 2 containers, 4 volumes and the network; nothing left), and so was the
+image afterwards. The three cases this task changed:
+
+| Case | Before (D2) | Now |
+| --- | --- | --- |
+| (1) the runner container killed (`SIGKILL`) | `FAILED POD_TERMINATED`; the owner's retry made generation 2 | Killed at 16:57:34.93 (Docker: exit 137); READY again as generation 2 on the same volume, runner and workspace by 16:58:07, with nobody asking; the retired proof says exit 137; attempt 1; the pool held 2 compute shares (this runner's and the other one's) once it was READY |
+| (7) a "host restart": the runner killed mid-write, the channel killed, the manager stopped, all back | `FAILED`, then the owner's retry | Everything stopped at 17:03:44.9; READY as the next generation (7) by 17:04:17.6 by itself; SQLite `integrity_check` `ok`, the rows kept (5252), the files as they were |
+| (11) a volume written past its disk limit | `FAILED POD_TERMINATED`, then the retry refused `VOLUME_OVER_LIMIT` | The channel's disk check stopped the container (exit 0 at 17:13:51); the restart that followed was refused, and the runner is `FAILED VOLUME_OVER_LIMIT` with no retry pressed and no container on the volume |
+
+The rest (refusals, the template, sleep and wake by message, task and schedule, eight racing wakes, the manager
+restarted mid-wake, the channel down mid-wake, capacity) passed unchanged, and the sampler saw at most one container
+per volume ([final-inventory.json](real-docker-it/final-inventory.json)).
+
+## In the isolated Docker host: restarts, a held volume, a restored one, out of memory
+
+Every drill below ran at fb93b9403 ([dind/](dind/)). Nobody pressed Retry, except in the restore drill, where Retry is
+what the owner is told to do. Times are UTC, 2026-10-17.
+
+| Drill | What happened |
+| --- | --- |
+| Graceful restart of the test host, `docker restart -t 300 d7-dind` at 17:29:13 ([kit/restart-drill.sh](kit/restart-drill.sh) `graceful`) | a READY at generation 1 with a SQLite writer running in its container (commit, then log the committed id, fsync); b put to sleep just before. Docker: a's container exited 0, `FinishedAt` 17:29:13.60. The test host's dockerd answered 22 s later, the API 30 s later. 17:29:41, the apiserver: `POD_TERMINATED: container a7b344fa… of generation 1 stopped in READY with exit code 0, not out of memory; starting generation 2 on the same volume in 10 s (attempt 1 of 5)`; 17:29:51, `generation 1 retired (OBSERVED_STOP); generation 2 reserved`. a's owner read `POD_RESTARTING` ("The runner instance stopped, so it is being started again on the same data volume. …") in REQUESTED and STARTING. READY at generation 2 at 17:30:28, 75 s after the restart began: the same runner `01a14ade-533c…`, the same volume and volume UID `0352e340…`, `lastRequestKey` unchanged (no request of the owner's). The pool held one compute share (a's) before the restart and when a was READY again; b's came back with its wake. Every file's checksum, the repository's HEAD, `integrity_check` `ok` with the 5000 rows and the same dump digest, and the runner identity in `config.json` as before; the writer had logged 250 and the database held 251 rows. b, woken afterwards, READY on its volume with its data the same ([dind/restarts.jsonl](dind/restarts.jsonl), [dind/status-transitions.jsonl](dind/status-transitions.jsonl), [dind/data.jsonl](dind/data.jsonl), [dind/docker-reports.jsonl](dind/docker-reports.jsonl)). |
+| Power cut of the test host, `docker kill d7-dind` then `docker start` at 17:41:03 (`powercut`) | a READY at generation 2 since 17:30:28, more than twice `backoffMaxSeconds` (600 s), with the writer; b asleep. Docker: exited 255, `FinishedAt` 17:41:04.31, the inner daemon's restore. dockerd 7 s, the API 22 s. 17:41:24: `… of generation 2 stopped in READY with exit code 255, not out of memory; starting generation 3 on the same volume in 8 s (attempt 1 of 5)`: attempt 1 again, the count started over. READY at generation 3 at 17:42:12, 69 s after the cut, the same identity, no request of the owner's; the writer had logged 768 and 768 rows were there; every file, the repository and SQLite as before. b woken afterwards, READY. |
+| A backup holds the volume during a wake, 17:32 ([kit/held-wake.sh](kit/held-wake.sh)) | b asleep (its runner exited 0 at 17:32:30.88 and was removed at 17:32:33.08). The runbook's `scripts/managed-runner/volume-backup.sh backup` started at 17:32:35; its helper container referred to the volume from 17:32:36.06. The owner's wake at 17:32:36: STARTING with `VOLUME_IN_USE` ("Something else is using this runner's data volume, such as a backup, …") 1.6 s later, attempt 0, and one warning: `VOLUME_IN_USE: volume mr-data-01a14ade-543d… is held by a container outside this instance; nothing is started on it until it is free`. The backup finished ("archived 123 files", 1.08 GB) and its helper exited at 17:33:00.40; b's container was created at 17:33:02.56, and b was READY at generation 3 at 17:33:33 on the same volume UID, with nothing more asked of the owner than the wake ([dind/held-wake.jsonl](dind/held-wake.jsonl)). The driver's own "backup finished" mark stayed empty (its `pgrep` matched its own shell; fixed in the kit), so the end of the backup is Docker's event. |
+| A volume lost while asleep, restored by the runbook, 17:35 ([kit/lost-volume.sh](kit/lost-volume.sh)) | b asleep; a backup (125 files); `docker volume rm`; the owner's wake: FAILED `PVC_MISSING` within a second, not retryable, and the owner's Retry answered 409. `volume-backup.sh restore` from 17:35:39 to 17:35:53: recreated with its labels, all 125 checksums equal, six SQLite files and the repository `ok`. **Found here:** the apiserver said `PVC_RESTORED` at 17:35:44, nine seconds before the script had finished, because the script makes the volume, labels and all, before it unpacks into it. A Retry in those seconds would have waited (`VOLUME_IN_USE`, the restore's helper held the volume), but the sentence invited it too early. Fixed in e51574350: `PVC_RESTORED` only once nothing holds the restored volume (the recovery spec's case (6) holds it); the drill ran again on that build (below). The owner's Retry after the script (202): READY at generation 4 on the same volume UID `d71b9de8…`, the same runner, every file, the repository and SQLite as before ([dind/lost-volume.jsonl](dind/lost-volume.jsonl)). |
+| Out of memory, 17:43–17:45 ([kit/oom-drill.sh](kit/oom-drill.sh)) | a READY at generation 3. Its container's memory limit lowered with `docker update` (an operator's test action standing for a runner that outgrows its limit): at 24 MiB the kernel reclaimed cache and the runner went on (no kill); at 8 MiB, at 17:44:51.57, the kernel killed the runner: Docker exit 137, `OOMKilled` true. 17:44:55: `… of generation 3 stopped in READY with exit code 137, out of memory; starting generation 4 on the same volume in 20 s (attempt 2 of 5)`. The owner read `POD_RESTARTING_OUT_OF_MEMORY` ("The runner ran out of memory and stopped, so it is being started again on the same data volume. …") through STARTING; READY at generation 4 at 17:45:54, its container on the profile's own 4 GiB again, the same volume and identity, its data as before ([dind/oom.jsonl](dind/oom.jsonl)). |
+
+**One container per volume.** From 17:17:22 to 17:47:44 the sampler took 3072 samples (24 while the test host was down):
+no data volume ever had more than one container referring to it, a backup's or a restore's helper included. Docker's
+events show each runner's containers one after another, each destroyed before the next was created, e.g. a's
+generation 1 destroyed at 17:29:51.645 and generation 2 created at 17:29:52.119.

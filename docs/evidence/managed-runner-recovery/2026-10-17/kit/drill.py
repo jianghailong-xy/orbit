@@ -485,7 +485,9 @@ def step_held_wake(key):
             last = snapshot
         if s["reason"] == "VOLUME_IN_USE" and seen_wait is None:
             seen_wait = round(time.time() - t0, 1)
-        if done_at is None and not sh(f"pgrep -f 'volume-backup.sh backup {m['volume']}' || true").stdout.strip():
+        # [.] keeps pgrep from matching the shell that runs it (the run of 17:32Z had a plain '.', matched itself,
+        # and recorded no end: Docker's events give it, the helper's die at 17:33:00.4).
+        if done_at is None and not sh(f"pgrep -f 'volume-backup[.]sh backup {m['volume']}' || true").stdout.strip():
             done_at = round(time.time() - t0, 1)
             record("held-wake.jsonl", {"step": "the backup finished", "seconds": done_at,
                                        "log": sh(f"cat {directory}.log", check=False).stdout.strip().splitlines()[-4:],
@@ -547,7 +549,7 @@ def step_lose_and_restore(key):
 
 # ── a real out-of-memory kill of the runner ─────────────────────────────────────────────────
 
-def step_oom(key):
+def step_oom(key, limit="24m"):
     """The runner's container's memory limit lowered below what it uses (docker update, an operator's test action), so
     the kernel kills its largest process, the runner: Docker reports exit 137 and OOMKilled. The manager logs it, says
     it to the owner and starts the next generation, with the profile's own limit, by itself."""
@@ -556,8 +558,8 @@ def step_oom(key):
     usage = sh(f"docker stats --no-stream --format '{{{{.MemUsage}}}}' {name}", check=False).stdout.strip()
     started = now()
     t0 = time.time()
-    out = sh(f"docker update --memory 24m --memory-swap 24m {name}", check=False)
-    record("oom.jsonl", {"step": "docker update --memory 24m --memory-swap 24m", "account": key, "before": identity(m), "usage": usage,
+    out = sh(f"docker update --memory {limit} --memory-swap {limit} {name}", check=False)
+    record("oom.jsonl", {"step": f"docker update --memory {limit} --memory-swap {limit}", "account": key, "before": identity(m), "usage": usage,
                          "exit": out.returncode, "stderr": out.stderr.strip()[-300:]})
     for _ in range(60):
         state = sh(f"docker inspect {name} --format '{{{{.State.Status}}}} {{{{.State.ExitCode}}}} {{{{.State.OOMKilled}}}}' 2>/dev/null", check=False).stdout.strip()
@@ -571,13 +573,24 @@ def step_oom(key):
                          "apiserverLog": apiserver_log(started, "POD_TERMINATED|retired")})
 
 
+def step_until_generation(key, label, generation):
+    """Follow the account until its runner is READY and usable at `generation` or later: after a stop, the status reads
+    READY until the manager's next pass sees it, so READY alone says nothing about the restart."""
+    wanted = int(generation)
+
+    def restarted(s):
+        return s.get("managementState") == "FAILED" or (ready(s) and (mapping(key) or {}).get("generation", 0) >= wanted)
+    final = follow(key, label, restarted)
+    return record("steps.jsonl", {"step": f"{key}: {label}", **summarize(final), "mapping": mapping(key), "pool": pool()})
+
+
 def main():
     step, args = sys.argv[1], sys.argv[2:]
     steps = {
         "accounts": step_accounts, "inventory": inventory, "seed": step_seed, "verify": step_verify, "writer": step_writer,
         "writer-check": step_writer_check, "follow": step_follow, "docker-report": docker_report, "sample": step_sample,
         "events": step_events, "pool": step_pool, "restart": step_restart, "held-wake": step_held_wake,
-        "lose-and-restore": step_lose_and_restore, "oom": step_oom,
+        "lose-and-restore": step_lose_and_restore, "oom": step_oom, "until-generation": step_until_generation,
         "mapping": lambda key: print(json.dumps(mapping(key), indent=2)),
         "sleep": lambda key: owner_action(key, "sleep"), "wake": lambda key: owner_action(key, "wake"),
         "retry": lambda key: owner_action(key, "retry"),
