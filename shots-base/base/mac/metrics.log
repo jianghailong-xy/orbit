@@ -1,0 +1,4 @@
+01:29:01.731 metrics SwiftUIOutlineListView x=0.0..628.0 h=674.0 off=-52.0 doc=622.0 visible=674.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1024.0 h=578.0 off=-77.0 doc=501.0 visible=578.0 insets=77.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=658.0 off=-44.0 doc=565.0 visible=658.0 insets=44.0/49.0 flipped=true
+01:29:06.604 mark 1-interrupts-light
+01:29:12.829 metrics SwiftUIOutlineListView x=0.0..628.0 h=674.0 off=-52.0 doc=622.0 visible=674.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1024.0 h=578.0 off=-77.0 doc=501.0 visible=578.0 insets=77.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=658.0 off=-44.0 doc=565.0 visible=658.0 insets=44.0/49.0 flipped=true
+01:29:17.751 mark 1-interrupts-dark

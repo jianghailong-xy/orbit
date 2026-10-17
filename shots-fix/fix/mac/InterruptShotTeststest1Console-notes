@@ -1,0 +1,4 @@
+light: 48 label="" value="Interrupted" frame=(655.0, 229.0, 84.0, 15.0) hittable=true
+light: 48 label="" value="Interrupted — the runner restarted" frame=(655.0, 393.0, 215.0, 15.0) hittable=true
+dark: 48 label="" value="Interrupted" frame=(655.0, 229.0, 84.0, 15.0) hittable=true
+dark: 48 label="" value="Interrupted — the runner restarted" frame=(655.0, 393.0, 215.0, 15.0) hittable=true

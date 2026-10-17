@@ -1,0 +1,6 @@
+Test Case '-[CfadeMacProbeUITests.InterruptShotTests test1Console]' started.
+Test Case '-[CfadeMacProbeUITests.InterruptShotTests test1Console]' passed (22.183 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.183 (22.184) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.183 (22.185) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.183 (22.186) seconds
+** TEST SUCCEEDED **

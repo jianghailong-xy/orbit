@@ -1,0 +1,50 @@
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+==> stub ready on 127.0.0.1:8765 (pid 8020, after 2s)
+==> ios
+Test Case '-[CfadeProbeUITests.InterruptShotTests test1Console]' started.
+Test Case '-[CfadeProbeUITests.InterruptShotTests test1Console]' passed (68.639 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 68.639 (68.642) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 68.639 (68.643) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 68.639 (68.644) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 23852, after 2s)
+==> mac
+Test Case '-[CfadeMacProbeUITests.InterruptShotTests test1Console]' started.
+Test Case '-[CfadeMacProbeUITests.InterruptShotTests test1Console]' passed (26.852 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 26.852 (26.853) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 26.852 (26.857) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 26.852 (26.859) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/_temp/tree/.irows-probe/run.sh: line 78: 23852 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/_temp/tree/.irows-probe/shots/ios:
+total 2216
+drwxr-xr-x  15 runner  staff     480 Oct 17 01:29 .
+drwxr-xr-x   4 runner  staff     128 Oct 17 01:13 ..
+-rw-r--r--   1 runner  staff  187692 Oct 17 01:23 1-interrupts-dark.png
+-rw-r--r--   1 runner  staff  211727 Oct 17 01:22 1-interrupts-light.png
+drwxr-xr-x   8 runner  staff     256 Oct 17 01:24 attachments
+-rw-r--r--   1 runner  staff     262 Oct 17 01:24 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff     415 Oct 17 01:24 InterruptShotTeststest1Console-notes
+-rw-r--r--@  1 runner  staff     415 Oct 17 01:23 InterruptShotTeststest1Console-notes.txt
+-rw-r--r--   1 runner  staff    2079 Oct 17 01:23 metrics.log
+-rw-r--r--   1 runner  staff     544 Oct 17 01:29 not-served.txt
+-rw-r--r--   1 runner  staff    5823 Oct 17 01:23 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 17 01:15 requests.log.out
+-rw-r--r--   1 runner  staff   17640 Oct 17 01:24 tree-console-light
+-rw-r--r--@  1 runner  staff   17640 Oct 17 01:22 tree-console-light.txt
+-rw-r--r--   1 runner  staff  658130 Oct 17 01:24 xcodebuild-ios.log
+
+/Users/runner/work/_temp/tree/.irows-probe/shots/mac:
+total 1776
+drwxr-xr-x  12 runner  staff     384 Oct 17 01:29 .
+drwxr-xr-x   4 runner  staff     128 Oct 17 01:13 ..
+-rw-r--r--   1 runner  staff   97343 Oct 17 01:29 1-interrupts-dark.png
+-rw-r--r--   1 runner  staff  106579 Oct 17 01:29 1-interrupts-light.png
+drwxr-xr-x   7 runner  staff     224 Oct 17 01:29 attachments
+-rw-r--r--   1 runner  staff     341 Oct 17 01:29 InterruptShotTeststest1Console-notes
+-rw-r--r--   1 runner  staff     773 Oct 17 01:29 metrics.log
+-rw-r--r--   1 runner  staff     366 Oct 17 01:29 not-served.txt
+-rw-r--r--   1 runner  staff    4586 Oct 17 01:29 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 17 01:24 requests.log.out
+-rw-r--r--   1 runner  staff   25211 Oct 17 01:29 tree-console-light
+-rw-r--r--   1 runner  staff  643895 Oct 17 01:29 xcodebuild-mac.log

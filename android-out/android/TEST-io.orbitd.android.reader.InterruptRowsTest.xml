@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="io.orbitd.android.reader.InterruptRowsTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-17T01:27:24.013Z" hostname="runnervm8k3b6" time="0.389">
+  <properties/>
+  <testcase name="anInterruptRowSaysWhetherTheRunnerRestartCutTheTurnOff" classname="io.orbitd.android.reader.InterruptRowsTest" time="0.389"/>
+  <system-out><![CDATA[shot interrupt-rows 1233×2673 -> /home/runner/work/orbit/orbit/src/android/build/evidence/interrupt-rows-android/interrupt-rows.png
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,4 @@
+:core:test: tests=259, failures=0, errors=0, skipped=0
+:app:testDebugUnitTest: tests=1441, failures=0, errors=0, skipped=0
+:app:testReleaseUnitTest: tests=1441, failures=0, errors=0, skipped=0
+Total: 3141 local tests passed; no skips

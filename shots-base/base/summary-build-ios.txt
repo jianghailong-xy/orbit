@@ -1,0 +1,6 @@
+Test Case '-[CfadeProbeUITests.InterruptShotTests test1Console]' started.
+Test Case '-[CfadeProbeUITests.InterruptShotTests test1Console]' passed (68.639 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 68.639 (68.642) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 68.639 (68.643) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 68.639 (68.644) seconds
+** TEST SUCCEEDED **

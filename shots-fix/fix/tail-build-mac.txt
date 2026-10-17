@@ -1,0 +1,300 @@
+
+Ld /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe normal (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/PackageFrameworks -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/PackageFrameworks -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/PackageFrameworks -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/PackageFrameworks -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/PackageFrameworks -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -rdynamic -Xlinker -no_deduplicate -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/CfadeMacProbe-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/CfadeMacProbe-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/CfadeMacProbe-ExecutorLinkFileList-normal-arm64.txt /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe.debug.dylib -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe.debug.dylib --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.zJGew2/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+ExtractAppIntentsMetadata (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.zJGew2/Metal.xctoolchain --module-name CfadeMacProbe --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk --xcode-version 17F113 --platform-family macOS --deployment-target 14.0 --bundle-identifier io.orbitd.cfademacprobe --output /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/Resources --target-triple arm64-apple-macos14.0 --binary-file /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe --dependency-file /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/Objects-normal/arm64/CfadeMacProbe_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/Objects-normal/arm64/CfadeMacProbe.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/CfadeMacProbe.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/CfadeMacProbe.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/Objects-normal/arm64/CfadeMacProbe.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-17 01:21:52.596 appintentsmetadataprocessor[35387:99366] Starting appintentsmetadataprocessor export
+2026-10-17 01:21:52.603 appintentsmetadataprocessor[35387:99366] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe.debug.dylib (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/CfadeMacProbe.debug.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/__preview.dylib (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app/Contents/MacOS/__preview.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbe.build/CfadeMacProbe.app.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app
+
+Validate /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-validationUtility /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+Touch /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app
+
+RegisterWithLaunchServices /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app (in target 'CfadeMacProbe' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Info.plist /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/empty-CfadeMacProbeUITests.plist (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/empty-CfadeMacProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -platform macosx -additionalcontentfile /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/MacOS/CfadeMacProbeUITests normal (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/../Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/MacOS/CfadeMacProbeUITests
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/MacOS/CfadeMacProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.zJGew2/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+ExtractAppIntentsMetadata (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.zJGew2/Metal.xctoolchain --module-name CfadeMacProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk --xcode-version 17F113 --platform-family macOS --deployment-target 14.0 --bundle-identifier io.orbitd.cfademacprobe.uitests --output /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Resources --target-triple arm64-apple-macos14.0 --binary-file /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/MacOS/CfadeMacProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/CfadeMacProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/CfadeMacProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/Objects-normal/arm64/CfadeMacProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-17 01:22:20.706 appintentsmetadataprocessor[36997:103460] Starting appintentsmetadataprocessor export
+2026-10-17 01:22:20.711 appintentsmetadataprocessor[36997:103460] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+MkDir /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME CfadeMacProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.cfademacprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME CfadeMacProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.cfademacprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest/Contents/Info.plist --outdir /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/MacOS/CfadeMacProbeUITests-Runner (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/MacOS/XCTRunner -output /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/MacOS/CfadeMacProbeUITests-Runner -extract arm64
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/CfadeMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app/Contents/PlugIns/CfadeMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app (in target 'CfadeMacProbeUITests' from project 'CfadeProbe')
+    cd /Users/runner/work/orbit/orbit/.irows-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Intermediates.noindex/CfadeProbe.build/Debug/CfadeMacProbeUITests.build/CfadeMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.irows-probe/.dd-mac/Build/Products/Debug/CfadeMacProbeUITests-Runner.app: replacing existing signature
+
+2026-10-17 01:22:24.445327+0000 CfadeMacProbeUITests-Runner[37732:104981] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-17 01:22:25.400.
+Test Suite 'CfadeMacProbeUITests.xctest' started at 2026-10-17 01:22:25.401.
+Test Suite 'InterruptShotTests' started at 2026-10-17 01:22:25.401.
+Test Case '-[CfadeMacProbeUITests.InterruptShotTests test1Console]' started.
+    t =     0.00s Start Test at 2026-10-17 01:22:25.402
+    t =     1.68s Set Up
+    t =     1.99s Open io.orbitd.cfademacprobe
+    t =     1.99s     Launch io.orbitd.cfademacprobe
+2026-10-17 01:22:27.701 xcodebuild[28359:83108] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-17 01:22:27.701 xcodebuild[28359:83108] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.14s         Wait for accessibility to load
+    t =     3.96s         Setting up automation session
+    t =     3.98s         Wait for io.orbitd.cfademacprobe to idle
+    t =     4.09s Waiting 20.0s for Window (First Match) to exist
+    t =     5.11s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     5.11s         Checking existence of `Window (First Match)`
+    t =     5.12s Checking existence of `Any (First Match)`
+    t =     5.33s Checking existence of `StaticText (First Match)`
+    t =    10.04s Checking existence of `Window (First Match)`
+    t =    10.04s Checking existence of `Window (First Match)`
+    t =    10.05s Find the Window (First Match)
+    t =    10.39s Added attachment named '1-interrupts-light'
+    t =    10.39s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Interrupted"'
+    t =    10.46s Get all elements bound by index for: Elements matching predicate 'value BEGINSWITH "Interrupted"'
+    t =    10.52s Checking existence of `StaticText (Element at index 0)`
+    t =    10.57s Checking existence of `StaticText (Element at index 1)`
+    t =    10.62s Checking existence of `StaticText (Element at index 0)`
+    t =    10.67s Find the StaticText (Element at index 0)
+    t =    10.73s Find the "Interrupted" StaticText
+    t =    10.78s Find the "Interrupted" StaticText
+    t =    10.83s Find the "Interrupted" StaticText
+    t =    10.89s Find the "Interrupted" StaticText
+    t =    10.95s Checking existence of `StaticText (Element at index 1)`
+    t =    11.01s Find the StaticText (Element at index 1)
+    t =    11.17s Find the "Interrupted — the runner restarted" StaticText
+    t =    11.22s Find the "Interrupted — the runner restarted" StaticText
+    t =    11.29s Find the "Interrupted — the runner restarted" StaticText
+    t =    11.36s Find the "Interrupted — the runner restarted" StaticText
+    t =    11.43s Requesting snapshot of accessibility hierarchy for app with pid 37751
+    t =    11.53s Requesting snapshot of accessibility hierarchy for app with pid 37751
+    t =    11.61s Added attachment named 'tree-console-light.txt'
+    t =    11.61s Terminate io.orbitd.cfademacprobe:37751
+    t =    12.71s Open io.orbitd.cfademacprobe
+    t =    12.71s     Launch io.orbitd.cfademacprobe
+2026-10-17 01:22:38.129 xcodebuild[28359:83108] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-17 01:22:38.129 xcodebuild[28359:83108] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    13.46s         Wait for accessibility to load
+    t =    13.90s         Setting up automation session
+    t =    13.92s         Wait for io.orbitd.cfademacprobe to idle
+    t =    13.93s Waiting 20.0s for Window (First Match) to exist
+    t =    14.97s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    14.97s         Checking existence of `Window (First Match)`
+    t =    14.98s Checking existence of `Any (First Match)`
+    t =    15.11s Checking existence of `StaticText (First Match)`
+    t =    19.83s Checking existence of `Window (First Match)`
+    t =    19.83s Checking existence of `Window (First Match)`
+    t =    19.84s Find the Window (First Match)
+    t =    19.88s Added attachment named '1-interrupts-dark'
+    t =    19.88s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Interrupted"'
+    t =    19.95s Get all elements bound by index for: Elements matching predicate 'value BEGINSWITH "Interrupted"'
+    t =    20.01s Checking existence of `StaticText (Element at index 0)`
+    t =    20.06s Checking existence of `StaticText (Element at index 1)`
+    t =    20.11s Checking existence of `StaticText (Element at index 0)`
+    t =    20.17s Find the StaticText (Element at index 0)
+    t =    20.23s Find the "Interrupted" StaticText
+    t =    20.28s Find the "Interrupted" StaticText
+    t =    20.33s Find the "Interrupted" StaticText
+    t =    20.39s Find the "Interrupted" StaticText
+    t =    20.45s Checking existence of `StaticText (Element at index 1)`
+    t =    20.50s Find the StaticText (Element at index 1)
+    t =    20.56s Find the "Interrupted — the runner restarted" StaticText
+    t =    20.61s Find the "Interrupted — the runner restarted" StaticText
+    t =    20.66s Find the "Interrupted — the runner restarted" StaticText
+    t =    20.72s Find the "Interrupted — the runner restarted" StaticText
+    t =    20.78s Terminate io.orbitd.cfademacprobe:38516
+    t =    21.84s Tear Down
+    t =    21.84s     Added attachment named 'InterruptShotTeststest1Console-notes.txt'
+Test Case '-[CfadeMacProbeUITests.InterruptShotTests test1Console]' passed (22.183 seconds).
+Test Suite 'InterruptShotTests' passed at 2026-10-17 01:22:47.586.
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.183 (22.184) seconds
+Test Suite 'CfadeMacProbeUITests.xctest' passed at 2026-10-17 01:22:47.586.
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.183 (22.185) seconds
+Test Suite 'All tests' passed at 2026-10-17 01:22:47.586.
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.183 (22.186) seconds
+2026-10-17 01:22:48.086 xcodebuild[28359:83108] [MT] IDETestOperationsObserverDebug: 26.995 elapsed -- Testing started completed.
+2026-10-17 01:22:48.086 xcodebuild[28359:83108] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-17 01:22:48.086 xcodebuild[28359:83108] [MT] IDETestOperationsObserverDebug: 26.995 sec, +26.995 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.irows-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
