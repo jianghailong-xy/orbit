@@ -119,7 +119,9 @@ prepare_managed_runners() {
     [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] \
       || die "the managed runner image is stamped with its full source commit: run from a Git checkout, or set ORBIT_SOURCE_SHA"
     echo "==> Building the managed runner image from deploy/managed-runner/image (local, never pushed)"
-    docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$source_sha" \
+    # No provenance attestation, which BuildKit makes anew for every build: in Docker's containerd image store it
+    # would give the same image a new ID each time. /upgrade builds it the same way and compares the IDs.
+    docker build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$source_sha" \
       -t orbit-managed-runner:local .
     RUNNER_IMAGE=orbit-managed-runner:local
   fi

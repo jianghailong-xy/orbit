@@ -1,0 +1,900 @@
++ 2026-10-17T15:06:07Z deploying 438cc2ef830362fbe6c537e5bd7239507da7a028 (d6-on-last), d431d1021c15dd7dd4410d2c9ee36c60b8bcc4fa plus the runner source change
+    438cc2ef test(d6): runner source change for the on-last upgrade
+  
+   src/runner-go/main.go | 2 ++
+   1 file changed, 2 insertions(+)
++ .claude/skills/upgrade/upgrade.sh (no flags)
+==> Building images from source (apiserver wiki-worker web docker-channel)
+ Image orbit-docker-channel:local Building 
+ Image orbit-apiserver:local Building 
+ Image orbit-web Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.73kB done
+#1 DONE 0.0s
+
+#2 [apiserver internal] load build definition from Dockerfile
+#2 transferring dockerfile: 30B
+#2 transferring dockerfile: 6.11kB 0.1s done
+#2 ...
+
+#3 [web internal] load build definition from Dockerfile
+#3 transferring dockerfile: 6.12kB 0.0s done
+#3 DONE 0.4s
+
+#2 [apiserver internal] load build definition from Dockerfile
+#2 DONE 0.5s
+
+#4 [web] resolve image config for docker-image://docker.io/docker/dockerfile:1
+#4 ...
+
+#5 [docker-channel internal] load build definition from Dockerfile
+#5 transferring dockerfile: 854B 0.1s done
+#5 DONE 0.5s
+
+#4 [apiserver] resolve image config for docker-image://docker.io/docker/dockerfile:1
+#4 DONE 2.0s
+
+#6 [apiserver] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#6 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.1s done
+#6 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.1s done
+#6 CACHED
+
+#7 [docker-channel internal] load metadata for docker.io/library/python:3.13-alpine
+#7 DONE 3.9s
+
+#8 [web internal] load metadata for docker.io/library/nginx:alpine
+#8 ...
+
+#9 [docker-channel 1/2] FROM docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+#9 resolve docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a 0.3s done
+#9 DONE 0.3s
+
+#10 [docker-channel internal] load build context
+#10 transferring context: 26B
+#10 transferring context: 74.50kB 1.0s done
+#10 DONE 1.3s
+
+#11 [web internal] load metadata for docker.io/library/node:26-alpine
+#11 ...
+
+#9 [docker-channel 1/2] FROM docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+#9 CACHED
+
+#12 [docker-channel 2/2] COPY deploy/managed-runner/docker-channel/channel.py /opt/orbit-docker-channel/channel.py
+#12 ...
+
+#13 [web internal] load metadata for docker.io/library/golang:1.27
+#13 DONE 2.6s
+
+#14 [apiserver internal] load metadata for docker.io/library/node:26-slim
+#14 DONE 2.8s
+
+#15 [web internal] load metadata for docker.io/library/orbit-web:previous-release
+#15 ...
+
+#8 [web internal] load metadata for docker.io/library/nginx:alpine
+#8 DONE 2.9s
+
+#11 [web internal] load metadata for docker.io/library/node:26-alpine
+#11 DONE 3.0s
+
+#16 [apiserver internal] load .dockerignore
+#16 transferring context: 506B 0.0s done
+#16 DONE 0.5s
+
+#12 [docker-channel 2/2] COPY deploy/managed-runner/docker-channel/channel.py /opt/orbit-docker-channel/channel.py
+#12 ...
+
+#15 [web internal] load metadata for docker.io/library/orbit-web:previous-release
+#15 DONE 3.4s
+
+#16 [web internal] load .dockerignore
+#16 transferring context: 506B 0.0s done
+#16 DONE 0.5s
+
+#12 [docker-channel 2/2] COPY deploy/managed-runner/docker-channel/channel.py /opt/orbit-docker-channel/channel.py
+#12 DONE 1.6s
+
+#17 [docker-channel] exporting to image
+#17 exporting layers
+#17 ...
+
+#18 [web internal] load build context
+#18 DONE 0.0s
+
+#19 [apiserver internal] load build context
+#19 ...
+
+#20 [web binbuild 1/9] FROM docker.io/library/golang:1.27@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8
+#20 resolve docker.io/library/golang:1.27@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 0.8s done
+#20 DONE 0.8s
+
+#21 [web build  1/11] FROM docker.io/library/node:26-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5
+#21 resolve docker.io/library/node:26-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 0.9s done
+#21 DONE 1.0s
+
+#19 [apiserver internal] load build context
+#19 ...
+
+#22 [web runtime 1/6] FROM docker.io/library/nginx:alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d
+#22 resolve docker.io/library/nginx:alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d 0.9s done
+#22 DONE 1.0s
+
+#23 [web previous-release 1/1] FROM docker.io/library/orbit-web:previous-release@sha256:0e534808d00082d3dd918bcd56ae59055c97323359101479409669e9fee2ebec
+#23 resolve docker.io/library/orbit-web:previous-release@sha256:0e534808d00082d3dd918bcd56ae59055c97323359101479409669e9fee2ebec 0.9s done
+#23 DONE 1.0s
+
+#19 [apiserver internal] load build context
+#19 ...
+
+#24 [apiserver build  1/10] FROM docker.io/library/node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4
+#24 resolve docker.io/library/node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4 0.8s done
+#24 DONE 0.9s
+
+#19 [apiserver internal] load build context
+#19 ...
+
+#23 [web previous-release 1/1] FROM docker.io/library/orbit-web:previous-release@sha256:0e534808d00082d3dd918bcd56ae59055c97323359101479409669e9fee2ebec
+#23 DONE 2.4s
+
+#19 [apiserver internal] load build context
+#19 ...
+
+#18 [web internal] load build context
+#18 transferring context: 258.63kB 0.9s done
+#18 DONE 1.7s
+
+#19 [apiserver internal] load build context
+#19 ...
+
+#25 [web binbuild 2/9] WORKDIR /app
+#25 CACHED
+
+#26 [web binbuild 3/9] RUN if [ -n "$ORBIT_MACOS_SIGNING" ]; then       case "$(uname -m)" in         x86_64) arch=x86_64 sum=dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002 ;;         aarch64) arch=aarch64 sum=4af92c87ddf52f5f2d1258a3b4e56c7dcb8f1b2468df744976c5f139e031961f ;;         *) echo "no rcodesign release for $(uname -m)" >&2; exit 1 ;;       esac &&       curl -fsSL -o /tmp/rcodesign.tar.gz         "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign/0.29.0/apple-codesign-0.29.0-$arch-unknown-linux-musl.tar.gz" &&       echo "$sum  /tmp/rcodesign.tar.gz" | sha256sum -c - &&       tar -xzf /tmp/rcodesign.tar.gz -C /usr/local/bin --strip-components=1         "apple-codesign-0.29.0-$arch-unknown-linux-musl/rcodesign" &&       rm /tmp/rcodesign.tar.gz;     fi
+#26 CACHED
+
+#19 [apiserver internal] load build context
+#19 transferring context: 203.12kB 4.1s done
+#19 DONE 4.3s
+
+#17 [docker-channel] exporting to image
+#17 exporting layers 2.6s done
+#17 exporting manifest sha256:aff93d84f69dc6521dece55fd5c5aafa97f0163ddd7ac5ea1e9c85bcb4bbb6dc 0.3s done
+#17 exporting config sha256:f8ce8f61f612cb601f7ee3a6d8eaaba1c1542a7e1d63e24204139e35056796f0 0.6s done
+#17 exporting attestation manifest sha256:f93c202fa3fff12d2029cbeb98f652f1ca60a7670fc9d0c0bf62745ef9724150 0.3s done
+#17 exporting manifest list sha256:a22ccb18f09788a06ab505cc404a1aba3f859942c3e767fe9127b0d8abfa049c 0.2s done
+#17 naming to docker.io/library/orbit-docker-channel:local 0.0s done
+#17 unpacking to docker.io/library/orbit-docker-channel:local
+#17 ...
+
+#27 [apiserver build  9/10] COPY src/apiserver ./src/apiserver
+#27 CACHED
+
+#28 [apiserver runtime 12/16] COPY --from=build /app/src/apiserver/dist ./src/apiserver/dist
+#28 CACHED
+
+#29 [apiserver runtime 11/16] COPY --from=build /app/src/apiserver/prisma.config.ts ./src/apiserver/prisma.config.ts
+#29 CACHED
+
+#30 [apiserver build 10/10] RUN npm run build -w @orbit/shared  && npm run prisma:generate -w @orbit/apiserver  && npm run build -w @orbit/apiserver
+#30 CACHED
+
+#31 [apiserver build  6/10] COPY src/web/package.json ./src/web/
+#31 CACHED
+
+#32 [apiserver runtime  4/16] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && codex --version  && rm -rf /root/.codex
+#32 CACHED
+
+#33 [apiserver build  4/10] COPY src/shared/package.json ./src/shared/
+#33 CACHED
+
+#34 [apiserver runtime 14/16] COPY contracts ./contracts
+#34 CACHED
+
+#35 [apiserver build  2/10] WORKDIR /app
+#35 CACHED
+
+#36 [apiserver codex 2/2] RUN npm install -g @openai/codex@0.158.0  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
+#36 CACHED
+
+#37 [apiserver runtime  6/16] COPY --from=build /app/src/apiserver/node_modules ./src/apiserver/node_modules
+#37 CACHED
+
+#38 [apiserver build  7/10] RUN npm ci
+#38 CACHED
+
+#39 [apiserver build  8/10] COPY src/shared ./src/shared
+#39 CACHED
+
+#40 [apiserver runtime  5/16] COPY --from=build /app/node_modules ./node_modules
+#40 CACHED
+
+#41 [apiserver runtime 15/16] COPY scripts/executable-acceptance-dead-man.mjs ./scripts/executable-acceptance-dead-man.mjs
+#41 CACHED
+
+#42 [apiserver build  5/10] COPY src/apiserver/package.json ./src/apiserver/
+#42 CACHED
+
+#43 [apiserver runtime 13/16] COPY --from=build /app/src/apiserver/prisma ./src/apiserver/prisma
+#43 CACHED
+
+#44 [apiserver runtime  7/16] COPY --from=build /app/package.json ./package.json
+#44 CACHED
+
+#45 [apiserver runtime  8/16] COPY --from=build /app/src/shared/package.json ./src/shared/package.json
+#45 CACHED
+
+#46 [apiserver runtime  3/16] COPY --from=codex /opt/codex /opt/codex
+#46 CACHED
+
+#47 [apiserver runtime  9/16] COPY --from=build /app/src/shared/dist ./src/shared/dist
+#47 CACHED
+
+#48 [apiserver runtime 10/16] COPY --from=build /app/src/apiserver/package.json ./src/apiserver/package.json
+#48 CACHED
+
+#49 [apiserver build  3/10] COPY package.json package-lock.json tsconfig.base.json ./
+#49 CACHED
+
+#50 [apiserver runtime 16/16] COPY runner-release.json ./runner-release.json
+#50 CACHED
+
+#17 [docker-channel] exporting to image
+#17 unpacking to docker.io/library/orbit-docker-channel:local 0.3s done
+#17 DONE 4.7s
+
+#51 [apiserver] exporting to image
+#51 exporting layers done
+#51 exporting manifest sha256:b8cdaf10ebb14cf8bb7bdc23a08eb6fc23eab65fa218fcc5e80d38e001b06884 0.1s done
+#51 exporting config sha256:d51910e9210de7c6384ca4f4fa19b009886ff391de54e436ead7bdd3d4376ec4 0.1s done
+#51 exporting attestation manifest sha256:e87f849517b577501446c9a8f97db4f3c53743bebf58ef7d622b98e43ad127e9
+#51 exporting attestation manifest sha256:e87f849517b577501446c9a8f97db4f3c53743bebf58ef7d622b98e43ad127e9 0.9s done
+#51 exporting manifest list sha256:406b2d0cac9b53da12898e9f389e331da98df0dd2c1627c54e1308559f2e8b7e
+#51 exporting manifest list sha256:406b2d0cac9b53da12898e9f389e331da98df0dd2c1627c54e1308559f2e8b7e 0.2s done
+#51 naming to docker.io/library/orbit-apiserver:local
+#51 naming to docker.io/library/orbit-apiserver:local 0.1s done
+#51 unpacking to docker.io/library/orbit-apiserver:local 0.1s done
+#51 DONE 2.0s
+
+#52 [web binbuild 4/9] COPY src/runner-go ./src/runner-go
+#52 ...
+
+#53 [docker-channel] resolving provenance for metadata file
+#53 DONE 0.0s
+
+#54 [apiserver] resolving provenance for metadata file
+#54 DONE 0.0s
+
+#52 [web binbuild 4/9] COPY src/runner-go ./src/runner-go
+#52 DONE 6.1s
+
+#55 [web binbuild 5/9] COPY package.json ./package.json
+#55 DONE 1.0s
+
+#56 [web binbuild 6/9] COPY scripts ./scripts
+#56 DONE 1.3s
+
+#57 [web binbuild 7/9] COPY contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
+#57 DONE 1.4s
+
+#58 [web binbuild 8/9] COPY .gi[t] ./.git/
+#58 DONE 0.8s
+
+#59 [web binbuild 9/9] RUN --mount=type=cache,target=/root/.cache/go-build     --mount=type=secret,id=orbit_macos_signing_p12     --mount=type=secret,id=orbit_macos_signing_password     if [ -n "$ORBIT_MACOS_SIGNING" ]; then       export ORBIT_MACOS_SIGNING_P12=/run/secrets/orbit_macos_signing_p12         ORBIT_MACOS_SIGNING_PASSWORD_FILE=/run/secrets/orbit_macos_signing_password;     fi;     ORBIT_SOURCE_SHA="438cc2ef830362fbe6c537e5bd7239507da7a028" bash scripts/build-binaries.sh dist-bin
+#59 1.463 >> source 438cc2ef830362fbe6c537e5bd7239507da7a028
+#59 1.463 >> orbit-linux-x64 (linux/amd64) v0.1.232
+#59 19.85 >> orbit-linux-arm64 (linux/arm64) v0.1.232
+#59 32.51 >> orbit-darwin-x64 (darwin/amd64) v0.1.232
+#59 46.55 >> orbit-darwin-arm64 (darwin/arm64) v0.1.232
+#59 67.48 >> wrote dist-bin/version.json (v0.1.232)
+#59 67.50 total 22M
+#59 67.50 -rwxr-xr-x 1 root root 5.3M Oct 17 15:07 orbit-darwin-arm64.gz
+#59 67.50 -rwxr-xr-x 1 root root 5.7M Oct 17 15:07 orbit-darwin-x64.gz
+#59 67.50 -rwxr-xr-x 1 root root 5.1M Oct 17 15:07 orbit-linux-arm64.gz
+#59 67.50 -rwxr-xr-x 1 root root 5.7M Oct 17 15:06 orbit-linux-x64.gz
+#59 67.50 -rw-r--r-- 1 root root  726 Oct 17 15:07 version.json
+#59 DONE 67.8s
+
+#60 [web build  9/11] COPY src/shared ./src/shared
+#60 CACHED
+
+#61 [web runtime 2/6] COPY src/web/nginx.conf /etc/nginx/conf.d/default.conf
+#61 CACHED
+
+#62 [web build 10/11] RUN npm run build -w @orbit/shared
+#62 CACHED
+
+#63 [web build  8/11] COPY src/web ./src/web
+#63 CACHED
+
+#64 [web build  3/11] COPY package.json package-lock.json tsconfig.base.json ./
+#64 CACHED
+
+#65 [web build  4/11] COPY src/shared/package.json ./src/shared/
+#65 CACHED
+
+#66 [web build  6/11] COPY src/web/package.json ./src/web/
+#66 CACHED
+
+#67 [web build  2/11] WORKDIR /app
+#67 CACHED
+
+#68 [web build  7/11] RUN npm ci
+#68 CACHED
+
+#69 [web build 11/11] RUN npm run build -w @orbit/web
+#69 CACHED
+
+#70 [web build  5/11] COPY src/apiserver/package.json ./src/apiserver/
+#70 CACHED
+
+#71 [web runtime 3/6] COPY --from=build /app/src/web/dist /usr/share/nginx/html
+#71 CACHED
+
+#72 [web runtime 4/6] COPY --from=binbuild /app/dist-bin /usr/share/nginx/html/dl
+#72 DONE 0.6s
+
+#73 [web runtime 5/6] RUN --mount=type=bind,from=previous-release,target=/previous-release     --mount=type=bind,source=scripts/retain-runner-release.sh,target=/tmp/retain-runner-release.sh     sh /tmp/retain-runner-release.sh /previous-release/usr/share/nginx/html/dl /usr/share/nginx/html/dl
+#73 0.414 retain-runner-release: no release older than 0.1.232 to keep; /dl publishes 0.1.232 alone
+#73 DONE 0.5s
+
+#74 [web runtime 6/6] RUN if [ -n "http://localhost:2086" ]; then       sed -i "s|https://orbitd.io|http://localhost:2086|g" /usr/share/nginx/html/install.sh;     fi
+#74 DONE 0.6s
+
+#75 [web] exporting to image
+#75 exporting layers
+#75 exporting layers 1.4s done
+#75 exporting manifest sha256:62253cc152e91693cf39e54f4549e3ecc263f3b53688174a8cb651cdc167178e
+#75 exporting manifest sha256:62253cc152e91693cf39e54f4549e3ecc263f3b53688174a8cb651cdc167178e 0.2s done
+#75 exporting config sha256:7471338e0e88a0fdcea20d05d00472b6b6103c27e2c3dcb65628c9bdfdd9ecfc
+#75 exporting config sha256:7471338e0e88a0fdcea20d05d00472b6b6103c27e2c3dcb65628c9bdfdd9ecfc 0.3s done
+#75 exporting attestation manifest sha256:a3e2129d447e8222f5c6f1e69bb157a4c975d9258c73fefc456d988e8502ded8
+#75 exporting attestation manifest sha256:a3e2129d447e8222f5c6f1e69bb157a4c975d9258c73fefc456d988e8502ded8 0.1s done
+#75 exporting manifest list sha256:ce4c2e0b1eae250f4c56cc668db37627d0bf3d345cf117ebefc290fe1da20a25 0.1s done
+#75 naming to docker.io/library/orbit-web:latest 0.0s done
+#75 unpacking to docker.io/library/orbit-web:latest
+#75 unpacking to docker.io/library/orbit-web:latest 0.4s done
+#75 DONE 2.9s
+
+#76 [web] resolving provenance for metadata file
+#76 DONE 0.1s
+ Image orbit-apiserver:local Built 
+ Image orbit-web Built 
+ Image orbit-docker-channel:local Built 
+==> Building the managed runner image from deploy/managed-runner/image (orbit-managed-runner:local, local, never pushed)
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 9.02kB 0.1s done
+#1 DONE 0.1s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#2 DONE 0.2s
+
+#3 docker-image://docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 resolve docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 resolve docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.2s done
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#4 DONE 0.3s
+
+#5 [internal] load metadata for docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#5 DONE 0.3s
+
+#6 [internal] load build context
+#6 DONE 0.0s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 resolve docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 resolve docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 0.2s done
+#7 DONE 0.3s
+
+#8 [claude 1/2] FROM docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#8 resolve docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 0.2s done
+#8 CACHED
+
+#6 [internal] load build context
+#6 transferring context: 1.78MB 0.1s
+#6 transferring context: 6.70MB 0.6s done
+#6 DONE 0.7s
+
+#9 [stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*  && printf '%s\n'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main'       > /etc/apt/sources.list  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini  && rm -rf /var/lib/apt/lists/*  && groupadd --gid 10001 orbit  && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+#9 ...
+
+#10 [orbit-build 2/4] WORKDIR /src/runner-go
+#10 CACHED
+
+#11 [orbit-build 3/4] COPY src/runner-go/ ./
+#11 DONE 0.9s
+
+#9 [stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*  && printf '%s\n'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main'       > /etc/apt/sources.list  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini  && rm -rf /var/lib/apt/lists/*  && groupadd --gid 10001 orbit  && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+#9 ...
+
+#12 [orbit-build 4/4] RUN test "$(go env GOVERSION)" = go1.27.1  && printf '%s\n' "438cc2ef830362fbe6c537e5bd7239507da7a028" | grep -Eq '^[0-9a-f]{40}$'  && go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.sourceSHA=438cc2ef830362fbe6c537e5bd7239507da7a028 -X main.version=managed-438cc2ef830362fbe6c537e5bd7239507da7a028"       -o /out/orbit .
+#12 ...
+
+#9 [stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*  && printf '%s\n'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main'       > /etc/apt/sources.list  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini  && rm -rf /var/lib/apt/lists/*  && groupadd --gid 10001 orbit  && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+#9 7.470 Get:1 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie InRelease [140 kB]
+#9 7.531 Get:2 https://snapshot.debian.org/archive/debian-security/20260928T000000Z trixie-security InRelease [43.4 kB]
+#9 7.799 Get:3 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 Packages [9678 kB]
+#9 7.989 Get:4 https://snapshot.debian.org/archive/debian-security/20260928T000000Z trixie-security/main amd64 Packages [263 kB]
+#9 8.484 Fetched 10.1 MB in 1s (8032 kB/s)
+#9 8.484 Reading package lists...
+#9 9.126 Reading package lists...
+#9 9.613 Building dependency tree...
+#9 9.824 Reading state information...
+#9 10.07 bash is already the newest version (5.2.37-2+b10).
+#9 10.07 bash set to manually installed.
+#9 10.07 The following additional packages will be installed:
+#9 10.07   git-man libbrotli1 libcbor0.10 libcom-err2 libcurl3t64-gnutls libcurl4t64
+#9 10.07   libedit2 liberror-perl libexpat1 libffi8 libfido2-1 libgdbm-compat4t64
+#9 10.07   libgdbm6t64 libgnutls30t64 libgssapi-krb5-2 libidn2-0 libk5crypto3
+#9 10.07   libkeyutils1 libkrb5-3 libkrb5support0 libldap2 libncursesw6 libnghttp2-14
+#9 10.07   libnghttp3-9 libngtcp2-16 libngtcp2-crypto-gnutls8 libp11-kit0 libperl5.40
+#9 10.07   libproc2-0 libpsl5t64 libpython3-stdlib libpython3.13-minimal
+#9 10.07   libpython3.13-stdlib libreadline8t64 librtmp1 libsasl2-2 libsasl2-modules-db
+#9 10.07   libssh2-1t64 libtasn1-6 libunistring5 media-types netbase openssl perl
+#9 10.07   perl-modules-5.40 python3-minimal python3.13 python3.13-minimal
+#9 10.07   readline-common
+#9 10.07 Suggested packages:
+#9 10.07   gettext-base git-doc git-email git-gui gitk gitweb git-cvs git-mediawiki
+#9 10.07   git-svn gdbm-l10n gnutls-bin krb5-doc krb5-user sensible-utils keychain
+#9 10.07   libpam-ssh monkeysphere ssh-askpass perl-doc libterm-readline-gnu-perl
+#9 10.07   | libterm-readline-perl-perl make libtap-harness-archive-perl python3-doc
+#9 10.07   python3-tk python3-venv python3.13-venv python3.13-doc binutils
+#9 10.07   binfmt-support readline-doc sqlite3-doc
+#9 10.07 Recommended packages:
+#9 10.07   bash-completion patch less krb5-locales libldap-common libgpm2 publicsuffix
+#9 10.07   libsasl2-modules xauth psmisc linux-sysctl-defaults
+#9 10.30 The following NEW packages will be installed:
+#9 10.30   ca-certificates curl git git-man libbrotli1 libcbor0.10 libcom-err2
+#9 10.30   libcurl3t64-gnutls libcurl4t64 libedit2 liberror-perl libexpat1 libffi8
+#9 10.30   libfido2-1 libgdbm-compat4t64 libgdbm6t64 libgnutls30t64 libgssapi-krb5-2
+#9 10.30   libidn2-0 libk5crypto3 libkeyutils1 libkrb5-3 libkrb5support0 libldap2
+#9 10.30   libncursesw6 libnghttp2-14 libnghttp3-9 libngtcp2-16
+#9 10.30   libngtcp2-crypto-gnutls8 libp11-kit0 libperl5.40 libproc2-0 libpsl5t64
+#9 10.30   libpython3-stdlib libpython3.13-minimal libpython3.13-stdlib libreadline8t64
+#9 10.30   librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1t64 libtasn1-6
+#9 10.30   libunistring5 media-types netbase openssh-client openssl perl
+#9 10.30   perl-modules-5.40 procps python3 python3-minimal python3.13
+#9 10.30   python3.13-minimal readline-common ripgrep sqlite3 tini
+#9 10.51 0 upgraded, 58 newly installed, 0 to remove and 0 not upgraded.
+#9 10.51 Need to get 36.6 MB of archives.
+#9 10.51 After this operation, 163 MB of additional disk space will be used.
+#9 10.51 Get:1 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libexpat1 amd64 2.8.3-1~deb13u1 [123 kB]
+#9 10.52 Get:2 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libpython3.13-minimal amd64 3.13.5-2+deb13u5 [863 kB]
+#9 10.53 Get:3 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 python3.13-minimal amd64 3.13.5-2+deb13u5 [2225 kB]
+#9 10.55 Get:4 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 python3-minimal amd64 3.13.5-1 [27.2 kB]
+#9 10.55 Get:5 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 media-types all 13.0.0 [29.3 kB]
+#9 10.55 Get:6 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 netbase all 6.5 [12.4 kB]
+#9 10.55 Get:7 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libffi8 amd64 3.4.8-2 [24.1 kB]
+#9 10.55 Get:8 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libncursesw6 amd64 6.5+20250216-2 [135 kB]
+#9 10.55 Get:9 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 readline-common all 8.2-6 [69.4 kB]
+#9 10.55 Get:10 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libreadline8t64 amd64 8.2-6 [169 kB]
+#9 10.55 Get:11 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libpython3.13-stdlib amd64 3.13.5-2+deb13u5 [1959 kB]
+#9 10.57 Get:12 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 python3.13 amd64 3.13.5-2+deb13u5 [757 kB]
+#9 10.58 Get:13 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libpython3-stdlib amd64 3.13.5-1 [10.2 kB]
+#9 10.58 Get:14 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 python3 amd64 3.13.5-1 [28.2 kB]
+#9 10.58 Get:15 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libproc2-0 amd64 2:4.0.4-9 [65.6 kB]
+#9 10.58 Get:16 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 procps amd64 2:4.0.4-9 [882 kB]
+#9 10.59 Get:17 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 openssl amd64 3.5.7-1~deb13u2 [1507 kB]
+#9 10.60 Get:18 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 ca-certificates all 20250419 [162 kB]
+#9 10.60 Get:19 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libedit2 amd64 3.1-20250104-1 [93.8 kB]
+#9 10.61 Get:20 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libcbor0.10 amd64 0.10.2-2 [28.3 kB]
+#9 10.61 Get:21 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libfido2-1 amd64 1.15.0-1+b1 [78.7 kB]
+#9 10.61 Get:22 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libkrb5support0 amd64 1.21.3-5+deb13u1 [33.1 kB]
+#9 10.62 Get:23 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libcom-err2 amd64 1.47.2-3+b12 [25.0 kB]
+#9 10.62 Get:24 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libk5crypto3 amd64 1.21.3-5+deb13u1 [81.2 kB]
+#9 10.62 Get:25 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libkeyutils1 amd64 1.6.3-6 [9456 B]
+#9 10.63 Get:26 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libkrb5-3 amd64 1.21.3-5+deb13u1 [326 kB]
+#9 10.64 Get:27 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libgssapi-krb5-2 amd64 1.21.3-5+deb13u1 [138 kB]
+#9 10.64 Get:28 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 openssh-client amd64 1:10.0p1-7+deb13u4 [990 kB]
+#9 10.65 Get:29 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 perl-modules-5.40 all 5.40.1-6+deb13u1 [3014 kB]
+#9 10.74 Get:30 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libgdbm6t64 amd64 1.24-2 [75.2 kB]
+#9 10.74 Get:31 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libgdbm-compat4t64 amd64 1.24-2 [50.3 kB]
+#9 10.74 Get:32 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libperl5.40 amd64 5.40.1-6+deb13u1 [4326 kB]
+#9 10.77 Get:33 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 perl amd64 5.40.1-6+deb13u1 [268 kB]
+#9 10.79 Get:34 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libbrotli1 amd64 1.1.0-2+b7 [307 kB]
+#9 10.79 Get:35 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libunistring5 amd64 1.3-2 [477 kB]
+#9 10.80 Get:36 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libidn2-0 amd64 2.3.8-2 [109 kB]
+#9 10.80 Get:37 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libsasl2-modules-db amd64 2.1.28+dfsg1-9 [19.8 kB]
+#9 10.80 Get:38 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libsasl2-2 amd64 2.1.28+dfsg1-9 [57.5 kB]
+#9 10.80 Get:39 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libldap2 amd64 2.6.10+dfsg-1 [194 kB]
+#9 10.80 Get:40 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libnghttp2-14 amd64 1.64.0-1.1+deb13u1 [76.2 kB]
+#9 10.80 Get:41 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libnghttp3-9 amd64 1.8.0-1 [67.7 kB]
+#9 10.80 Get:42 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libpsl5t64 amd64 0.21.2-1.1+b1 [57.2 kB]
+#9 10.80 Get:43 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libp11-kit0 amd64 0.25.5-3 [425 kB]
+#9 10.81 Get:44 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libtasn1-6 amd64 4.20.0-2+deb13u1 [50.1 kB]
+#9 10.81 Get:45 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libgnutls30t64 amd64 3.8.9-3+deb13u4 [1469 kB]
+#9 10.83 Get:46 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 librtmp1 amd64 2.4+20151223.gitfa8646d.1-2+b5 [58.8 kB]
+#9 10.83 Get:47 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libssh2-1t64 amd64 1.11.1-1+deb13u2 [245 kB]
+#9 10.84 Get:48 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libcurl4t64 amd64 8.14.1-2+deb13u5 [391 kB]
+#9 10.84 Get:49 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 curl amd64 8.14.1-2+deb13u5 [270 kB]
+#9 10.84 Get:50 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libngtcp2-16 amd64 1.11.0-1+deb13u1 [132 kB]
+#9 10.84 Get:51 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libngtcp2-crypto-gnutls8 amd64 1.11.0-1+deb13u1 [29.5 kB]
+#9 10.85 Get:52 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 libcurl3t64-gnutls amd64 8.14.1-2+deb13u5 [384 kB]
+#9 10.85 Get:53 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 liberror-perl all 0.17030-1 [26.9 kB]
+#9 10.85 Get:54 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 git-man all 1:2.47.3-0+deb13u1 [2205 kB]
+#9 10.87 Get:55 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 git amd64 1:2.47.3-0+deb13u1 [8862 kB]
+#9 11.00 Get:56 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 ripgrep amd64 14.1.1-1+b4 [1434 kB]
+#9 11.01 Get:57 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 sqlite3 amd64 3.46.1-7+deb13u2 [384 kB]
+#9 11.02 Get:58 https://snapshot.debian.org/archive/debian/20260928T000000Z trixie/main amd64 tini amd64 0.19.0-3+b8 [280 kB]
+#9 11.60 debconf: unable to initialize frontend: Dialog
+#9 11.60 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#9 11.60 debconf: falling back to frontend: Readline
+#9 11.60 debconf: unable to initialize frontend: Readline
+#9 11.60 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 58.)
+#9 11.60 debconf: falling back to frontend: Teletype
+#9 11.60 debconf: unable to initialize frontend: Teletype
+#9 11.60 debconf: (This frontend requires a controlling tty.)
+#9 11.60 debconf: falling back to frontend: Noninteractive
+#9 12.16 Preconfiguring packages ...
+#9 12.37 Fetched 36.6 MB in 1s (52.6 MB/s)
+#9 12.52 Selecting previously unselected package libexpat1:amd64.
+#9 12.52 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 5039 files and directories currently installed.)
+#9 12.56 Preparing to unpack .../libexpat1_2.8.3-1~deb13u1_amd64.deb ...
+#9 12.63 Unpacking libexpat1:amd64 (2.8.3-1~deb13u1) ...
+#9 13.45 Selecting previously unselected package libpython3.13-minimal:amd64.
+#9 13.45 Preparing to unpack .../libpython3.13-minimal_3.13.5-2+deb13u5_amd64.deb ...
+#9 13.53 Unpacking libpython3.13-minimal:amd64 (3.13.5-2+deb13u5) ...
+#9 14.11 Selecting previously unselected package python3.13-minimal.
+#9 14.12 Preparing to unpack .../python3.13-minimal_3.13.5-2+deb13u5_amd64.deb ...
+#9 14.30 Unpacking python3.13-minimal (3.13.5-2+deb13u5) ...
+#9 15.24 Setting up libpython3.13-minimal:amd64 (3.13.5-2+deb13u5) ...
+#9 16.13 Setting up libexpat1:amd64 (2.8.3-1~deb13u1) ...
+#9 16.86 Setting up python3.13-minimal (3.13.5-2+deb13u5) ...
+#9 ...
+
+#12 [orbit-build 4/4] RUN test "$(go env GOVERSION)" = go1.27.1  && printf '%s\n' "438cc2ef830362fbe6c537e5bd7239507da7a028" | grep -Eq '^[0-9a-f]{40}$'  && go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.sourceSHA=438cc2ef830362fbe6c537e5bd7239507da7a028 -X main.version=managed-438cc2ef830362fbe6c537e5bd7239507da7a028"       -o /out/orbit .
+#12 DONE 15.2s
+
+#13 [codex 2/2] RUN test "$(node --version)" = v26.10.0  && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.158.0  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex  && test -x /opt/codex/bin/codex  && test -x /opt/codex/codex-path/rg
+#13 CACHED
+
+#14 [claude 2/2] RUN test "$(node --version)" = v26.10.0  && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.300  && install -D -m 0755       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude"       /opt/claude/bin/claude
+#14 CACHED
+
+#9 [stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*  && printf '%s\n'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main'       > /etc/apt/sources.list  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini  && rm -rf /var/lib/apt/lists/*  && groupadd --gid 10001 orbit  && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+#9 18.16 Selecting previously unselected package python3-minimal.
+#9 18.16 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 5373 files and directories currently installed.)
+#9 18.17 Preparing to unpack .../0-python3-minimal_3.13.5-1_amd64.deb ...
+#9 18.24 Unpacking python3-minimal (3.13.5-1) ...
+#9 18.54 Selecting previously unselected package media-types.
+#9 18.54 Preparing to unpack .../1-media-types_13.0.0_all.deb ...
+#9 18.59 Unpacking media-types (13.0.0) ...
+#9 19.30 Selecting previously unselected package netbase.
+#9 19.30 Preparing to unpack .../2-netbase_6.5_all.deb ...
+#9 19.44 Unpacking netbase (6.5) ...
+#9 19.95 Selecting previously unselected package libffi8:amd64.
+#9 19.95 Preparing to unpack .../3-libffi8_3.4.8-2_amd64.deb ...
+#9 20.04 Unpacking libffi8:amd64 (3.4.8-2) ...
+#9 20.48 Selecting previously unselected package libncursesw6:amd64.
+#9 20.48 Preparing to unpack .../4-libncursesw6_6.5+20250216-2_amd64.deb ...
+#9 20.58 Unpacking libncursesw6:amd64 (6.5+20250216-2) ...
+#9 20.90 Selecting previously unselected package readline-common.
+#9 20.91 Preparing to unpack .../5-readline-common_8.2-6_all.deb ...
+#9 20.95 Unpacking readline-common (8.2-6) ...
+#9 21.33 Selecting previously unselected package libreadline8t64:amd64.
+#9 21.33 Preparing to unpack .../6-libreadline8t64_8.2-6_amd64.deb ...
+#9 21.39 Adding 'diversion of /lib/x86_64-linux-gnu/libhistory.so.8 to /lib/x86_64-linux-gnu/libhistory.so.8.usr-is-merged by libreadline8t64'
+#9 21.48 Adding 'diversion of /lib/x86_64-linux-gnu/libhistory.so.8.2 to /lib/x86_64-linux-gnu/libhistory.so.8.2.usr-is-merged by libreadline8t64'
+#9 21.53 Adding 'diversion of /lib/x86_64-linux-gnu/libreadline.so.8 to /lib/x86_64-linux-gnu/libreadline.so.8.usr-is-merged by libreadline8t64'
+#9 21.57 Adding 'diversion of /lib/x86_64-linux-gnu/libreadline.so.8.2 to /lib/x86_64-linux-gnu/libreadline.so.8.2.usr-is-merged by libreadline8t64'
+#9 21.63 Unpacking libreadline8t64:amd64 (8.2-6) ...
+#9 21.90 Selecting previously unselected package libpython3.13-stdlib:amd64.
+#9 21.90 Preparing to unpack .../7-libpython3.13-stdlib_3.13.5-2+deb13u5_amd64.deb ...
+#9 21.93 Unpacking libpython3.13-stdlib:amd64 (3.13.5-2+deb13u5) ...
+#9 22.27 Selecting previously unselected package python3.13.
+#9 22.27 Preparing to unpack .../8-python3.13_3.13.5-2+deb13u5_amd64.deb ...
+#9 22.34 Unpacking python3.13 (3.13.5-2+deb13u5) ...
+#9 22.64 Selecting previously unselected package libpython3-stdlib:amd64.
+#9 22.64 Preparing to unpack .../9-libpython3-stdlib_3.13.5-1_amd64.deb ...
+#9 22.69 Unpacking libpython3-stdlib:amd64 (3.13.5-1) ...
+#9 22.96 Setting up python3-minimal (3.13.5-1) ...
+#9 23.43 Selecting previously unselected package python3.
+#9 23.43 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 5881 files and directories currently installed.)
+#9 23.43 Preparing to unpack .../00-python3_3.13.5-1_amd64.deb ...
+#9 23.49 Unpacking python3 (3.13.5-1) ...
+#9 23.80 Selecting previously unselected package libproc2-0:amd64.
+#9 23.81 Preparing to unpack .../01-libproc2-0_2%3a4.0.4-9_amd64.deb ...
+#9 23.85 Unpacking libproc2-0:amd64 (2:4.0.4-9) ...
+#9 24.26 Selecting previously unselected package procps.
+#9 24.26 Preparing to unpack .../02-procps_2%3a4.0.4-9_amd64.deb ...
+#9 24.40 Unpacking procps (2:4.0.4-9) ...
+#9 24.83 Selecting previously unselected package openssl.
+#9 24.83 Preparing to unpack .../03-openssl_3.5.7-1~deb13u2_amd64.deb ...
+#9 24.86 Unpacking openssl (3.5.7-1~deb13u2) ...
+#9 25.17 Selecting previously unselected package ca-certificates.
+#9 25.17 Preparing to unpack .../04-ca-certificates_20250419_all.deb ...
+#9 25.21 Unpacking ca-certificates (20250419) ...
+#9 25.68 Selecting previously unselected package libedit2:amd64.
+#9 25.68 Preparing to unpack .../05-libedit2_3.1-20250104-1_amd64.deb ...
+#9 25.75 Unpacking libedit2:amd64 (3.1-20250104-1) ...
+#9 26.23 Selecting previously unselected package libcbor0.10:amd64.
+#9 26.23 Preparing to unpack .../06-libcbor0.10_0.10.2-2_amd64.deb ...
+#9 26.28 Unpacking libcbor0.10:amd64 (0.10.2-2) ...
+#9 26.65 Selecting previously unselected package libfido2-1:amd64.
+#9 26.65 Preparing to unpack .../07-libfido2-1_1.15.0-1+b1_amd64.deb ...
+#9 26.67 Unpacking libfido2-1:amd64 (1.15.0-1+b1) ...
+#9 26.92 Selecting previously unselected package libkrb5support0:amd64.
+#9 26.92 Preparing to unpack .../08-libkrb5support0_1.21.3-5+deb13u1_amd64.deb ...
+#9 26.95 Unpacking libkrb5support0:amd64 (1.21.3-5+deb13u1) ...
+#9 27.34 Selecting previously unselected package libcom-err2:amd64.
+#9 27.34 Preparing to unpack .../09-libcom-err2_1.47.2-3+b12_amd64.deb ...
+#9 27.39 Unpacking libcom-err2:amd64 (1.47.2-3+b12) ...
+#9 27.74 Selecting previously unselected package libk5crypto3:amd64.
+#9 27.74 Preparing to unpack .../10-libk5crypto3_1.21.3-5+deb13u1_amd64.deb ...
+#9 27.79 Unpacking libk5crypto3:amd64 (1.21.3-5+deb13u1) ...
+#9 28.13 Selecting previously unselected package libkeyutils1:amd64.
+#9 28.14 Preparing to unpack .../11-libkeyutils1_1.6.3-6_amd64.deb ...
+#9 28.19 Unpacking libkeyutils1:amd64 (1.6.3-6) ...
+#9 28.50 Selecting previously unselected package libkrb5-3:amd64.
+#9 28.50 Preparing to unpack .../12-libkrb5-3_1.21.3-5+deb13u1_amd64.deb ...
+#9 28.54 Unpacking libkrb5-3:amd64 (1.21.3-5+deb13u1) ...
+#9 28.79 Selecting previously unselected package libgssapi-krb5-2:amd64.
+#9 28.79 Preparing to unpack .../13-libgssapi-krb5-2_1.21.3-5+deb13u1_amd64.deb ...
+#9 28.83 Unpacking libgssapi-krb5-2:amd64 (1.21.3-5+deb13u1) ...
+#9 29.24 Selecting previously unselected package openssh-client.
+#9 29.24 Preparing to unpack .../14-openssh-client_1%3a10.0p1-7+deb13u4_amd64.deb ...
+#9 29.29 Unpacking openssh-client (1:10.0p1-7+deb13u4) ...
+#9 29.80 Selecting previously unselected package perl-modules-5.40.
+#9 29.80 Preparing to unpack .../15-perl-modules-5.40_5.40.1-6+deb13u1_all.deb ...
+#9 29.86 Unpacking perl-modules-5.40 (5.40.1-6+deb13u1) ...
+#9 30.37 Selecting previously unselected package libgdbm6t64:amd64.
+#9 30.37 Preparing to unpack .../16-libgdbm6t64_1.24-2_amd64.deb ...
+#9 30.42 Unpacking libgdbm6t64:amd64 (1.24-2) ...
+#9 30.77 Selecting previously unselected package libgdbm-compat4t64:amd64.
+#9 30.78 Preparing to unpack .../17-libgdbm-compat4t64_1.24-2_amd64.deb ...
+#9 30.80 Unpacking libgdbm-compat4t64:amd64 (1.24-2) ...
+#9 31.03 Selecting previously unselected package libperl5.40:amd64.
+#9 31.04 Preparing to unpack .../18-libperl5.40_5.40.1-6+deb13u1_amd64.deb ...
+#9 31.07 Unpacking libperl5.40:amd64 (5.40.1-6+deb13u1) ...
+#9 31.55 Selecting previously unselected package perl.
+#9 31.55 Preparing to unpack .../19-perl_5.40.1-6+deb13u1_amd64.deb ...
+#9 31.61 Unpacking perl (5.40.1-6+deb13u1) ...
+#9 32.09 Selecting previously unselected package libbrotli1:amd64.
+#9 32.10 Preparing to unpack .../20-libbrotli1_1.1.0-2+b7_amd64.deb ...
+#9 32.22 Unpacking libbrotli1:amd64 (1.1.0-2+b7) ...
+#9 32.48 Selecting previously unselected package libunistring5:amd64.
+#9 32.49 Preparing to unpack .../21-libunistring5_1.3-2_amd64.deb ...
+#9 32.52 Unpacking libunistring5:amd64 (1.3-2) ...
+#9 32.82 Selecting previously unselected package libidn2-0:amd64.
+#9 32.82 Preparing to unpack .../22-libidn2-0_2.3.8-2_amd64.deb ...
+#9 32.86 Unpacking libidn2-0:amd64 (2.3.8-2) ...
+#9 33.07 Selecting previously unselected package libsasl2-modules-db:amd64.
+#9 33.07 Preparing to unpack .../23-libsasl2-modules-db_2.1.28+dfsg1-9_amd64.deb ...
+#9 33.11 Unpacking libsasl2-modules-db:amd64 (2.1.28+dfsg1-9) ...
+#9 33.39 Selecting previously unselected package libsasl2-2:amd64.
+#9 33.40 Preparing to unpack .../24-libsasl2-2_2.1.28+dfsg1-9_amd64.deb ...
+#9 33.44 Unpacking libsasl2-2:amd64 (2.1.28+dfsg1-9) ...
+#9 33.80 Selecting previously unselected package libldap2:amd64.
+#9 33.80 Preparing to unpack .../25-libldap2_2.6.10+dfsg-1_amd64.deb ...
+#9 33.85 Unpacking libldap2:amd64 (2.6.10+dfsg-1) ...
+#9 34.07 Selecting previously unselected package libnghttp2-14:amd64.
+#9 34.08 Preparing to unpack .../26-libnghttp2-14_1.64.0-1.1+deb13u1_amd64.deb ...
+#9 34.12 Unpacking libnghttp2-14:amd64 (1.64.0-1.1+deb13u1) ...
+#9 34.36 Selecting previously unselected package libnghttp3-9:amd64.
+#9 34.36 Preparing to unpack .../27-libnghttp3-9_1.8.0-1_amd64.deb ...
+#9 34.40 Unpacking libnghttp3-9:amd64 (1.8.0-1) ...
+#9 34.71 Selecting previously unselected package libpsl5t64:amd64.
+#9 34.72 Preparing to unpack .../28-libpsl5t64_0.21.2-1.1+b1_amd64.deb ...
+#9 34.76 Unpacking libpsl5t64:amd64 (0.21.2-1.1+b1) ...
+#9 35.12 Selecting previously unselected package libp11-kit0:amd64.
+#9 35.12 Preparing to unpack .../29-libp11-kit0_0.25.5-3_amd64.deb ...
+#9 35.21 Unpacking libp11-kit0:amd64 (0.25.5-3) ...
+#9 35.55 Selecting previously unselected package libtasn1-6:amd64.
+#9 35.55 Preparing to unpack .../30-libtasn1-6_4.20.0-2+deb13u1_amd64.deb ...
+#9 35.57 Unpacking libtasn1-6:amd64 (4.20.0-2+deb13u1) ...
+#9 35.79 Selecting previously unselected package libgnutls30t64:amd64.
+#9 35.80 Preparing to unpack .../31-libgnutls30t64_3.8.9-3+deb13u4_amd64.deb ...
+#9 35.83 Unpacking libgnutls30t64:amd64 (3.8.9-3+deb13u4) ...
+#9 36.13 Selecting previously unselected package librtmp1:amd64.
+#9 36.13 Preparing to unpack .../32-librtmp1_2.4+20151223.gitfa8646d.1-2+b5_amd64.deb ...
+#9 36.17 Unpacking librtmp1:amd64 (2.4+20151223.gitfa8646d.1-2+b5) ...
+#9 36.47 Selecting previously unselected package libssh2-1t64:amd64.
+#9 36.47 Preparing to unpack .../33-libssh2-1t64_1.11.1-1+deb13u2_amd64.deb ...
+#9 36.53 Unpacking libssh2-1t64:amd64 (1.11.1-1+deb13u2) ...
+#9 36.92 Selecting previously unselected package libcurl4t64:amd64.
+#9 36.92 Preparing to unpack .../34-libcurl4t64_8.14.1-2+deb13u5_amd64.deb ...
+#9 36.97 Unpacking libcurl4t64:amd64 (8.14.1-2+deb13u5) ...
+#9 37.20 Selecting previously unselected package curl.
+#9 37.21 Preparing to unpack .../35-curl_8.14.1-2+deb13u5_amd64.deb ...
+#9 37.23 Unpacking curl (8.14.1-2+deb13u5) ...
+#9 37.60 Selecting previously unselected package libngtcp2-16:amd64.
+#9 37.60 Preparing to unpack .../36-libngtcp2-16_1.11.0-1+deb13u1_amd64.deb ...
+#9 37.64 Unpacking libngtcp2-16:amd64 (1.11.0-1+deb13u1) ...
+#9 37.96 Selecting previously unselected package libngtcp2-crypto-gnutls8:amd64.
+#9 37.96 Preparing to unpack .../37-libngtcp2-crypto-gnutls8_1.11.0-1+deb13u1_amd64.deb ...
+#9 38.01 Unpacking libngtcp2-crypto-gnutls8:amd64 (1.11.0-1+deb13u1) ...
+#9 38.37 Selecting previously unselected package libcurl3t64-gnutls:amd64.
+#9 38.37 Preparing to unpack .../38-libcurl3t64-gnutls_8.14.1-2+deb13u5_amd64.deb ...
+#9 38.43 Unpacking libcurl3t64-gnutls:amd64 (8.14.1-2+deb13u5) ...
+#9 38.66 Selecting previously unselected package liberror-perl.
+#9 38.66 Preparing to unpack .../39-liberror-perl_0.17030-1_all.deb ...
+#9 38.68 Unpacking liberror-perl (0.17030-1) ...
+#9 38.90 Selecting previously unselected package git-man.
+#9 38.90 Preparing to unpack .../40-git-man_1%3a2.47.3-0+deb13u1_all.deb ...
+#9 38.93 Unpacking git-man (1:2.47.3-0+deb13u1) ...
+#9 39.25 Selecting previously unselected package git.
+#9 39.26 Preparing to unpack .../41-git_1%3a2.47.3-0+deb13u1_amd64.deb ...
+#9 39.30 Unpacking git (1:2.47.3-0+deb13u1) ...
+#9 39.71 Selecting previously unselected package ripgrep.
+#9 39.72 Preparing to unpack .../42-ripgrep_14.1.1-1+b4_amd64.deb ...
+#9 39.78 Unpacking ripgrep (14.1.1-1+b4) ...
+#9 40.09 Selecting previously unselected package sqlite3.
+#9 40.09 Preparing to unpack .../43-sqlite3_3.46.1-7+deb13u2_amd64.deb ...
+#9 40.11 Unpacking sqlite3 (3.46.1-7+deb13u2) ...
+#9 40.26 Selecting previously unselected package tini.
+#9 40.27 Preparing to unpack .../44-tini_0.19.0-3+b8_amd64.deb ...
+#9 40.30 Unpacking tini (0.19.0-3+b8) ...
+#9 40.48 Setting up media-types (13.0.0) ...
+#9 40.66 Setting up libkeyutils1:amd64 (1.6.3-6) ...
+#9 40.82 Setting up libgdbm6t64:amd64 (1.24-2) ...
+#9 40.97 Setting up libgdbm-compat4t64:amd64 (1.24-2) ...
+#9 41.15 Setting up libcbor0.10:amd64 (0.10.2-2) ...
+#9 41.32 Setting up libbrotli1:amd64 (1.1.0-2+b7) ...
+#9 41.38 Setting up libedit2:amd64 (3.1-20250104-1) ...
+#9 41.46 Setting up libnghttp2-14:amd64 (1.64.0-1.1+deb13u1) ...
+#9 41.55 Setting up libcom-err2:amd64 (1.47.2-3+b12) ...
+#9 41.65 Setting up libkrb5support0:amd64 (1.21.3-5+deb13u1) ...
+#9 41.75 Setting up libsasl2-modules-db:amd64 (2.1.28+dfsg1-9) ...
+#9 41.88 Setting up libproc2-0:amd64 (2:4.0.4-9) ...
+#9 42.02 Setting up libunistring5:amd64 (1.3-2) ...
+#9 42.16 Setting up tini (0.19.0-3+b8) ...
+#9 42.31 Setting up libncursesw6:amd64 (6.5+20250216-2) ...
+#9 42.55 Setting up libk5crypto3:amd64 (1.21.3-5+deb13u1) ...
+#9 43.00 Setting up libsasl2-2:amd64 (2.1.28+dfsg1-9) ...
+#9 43.43 Setting up libnghttp3-9:amd64 (1.8.0-1) ...
+#9 44.04 Setting up libffi8:amd64 (3.4.8-2) ...
+#9 44.36 Setting up perl-modules-5.40 (5.40.1-6+deb13u1) ...
+#9 44.53 Setting up ripgrep (14.1.1-1+b4) ...
+#9 44.63 Setting up procps (2:4.0.4-9) ...
+#9 45.12 Setting up libtasn1-6:amd64 (4.20.0-2+deb13u1) ...
+#9 45.23 Setting up git-man (1:2.47.3-0+deb13u1) ...
+#9 45.34 Setting up netbase (6.5) ...
+#9 45.65 Setting up libngtcp2-16:amd64 (1.11.0-1+deb13u1) ...
+#9 45.80 Setting up libkrb5-3:amd64 (1.21.3-5+deb13u1) ...
+#9 45.96 Setting up libssh2-1t64:amd64 (1.11.1-1+deb13u2) ...
+#9 46.14 Setting up libfido2-1:amd64 (1.15.0-1+b1) ...
+#9 46.34 Setting up openssl (3.5.7-1~deb13u2) ...
+#9 46.48 Setting up readline-common (8.2-6) ...
+#9 46.60 Setting up libldap2:amd64 (2.6.10+dfsg-1) ...
+#9 46.70 Setting up libidn2-0:amd64 (2.3.8-2) ...
+#9 46.82 Setting up libperl5.40:amd64 (5.40.1-6+deb13u1) ...
+#9 46.95 Setting up ca-certificates (20250419) ...
+#9 47.10 debconf: unable to initialize frontend: Dialog
+#9 47.10 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#9 47.10 debconf: falling back to frontend: Readline
+#9 47.10 debconf: unable to initialize frontend: Readline
+#9 47.10 debconf: (This frontend requires a controlling tty.)
+#9 47.10 debconf: falling back to frontend: Teletype
+#9 47.10 debconf: unable to initialize frontend: Teletype
+#9 47.10 debconf: (This frontend requires a controlling tty.)
+#9 47.10 debconf: falling back to frontend: Noninteractive
+#9 47.38 Updating certificates in /etc/ssl/certs...
+#9 47.74 rehash: warning: skipping ca-certificates.crt, it does not contain exactly one certificate or CRL
+#9 47.76 150 added, 0 removed; done.
+#9 47.98 Setting up perl (5.40.1-6+deb13u1) ...
+#9 48.06 Setting up libp11-kit0:amd64 (0.25.5-3) ...
+#9 48.13 Setting up libgssapi-krb5-2:amd64 (1.21.3-5+deb13u1) ...
+#9 48.21 Setting up libreadline8t64:amd64 (8.2-6) ...
+#9 48.30 Setting up libpython3.13-stdlib:amd64 (3.13.5-2+deb13u5) ...
+#9 48.40 Setting up sqlite3 (3.46.1-7+deb13u2) ...
+#9 48.50 Setting up libpython3-stdlib:amd64 (3.13.5-1) ...
+#9 48.62 Setting up libgnutls30t64:amd64 (3.8.9-3+deb13u4) ...
+#9 48.75 Setting up python3.13 (3.13.5-2+deb13u5) ...
+#9 49.21 Setting up openssh-client (1:10.0p1-7+deb13u4) ...
+#9 49.74 Setting up libpsl5t64:amd64 (0.21.2-1.1+b1) ...
+#9 49.85 Setting up python3 (3.13.5-1) ...
+#9 49.92 running python rtupdate hooks for python3.13...
+#9 49.92 running python post-rtupdate hooks for python3.13...
+#9 50.00 Setting up liberror-perl (0.17030-1) ...
+#9 50.12 Setting up librtmp1:amd64 (2.4+20151223.gitfa8646d.1-2+b5) ...
+#9 50.25 Setting up libngtcp2-crypto-gnutls8:amd64 (1.11.0-1+deb13u1) ...
+#9 50.39 Setting up libcurl4t64:amd64 (8.14.1-2+deb13u5) ...
+#9 50.54 Setting up libcurl3t64-gnutls:amd64 (8.14.1-2+deb13u5) ...
+#9 50.62 Setting up git (1:2.47.3-0+deb13u1) ...
+#9 50.72 Setting up curl (8.14.1-2+deb13u5) ...
+#9 50.80 Processing triggers for libc-bin (2.41-12+deb13u4) ...
+#9 51.20 Processing triggers for ca-certificates (20250419) ...
+#9 51.25 Updating certificates in /etc/ssl/certs...
+#9 51.46 0 added, 0 removed; done.
+#9 51.46 Running hooks in /etc/ca-certificates/update.d...
+#9 51.49 done.
+#9 DONE 53.0s
+
+#15 [stage-3  3/11] COPY --from=orbit-build /usr/local/go/ /usr/local/go/
+#15 DONE 3.2s
+
+#16 [stage-3  4/11] COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
+#16 DONE 0.4s
+
+#17 [stage-3  5/11] COPY --from=codex /opt/codex/ /opt/codex/
+#17 DONE 6.1s
+
+#18 [stage-3  6/11] COPY --from=claude /opt/claude/ /opt/claude/
+#18 DONE 3.6s
+
+#19 [stage-3  7/11] COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
+#19 DONE 0.6s
+
+#20 [stage-3  8/11] COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
+#20 DONE 0.3s
+
+#21 [stage-3  9/11] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && ln -s /opt/claude/bin/claude /usr/local/bin/claude  && chown -R root:root /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit  && chmod -R go-w /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit  && chmod 0755 /usr/local/share/orbit  && git config --system user.name 'Orbit Runner'  && git config --system user.email runner@orbit.invalid
+#21 DONE 428.1s
+
+#22 [stage-3 10/11] RUN <<'SH' (set -eu...)
+#22 0.870 WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "/tmp/orbit-version-check/.codex", but that path does not exist
+#22 DONE 1.3s
+
+#23 [stage-3 11/11] WORKDIR /var/lib/orbit
+#23 DONE 0.3s
+
+#24 exporting to image
+#24 exporting layers
+#24 exporting layers 14.5s done
+#24 exporting manifest sha256:8284db3f7c4556c9ef0ed302c3ed1a2fac219017e50dfcb8eb9ea7450a2f83c0 0.1s done
+#24 exporting config sha256:0eec40b26c9c091761bc068b00105da3daec61419e5960213b7e277e256ccff5 0.1s done
+#24 naming to docker.io/library/orbit-managed-runner:local
+#24 naming to docker.io/library/orbit-managed-runner:local 0.0s done
+#24 unpacking to docker.io/library/orbit-managed-runner:local
+#24 unpacking to docker.io/library/orbit-managed-runner:local 8.1s done
+#24 DONE 23.0s
+==> The managed runner image is now sha256:8284db3f7c4556c9ef0ed302c3ed1a2fac219017e50dfcb8eb9ea7450a2f83c0 in channel.json and profile.json
+    (it was sha256:8a3c127f2568918ad62bf5055d41bfbf28078f49e032575d1d07275df8f40ba7: containers made from it keep running on it until they stop)
+==> Recreating changed services (apiserver applies DB migrations on boot)
+ Container orbit-wiki-worker Running 
+ Container orbit-gateway Running 
+ Container orbit-postgres Running 
+ Container orbit-apiserver Running 
+ Container orbit-web Recreate 
+ Container orbit-web Recreated 
+ Container orbit-postgres Waiting 
+ Container orbit-postgres Healthy 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+ Container orbit-apiserver Healthy 
+ Container orbit-web Starting 
+ Container orbit-web Started 
+ Container orbit-web Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+ Container orbit-web Healthy 
+ Container orbit-web Waiting 
+ Container orbit-gateway Waiting 
+ Container orbit-postgres Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-wiki-worker Waiting 
+ Container orbit-postgres Healthy 
+ Container orbit-web Healthy 
+ Container orbit-wiki-worker Healthy 
+ Container orbit-apiserver Healthy 
+ Container orbit-gateway Healthy 
+==> Recreating apiserver to read the managed runner profile
+ Container orbit-apiserver Recreate 
+ Container orbit-apiserver Recreated 
+ Container orbit-apiserver Starting 
+ Container orbit-apiserver Started 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+==> Recreating docker-channel to read its configuration
+ Container orbit-docker-channel Recreate 
+ Container orbit-docker-channel Recreated 
+ Container orbit-docker-channel Starting 
+ Container orbit-docker-channel Started 
+ Container orbit-docker-channel Waiting 
+ Container orbit-docker-channel Healthy 
+==> Stack status
+NAME                   IMAGE                                                                     COMMAND                  SERVICE          CREATED             STATUS                    PORTS
+orbit-apiserver        orbit-apiserver:local                                                     "docker-entrypoint.s…"   apiserver        23 seconds ago      Up 12 seconds (healthy)   3000/tcp
+orbit-docker-channel   orbit-docker-channel:local                                                "python3 -I /opt/orb…"   docker-channel   7 seconds ago       Up 5 seconds (healthy)    
+orbit-gateway          nginx:alpine                                                              "/docker-entrypoint.…"   gateway          About an hour ago   Up 13 minutes (healthy)   0.0.0.0:2086->80/tcp, [::]:2086->80/tcp
+orbit-pgbackup         postgres:16-alpine                                                        "/bin/sh /usr/local/…"   pgbackup         About an hour ago   Up 13 minutes             5432/tcp
+orbit-postgres         postgres:16-alpine                                                        "/bin/sh -c 'mkdir -…"   postgres         About an hour ago   Up 13 minutes (healthy)   5432/tcp
+orbit-web              orbit-web                                                                 "/docker-entrypoint.…"   web              35 seconds ago      Up 29 seconds (healthy)   80/tcp
+orbit-wiki-worker      sha256:d401efa5ee2539364541de396b017bb9c62a6370dddc96f9fe8c2ee80b44c311   "docker-entrypoint.s…"   wiki-worker      About an hour ago   Up 13 minutes             3000/tcp
+✓ Upgrade complete — all services healthy.
++ 2026-10-17T15:17:11Z upgrade exit=0 after 664 s

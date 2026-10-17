@@ -1008,14 +1008,19 @@ class Channel:
                     if not self.ours(labels):
                         raise Refused(409, "NOT_MANAGED", f"a container named {name} exists without this instance's label")
                     status = found["State"].get("Status")
-                    if self.same_identity(labels, body):
+                    never_started = status == "created" and (found["State"].get("StartedAt") or ZERO_TIME).startswith("0001-01-01")
+                    # One made before the configuration changed — from the previous image after an upgrade —
+                    # is never started: only the configured image runs, and having never run it is removed.
+                    stale = never_started and unsafe_container(self.config, found, self.image_env)
+                    if self.same_identity(labels, body) and not stale:
                         if status == "created":
                             credential = self.matching_credential(body)
                             self.populate_and_start(name, credential, body["generation"], runner_id, labels[UID_LABEL])
                             return 200, self.container_view(self.docker.container(name))
                         return 200, self.container_view(found)  # created once; a stopped one is never started again
-                    if status == "created" and (found["State"].get("StartedAt") or ZERO_TIME).startswith("0001-01-01"):
-                        log(f"container {name}: an earlier container that never started was removed")
+                    if never_started:
+                        log(f"container {name}: an earlier container that never started was removed"
+                            f"{' (it breaks the template: ' + '; '.join(stale) + ')' if stale else ''}")
                         self.remove_with_bootstrap(name, found)
                         continue
                     raise Refused(409, "CONTAINER_CONFLICT",

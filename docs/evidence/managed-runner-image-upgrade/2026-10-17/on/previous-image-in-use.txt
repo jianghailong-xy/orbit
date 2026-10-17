@@ -1,0 +1,6 @@
++ docker ps -a --filter ancestor=sha256:efa7b75f9ac00974dbb46bf411b4b39005b370e92109ac6b6a1edf1906607837
++ docker image rm sha256:efa7b75f9ac00974dbb46bf411b4b39005b370e92109ac6b6a1edf1906607837
+Error response from daemon: No such image: sha256:efa7b75f9ac00974dbb46bf411b4b39005b370e92109ac6b6a1edf1906607837
+exit=1
++ docker image ls (managed runner images)
+orbit-managed-runner:local sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394
