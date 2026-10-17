@@ -40,6 +40,10 @@ type MergeRecovery struct {
 	// Exactly what the push adds to origin/<target>, newest first. Left out past the commit cap
 	// rather than failing the preview: clients then list the local-only commits alone.
 	PushCommits []MergeRecoveryCommit `json:"pushCommits,omitempty"`
+	// ALREADY_LANDED: every one of the session's own commits is already on origin/<target>, as
+	// itself or as a copy with the same patch-id (see landedCommits). Each is listed with the origin
+	// commit carrying it, newest first.
+	LandedCommits []MergeRecoveryLandedCommit `json:"landedCommits,omitempty"`
 }
 type MergeRecoveryCommit struct {
 	Sha     string `json:"sha"`
@@ -47,6 +51,13 @@ type MergeRecoveryCommit struct {
 	Author  string `json:"author"`
 	Date    string `json:"date"`
 	Merge   bool   `json:"merge,omitempty"`
+}
+
+// MergeRecoveryLandedCommit is the commit on origin/<target> that carries the session's commit
+// SourceSha. Its Date is the committer date: when it reached origin (see landedCommitDetails).
+type MergeRecoveryLandedCommit struct {
+	MergeRecoveryCommit
+	SourceSha string `json:"sourceSha"`
 }
 type MergeRecoveryCheck struct {
 	Status         string `json:"status"`
@@ -65,7 +76,7 @@ func recoveryError(r *MergeRecovery, code, message string) mergeOutcome {
 	// Leave room for later outcome codes, and retain the candidate/location without a partial diff.
 	if payload, _ := json.Marshal(r); len(payload) > 1_180_000 {
 		r.Code, r.Patch = "PREVIEW_TOO_LARGE", ""
-		r.LocalCommits, r.RemoteCommits, r.PushCommits, r.Conflicts, r.Check = nil, nil, nil, nil, nil
+		r.LocalCommits, r.RemoteCommits, r.PushCommits, r.LandedCommits, r.Conflicts, r.Check = nil, nil, nil, nil, nil, nil
 		message = "preview details are too large to review inline; inspect the saved histories or repair worktree"
 	}
 	return mergeOutcome{Status: "error", SourceSha: r.SourceSha, TargetBranch: r.TargetBranch,
@@ -127,6 +138,19 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	if err != nil {
 		return recoveryError(r, "PREVIEW_TOO_LARGE", err.Error())
 	}
+	// Asked against origin as just fetched, before any repair checkout exists: a session whose
+	// every commit origin already carries has no candidate to build, and the local target's own
+	// commits are not its to push. A source origin contains as itself is left to the candidate as
+	// before. Partly landed, the replay below leaves the landed commits out.
+	anchor := replayAnchor(root, req.SessionID, r.SourceSha, req.BaseSha)
+	var landed map[string]bool
+	if !targetContainsSource(root, r.SourceSha, r.RemoteSha) {
+		landing := landedCommits(root, anchor, r.SourceSha, r.RemoteSha)
+		if landing.All {
+			return alreadyLandedOutcome(root, r, landing.Landed)
+		}
+		landed = landing.Skip
+	}
 	r.AddsMergeCommit = !targetContainsSource(root, r.LocalSha, r.RemoteSha) && !targetContainsSource(root, r.RemoteSha, r.LocalSha)
 
 	// Every completed check gets a new approval identity, even when it reuses a repair branch.
@@ -182,13 +206,7 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		if _, err := git(r.RepairWorktree, "reset", "--hard", r.SourceSha); err != nil {
 			return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
 		}
-		args := []string{"rebase"}
-		if anchor := replayAnchor(root, req.SessionID, r.SourceSha, req.BaseSha); anchor != "" {
-			args = append(args, "--onto", syncSha, anchor)
-		} else {
-			args = append(args, syncSha)
-		}
-		if _, err := git(r.RepairWorktree, args...); err != nil {
+		if _, err := replaySource(r.RepairWorktree, syncSha, anchor, r.SourceSha, landed); err != nil {
 			return recoveryConflict(r, "SOURCE_REPLAY", err)
 		}
 	}
