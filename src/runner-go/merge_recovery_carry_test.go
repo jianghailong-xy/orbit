@@ -158,17 +158,15 @@ func (f *carryFixture) carried(t *testing.T, r *MergeRecovery) {
 	f.repairs(t, 1)
 }
 
-// startedOver checks that r left the first check's repair alone and began again beside it, in a
-// new branch and checkout; the old branch is still at tip and its checkout is clean.
+// startedOver checks that r began again in a new branch and checkout, superseding the first check's
+// repair: its finished, clean checkout is reclaimed (R3), and its branch is still at tip.
 func (f *carryFixture) startedOver(t *testing.T, r *MergeRecovery, tip string) {
 	t.Helper()
 	if r.RepairBranch == "" || r.RepairBranch == f.first.RepairBranch || r.RepairWorktree == "" || r.RepairWorktree == f.first.RepairWorktree {
 		t.Fatalf("the check did not start over: %+v", r)
 	}
-	f.repairs(t, 2)
-	if mustGit(t, f.repo, "rev-parse", "refs/heads/"+f.first.RepairBranch) != tip || mustGit(t, f.first.RepairWorktree, "status", "--porcelain") != "" {
-		t.Fatal("starting over touched the old repair")
-	}
+	f.repairsLeft(t, 1, 2)
+	reclaimed(t, f.repo, f.first, tip)
 }
 
 // unfinished checks a REPAIR_IN_PROGRESS answer: files left to resolve, the first check's repair —
@@ -192,9 +190,15 @@ func (f *carryFixture) unfinished(t *testing.T, r *MergeRecovery, files []string
 // repairs checks how many repair checkouts and branches exist.
 func (f *carryFixture) repairs(t *testing.T, n int) {
 	t.Helper()
-	branches := splitLines(mustGit(t, f.repo, "for-each-ref", "--format=%(refname)", "refs/heads/orbit/recovery"))
-	if dirs := recoveryWorktrees(t); len(dirs) != n || len(branches) != n {
-		t.Fatalf("want %d repair checkout(s) and branch(es), got %v and %v", n, dirs, branches)
+	f.repairsLeft(t, n, n)
+}
+
+// repairsLeft checks how many repair checkouts and branches exist: a reclaimed checkout leaves its branch.
+func (f *carryFixture) repairsLeft(t *testing.T, checkouts, branches int) {
+	t.Helper()
+	names := splitLines(mustGit(t, f.repo, "for-each-ref", "--format=%(refname)", "refs/heads/orbit/recovery"))
+	if dirs := recoveryWorktrees(t); len(dirs) != checkouts || len(names) != branches {
+		t.Fatalf("want %d repair checkout(s) and %d branch(es), got %v and %v", checkouts, branches, dirs, names)
 	}
 }
 
@@ -349,7 +353,7 @@ func TestMergeRecoveryCarryNewConflictListsOnlyNewFiles(t *testing.T) {
 
 // A target rewritten under the repair — origin force-pushed, local main reset — did not move on:
 // what the repair joined is gone from it. The check starts over in a new checkout, meeting the
-// conflict again, and leaves the old repair as it was.
+// conflict again; the old repair's checkout is reclaimed and its branch kept as it was.
 func TestMergeRecoveryCarryRewrittenTargetStartsOver(t *testing.T) {
 	t.Run("origin", func(t *testing.T) {
 		f := newCarryFixture(t, "SOURCE_REPLAY", "shared.txt")
