@@ -996,7 +996,57 @@ Left to later work, or not shown here:
   failure handling (D5).
 - An upgrade does not rebuild the managed runner image, whose runner does not update itself: a deployment's
   runners keep the image `channel.json` and `profile.json` name until an administrator builds another and names
-  its ID in both.
+  its ID in both. (Since D6 it does: "Implementation record: image upgrades".)
 - The manual path's `docker compose up -d --build --wait` still applies a new database's migrations at the
   apiserver's first boot, and on a slow disk the pinned health check can give up first; the install script avoids
   it, the checklist does not. This predates D3.
+
+## Implementation record: image upgrades
+
+Recorded 2026-10-17 for the second phase's task D6. The managed runner image carries the runner, and the runner in
+it never updates itself (`ORBIT_NO_SELFUPDATE=1`), so until now a new deployment's managed runners kept the runner
+of the image they were installed with. The operator's side is [self-hosting](self-hosting.md#what-an-upgrade-does).
+
+| Area | As implemented |
+| --- | --- |
+| `/upgrade`, profile on | Both copies of the script share one section, byte for byte (`new_deployment_test.py` compares them). Where `docker compose config --services` lists `docker-channel`, the script finds the managed runners' directory as Compose binds it into the channel (the bind's source at `/var/lib/orbit-managed-runners`, so the script names no variable of `.env`), and stops before building if `channel.json` or `profile.json` is missing or names the image other than once. It builds `docker-channel` with the other images, then the managed runner image from this checkout as `orbit-managed-runner:local` (`--build-arg ORBIT_SOURCE_SHA` the deployed commit, `--provenance=false`, never pushed). When the ID is new in either file it writes it into both, each through a copy with the original's mode and owner, then a rename. It recreates the other services as before, then the apiserver if that did not recreate it, then `docker-channel`, last (`--no-deps --force-recreate` for both, since each reads its file only as it starts). |
+| `/upgrade`, profile off | Unchanged: each copy makes the Docker calls it made at c16d115b3, in the same order (pinned in `new_deployment_test.py`), and writes nothing under `data/`. |
+| Order | The apiserver goes first. A manager whose profile names an image the channel does not serve stops each pass at the mismatch (`capacityBudget`, `DOCKER_CHANNEL_MISMATCH`) before it reads any mapping, so it changes nothing and waits; the channel then restarts on the new image and the next pass goes on. The other order would let the previous apiserver, its capacity pool already established, ask a channel already on the new image for a container: refused (`IMAGE_REFUSED`, or the guard probe refused for that) and the runner it was starting `FAILED` (the Docker backend pg spec, case 12). |
+| Running containers | Left as they are. A container keeps the image it was made from: the upgrade stops, drains and restarts no managed container, and the channel still reads, stops and removes containers of a previous image by UID. Each runner moves to the new image with its next container, the next generation the wake after its next sleep (or a retry) makes, on the same volume and runner. A runner is stopped for nothing but the reasons it already was: draining for an image would cost a busy user a wake for nothing they asked for, while the sleep already decides when a runner can stop without interrupting anything. A runner that never sleeps keeps the previous image; its owner can ask it to sleep (`POST /api/managed-runner/sleep`). One container per volume, the stop proof and the compute reservation are exactly those of any sleep and wake. |
+| Channel | Only the configured image is made or started. A container of a previous image that was made and never started is removed and made again from the current image, at start-up (as before) and now also on a create (`create_container` started it if its credential was there again). |
+| Unfinished switch | `data/managed-runners/.image-switch` names the image from before the files are written until both services have started on them; a run that finds it starts both again, whatever it built. |
+| Image ID | BuildKit's provenance attestation is made anew for every build, and in Docker's containerd image store the image's ID is the digest of the index carrying it: a fully cached rebuild of the same commit got a new ID (`sha256:efa7b75f9ac0…`, then `sha256:1eb5a013755c…`, config and layers identical). Built with `--provenance=false` (the install too, now), it keeps one ID, so a re-run finds the files already naming it. |
+| Previous images | Nothing deletes one. In the containerd image store the previous image loses its name when the new one takes the tag (no dangling record) while its containers keep running on it; their removal frees its storage. In the classic store it stays untagged, kept by Docker while a container was made from it and removed by `docker image prune -f` (`/upgrade --prune`) afterwards. Both shown in throwaway Docker 29.8.2 hosts. |
+| Cost | The image is stamped with its commit, so every new commit rebuilds it. `ARG ORBIT_SOURCE_SHA` comes before the package and `chown` steps of its last stage, so both run again: 10 minutes on the test host's spinning disk, which needs the network for the package snapshot. The install's cold build there took 19.5 minutes. |
+
+Verified on 2026-10-17 in isolated Docker hosts on the HPC machine (`docker:29.8.2-dind`, containerd image store,
+capped, outside the runner's cgroup; [evidence](evidence/managed-runner-image-upgrade/2026-10-17/README.md)):
+
+- A fresh install at the project line's tip c16d115b3 (`scripts/install-server.sh`, no flags) built
+  `sha256:efa7b75f9ac0…`; the first account's runner was READY, generation 1, after a placeholder Codex sign-in.
+- With data written to its volume (a file, a SQLite database) and a process in its container writing a timestamp
+  every second, `/upgrade` deployed d051db3d8 plus a one-line runner source change: it rebuilt the image
+  (`sha256:09a872d9ce72…`, source f899e5fe6), rewrote only the `image` line of each file, recreated the apiserver
+  (its own image had not changed) and then the channel. The new apiserver's two passes before the channel came back
+  stopped at the mismatch; the channel served the new image eight seconds after the apiserver started on it. The
+  runner's container was the same container, started at the same time, through the whole upgrade, its writer without
+  a gap over two seconds, its mapping READY at the same revision.
+- Its owner's sleep: the runner exited by itself (exit 0), the channel removed the container, and only then did the
+  mapping sleep, compute released. The wake made generation 2 from the new image: the same runner ID and volume, the
+  file and the database intact, the runner reporting `managed-f899e5fe6…`. A sampler every 250 ms saw at most one
+  container referring to the volume (5223 samples).
+- A deployment installed by hand at c16d115b3, with no managed runner line in `.env` (orbitd.io's kind), upgraded
+  first with c16d115b3's own `/upgrade` and then with D6's: the same Docker calls in the same order, the same
+  containers recreated, `.env` byte for byte as installed, no file added under `data/`, and no channel, network,
+  managed runner image, container or volume.
+
+Left to later work, or not shown here:
+
+- No model was used: the owner's DeepSeek key file was not there, so READY came from a placeholder Codex sign-in
+  and the work the upgrade did not interrupt was a process in the container, not an engine session.
+- A runner that never sleeps keeps the previous image; there is no administrator command to move every runner at
+  once.
+- Every commit rebuilds the image's last stage. Moving `ARG ORBIT_SOURCE_SHA` and the label below the package and
+  `chown` steps in `deploy/managed-runner/image/Dockerfile` (T03's) would keep those cached.
+- The by-hand upgrade steps (self-hosting's "Upgrading") rebuild no managed runner image; they now list the commands
+  that do.

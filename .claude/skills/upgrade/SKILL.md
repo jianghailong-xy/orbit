@@ -85,9 +85,9 @@ which follows the apiserver as above.
   the channel's and the managed runner image) without the Docker layer cache (use
   when a dependency change isn't being picked up).
 - `--prune` — `docker image prune -f` after a successful upgrade to reclaim
-  space from the now-dangling old image layers. Docker never prunes an image a
-  container still uses, so a previous managed runner image goes only once no
-  container, running or stopped, was made from it.
+  space from the now-dangling old image layers. In the classic image store that
+  includes a previous managed runner image once no container, running or
+  stopped, was made from it; Docker never prunes one a container uses.
 - `--allow-dirty` — build even though the checkout has uncommitted changes. Use
   when you deliberately want to test an uncommitted change in the deployment, and
   remember the change exists in no commit: the next clean rebuild reverts it.
@@ -126,7 +126,9 @@ which follows the apiserver as above.
      waits, while a channel already on the new image would refuse the old apiserver's creates.
   A managed runner's container keeps the image it was made from and is never stopped by the
   upgrade: each runner moves to the new image with its next container, when it wakes after it next
-  sleeps. The previous image stays while a container uses it; `--prune` removes it once none does.
+  sleeps. Nothing deletes the previous image while a container uses it: in Docker's containerd image
+  store it loses its name when the new image takes the tag, and its storage goes with the last
+  container made from it; in the classic store `--prune` removes it once no container uses it.
   `data/managed-runners/.image-switch` marks a switch written and not yet started on, so a run that
   failed between the two is finished by the next one.
 - The default `up -d --wait apiserver wiki-worker web gateway` only recreates services whose

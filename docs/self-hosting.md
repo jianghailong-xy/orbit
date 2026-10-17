@@ -462,12 +462,27 @@ one through the API (`POST /api/managed-runner/sleep`), and only while nothing r
 and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
 channel removes it and makes a new one from the current image.
 
-The previous image is left to you. Docker keeps it, untagged, while any container, running or stopped, was made
-from it; `/upgrade --prune` (`docker image prune -f`) removes it once none is, which is after every runner has slept
-once. To see which containers still use one: `docker ps -a --filter ancestor=<image id>`; `docker image rm <image id>`
-refuses while any does. If an upgrade stops between writing the files and starting both services on them,
-`data/managed-runners/.image-switch` names the image, and the next `/upgrade` starts the apiserver and the channel
-again whatever it builds.
+`/upgrade` deletes no image, and Docker keeps whatever a container still runs. What happens to the previous image
+then depends on Docker's image store:
+
+- In the containerd image store, which a fresh Docker 29 uses (`docker info` lists `io.containerd.snapshotter.v1`),
+  the previous image loses its name as soon as the new one takes the tag: `docker image ls` no longer shows it and
+  nothing new can be made from it, but containers made from it keep running on it, and its storage goes when the
+  last of them is removed. Nothing is left to delete.
+- In the classic store it stays as an untagged image. Docker refuses to remove it while any container, running or
+  stopped, was made from it, and `/upgrade --prune` (`docker image prune -f`) removes it once none is.
+
+Either way it is gone once every runner has slept once. To see which runners still run a previous image, list the
+managed runner containers with their images:
+
+```bash
+docker ps -a --filter label=orbit.managed-runner.instance --format '{{.Names}} {{.Image}}'
+```
+
+The layers of every image an upgrade rebuilds also stay in Docker's build cache until `docker builder prune`.
+
+If an upgrade stops between writing the files and starting both services on them, `data/managed-runners/.image-switch`
+names the image, and the next `/upgrade` starts the apiserver and the channel again whatever it builds.
 
 Every new commit gives a new image, since the image is stamped with the commit it was built from, and so a few
 minutes of building on each upgrade: the build's package step runs again, which needs the network.

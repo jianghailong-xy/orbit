@@ -69,8 +69,8 @@ fi
 # name by its local image ID. The image carries the runner, and the runner never updates itself, so the
 # upgrade rebuilds the image from this checkout (on this host, never pushed) and names the new ID in both
 # files. A container keeps the image it was made from: nothing running is stopped, and each runner
-# moves to the new image with its next container, made when it wakes after it next sleeps. The previous
-# image stays while a container uses it; --prune removes it once none does.
+# moves to the new image with its next container, made when it wakes after it next sleeps. Nothing here
+# deletes the previous image, and Docker keeps what a container runs (docs/self-hosting.md, "What an upgrade does").
 MR_TAG=orbit-managed-runner:local
 # Where root Compose mounts the managed runners' directory: in the channel, and read-only in the apiserver.
 MR_MOUNT=/var/lib/orbit-managed-runners
@@ -149,7 +149,7 @@ managed_runner_image_switch() {
   mv -f "$MR_DIR/.channel.json.new" "$MR_DIR/channel.json"
   mv -f "$MR_DIR/.profile.json.new" "$MR_DIR/profile.json"
   echo "==> The managed runner image is now $MR_IMAGE in channel.json and profile.json"
-  echo "    (it was $MR_CHANNEL_IMAGE, which stays on this host while a container uses it)"
+  echo "    (it was $MR_CHANNEL_IMAGE: containers made from it keep running on it until they stop)"
   MR_APISERVER="$($DC ps -q apiserver 2>/dev/null || true)"
 }
 
