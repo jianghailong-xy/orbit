@@ -46,6 +46,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -167,7 +168,7 @@ func (s CursorLaunchSpec) MarshalJSON() ([]byte, error) {
 // cursorACPArgs are the arguments every `agent acp` Orbit starts carries (§16.3): no self-update — ACP
 // runs no update check today (§1.1), and the flag keeps it so whatever a later build adds — and no
 // codebase indexing, D1's default, which uploads whole files from some accounts (§14.3). The flags a
-// permission mode adds are the driver's.
+// permission mode adds follow them (cursorPermissionArgs).
 func cursorACPArgs() []string {
 	return []string{"acp", "--disable-auto-update", "--disable-indexing"}
 }
@@ -225,7 +226,7 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		return CursorLaunchSpec{}, errors.New("CURSOR_CONFIG_CONFLICT: the session's working directory must be a directory")
 	}
 	spec := CursorLaunchSpec{
-		Executable: exe, Args: cursorACPArgs(), Cwd: cwd,
+		Executable: exe, Args: append(cursorACPArgs(), cursorPermissionArgs(job.Agent.PermissionMode)...), Cwd: cwd,
 		ConfigDir: filepath.Join(dir, "config"), DataDir: filepath.Join(dir, "data"), Home: filepath.Join(dir, "home"),
 		Version: cursorSupportedVersion,
 	}
@@ -331,10 +332,14 @@ func cursorLaunchCredential(job *ClaimedSession) (string, string, error) {
 }
 
 // writeCursorSessionConfig sets what Orbit owns in the session's cli-config.json and leaves the rest —
-// the allow-always rules the CLI saves there, the model it last ran — as the CLI wrote it. `channel:
-// static` turns the CLI's update check off; ACP runs none today (§1.1), and this keeps a later build
-// that brings one into ACP from running it (unmeasured, §17.1 item 9). The pinned build keeps the
-// value and fills in its own defaults around it (measured).
+// the model it last ran, the CLI's own preferences — as the CLI wrote it. `channel: static` turns the
+// CLI's update check off; ACP runs none today (§1.1), and this keeps a later build that brings one into
+// ACP from running it (unmeasured, §17.1 item 9). The pinned build keeps the value and fills in its own
+// defaults around it (measured). What decides that something runs unasked is Orbit's as well
+// (cursor_permissions.go): the allowlist goes back to the CLI's own default — `ls`, no deny rules — with
+// approval by allowlist and no web search accepted unasked (§5.3), so no rule that did not come from a
+// person's answer on Orbit's card lets a command, a tool or a search run unasked. Orbit never answers with
+// Cursor's allow-always, so the CLI never adds one of its own.
 func writeCursorSessionConfig(configDir string) error {
 	path := filepath.Join(configDir, "cli-config.json")
 	config := map[string]interface{}{}
@@ -349,10 +354,21 @@ func writeCursorSessionConfig(configDir string) error {
 	default:
 		return fmt.Errorf("CURSOR_CONFIG_CONFLICT: the session's %s cannot be read: %w", path, err)
 	}
-	if config["channel"] == "static" {
+	owned := map[string]interface{}{
+		"channel":             "static",
+		"permissions":         map[string]interface{}{"allow": []interface{}{"Shell(ls)"}, "deny": []interface{}{}},
+		"approvalMode":        "allowlist",
+		"autoAcceptWebSearch": false,
+	}
+	changed := false
+	for key, value := range owned {
+		if !reflect.DeepEqual(config[key], value) {
+			config[key], changed = value, true
+		}
+	}
+	if !changed {
 		return nil
 	}
-	config["channel"] = "static"
 	out, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err

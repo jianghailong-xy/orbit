@@ -251,7 +251,7 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 			started = call
 		}
 	}
-	if strings.Join(started.Args, " ") != "acp --disable-auto-update --disable-indexing" || started.Dir != spec.Cwd {
+	if strings.Join(started.Args, " ") != "acp --disable-auto-update --disable-indexing --disable-project-configs" || started.Dir != spec.Cwd {
 		t.Fatalf("started %v in %s", started.Args, started.Dir)
 	}
 	got := envMap(started.Env)

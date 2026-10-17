@@ -1,0 +1,148 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "echo first \u003e always-1.txt"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+      "withdrawn": false
+    },
+    {
+      "input": {
+        "command": "echo second \u003e always-2.txt"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+      "withdrawn": false
+    }
+  ],
+  "checks": [
+    {
+      "name": "always-answered-allow-once",
+      "pass": true,
+      "detail": "first [[\"`echo first \u003e always-1.txt`\" \"allow-once\"]]"
+    },
+    {
+      "name": "cursor-did-not-remember",
+      "pass": true,
+      "detail": "the second echo asked again: [[\"`echo second \u003e always-2.txt`\" \"allow-once\"]]"
+    },
+    {
+      "name": "session-allowlist-unchanged",
+      "pass": true,
+      "detail": "the session's cli-config allow = [Shell(ls)]"
+    },
+    {
+      "name": "repository-untouched",
+      "pass": true,
+      "detail": "no .cursor in the checkout (lstat <RUN>/work/.cursor: no such file or directory)"
+    },
+    {
+      "name": "runner-home-untouched",
+      "pass": true,
+      "detail": "no .cursor in the runner user's HOME (lstat <RUN>/home/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll run the two commands in order, then stop.\n\ndone",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "echo first \u003e always-1.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+        "input": {
+          "command": "echo second \u003e always-2.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "configDir": "<RUN>/session/config"
+  },
+  "mode": "acceptEdits",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<CLI>/rg --files --follow --max-depth 16 --no-messages",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    12
+  ],
+  "scenario": "allow-always",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}
