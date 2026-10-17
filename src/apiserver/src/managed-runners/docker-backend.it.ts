@@ -739,12 +739,14 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
 
   // ── (10) ────────────────────────────────────────────────────────────────────────────────────
   await t.test('(10) capacity: the third runner waits, and starts once a slot is given back', async () => {
-    let b = await bobReady;
-    if ((await mappingOf(bob)).managementState !== 'READY') {
-      await api('POST', '/api/managed-runner/wake', bob.token, { idempotencyKey: `wake-${randomUUID()}` });
-      b = await stateIs(bob, 'READY', undefined, 300_000);
+    // Both slots taken, each runner freshly asked for (demand restarts its idle interval).
+    await bobReady;
+    for (const o of [alice, bob]) {
+      const woke = await api('POST', '/api/managed-runner/wake', o.token, { idempotencyKey: `wake-${randomUUID()}` });
+      assert.equal(woke.status, 202, woke.text);
     }
-    assert.equal((await mappingOf(alice)).managementState, 'READY');
+    const b = await stateIs(bob, 'READY', undefined, 300_000);
+    await stateIs(alice, 'READY', undefined, 300_000);
     const carol = await owner('carol');
     const ensured = await api('POST', '/api/managed-runner/ensure', carol.token, { idempotencyKey: 'ensure-carol' });
     assert.equal(ensured.status, 202, ensured.text);
@@ -764,21 +766,37 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
       const m = await mappingOf(carol);
       return m?.podUid && m.managementState === 'STARTING' ? m : null;
     }, 180_000, 500);
-    const created = (await dockerJson<{ Time: number; Action: string; Actor: { Attributes: Record<string, string> } }>('events', '--since', String(Math.floor(started / 1000)), '--until', String(Math.floor(Date.now() / 1000) + 1), '--filter', `label=${instanceLabel}`, '--filter', 'type=container', '--format', '{{json .}}'))
+    // Docker's own record: when carol's container was created, bob's was gone and at most one other was there.
+    const lifecycle = (await dockerJson<{ timeNano: number; Action: string; Actor: { Attributes: Record<string, string> } }>('events', '--since', String(Math.floor(started / 1000)), '--until', String(Math.floor(Date.now() / 1000) + 1), '--filter', `label=${instanceLabel}`, '--filter', 'type=container', '--format', '{{json .}}'))
       .filter((e) => ['create', 'destroy'].includes(e.Action));
-    const bobDestroyed = created.filter((e) => e.Action === 'destroy' && e.Actor.Attributes['orbit.managed-runner.runner'] === b.runnerId).at(-1);
-    const carolCreated = created.find((e) => e.Action === 'create' && e.Actor.Attributes['orbit.managed-runner.runner'] === c1.runnerId);
-    assert.ok(bobDestroyed && carolCreated && bobDestroyed.Time <= carolCreated.Time, 'carol\'s container came only after bob\'s was removed');
+    const live = new Set<string>();
+    let liveAtCarol: string[] | null = null;
+    let bobGoneFirst = false;
+    for (const e of lifecycle) {
+      const runner = e.Actor.Attributes['orbit.managed-runner.runner'];
+      if (e.Action === 'create' && runner === c1.runnerId && !liveAtCarol) {
+        liveAtCarol = [...live];
+        bobGoneFirst = !live.has(b.runnerId);
+      }
+      if (e.Action === 'create') live.add(runner);
+      else live.delete(runner);
+    }
+    assert.ok(liveAtCarol, 'carol\'s container create is in Docker\'s events');
+    assert.ok(bobGoneFirst, 'bob\'s container was removed before carol\'s was created');
+    assert.ok(liveAtCarol.length <= 1, `at most one other container when carol's was created: ${liveAtCarol.join(', ')}`);
     await until('carol\'s runner heartbeating', async () => (await db.runner.findUnique({ where: { id: c1.runnerId } }))?.lastHeartbeatAt, 180_000, 500);
     await signInCodex(c1);
     const c = await stateIs(carol, 'READY', 1, 900_000);
     assert.ok((await pool()).pods_reserved <= 2);
-    note('(10) third runner started after a release', { bobSleptAt: bobAsleep.stateEnteredAt, carolReadyAt: c.stateEnteredAt, poolReserved: await pool() });
+    note('(10) third runner started after a release', { bobSleptAt: bobAsleep.stateEnteredAt, liveWhenCarolWasCreated: liveAtCarol.length, carolReadyAt: c.stateEnteredAt, poolReserved: await pool() });
   });
 
   // ── (11) ────────────────────────────────────────────────────────────────────────────────────
   await t.test('(11) a volume over its disk limit: its container is stopped, and no container is started on it', async () => {
-    const ready = await mappingOf(alice);
+    // Up, and freshly asked for, so its idle interval does not end before the channel's disk check.
+    const woke = await api('POST', '/api/managed-runner/wake', alice.token, { idempotencyKey: `wake-${randomUUID()}` });
+    assert.equal(woke.status, 202, woke.text);
+    const ready = await stateIs(alice, 'READY', undefined, 300_000);
     await shell(containerOf(ready), `head -c ${300 * MiB} /dev/zero > ${DATA}/filler`);
     const failed = await stateIs(alice, 'FAILED', ready.generation, 240_000);
     const detail = (failed.lastError as { code: string; detail: string });
