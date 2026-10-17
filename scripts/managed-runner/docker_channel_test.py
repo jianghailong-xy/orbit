@@ -757,6 +757,112 @@ class RestartTest(ChannelFixture):
         self.assertEqual(restarted.read_volume(f"mr-data-{RUNNER}")["uid"], volume["uid"])
 
 
+class ImageSwitchTest(ChannelFixture):
+    """An upgrade restarts the channel on a new image (channel.json's `image`) while containers made from the
+    previous one still run: those are this instance's as before — read, stopped and removed by UID — and every
+    container made from then on comes from the new image, still one per data volume."""
+
+    NEW = "sha256:" + "c" * 64
+
+    def switch(self):
+        """The channel restarted on a configuration naming the new image, built on this host."""
+        self.docker.images[self.NEW] = {"Id": self.NEW, "Config": {"Env": ["PATH=/usr/bin:/bin", "ORBIT_HOME=/var/lib/orbit/home/.orbit"]}}
+        self.config = self.ch.parse_config({**self.config_value(Path(self.scratch.name)), "image": self.NEW})
+        self.channel = self.ch.Channel(self.config, self.docker, TOKEN)
+        self.channel.prepare()
+        self.server.channel = self.channel
+
+    def next_generation(self, volume_uid):
+        """The manager's next generation for the runner: its credential replaces the retired one's."""
+        old = self.call("GET", f"/v1/credentials/{RUNNER}")[1]
+        self.assertEqual(self.call("DELETE", f"/v1/credentials/{RUNNER}?uid={old['uid']}")[0], 204)
+        self.credential(2, token="generation-2-credential-0123456789")
+        return self.request(volume_uid, generation=2, image=self.NEW)
+
+    def test_the_previous_image_s_container_is_still_read_stopped_and_removed_by_uid(self):
+        volume, created = self.running_container()
+        self.switch()
+        name = f"mr-{RUNNER}"
+        status, view = self.call("GET", f"/v1/containers/{name}")
+        self.assertEqual((status, view["uid"], view["status"]), (200, created["uid"], "running"), "nothing that runs is touched")
+        self.assertEqual(self.docker.containers_by_name[name]["Image"], IMAGE)
+        self.assertEqual(self.call("GET", f"/v1/volumes/mr-data-{RUNNER}/holders")[1], {"holders": [{"name": name, "managed": True}]})
+        self.assertEqual([c["uid"] for c in self.call("GET", "/v1/resources")[1]["containers"]], [created["uid"]])
+        self.assertEqual(self.call("DELETE", f"/v1/containers/{name}?uid={created['uid']}")[1]["code"], "CONTAINER_RUNNING")
+        stopped = threading.Event()
+        self.docker.stop_hook = stopped.set
+        self.assertEqual(self.call("POST", f"/v1/containers/{name}/stop?uid={created['uid']}")[0], 202)
+        self.assertTrue(stopped.wait(5))
+        for _ in range(100):
+            view = self.call("GET", f"/v1/containers/{name}")[1]
+            if view["status"] == "exited":
+                break
+            threading.Event().wait(0.02)
+        self.assertEqual((view["status"], view["exitCode"]), ("exited", 143), "Docker's report, as before the switch")
+        self.assertEqual(self.call("DELETE", f"/v1/containers/{name}?uid={created['uid']}")[0], 204)
+        self.assertEqual(self.call("GET", f"/v1/volumes/mr-data-{RUNNER}/holders")[1], {"holders": []})
+        self.assertEqual(self.call("GET", f"/v1/volumes/mr-data-{RUNNER}")[1]["uid"], volume["uid"], "the volume stays")
+
+    def test_only_the_new_image_makes_containers_and_only_once_the_previous_one_is_gone(self):
+        volume, created = self.running_container()
+        self.switch()
+        self.assertEqual(self.call("GET", "/v1/info")[1]["image"], self.NEW)
+        # A request naming the previous image — an apiserver still on the previous profile — makes nothing.
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"], generation=2))
+        self.assertEqual((status, body["code"]), (403, "IMAGE_REFUSED"))
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"], generation=2, name=f"mr-{RUNNER}-guard-probe", dryRun=True))
+        self.assertEqual((status, body["code"]), (403, "IMAGE_REFUSED"), "not even its guard probe is admitted")
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"], generation=2, image=self.NEW, name=f"mr-{RUNNER}-guard-probe", dryRun=True))
+        self.assertEqual((status, body["code"]), (409, "SINGLE_CONTAINER_GUARD"), "the new profile's probe meets the guard")
+        # The next generation on the new image waits for the previous container: exited is not enough, removed is.
+        request = self.next_generation(volume["uid"])
+        self.assertEqual(self.call("POST", "/v1/containers", request)[1]["code"], "CONTAINER_CONFLICT")
+        self.docker.exit(f"mr-{RUNNER}")
+        self.assertEqual(self.call("POST", "/v1/containers", request)[1]["code"], "CONTAINER_CONFLICT")
+        self.assertEqual(self.call("DELETE", f"/v1/containers/mr-{RUNNER}?uid={created['uid']}")[0], 204)
+        status, body = self.call("POST", "/v1/containers", request)
+        self.assertEqual(status, 201, body)
+        made = self.docker.containers_by_name[f"mr-{RUNNER}"]
+        self.assertEqual((made["Image"], made["Config"]["Labels"]["orbit.managed-runner.generation"], body["volumeUid"]), (self.NEW, "2", volume["uid"]))
+        self.assertNotEqual(body["uid"], created["uid"])
+        self.assertEqual(self.docker.calls.count(("create_container", f"mr-{RUNNER}")), 2, "one container per generation, never two at once")
+
+    def test_a_create_the_previous_channel_left_unstarted_is_removed_and_never_started(self):
+        volume = self.volume()
+        self.credential()
+        spec = self.ch.container_spec(self.config, self.request(volume["uid"]), str(uuid.uuid4()))
+        self.docker.create_container(f"mr-{RUNNER}", spec)  # the channel stopped right after Docker's create
+        self.switch()  # ...and came back on the new image
+        self.assertNotIn(f"mr-{RUNNER}", self.docker.containers_by_name)
+        self.assertNotIn(("start_container", f"mr-{RUNNER}"), self.docker.calls)
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"], image=self.NEW))
+        self.assertEqual(status, 201, body)
+        self.assertEqual(self.docker.containers_by_name[f"mr-{RUNNER}"]["Image"], self.NEW)
+
+    def test_an_unstarted_container_of_the_previous_image_is_made_again_never_started(self):
+        volume = self.volume()
+        stale_uid = str(uuid.uuid4())
+        spec = self.ch.container_spec(self.config, self.request(volume["uid"]), stale_uid)
+        self.docker.create_container(f"mr-{RUNNER}", spec)
+        self.switch()  # its credential was gone: left for the manager, never started
+        self.assertEqual(self.docker.containers_by_name[f"mr-{RUNNER}"]["State"]["Status"], "created")
+        self.credential()
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"], image=self.NEW))
+        self.assertEqual(status, 201, body)
+        made = self.docker.containers_by_name[f"mr-{RUNNER}"]
+        self.assertEqual((made["Image"], made["State"]["Status"]), (self.NEW, "running"))
+        self.assertNotEqual(body["uid"], stale_uid, "a new container, not the previous image's started")
+        self.assertEqual(self.docker.calls.count(("start_container", f"mr-{RUNNER}")), 1)
+        self.assertIn(("remove_container", f"mr-{RUNNER}"), self.docker.calls)
+        instance = json.loads(made["archives"]["/run/orbit-bootstrap"]["instance.json"]["data"])
+        self.assertEqual(instance["instanceUid"], body["uid"], "the bootstrap files are the new container's")
+
+    def test_a_channel_does_not_serve_an_image_this_host_does_not_have(self):
+        config = self.ch.parse_config({**self.config_value(Path(self.scratch.name)), "image": self.NEW})
+        with self.assertRaisesRegex(ValueError, "is not on this Docker host"):
+            self.ch.Channel(config, self.docker, TOKEN).prepare()
+
+
 class ListingAndHostTest(ChannelFixture):
     def test_the_listing_holds_this_instance_s_resources_only(self):
         self.running_container()

@@ -50,9 +50,13 @@ export class FakeDockerChannel implements DockerChannel {
   };
   private failures: Array<{ call: string; failure: Failure }> = [];
 
+  /**
+   * `image` is the one the channel's configuration names: an upgrade restarts the channel on another one
+   * (`image = …`), while the containers made from the previous one stay as they are (`request.image`).
+   */
   constructor(
     readonly instanceId: string,
-    readonly image: string,
+    public image: string,
   ) {}
 
   // ── test controls ──────────────────────────────────────────────────────────────────────────

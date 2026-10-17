@@ -445,9 +445,55 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
 
 An upgrade (the `/upgrade` skill's script, or the steps under [Upgrading](#upgrading)) never writes `.env`, so
 managed runners stay as they were: off on a deployment whose `.env` does not switch them on, which is every
-deployment installed before them. Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also
-rebuilds and recreates `docker-channel`. It does not rebuild the managed runner image: runners keep the image both
-files name until an administrator builds another one and names its ID in both.
+deployment installed before them. There `/upgrade` builds and recreates exactly what it did before managed runners
+existed, and writes nothing under `data/`.
+
+Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also keeps the managed runners current. The
+runner in their image never updates itself, so each upgrade:
+
+1. stops before building anything unless `channel.json` and `profile.json` are in the managed runners' directory,
+   as Compose binds it into `docker-channel`;
+2. rebuilds `docker-channel` with the other images, then the managed runner image from this checkout, as
+   `orbit-managed-runner:local`, on this host and pushed nowhere;
+3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
+   file replaced whole by a rename;
+4. recreates the other services, then the apiserver if that did not recreate it, then `docker-channel`, last.
+   Both read their file only as they start. Until the channel serves the image the apiserver's profile names, the
+   apiserver starts no runner and only waits; in the other order, a channel already on the new image would refuse
+   the previous apiserver and fail a runner it was starting.
+
+Nothing a managed runner is doing is interrupted. A container keeps the image it was made from: the upgrade does not
+stop, drain or restart it, and the channel still reads, stops and removes containers of the previous image. Each
+runner moves to the new image with its next container, the one the wake after its next sleep makes, on the same
+volume and with the same runner. A sleep comes after an hour with nothing to do, or sooner when its owner asks for
+one through the API (`POST /api/managed-runner/sleep`), and only while nothing runs on it; one container per volume
+and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
+channel removes it and makes a new one from the current image.
+
+`/upgrade` deletes no image, and Docker keeps whatever a container still runs. What happens to the previous image
+then depends on Docker's image store:
+
+- In the containerd image store, which a fresh Docker 29 uses (`docker info` lists `io.containerd.snapshotter.v1`),
+  the previous image loses its name as soon as the new one takes the tag: `docker image ls` no longer shows it and
+  nothing new can be made from it, but containers made from it keep running on it, and its storage goes when the
+  last of them is removed. Nothing is left to delete.
+- In the classic store it stays as an untagged image. Docker refuses to remove it while any container, running or
+  stopped, was made from it, and `/upgrade --prune` (`docker image prune -f`) removes it once none is.
+
+Either way it is gone once every runner has slept once. To see which runners still run a previous image, list the
+managed runner containers with their images:
+
+```bash
+docker ps -a --filter label=orbit.managed-runner.instance --format '{{.Names}} {{.Image}}'
+```
+
+The layers of every image an upgrade rebuilds also stay in Docker's build cache until `docker builder prune`.
+
+If an upgrade stops between writing the files and starting both services on them, `data/managed-runners/.image-switch`
+names the image, and the next `/upgrade` starts the apiserver and the channel again whatever it builds.
+
+Every new commit gives a new image, since the image is stamped with the commit it was built from, and so a few
+minutes of building on each upgrade: the build's package step runs again, which needs the network.
 
 Each runner's data is on a Docker volume, `mr-data-<runner id>`, on this host's disk alone. The Postgres backups
 above do not include it, and neither switching managed runners off nor disabling an account deletes it. Back the
@@ -469,6 +515,19 @@ The control plane applies pending Prisma migrations on startup, and `wiki-worker
 starts once it is healthy. Keep Postgres running unless the release notes explicitly require a database change
 outside the normal migration path. An upgrade leaves `.env`, and with it [managed runners](#what-an-upgrade-does),
 as it was.
+
+These steps leave the managed runner image as it was. On a deployment with managed runners, upgrade with
+`/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`), which also rebuilds that image and switches to it, or do
+its steps after the ones above:
+
+```bash
+docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$(git rev-parse HEAD)" \
+  -t orbit-managed-runner:local .
+docker image inspect -f '{{.Id}}' orbit-managed-runner:local
+# Write that ID as "image" in data/managed-runners/channel.json and as runner.image in profile.json, then:
+docker compose up -d --wait --no-deps --force-recreate apiserver
+docker compose up -d --wait --no-deps --force-recreate docker-channel
+```
 
 ## Production checklist
 
