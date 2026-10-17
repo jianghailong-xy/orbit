@@ -253,7 +253,8 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
     **ACP 上看不出这张卡的命令还在跑**，`exitCode: 0` 不代表命令跑完或成功。
   - prompt 不等后台命令：`end_turn` 后 16.9 s 命令才写出文件。之后 40 s 内**没有任何 `session/update`**，后台命令结束也不开新的一轮。
     这和源码一致：后台 shell 和子代理的跟进步骤都在发起它的那个 prompt 请求里跑完【源码 A@15706、A@23155】。
-  - 后台命令在轮次结束后照常运行【实测】。CLI 退出或被杀之后它们会怎样【待验】；按 §3.4 的孤儿命令对待，由 runner 的会话作用域收拾（P5b 跟进）。
+  - 后台命令在轮次结束后照常运行【实测】。CLI 退出或被杀之后它们会怎样【待验】；Orbit 不依赖它：§3.4 的每会话进程作用域（P5b 跟进）
+    在 CLI 结束时回收它启动的全部后代，后台命令也在其中。会话还在、只是轮次结束时，它们照常运行。
 - **轮外更新**【实测：P0a 和 P0c 全部 27 轮的录制，[`p0c/analysis/turn-endings.json`](evidence/cursor-cli/2026.10.14-941492e/p0c/analysis/turn-endings.json)】：
   没有 prompt 在跑、也没在 `session/load` 重放时，来过的更新只有 `available_commands_update`、`current_mode_update`（客户端 `set_mode` 之后）和
   一条迟到的 `session_info_update`。没有正文、思考或工具更新，也就是**没有 Cursor 自己发起的轮次**。
