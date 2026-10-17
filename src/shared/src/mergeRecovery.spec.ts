@@ -39,6 +39,24 @@ describe('merge recovery wire contract', () => {
       expect(readMergeRecovery(bad)).toBeNull();
     }
   });
+  it('reads the origin commits an ALREADY_LANDED result names for each session commit', () => {
+    const landed = [
+      { sha: 'f'.repeat(40), subject: 'Session list wiring tests', author: 'Alice', date: '2026-10-11T10:34:00Z', sourceSha: 'a'.repeat(40) },
+      { sha: 'e'.repeat(40), subject: 'Agents model', author: 'Alice', date: '2026-10-11T09:36:00Z', sourceSha: '9'.repeat(40) },
+    ];
+    const r = readMergeRecovery({ code: 'ALREADY_LANDED', targetBranch: 'main', sourceSha: 'a'.repeat(40), localSha: 'b'.repeat(40),
+      remoteSha: 'c'.repeat(40), checkedAt: '2026-10-17T06:00:00Z', patch: '', landedCommits: landed });
+    expect(r?.landedCommits).toEqual(landed);
+    expect(mergeRecoveryReady(r)).toBe(false);
+  });
+  it('rejects landedCommits of the wrong shape', () => {
+    const commit = { sha: 'f'.repeat(40), subject: 'Agents model', author: 'Alice', date: '2026-10-11T09:36:00Z' };
+    const landed = { ...commit, sourceSha: 'a'.repeat(40) };
+    for (const bad of [{}, 'f'.repeat(40), [null], [commit], [{ ...landed, sourceSha: 5 }], [{ ...landed, sha: 1 }],
+      [{ ...landed, merge: 'no' }]]) {
+      expect(readMergeRecovery({ code: 'ALREADY_LANDED', targetBranch: 'main', landedCommits: bad })).toBeNull();
+    }
+  });
   it('relates the local target to origin only when a check has read both sides', () => {
     const c = { sha: 'f'.repeat(40), subject: 'x', author: 'Alice', date: '2026-09-30' };
     expect(mergeRecoveryTargetRelation({ ...ready, remoteSha: ready.localSha })).toEqual({ ahead: 0, behind: 0 });
