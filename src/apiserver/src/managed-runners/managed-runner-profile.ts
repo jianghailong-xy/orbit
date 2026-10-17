@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
+import { MANAGED_RUNNER_BACKENDS } from './managed-runner-backend';
 import { capacityBudget, computeShare, quantityUnits, storageShare } from './managed-runner-capacity';
 
 /**
@@ -13,6 +14,11 @@ import { capacityBudget, computeShare, quantityUnits, storageShare } from './man
  * current context, a default namespace, KUBECONFIG, ~/.kube or in-cluster credentials — and states
  * every lifecycle budget, because none of them is a fact this repository can supply. A profile
  * that is missing anything leaves the feature unavailable; ordinary login is unaffected.
+ *
+ * `backend` chooses the run backend (managed-runner-backend.ts). Absent, it is `kubernetes`, which
+ * every profile written before the field existed means; the shape below is that backend's. `docker`
+ * is named and not implemented yet: a profile choosing it is refused, with that reason, and nothing
+ * runs on Kubernetes in its place.
  */
 export const MANAGED_RUNNERS_PROFILE_ENV = 'ORBIT_MANAGED_RUNNERS_PROFILE';
 
@@ -24,6 +30,8 @@ export interface ManagedRunnerResourceAmounts {
 export interface ManagedRunnerProfile {
   schemaVersion: 1;
   valueKind: 'actual';
+  /** The run backend. Absent: `kubernetes`; a profile states it only when its file does. */
+  backend?: 'kubernetes';
   /** The authorized environment's name: the Pod's `orbit-test-environment` label. */
   environmentId: string;
   /** Recorded on every mapping as its cluster; with namespace and PVC name, the location key. */
@@ -166,6 +174,14 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
   });
 
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, problems: ['the profile must be a JSON object'] };
+  // The backend decides the shape of everything else, so it is settled first, and alone.
+  const backend = at('backend');
+  if (backend === 'docker') {
+    return { ok: false, problems: ['backend is "docker", which this server does not implement yet; it does not run managed runners on Kubernetes instead'] };
+  }
+  if (backend !== undefined && backend !== 'kubernetes') {
+    return { ok: false, problems: [`backend must be one of ${MANAGED_RUNNER_BACKENDS.map((name) => JSON.stringify(name)).join(', ')}, or absent for "kubernetes"`] };
+  }
   if (at('schemaVersion') !== 1) problems.push('schemaVersion must be 1');
   if (at('valueKind') !== 'actual') problems.push('valueKind must be "actual": an example profile authorizes nothing');
 
@@ -178,6 +194,7 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
   const profile: ManagedRunnerProfile = {
     schemaVersion: 1,
     valueKind: 'actual',
+    ...(backend === 'kubernetes' ? { backend } : {}),
     environmentId: text('environmentId', DNS_LABEL, 'must be a DNS label (a Kubernetes label value)'),
     clusterKey: text('clusterKey'),
     resourceProfileId: text('resourceProfileId'),
