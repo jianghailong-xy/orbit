@@ -148,7 +148,10 @@ def load_identity():
         raise ValueError("retained config does not match the fixed runner contract")
     expected = os.environ.get("ORBIT_RUNNER_EXPECTED_ID")
     if expected and config["runnerId"] != expected:
-        raise ValueError("retained runner ID does not match the expected user's volume")
+        # config.json keeps the UUID `orbit register` prints; the owner API's public id spells
+        # the same runner differently and does not match here.
+        raise ValueError("retained runner ID does not match the expected user's volume "
+                         "(ORBIT_RUNNER_EXPECTED_ID is the runner UUID that `orbit-container check` prints)")
     identity = {"layoutVersion": 1, "runnerId": config["runnerId"],
                 "serverUrl": config["serverUrl"], "workDir": str(workspace)}
     marker = orbit / "container-identity.json"

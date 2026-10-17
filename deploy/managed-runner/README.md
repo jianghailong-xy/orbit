@@ -108,7 +108,9 @@ existing registration ownership checks and recovery protocol, rather than creati
 The enrollment token passes through the existing CLI argument during registration; bootstrap logs
 and process inspection belong to the same isolated user's trust boundary.
 
-On rebuild, reuse the original PVC and supply `ORBIT_RUNNER_EXPECTED_ID` from the recorded mapping.
+On rebuild, reuse the original PVC and supply `ORBIT_RUNNER_EXPECTED_ID` from the recorded mapping:
+the runner UUID that `orbit register` printed and `orbit-container check` reports, not the public id
+the owner API shows for the same runner (that spelling is refused as a mismatch).
 Remove the enrollment Secret mount/reference and environment variable. The saved ID, token and config
 bytes are reused without calling register, forcing a registration or unregistering. Malformed or
 mismatched config fails closed. A populated repository/runtime home without config also fails; put
