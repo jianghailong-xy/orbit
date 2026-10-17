@@ -86,7 +86,9 @@ cleanup() {
   fi
   if [[ "$owns_reverse" == true ]]; then adbx -s "$serial" reverse --remove "tcp:$port" > /dev/null 2>&1 || failed=1; fi
   if [[ -n "$fixture_pid" ]]; then kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fi
-  if [[ "$started_unit" == true ]]; then systemctl stop orbit-android-emulator.service 9>&- || failed=1; fi
+  if [[ "$started_unit" == true ]]; then systemctl stop orbit-android-emulator.service 9>&- || failed=1
+    # Its emulator aborts on the unit's SIGINT, which marks the unit failed; leave it inactive as it was found.
+    systemctl reset-failed orbit-android-emulator.service 9>&- 2> /dev/null || true; fi
   (( result == 0 && failed != 0 )) && result=1
   printf 'cleanup_failed=%s\nexit_code=%s\nfinished_utc=%s\n' "$failed" "$result" "$(date -u +%FT%TZ)" >> "$output/result.txt"
   exit "$result"
