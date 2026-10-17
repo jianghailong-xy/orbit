@@ -684,10 +684,10 @@ export const setAvatar = async (photo: Blob): Promise<Me> => {
   return (await res.json()) as Me;
 };
 
-/** The account's profile photo as a data URL. The endpoint is bearer-guarded, so an `<img src>`
- *  pointing at it would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
-export const fetchAvatarDataUrl = async (): Promise<string> => {
-  const res = await authedFetch('/api/users/me/avatar');
+/** A profile photo as a data URL. The endpoints are bearer-guarded, so an `<img src>` pointing at
+ *  one would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
+const fetchPhotoDataUrl = async (path: string): Promise<string> => {
+  const res = await authedFetch(path);
   if (!res.ok) throw new Error(`profile photo: ${res.status}`);
   const blob = await res.blob();
   return await new Promise<string>((resolve, reject) => {
@@ -697,6 +697,13 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
     reader.readAsDataURL(blob);
   });
 };
+
+/** The account's profile photo as a data URL. */
+export const fetchAvatarDataUrl = (): Promise<string> => fetchPhotoDataUrl('/api/users/me/avatar');
+
+/** Another account's profile photo as a data URL, for Admin → Users (`GET /admin/users/:id/avatar`). */
+export const fetchUserAvatarDataUrl = (userId: string): Promise<string> =>
+  fetchPhotoDataUrl(`/api/admin/users/${encodeURIComponent(userId)}/avatar`);
 
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
