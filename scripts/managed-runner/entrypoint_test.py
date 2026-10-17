@@ -564,6 +564,20 @@ class DockerInstanceFileTest(ManagedBootstrapFixture):
             with self.assertRaises(ValueError):
                 self.runner.server_url()
 
+    def test_an_enrollment_start_with_the_instance_file_variable_keeps_plain_http_to_loopback(self):
+        # Without the manager's credential file the start is an enrollment, and its one-time token
+        # never goes to a private address in plain HTTP, whatever else the environment names.
+        os.environ.pop("ORBIT_RUNNER_CREDENTIAL_FILE")
+        os.environ["ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE"] = str(self.token)
+        for url in ("http://172.18.0.1:3000", "http://apiserver:3000", "http://[fd00::1]:3000"):
+            with self.subTest(url=url), mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": url}):
+                with self.assertRaises(ValueError):
+                    self.runner.server_url()
+                self.assert_refused()
+                self.assertFalse((self.orbit / "registration-pending.json").exists())
+        with mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": "https://orbit.example.test"}):
+            self.assertEqual(self.runner.server_url(), "https://orbit.example.test")
+
 
 if __name__ == "__main__":
     print("Scope: real scratch file checks; mount and UID mapping adapted for local namespace. "

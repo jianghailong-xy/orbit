@@ -93,8 +93,9 @@ def clean_env():
 
 
 def private_host(hostname):
-    """An address that never leaves the host's container network: a private, loopback or link-local IP
-    literal, or a single-label name (a Compose service, never resolved on the public DNS)."""
+    """A private, loopback or link-local IP literal, or a single-label name (a Compose service). Neither
+    proves the address is on the host's container network (private ranges include LANs; a single label
+    can resolve through search domains): the operator who sets the URL guarantees that."""
     try:
         address = ipaddress.ip_address(hostname)
     except ValueError:
@@ -105,9 +106,12 @@ def private_host(hostname):
 def server_url():
     value = os.environ.get("ORBIT_RUNNER_SERVER_URL", "").rstrip("/")
     parsed = urlsplit(value)
-    # A Docker backend container (its identity comes from the bootstrap file) reaches the server on its
-    # host, over the host's container network: plain HTTP is accepted there, to a private address only.
-    docker_private = bool(os.environ.get(INSTANCE_FILE_ENV)) and private_host(parsed.hostname or "")
+    # A Docker backend container (its identity comes from the bootstrap file, beside the manager's
+    # credential) reaches the server on its host, over the host's container network: plain HTTP is
+    # accepted there, to a private address only. A start without the credential file is an enrollment,
+    # whose one-time token never travels in plain HTTP beyond loopback.
+    docker_private = (bool(os.environ.get(INSTANCE_FILE_ENV)) and bool(os.environ.get("ORBIT_RUNNER_CREDENTIAL_FILE"))
+                      and private_host(parsed.hostname or ""))
     if (not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
             or (parsed.scheme != "https" and not
                 (parsed.scheme == "http" and (parsed.hostname in ("127.0.0.1", "localhost", "::1") or docker_private)))):
