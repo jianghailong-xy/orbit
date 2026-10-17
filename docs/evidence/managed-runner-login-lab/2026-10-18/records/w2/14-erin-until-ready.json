@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-17T23:37:32.268+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:37:32.268+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": "deepseek-2",
+        "last_heartbeat_at": "2026-10-17T23:37:17.722",
+        "management_state": "READY",
+        "pod": "5cce5e71",
+        "reason": null,
+        "revision": 13,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "erin",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

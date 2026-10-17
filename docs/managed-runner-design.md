@@ -690,6 +690,20 @@ rendering of these states, capacity admission and wake/sleep belong to the clien
 The local evidence is `managed-runner-sign-in.spec.ts` and `managed-runner-supply.spec.ts` in the
 unit suite, and `managed-runner-sign-in.pg.spec.ts`, run with `scripts/run-pg-spec.sh <spec>`.
 
+In the single-machine lab (T05, 2026-10-17), real sign-ins provisioned real RBD-backed PVCs and Pods.
+The managed image registered with its bootstrap credential, and its engine probe reported Claude Code and Codex installed and signed out.
+A key-only account then became READY only with the model-key rule above.
+A first session with nothing named ran on the managed runner, through to an answer.
+These also held there:
+- concurrent sign-ins on two replicas;
+- repeated sign-ins;
+- an existing account's landing and deep links;
+- a refused intent and a missing admission guard, each followed by its retry;
+- the switch unset and `false`, for new and existing accounts.
+
+The model there was a stand-in endpoint behind a DeepSeek-preset key, so a session on a real model is still open
+([lab record](managed-runner-lab.md#sign-in-provisioning-t05)).
+
 ## Implementation record: single-writer protection
 
 Recorded 2026-10-09 for the code-track single-writer task. It was verified with the in-memory

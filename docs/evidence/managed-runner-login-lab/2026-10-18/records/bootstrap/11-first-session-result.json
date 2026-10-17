@@ -1,0 +1,77 @@
+{
+  "answers": [
+    "FAKE MODEL reply #1: this conversation has 2 message(s); secrets seen: none."
+  ],
+  "at": "2026-10-17T23:49:53.131+00:00",
+  "events": 8,
+  "fakeModelRequests": [
+    {
+      "at": "2026-10-17T23:49:52Z",
+      "lastUser": "T05-FIRST-USER first session of a new deployment",
+      "messages": 2,
+      "model": "deepseek-v4-pro",
+      "n": 1,
+      "path": "/anthropic/v1/messages?beta=true",
+      "secrets": [],
+      "slow": 0,
+      "stream": true
+    }
+  ],
+  "owner": "first",
+  "row": [
+    {
+      "assigned_runner_id": "01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+      "created_at": "2026-10-17T23:49:48.858",
+      "engine": "claude",
+      "id": "01a14c45-8cba-738b-8d51-ce71943b8178",
+      "model": "deepseek-v4-pro",
+      "provider": "deepseek",
+      "provider_builtin": false,
+      "runtime_session_id": "3ec7888a-2fd8-45e1-bb7d-368cd9a458c1",
+      "status": "AWAITING_INPUT"
+    }
+  ],
+  "session": "34hkfehcoyDRpkrrgX5sO",
+  "timedOut": false,
+  "timeline": [
+    [
+      "2026-10-17T23:49:49.011+00:00",
+      {
+        "assignedRunnerId": "34hkeTv4p8HKXHXD9c4PY",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "runState": "RUNNING",
+        "runStatus": "RUNNING",
+        "runtimeSessionId": "3ec7888a-2fd8-45e1-bb7d-368cd9a458c1",
+        "sessionState": "RUNNING",
+        "status": "RUNNING"
+      }
+    ],
+    [
+      "2026-10-17T23:49:53.050+00:00",
+      {
+        "assignedRunnerId": "34hkeTv4p8HKXHXD9c4PY",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "runState": "AWAITING_INPUT",
+        "runStatus": "AWAITING_INPUT",
+        "runtimeSessionId": "3ec7888a-2fd8-45e1-bb7d-368cd9a458c1",
+        "sessionState": "AWAITING_INPUT",
+        "status": "AWAITING_INPUT"
+      }
+    ]
+  ],
+  "types": {
+    "assistant": 1,
+    "system": 3,
+    "turn_end": 1,
+    "user": 1,
+    "user_delivery": 2
+  }
+}
