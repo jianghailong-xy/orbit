@@ -1,4 +1,8 @@
 {
+ "login-timing/README.md": "6a420fab37fa1131ed70097671a001bbcdd3111caae27186d4db8d80979b878a",
+ "login-timing/login-default-store.txt": "26e14daa3ca706db1ff7bedff805c1667317ce8845852ee4b810aaf750582c27",
+ "login-timing/login-file-store.txt": "d74020038245f92524849ef86c5ecfc23ccc4e9becaae73ffdb69b7e5ea332a4",
+ "probe/store-probe-summary.json": "4f38cf5913241c7be6fdf1f068519627ac610a7d9a11cef9a761c3d642772d72",
  "prompts-ledger.json": "1cb2f1e3ac199bbecf970edcfde967b6de5143b8bb20332a265155a73f55db19",
  "protocol/debug-log-location.ndjson": "73e995c80efd2332dae0e3f5c27d75b30bd05b770db06de9b9dae8f491b8efb5",
  "protocol/failure-shapes-without-prompt.ndjson": "cf00d984656ea0429071c2ef3a372820050344a810ac37244abecd494e795e52",
@@ -16,5 +20,5 @@
  "scenarios/macos-quarantine.json": "b2640413daaf9fde59709d682e20fcdb2e3724cd5cb76962b30f0c8518993282",
  "scenarios/process-signals.json": "13aa5763f9fa6c50a6b1ee3182ea3efa6a8a59c5a839abdc1196743a321dd85e",
  "scenarios/signed-out-handshake.json": "df34ef3ed23327c415431a2af2dbcc55d91f5d307723c0363b9f2e7b119044fa",
- "summary.json": "38024d6003ce2a965811514dc844642b78638c23e05cec18518edf6b99de9715"
+ "summary.json": "13db3d209517fc4ca2074a5865637c030e90353e54c254ce3dc83f8e832c43f6"
 }
