@@ -66,7 +66,8 @@ fi
 # upgrade rebuilds the image from this checkout (on this host, never pushed) and names the new ID in both
 # files. A container keeps the image it was made from: nothing running is stopped, and each runner
 # moves to the new image with its next container, made when it wakes after it next sleeps. Nothing here
-# deletes the previous image, and Docker keeps what a container runs (docs/self-hosting.md, "What an upgrade does").
+# deletes the previous image, and Docker keeps what a container runs (docs/self-hosting.md, "What an
+# upgrade does").
 MR_TAG=orbit-managed-runner:local
 # Where root Compose mounts the managed runners' directory: in the channel, and read-only in the apiserver.
 MR_MOUNT=/var/lib/orbit-managed-runners
@@ -140,7 +141,12 @@ managed_runner_image_switch() {
   for file in channel.json profile.json; do
     cp -p "$MR_DIR/$file" "$MR_DIR/.$file.new"
     sed -E "s/(\"image\"[[:space:]]*:[[:space:]]*\")sha256:[0-9a-f]{64}\"/\\1$MR_IMAGE\"/" "$MR_DIR/$file" >"$MR_DIR/.$file.new"
-    [ "$(managed_runner_image_in "$MR_DIR/.$file.new")" = "$MR_IMAGE" ] || exit 1
+    # One ID for another of the same length: the copy is whole only if it is exactly as long as the file.
+    if [ "$(managed_runner_image_in "$MR_DIR/.$file.new")" != "$MR_IMAGE" ] \
+      || [ "$(wc -c <"$MR_DIR/.$file.new")" -ne "$(wc -c <"$MR_DIR/$file")" ]; then
+      echo "error: could not write the new image ID into a copy of $MR_DIR/$file; nothing was recreated" >&2
+      exit 1
+    fi
   done
   mv -f "$MR_DIR/.channel.json.new" "$MR_DIR/channel.json"
   mv -f "$MR_DIR/.profile.json.new" "$MR_DIR/profile.json"
