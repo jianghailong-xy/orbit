@@ -198,4 +198,21 @@ were not touched. The VM and the test server are off.
 
 ## Checks
 
-To be run on the landing merge.
+On the landing merge `d7e9824e4`: this branch's commit `08b88e56a` with origin/main `8670932a4`. The project line
+(292b2eb43) was already in the branch and had not moved. One step after another in a transient unit outside the
+runner's cgroup (`MemoryMax=9G`), with the lab VM off ([kit/gate.sh](kit/gate.sh), [logs/gate-steps.txt](logs/gate-steps.txt),
+[logs/gate-results.txt](logs/gate-results.txt)):
+
+| Step | Result |
+| --- | --- |
+| `npm run test:compose-topology` | 14 of 14 |
+| `npm run prisma:generate`, `npm run build` | exit 0 |
+| `npm test -w @orbit/shared` | 490 of 490 (32 files) |
+| `npm test -w @orbit/apiserver` | 5318 of 5318 |
+| `npm test -w @orbit/web` | 5371 of 5371 (414 files) |
+| managed-runner Python, `python3 -B -m unittest discover -s scripts/managed-runner -p '*test*.py'` | 150 tests OK, the five new `SingleWriterLabTest` cases among them |
+| every managed-runner pg spec, `scripts/run-pg-spec.sh src/apiserver/src/managed-runners/*.pg.spec.ts` | 12 specs, 116 cases, none failed or skipped: docker-backend 13, account-disabled 5, backend 7, boot 5, capacity 7, existing 3, fencing 16, manager 14, recovery 14, sign-in 12, sleep 10, wake 10 |
+
+No product code changed: the delivery is lab tooling (`scripts/managed-runner/lab/`), its offline tests, the lab page, one
+row of the design record and this evidence, so runner-go's `go test ./...` was not run. This README's checks section and
+the gate's script and logs were added to the merge commit afterwards; it changed nothing else.

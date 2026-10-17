@@ -1,0 +1,36 @@
+00-overlay exit=0
+01-compose-topology exit=0
+02-prisma-generate exit=0
+03-build exit=0
+04-shared exit=0
+05-apiserver exit=0
+06-web exit=0
+07-managed-runner-python exit=0
+08-managed-runner-pg exit=0
+# tests 14
+# pass 14
+ Test Files  32 passed (32)
+      Tests  490 passed (490)
+ℹ tests 5318
+ℹ pass 5318
+ℹ fail 0
+ℹ skipped 0
+ Test Files  414 passed (414)
+      Tests  5371 passed (5371)
+Ran 150 tests in 4.874s
+
+OK
+==> OK: /root/.orbit/worktrees/49cb15ca-2b61-5210-8668-a7972fa8f259 is ready to build and test
+==== docker-backend.pg.spec.ts tests=13 pass=13 fail=0 skipped=0 
+==== managed-runner-account-disabled.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+==== managed-runner-backend.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+==== managed-runner-boot.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+==== managed-runner-capacity.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+==== managed-runner-existing.pg.spec.ts tests=3 pass=3 fail=0 skipped=0 
+==== managed-runner-fencing.pg.spec.ts tests=16 pass=16 fail=0 skipped=0 
+==== managed-runner-manager.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+==== managed-runner-recovery.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+==== managed-runner-sign-in.pg.spec.ts tests=12 pass=12 fail=0 skipped=0 
+==== managed-runner-sleep.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==== managed-runner-wake.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==> OK: 12 spec(s) witnessed against PostgreSQL 16.15, no skips
