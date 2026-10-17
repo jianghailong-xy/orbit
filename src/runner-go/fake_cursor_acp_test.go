@@ -11,14 +11,20 @@ package main
 //     recorded order and given the runner's own id. A recorded request the runner did not send is
 //     skipped, and so is its answer;
 //   - a notification goes out with the next answer after it — it is what Cursor streamed while that
-//     request ran — and those after the last answer go out at once (a title can follow its turn's end);
+//     request ran — and those after the last answer go out at once (a title can follow its turn's end),
+//     unless the CLI never answered a request, a prompt it was killed in: they are that request's stream;
 //   - a request the CLI sends the client goes out as recorded, and the replay waits for the runner to
-//     answer it, since the real CLI would wait forever (§4.2, §5.2).
+//     answer it, since the real CLI would wait forever (§4.2, §5.2);
+//   - a prompt's recorded `cancelled` answer goes out once the runner has cancelled that prompt — with
+//     session/cancel, or with another session/prompt, which cancels the one running (§3.2, §3.3) — the
+//     only things the real CLI answers `cancelled` to.
 //
 // A process that ran two sessions is replayed as the one session the script names, with its
 // sub-agents. What the runner wrote is kept in received.jsonl, each line with how much of the
 // recording had gone out by then, and how the CLI was started in start.json. Like the real CLI it does
-// not exit when stdin ends, only on SIGTERM (143) or SIGINT (130) (§3.4).
+// not exit when stdin ends, only on SIGTERM (143) or SIGINT (130) (§3.4) — or, when the script says so,
+// once its recording has gone out: killed, as a crash, or with its stdout closed while it runs on. The
+// same binary answers `agent models` the ways P0a recorded it (§9), each call noted in models.jsonl.
 
 import (
 	"bufio"
@@ -41,11 +47,29 @@ type fakeCursorACPScript struct {
 	Recording string `json:"recording"`
 	// Session, when set, is the one session of a recording that holds two.
 	Session string `json:"session,omitempty"`
+	// Exit ends the CLI once its recording has gone out and nothing waits on the runner: "SIGKILL" kills
+	// it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while it runs on.
+	Exit string `json:"exit,omitempty"`
+	// Models is how `agent models` answers: "invalid-key" or "offline" as P0a recorded them
+	// (failure-shapes-without-prompt), a catalogue otherwise.
+	Models string `json:"models,omitempty"`
+	// MatchParams matches a request to the first recorded one of its method with the same params — the
+	// session id and working directory aside — before the first of its method.
+	MatchParams bool `json:"matchParams,omitempty"`
+	// IgnoreCancel is a CLI that no longer answers: a session/cancel cancels nothing.
+	IgnoreCancel bool `json:"ignoreCancel,omitempty"`
+}
+
+// fakeCursorModelsCall is one `agent models` the fake answered, as models.jsonl keeps it.
+type fakeCursorModelsCall struct {
+	APIKey bool `json:"apiKey"` // whether it was asked with a CURSOR_API_KEY
 }
 
 type fakeCursorRequest struct {
 	id, method string
 	session    string
+	params     map[string]interface{}
+	unanswered bool // the recording holds no answer to it
 }
 
 // fakeCursorLine is one recorded line of the CLI's stdout.
@@ -109,7 +133,8 @@ func loadFakeCursorReplay(script fakeCursorACPScript) ([]fakeCursorRequest, []fa
 			session = firstString(mapValue(answers[id]["result"]), "sessionId")
 		}
 		requestSession[id] = session
-		requests = append(requests, fakeCursorRequest{id: id, method: method, session: session})
+		_, answered := answers[id]
+		requests = append(requests, fakeCursorRequest{id: id, method: method, session: session, params: mapValue(msg["params"]), unanswered: !answered})
 	}
 	toolSession, parentOf := map[string]string{}, map[string]string{}
 	root := func(session string) string {
@@ -159,6 +184,14 @@ func loadFakeCursorReplay(script fakeCursorACPScript) ([]fakeCursorRequest, []fa
 }
 
 func runFakeCursorACP(dir string) int {
+	var script fakeCursorACPScript
+	data, err := os.ReadFile(filepath.Join(dir, "script.json"))
+	if err == nil {
+		err = json.Unmarshal(data, &script)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "models" {
+		return fakeCursorReplayModels(dir, script.Models)
+	}
 	if len(os.Args) < 2 || os.Args[1] != "acp" {
 		fmt.Println(cursorSupportedVersion)
 		return 0
@@ -175,11 +208,6 @@ func runFakeCursorACP(dir string) int {
 		}
 		os.Exit(143)
 	}()
-	var script fakeCursorACPScript
-	data, err := os.ReadFile(filepath.Join(dir, "script.json"))
-	if err == nil {
-		err = json.Unmarshal(data, &script)
-	}
 	var requests []fakeCursorRequest
 	var lines []fakeCursorLine
 	if err == nil {
@@ -207,6 +235,22 @@ func runFakeCursorACP(dir string) int {
 	skipped := map[string]bool{}     // recorded requests the runner did not send
 	cursor := 0                      // the next recorded line to go out
 	waiting := ""                    // the CLI's request still waiting for the runner's answer
+	running := map[string]string{}   // recorded prompts sent and not answered yet -> their session
+	cancelled := map[string]bool{}   // recorded prompts the runner cancelled
+	unanswered := ""                 // the first recorded request the CLI never answered
+	for _, request := range requests {
+		if request.unanswered {
+			unanswered = request.id
+			break
+		}
+	}
+	cancel := func(session string) {
+		for id, s := range running {
+			if s == session {
+				cancelled[id] = true
+			}
+		}
+	}
 	pump := func() {
 		for cursor < len(lines) && waiting == "" {
 			line := lines[cursor]
@@ -214,6 +258,7 @@ func runFakeCursorACP(dir string) int {
 				cursor++
 				continue
 			}
+			anchored := false
 			for _, later := range lines[cursor:] {
 				if later.answer == "" || skipped[later.answer] {
 					continue
@@ -221,7 +266,14 @@ func runFakeCursorACP(dir string) int {
 				if _, sent := live[later.answer]; !sent {
 					return // this stretch went out while a request the runner has not sent yet ran
 				}
+				anchored = true
 				break
+			}
+			if _, sent := live[unanswered]; !anchored && unanswered != "" && !sent && !skipped[unanswered] {
+				return // the stream of the request the CLI never answered, which the runner has not sent yet
+			}
+			if line.answer != "" && firstString(mapValue(line.msg["result"]), "stopReason") == "cancelled" && !cancelled[line.answer] {
+				return // the CLI answers a prompt `cancelled` only once it has been cancelled
 			}
 			msg := line.msg
 			if line.answer != "" {
@@ -230,10 +282,20 @@ func runFakeCursorACP(dir string) int {
 					msg[key] = value
 				}
 				msg["id"] = live[line.answer]
+				delete(running, line.answer)
 			}
 			write(msg)
 			cursor++
 			waiting = line.ask
+		}
+		if cursor == len(lines) && waiting == "" {
+			switch script.Exit {
+			case "SIGKILL":
+				_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			case "close-stdout":
+				script.Exit = ""
+				_ = os.Stdout.Close()
+			}
 		}
 	}
 	scanner := bufio.NewScanner(os.Stdin)
@@ -247,13 +309,19 @@ func runFakeCursorACP(dir string) int {
 			_, _ = received.Write(append(line, '\n'))
 		}
 		method, id := asString(msg["method"]), msg["id"]
+		params := mapValue(msg["params"])
 		switch {
 		case method != "" && id != nil:
 			match := -1
-			for i := next; i < len(requests); i++ {
-				if requests[i].method == method {
+			for i := next; i < len(requests) && script.MatchParams; i++ {
+				if requests[i].method == method && fakeCursorSameParams(requests[i].params, params) {
 					match = i
 					break
+				}
+			}
+			for i := next; i < len(requests) && match < 0; i++ {
+				if requests[i].method == method {
+					match = i
 				}
 			}
 			if match < 0 {
@@ -266,6 +334,14 @@ func runFakeCursorACP(dir string) int {
 			}
 			live[requests[match].id] = id
 			next = match + 1
+			if method == "session/prompt" {
+				// A prompt sent while another runs cancels that one (§3.2).
+				session := firstString(params, "sessionId")
+				cancel(session)
+				running[requests[match].id] = session
+			}
+		case method == "session/cancel" && !script.IgnoreCancel:
+			cancel(firstString(params, "sessionId"))
 		case id != nil:
 			if rpcIDKey(id) == waiting {
 				waiting = ""
@@ -274,6 +350,45 @@ func runFakeCursorACP(dir string) int {
 		pump()
 	}
 	time.Sleep(60 * time.Second)
+	return 0
+}
+
+// fakeCursorSameParams is whether a request's params are a recorded one's, the session id and the working
+// directory aside: those are the run's own.
+func fakeCursorSameParams(recorded, sent map[string]interface{}) bool {
+	strip := func(params map[string]interface{}) string {
+		kept := map[string]interface{}{}
+		for key, value := range params {
+			if key != "sessionId" && key != "cwd" {
+				kept[key] = value
+			}
+		}
+		wire, _ := json.Marshal(kept)
+		return string(wire)
+	}
+	return strip(recorded) == strip(sent)
+}
+
+// fakeCursorReplayModels is `agent models` answering as P0a recorded it (failure-shapes-without-prompt):
+// a key Cursor refuses, an API it cannot reach, or the catalogue's first line.
+func fakeCursorReplayModels(dir, mode string) int {
+	if line, err := json.Marshal(fakeCursorModelsCall{APIKey: os.Getenv("CURSOR_API_KEY") != ""}); err == nil {
+		if f, err := os.OpenFile(filepath.Join(dir, "models.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_, _ = f.Write(append(line, '\n'))
+			_ = f.Close()
+		}
+	}
+	switch mode {
+	case "invalid-key":
+		fmt.Fprintln(os.Stderr, "\x1b[33m⚠ Warning: The provided API key is invalid.\x1b[0m\n"+
+			"The API key was loaded from the CURSOR_API_KEY environment variable.\n"+
+			"Please check you have the right key, create a new one, or authenticate without it.")
+		return 1
+	case "offline":
+		fmt.Fprintln(os.Stderr, "\x1b[31m✗ Failed to reach the Cursor API. If you are behind a corporate proxy, set the HTTPS_PROXY environment variable.\x1b[0m")
+		return 1
+	}
+	fmt.Println("auto - Auto (default)")
 	return 0
 }
 
@@ -286,6 +401,14 @@ type cursorReplay struct {
 // newCursorReplay replays testdata/cursor/<recording> (scenario/process), kept to session when given.
 func newCursorReplay(t *testing.T, recording, session string) *cursorReplay {
 	t.Helper()
+	return newCursorReplayScript(t, fakeCursorACPScript{Recording: recording, Session: session})
+}
+
+// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor) the
+// way the rest of the script says.
+func newCursorReplayScript(t *testing.T, script fakeCursorACPScript) *cursorReplay {
+	t.Helper()
+	recording := script.Recording
 	dir := t.TempDir()
 	abs, err := filepath.Abs(filepath.Join("testdata", "cursor", recording))
 	if err != nil {
@@ -294,11 +417,12 @@ func newCursorReplay(t *testing.T, recording, session string) *cursorReplay {
 	if _, err := os.Stat(filepath.Join(abs, "stdout.jsonl")); err != nil {
 		t.Fatalf("no recording %s: %v", recording, err)
 	}
-	script, err := json.Marshal(fakeCursorACPScript{Recording: abs, Session: session})
+	script.Recording = abs
+	wire, err := json.Marshal(script)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "script.json"), script, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "script.json"), wire, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	self, err := os.Executable()
@@ -342,6 +466,27 @@ func (f *cursorReplay) requests(t *testing.T, method string) []fakeCursorReceive
 		}
 	}
 	return out
+}
+
+// models is every `agent models` the fake answered, in order.
+func (f *cursorReplay) models(t *testing.T) []fakeCursorModelsCall {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(f.dir, "models.jsonl"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []fakeCursorModelsCall
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var call fakeCursorModelsCall
+		if err := json.Unmarshal([]byte(line), &call); err != nil {
+			t.Fatalf("models.jsonl: %v", err)
+		}
+		calls = append(calls, call)
+	}
+	return calls
 }
 
 // started is how the CLI was started: its arguments, environment and working directory.
