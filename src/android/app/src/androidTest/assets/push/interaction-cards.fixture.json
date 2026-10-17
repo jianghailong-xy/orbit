@@ -268,6 +268,54 @@
           }
         ],
         "waitingOnYou": [],
+        "waitingOnCoordinator": [
+          {
+            "taskId": "3kurFew9WWOLA9F0fp8dtZ",
+            "title": "Queue cards for the coordinator",
+            "status": "IN_PROGRESS",
+            "projectId": "34ZZn8fmemArxvl2CsCFp",
+            "ownerCard": null,
+            "criterion": {
+              "key": "cards",
+              "text": "Decisions match the server."
+            },
+            "evidenceRevision": "2",
+            "submittedAt": "2026-10-04T00:00:00.000Z",
+            "ageSeconds": 7260,
+            "claim": "Revisions wait while the coordinator is paused.",
+            "gaps": [
+              "The weekly reset itself was not observed."
+            ],
+            "citations": [
+              {
+                "kind": "TOOL_CALL",
+                "ref": "fixture-queue-run",
+                "resolved": true,
+                "reason": null,
+                "label": "Queue spec run"
+              }
+            ],
+            "decidability": {
+              "decidable": true,
+              "refusal": null,
+              "requiredAction": null
+            },
+            "independence": {
+              "independent": true,
+              "disqualification": null,
+              "requiredAction": null
+            }
+          }
+        ],
+        "sentToCoordinator": [
+          {
+            "taskId": "OzUP5aliVUIv4unAopIJ5",
+            "title": "Send waited revisions",
+            "projectId": "34ZZn8fmemArxvl2CsCFp",
+            "evidenceRevision": "1",
+            "deliveredAt": "2026-10-04T00:05:00.000Z"
+          }
+        ],
         "decided": []
       },
       "ownerConfirmation": {
