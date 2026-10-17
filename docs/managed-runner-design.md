@@ -1000,3 +1000,53 @@ Left to later work, or not shown here:
 - The manual path's `docker compose up -d --build --wait` still applies a new database's migrations at the
   apiserver's first boot, and on a slow disk the pinned health check can give up first; the install script avoids
   it, the checklist does not. This predates D3.
+
+## Implementation record: Docker backend security and operations
+
+Recorded 2026-10-17 for the second phase's task D5: an independent check of the boundary every account's runner
+sits behind, and the runbook for its data. Everything ran in two isolated places on the HPC machine, and nothing of
+an existing deployment was touched ([evidence](evidence/managed-runner-docker-security/2026-10-17/README.md)):
+
+- `d5-dind`, a capped `docker:29.8.2-dind` test host whose own dockerd and data root (under /mnt/data) belonged to
+  this task alone. It ran a default deployment from `scripts/install-server.sh` with no flags; `/upgrade` later
+  moved it to the channel fix below.
+- The HPC host's own Docker, which a Docker-in-Docker host cannot stand in for: AppArmor and the host's network.
+  A separately labelled channel instance ran there, as Compose runs it (no network, the Docker socket), with the
+  same runner image and its own ICC-off network. It was removed afterwards.
+
+| Area | What was checked | Result |
+| --- | --- | --- |
+| Channel refusals | 267 requests the channel must refuse, sent to the default deployment's own channel: Docker parameters by name and smuggled into nested objects (privileged, capabilities, binds and mounts, the Docker socket as mount, volume, URL or `DOCKER_HOST`, host network, PID, IPC, UTS, user and cgroup namespaces, devices and GPUs, security options, a user, an environment, labels, sysctls, restart policies, ports and more); other images (by tag, by ID, the configured image's own tag); amounts over the ceilings; another runner's volume, name or owner; resources without this instance's label (unlabelled, another instance's, the wrong kind), and the stack's own containers and volumes; route, query and body tricks; 41 requests without the token or with a wrong, partial, case-changed or second one. Docker's whole inventory and the channel's state directory were compared before and after each one, and a positive control showed that the comparison sees a change. | All refused, each with its code, and nothing changed. Two were accepted at c16d115b3 and are fixed: a runner id or owner id with a trailing newline (`$` matched before it). |
+| The channel's surface | The deployment's `docker-channel` and its directory | No network at all (only `lo`, no TCP or UDP socket); one unix socket, root 0600, in a 0700 root directory; the token 0600. No other container has the Docker socket. The apiserver mounts the directory read-only. |
+| The container | Inside a real runner container, as its user, on the host's Docker and in the default deployment | User 10001; every capability set empty; `NoNewPrivs` 1; seccomp in filter mode; AppArmor `docker-default (enforce)` on the host (unconfined only inside the dind test host, which cannot load profiles); read-only root. It can write only to its volume, `/tmp` and `/dev/shm`. The bootstrap files are root-owned 0444 in a root-owned 0755 directory, and the runner can neither change, rename nor delete them (T03's point), nor add a file there. Setuid binaries do nothing (`mount`: "must be superuser"). `unshare`, `mount`, `setuid`, `chroot`, `keyctl`, `bpf`, `perf_event_open` and `open_by_handle_at` get EPERM. No Docker socket or binary, no host path, no block device; the environment holds the runner's six keys and the image's own. |
+| Limits | Measured inside the containers | CPU 1.01 of 1.0 and 1.99 of 2.0 CPUs; PIDs refused at `pids.max` (256, 4096); `/tmp` full at its size (64 MiB, 1 GiB), counted in memory; memory: the allocating process OOM-killed at the 512 MiB limit while the runner went on; disk: a 64 MiB volume with checks every 10 s stopped at 192,940,181 bytes, a new generation refused (`VOLUME_OVER_LIMIT`) until `volumeLimitOverrides` raised it. |
+| Network | TCP from inside, on both | Unreachable: another runner, the stack's containers (their names do not resolve), other networks, Docker's API, the host's loopback, the metadata address. Reachable: the internet, the gateway's published port (the designed path), and every service the host listens to on another address: sshd and rpcbind on the HPC host, through the network's gateway, docker0 and the LAN address. |
+| `serverUrl` | The default deployment's `profile.json` against its network | `http://172.19.0.1:2086`, the gateway of `orbit-managed-runners`: this host's own address on the runners' network. Self-hosting and the runbook now state that plain HTTP goes nowhere else. |
+| Backup and restore | `scripts/managed-runner/volume-backup.sh`, as [the runbook](managed-runner-docker-operations.md) gives it, on a sleeping runner's volume | Backed up with its labels (163 files) and checked in a scratch volume: every checksum matched, and the six SQLite files and two repositories were `ok`. The volume was then deleted and restored with its labels while the account was disabled. The runner woke on it as its next generation: every file had its checksum, `integrity_check` was `ok`, and the rows, the dump digest, the repository and the runner identity were the same. |
+| Host restarts | `d5-dind` restarted gracefully (`docker restart`) and power-cut (`docker kill`, then `docker start`), each with one runner ready and a SQLite writer in it, and one runner just put to sleep | Docker reported the running container exited (0 on the graceful stop; 255 after the power cut, `FinishedAt` at the daemon's restore). The manager recorded that report as the stop proof and failed the runner `POD_TERMINATED`, its compute held until its owner's Retry started the next generation on the same volume. The sleeping runner woke normally. No committed row of the writer was lost, and every file kept its checksum. |
+| Outages | The channel stopped for 62 s during a wake; the apiserver stopped for 60 s | The ready runner stayed ready throughout. The wake backed off (`TRANSIENT`, four attempts) and finished once the channel was back. The runner's container ran on through the apiserver's absence, and the runner was ready 6 s after the apiserver came back. |
+
+Fixed here (commit d44626483, channel and tests):
+
+- the channel's anchored patterns end in `\Z`, so `<uuid>\n` is no runner id or owner id;
+- the disk check stops a container over its volume limit even when it cannot write down why, as on a full disk.
+
+Added: `scripts/managed-runner/volume-backup.sh` (`backup`, `check`, `restore`, and `verify` for a volume after a power loss) and its test, and the operations runbook. Self-hosting links to it
+and states the `serverUrl` rule and what a runner can reach.
+
+Left to later work (in the task's comment for the coordinator):
+
+- **Host restarts.** After a host or Docker restart every runner that was running needs its owner's Retry. No
+  automatic recovery and no operator route exist.
+- **Silent failures.** The apiserver does not log a runner that failed, and the `detail` (such as `OOM-killed`)
+  reaches no client.
+- **A held volume fails the wake.** A wake that finds another container referring to the volume (a backup's)
+  fails the runner (`DOCKER_CHANNEL_REFUSED`, `VOLUME_IN_USE`) instead of waiting.
+- **`PVC_MISSING` has no way back.** A runner woken while its volume was missing stays `PVC_MISSING` even after
+  the volume is restored.
+- **The storage budget measures the wrong disk.** In Compose it is measured on the disk under
+  `data/managed-runners`, not on Docker's data root.
+- **The host's own services are reachable.** Runners reach every service the host listens to on another address,
+  and the LAN; the default deployment adds no firewall rule.
+- **Two defence-in-depth gaps in the channel.** It caps each container but not their number, and it offers volume
+  deletion to the token's holder although the manager never asks for it.
