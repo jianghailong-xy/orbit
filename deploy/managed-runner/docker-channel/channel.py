@@ -72,12 +72,13 @@ GENERATION_LABEL = LABEL + "generation"
 VOLUME_UID_LABEL = LABEL + "volume-uid"
 DISK_LIMIT_LABEL = LABEL + "disk-limit-bytes"
 
-UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-INSTANCE_ID = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
-IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
-LABEL_KEY = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,126}[a-z0-9])?$")
-TOKEN_SHAPE = re.compile(r"^[\x21-\x7e]{16,512}$")
-NETWORK_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
+# \Z, not $: `$` also matches before a final newline, and "<uuid>\n" is not a runner's name.
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+INSTANCE_ID = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\Z")
+IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}\Z")
+LABEL_KEY = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,126}[a-z0-9])?\Z")
+TOKEN_SHAPE = re.compile(r"^[\x21-\x7e]{16,512}\Z")
+NETWORK_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 
 RUNNER_USER = "10001:10001"
 DATA_MOUNT = "/var/lib/orbit"
@@ -771,10 +772,14 @@ class Channel:
                 continue
             instance_uid = found["Config"]["Labels"].get(UID_LABEL, "")
             if not self.eviction(instance_uid):
-                durable_write(self.eviction_path(instance_uid), {
-                    "reason": "VOLUME_OVER_LIMIT", "volume": name, "usageBytes": used, "limitBytes": limit,
-                    "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.clock())),
-                })
+                try:
+                    durable_write(self.eviction_path(instance_uid), {
+                        "reason": "VOLUME_OVER_LIMIT", "volume": name, "usageBytes": used, "limitBytes": limit,
+                        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.clock())),
+                    })
+                except OSError as error:
+                    # A full disk is when the limit matters most: the stop never waits for the record of why.
+                    log(f"container {container_name(runner_id)}: the reason for its stop could not be kept ({error})")
                 log(f"container {container_name(runner_id)}: volume {name} holds {used} bytes, over its {limit}-byte limit; stopping it")
             self.stop_in_background(container_name(runner_id))
             evicted.append(container_name(runner_id))
