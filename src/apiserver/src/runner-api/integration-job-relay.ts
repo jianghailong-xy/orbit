@@ -4,7 +4,10 @@ import {
   IntegrationCheckResult,
   IntegrationCheckSpec,
   IntegrationJobCommand,
+  IntegrationJobPhase,
   IntegrationJobProgressRequest,
+  IntegrationJobReleaseRequest,
+  IntegrationJobReleaseResponse,
   IntegrationJobResultRequest,
   IntegrationJobResultResponse,
   IntegrationJobState,
@@ -105,6 +108,30 @@ export class IntegrationJobRelay {
     body: IntegrationJobProgressRequest,
   ): Promise<{ accepted: true }> {
     return receiveIntegrationJobProgress(this.prisma, runnerId, jobId, body);
+  }
+
+  /**
+   * §2.2 J-T11 — see `releaseIntegrationJob`. A job somebody asked to stop is not handed back: a
+   * QUEUED row with a stop request is never claimed again, so it ends CANCELLED instead, through the
+   * result transaction every runner-reported end goes through (J-T12).
+   */
+  async release(
+    jobId: string,
+    runnerId: string,
+    body: IntegrationJobReleaseRequest,
+    ownerId?: string,
+  ): Promise<{ answer: IntegrationJobReleaseResponse; after: IntegrationResultAftermath | null }> {
+    const released = await releaseIntegrationJob(this.prisma, { jobId, runnerId, ownerId, body });
+    if (released.released) {
+      return { answer: { released: true, state: 'QUEUED' }, after: null };
+    }
+    const applied = await this.applyResult(jobId, runnerId, {
+      claimGeneration: body.claimGeneration,
+      leaseOwner: body.leaseOwner,
+      state: 'CANCELLED',
+      ...(released.phase ? { phase: released.phase } : {}),
+    }, ownerId);
+    return { answer: { released: false, state: applied.answer.state }, after: applied.after };
   }
 
   /**
@@ -568,6 +595,75 @@ export async function receiveIntegrationJobProgress(
     }
   }
   return { accepted: true };
+}
+
+/** What a release came to when nothing was refused: back in the queue, or owed a CANCELLED end. */
+export type IntegrationJobReleaseOutcome =
+  | { released: true }
+  | { released: false; phase: IntegrationJobPhase | null };
+
+/**
+ * A claimed job handed back by the process that holds it (J-T11): a runner that is stopping, for a
+ * job it never started or one it stopped before its push. Nothing was pushed under the claim, so the
+ * job goes back to QUEUED for the next heartbeat that asks for work — on a stopping runner, its next
+ * process — instead of staying RUNNING until the lease runs out ten minutes after its last report.
+ *
+ * One conditional UPDATE, fenced like a result on the job, this runner, RUNNING and the exact claim
+ * the request names. The claim generation moves on, so a late report under the claim given back is
+ * refused STALE_CLAIM; the lease and the step are cleared, which frees the serial key (J1); the first
+ * `started_at` stays. A job somebody asked to stop matches nothing here: a QUEUED row with a stop
+ * request is never claimed, so it answers `released: false` and the caller ends it (J-T12).
+ */
+export async function releaseIntegrationJob(
+  prisma: PrismaService,
+  input: { jobId: string; runnerId: string; ownerId?: string; body: IntegrationJobReleaseRequest },
+): Promise<IntegrationJobReleaseOutcome> {
+  const body = input.body;
+  if (typeof body?.leaseOwner !== 'string' || body.leaseOwner === ''
+      || typeof body.claimGeneration !== 'string' || !/^\d{1,19}$/.test(body.claimGeneration)) {
+    throw new IntegrationJobRefused('INVALID_RESULT', 'a release names the claim it gives back: claimGeneration and leaseOwner');
+  }
+  const claimGeneration = BigInt(body.claimGeneration);
+  const moved = await prisma.projectIntegrationJob.updateMany({
+    where: {
+      id: input.jobId,
+      runnerId: input.runnerId,
+      ...(input.ownerId != null ? { ownerId: input.ownerId } : {}),
+      state: 'RUNNING',
+      claimLeaseOwner: body.leaseOwner,
+      claimGeneration,
+      cancelRequestedAt: null,
+    },
+    data: {
+      state: 'QUEUED',
+      phase: null,
+      claimGeneration: { increment: 1 },
+      claimLeaseOwner: null,
+      claimedAt: null,
+      heartbeatAt: null,
+    },
+  });
+  if (moved.count === 1) return { released: true };
+  // Nothing moved: say why, from the row as it is now, and among the reporting runner's owner's jobs
+  // only — another account's job is answered as one that does not exist.
+  const job = await prisma.projectIntegrationJob.findFirst({
+    where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
+    select: {
+      state: true, runnerId: true, claimLeaseOwner: true, claimGeneration: true, cancelRequestedAt: true, phase: true,
+    },
+  });
+  if (!job) throw new IntegrationJobRefused('NOT_FOUND');
+  if (isTerminalJobState(job.state)) throw new IntegrationJobRefused('ALREADY_FINAL');
+  if (job.state !== 'RUNNING' || job.runnerId !== input.runnerId
+      || job.claimLeaseOwner !== body.leaseOwner || job.claimGeneration !== claimGeneration) {
+    throw new IntegrationJobRefused('STALE_CLAIM');
+  }
+  if (job.cancelRequestedAt) {
+    return { released: false, phase: INTEGRATION_JOB_PHASES.includes(job.phase as never) ? job.phase as IntegrationJobPhase : null };
+  }
+  // Only a race the UPDATE lost ends here (a second release of the same claim, say): answered as the
+  // claim that has moved on, which is what the row says by the time anything could act on it.
+  throw new IntegrationJobRefused('STALE_CLAIM');
 }
 
 /** What the caller must do after the transaction that applied a result committed. */
