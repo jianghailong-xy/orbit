@@ -1,0 +1,546 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-17). The Watching row's session folded into the Tasks card, on the web session page.
+     The owner's screenshot (2026-10-17): above the composer, Watching names a session "Task: Android: …" (Running),
+     then Background processes · 14 total, Tasks 👁 1 · 1 running · 1/2 done, and the branch bar. The watched session
+     is the run session (sessions.task_id) of the running row in Tasks, and the 👁 1 is a task_await on that same task:
+     the agent waited on one task twice (task fails / its run ends or asks for approval).
+     The strips are drawn with the app's own stylesheet (src/web/src/index.css): .bg-tray, .ct-*, .status-pill and
+     .wt-bar are the shipped rules. Task titles are sample text (the repo is public).
+     Data: agent transcripts on runner "workstation", last 30 days. session_await / watch_create waited on 110
+     sessions: 81 run a task, 27 are child sessions (parentSessionId, no task), 2 are neither.
+     Render: node /mnt/data/tmp/watch-merge-mock/render.mjs <this> <outdir> (playwright-core, Inter + Noto Sans SC). -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Watching 里的会话并入 Tasks 停车条 — web 设计图</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  html, body { height: auto !important; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 1640px; box-sizing: border-box;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .anticon { display: inline-flex; align-items: center; line-height: 0; }
+  .anticon svg { width: 1em; height: 1em; fill: currentColor; }
+  .status-pill.queued { animation: none; }
+
+  /* ── board chrome (b- prefix: index.css owns the short names) ── */
+  .b-part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .b-part + .b-part { margin-top: 30px; }
+  .b-h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  .b-h2 { font-size: 21px; margin: 0 0 6px; }
+  .b-lede { color: #4d4d56; font-size: 15.5px; max-width: 1500px; margin: 0 0 6px; }
+  .b-lede b, .b-cap b, .b-col b { color: #16161a; }
+  .b-code { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .b-tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 12px; }
+  .b-tag.now { background: #ffe1dc; color: #b3261e; }
+  .b-tag.new { background: #dfe8ff; color: #2346c4; }
+  .b-tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .b-tag.open { background: #fff0d1; color: #8a5300; }
+  .b-grid { display: grid; grid-template-columns: 730px 730px; gap: 40px; align-items: start; margin-top: 22px; }
+  .b-n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #F08A24;
+         color: #fff; font: 700 12px/1 "Inter", sans-serif; flex: none; }
+  .b-cap { margin-top: 14px; font-size: 14px; line-height: 1.68; color: #4d4d56; }
+  .b-cap > b:first-child { display: block; font-size: 15px; margin-bottom: 4px; }
+  .b-cap ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .b-cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .b-cap li .b-n { position: absolute; left: 0; top: 2px; }
+  .b-cap p { margin: 6px 0 0; }
+  .b-new { outline: 2px dashed #e8590c; outline-offset: 3px; }
+
+  /* One slice of the session page: the tail of the transcript, then the composer band. */
+  .b-pane { position: relative; width: 730px; box-sizing: border-box; background: var(--bg-base); border: 1px solid #d5d8dd;
+            border-radius: 12px; padding: 0 18px 14px 40px; overflow: hidden; display: flex; flex-direction: column;
+            box-shadow: 0 8px 26px rgba(0,0,0,.07); }
+  .b-tail { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
+            font-size: 14px; line-height: 1.7; color: var(--text-1); padding: 0 6px 12px 0;
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 70px); }
+  .b-tail p { margin: 0 0 8px; }
+  .b-tail a { color: var(--brand); text-decoration: none; }
+  .b-band { flex: none; }
+  .b-hold { position: relative; }
+  .b-hold > .b-mk { position: absolute; left: -30px; top: 6px; }
+  .b-hold.b-row-mk > .b-mk { top: 5px; }
+  .b-gone { display: flex; align-items: center; gap: 8px; height: 0; overflow: visible; }
+
+  /* The composer, drawn only as far as the screenshot shows it. */
+  .b-composer { border: 1px solid var(--border); border-radius: 22px; background: #fff; padding: 11px 12px 9px 16px;
+                box-shadow: 0 1px 6px rgba(0,0,0,.05); }
+  .b-ph { font-size: 15px; color: var(--text-4); height: 26px; }
+  .b-cbar { display: flex; align-items: center; gap: 12px; font-size: 13.5px; color: var(--text-2); margin-top: 6px; }
+  .b-plus { font-size: 22px; font-weight: 300; color: var(--text-1); line-height: 1; width: 18px; text-align: center; }
+  .b-sp { flex: 1 1 auto; }
+  .b-model b { color: var(--text-1); font-weight: 650; }
+  .b-meter { width: 24px; height: 3.5px; border-radius: 2px; background: #f2a65a; display: inline-block; margin-right: 4px; vertical-align: middle; }
+  .b-ring { width: 13px; height: 13px; border-radius: 50%; border: 2px solid #e3e8f5; border-top-color: #3370ff; border-right-color: #3370ff;
+            display: inline-block; margin-right: 4px; vertical-align: middle; box-sizing: border-box; }
+  .b-send { width: 30px; height: 30px; border-radius: 50%; background: #dcdde1; color: #fff; display: grid; place-items: center; font-size: 15px; font-weight: 700; }
+
+  /* Case cards beside the opened frame. */
+  .b-case { background: #fff; border: 1px solid #d5d8dd; border-radius: 12px; padding: 14px 18px 16px; box-shadow: 0 8px 26px rgba(0,0,0,.05); }
+  .b-case + .b-case { margin-top: 18px; }
+  .b-case h3 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .b-case .b-cap { margin-top: 10px; font-size: 13.5px; }
+  .b-case .b-cap > b:first-child { display: inline; font-size: inherit; margin: 0; }
+  .b-mini { width: 560px; }
+  .b-mini .bg-tray:last-child { margin-bottom: 0; }
+  .b-lbl { font-size: 12px; color: #8a8a94; margin: 10px 0 5px; font-weight: 600; letter-spacing: .02em; }
+  .b-lbl:first-of-type { margin-top: 0; }
+  .b-lbl.now { color: #b3261e; } .b-lbl.new { color: #2346c4; }
+
+  /* A session list row, drawn just far enough for its second line. */
+  .b-srow { width: 340px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); padding: 8px 12px; }
+  .b-srow .t { font-size: 13.5px; font-weight: 600; color: var(--text-1); display: flex; align-items: center; gap: 7px; }
+  .b-srow .t i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--brand); box-sizing: border-box; flex: none; }
+  .b-srow .l { font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .b-pair { display: flex; gap: 22px; align-items: flex-start; }
+  .b-word { font-size: 12.5px; color: var(--text-2); }
+  .b-word b { font-weight: 600; color: var(--text-1); }
+
+  /* B's session row: a session glyph before the title. */
+  .b-sess { color: var(--text-3); margin-right: 5px; font-size: 12px; vertical-align: -1px; }
+
+  .b-rec { margin-top: 22px; background: #eef7ee; border: 1px solid #c7e6c9; border-radius: 12px; padding: 12px 18px; font-size: 14.5px; line-height: 1.7; color: #24502a; }
+  .b-rec b { color: #133d19; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; margin-top: 18px; }
+  .b-col { background: #fff; border: 1px solid #d5d8dd; border-radius: 12px; padding: 16px 20px; font-size: 13.5px; line-height: 1.7; color: #30343b; }
+  .b-col h3 { margin: 0 0 8px; font-size: 15px; color: #16161a; }
+  .b-col ul, .b-col ol { margin: 0; padding-left: 18px; }
+  .b-col li { margin: 0 0 6px; }
+  .b-data { border-collapse: collapse; font-size: 13.5px; margin-top: 4px; }
+  .b-data td { padding: 3px 14px 3px 0; vertical-align: top; }
+  .b-data td.num { text-align: right; font-weight: 650; color: #16161a; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<!-- antd icons (@ant-design/icons-svg): eye, check-square, console-sql, loading, message -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-eye" viewBox="64 64 896 896"><path d="M942.2 486.2C847.4 286.5 704.1 186 512 186c-192.2 0-335.4 100.5-430.2 300.3a60.3 60.3 0 000 51.5C176.6 737.5 319.9 838 512 838c192.2 0 335.4-100.5 430.2-300.3 7.7-16.2 7.7-35 0-51.5zM512 766c-161.3 0-279.4-81.8-362.7-254C232.6 339.8 350.7 258 512 258c161.3 0 279.4 81.8 362.7 254C791.5 684.2 673.4 766 512 766zm-4-430c-97.2 0-176 78.8-176 176s78.8 176 176 176 176-78.8 176-176-78.8-176-176-176zm0 288c-61.9 0-112-50.1-112-112s50.1-112 112-112 112 50.1 112 112-50.1 112-112 112z"/></symbol>
+  <symbol id="i-task" viewBox="64 64 896 896"><path d="M433.1 657.7a31.8 31.8 0 0051.7 0l210.6-292c3.8-5.3 0-12.7-6.5-12.7H642c-10.2 0-19.9 4.9-25.9 13.3L459 584.3l-71.2-98.8c-6-8.3-15.6-13.3-25.9-13.3H315c-6.5 0-10.3 7.4-6.5 12.7l124.6 172.8z"/><path d="M880 112H144c-17.7 0-32 14.3-32 32v736c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V144c0-17.7-14.3-32-32-32zm-40 728H184V184h656v656z"/></symbol>
+  <symbol id="i-console" viewBox="64 64 896 896"><path d="M301.3 496.7c-23.8 0-40.2-10.5-41.6-26.9H205c.9 43.4 36.9 70.3 93.9 70.3 59.1 0 95-28.4 95-75.5 0-35.8-20-55.9-64.5-64.5l-29.1-5.6c-23.8-4.7-33.8-11.9-33.8-24.2 0-15 13.3-24.5 33.4-24.5 20.1 0 35.3 11.1 36.6 27h53c-.9-41.7-37.5-70.3-90.3-70.3-54.4 0-89.7 28.9-89.7 73 0 35.5 21.2 58 62.5 65.8l29.7 5.9c25.8 5.2 35.6 11.9 35.6 24.4.1 14.7-14.5 25.1-36 25.1z"/><path d="M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h380v112H304c-8.8 0-16 7.2-16 16v48c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-48c0-8.8-7.2-16-16-16H548V700h380c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z"/><path d="M828.5 486.7h-95.8V308.5h-57.4V534h153.2zm-298.6 53.4c14.1 0 27.2-2 39.1-5.8l13.3 20.3h53.3L607.9 511c21.1-20 33-51.1 33-89.8 0-73.3-43.3-118.8-110.9-118.8s-111.2 45.3-111.2 118.8c-.1 73.7 43 118.9 111.1 118.9zm0-190c31.6 0 52.7 27.7 52.7 71.1 0 16.7-3.6 30.6-10 40.5l-5.2-6.9h-48.8L542 491c-3.9.9-8 1.4-12.2 1.4-31.7 0-52.8-27.5-52.8-71.2.1-43.6 21.2-71.1 52.9-71.1z"/></symbol>
+  <symbol id="i-loading" viewBox="0 0 1024 1024"><path d="M988 548c-19.9 0-36-16.1-36-36 0-59.4-11.6-117-34.6-171.3a440.45 440.45 0 00-94.3-139.9 437.71 437.71 0 00-139.9-94.3C629 83.6 571.4 72 512 72c-19.9 0-36-16.1-36-36s16.1-36 36-36c69.1 0 136.2 13.5 199.3 40.3C772.3 66 827 103 874 150c47 47 83.9 101.8 109.7 162.7 26.7 63.1 40.2 130.2 40.2 199.3.1 19.9-16 36-35.9 36z"/></symbol>
+  <symbol id="i-msg" viewBox="64 64 896 896"><path d="M464 512a48 48 0 1096 0 48 48 0 10-96 0zm200 0a48 48 0 1096 0 48 48 0 10-96 0zm-400 0a48 48 0 1096 0 48 48 0 10-96 0zm661.2-173.6c-22.6-53.7-55-101.9-96.3-143.3a444.35 444.35 0 00-143.3-96.3C630.6 75.7 572.2 64 512 64h-2c-60.6.3-119.3 12.3-174.5 35.9a445.35 445.35 0 00-142 96.5c-40.9 41.3-73 89.3-95.2 142.8-23 55.4-34.6 114.3-34.3 174.9A449.4 449.4 0 00112 714v152a46 46 0 0046 46h152.1A449.4 449.4 0 00510 960h2.1c59.9 0 118-11.6 172.7-34.3a444.48 444.48 0 00142.8-95.2c41.3-40.9 73.8-88.7 96.5-142 23.6-55.2 35.6-113.9 35.9-174.5.3-60.9-11.5-120-34.8-175.6zm-151.1 438C704 845.8 611 884 512 884h-1.7c-60.3-.3-120.2-15.3-173.1-43.5l-8.4-4.5H188V695.2l-4.5-8.4C155.3 633.9 140.3 574 140 513.7c-.4-99.7 37.7-193.3 107.6-263.8 69.8-70.5 163.1-109.5 262.8-109.9h1.7c50 0 98.5 9.7 144.2 28.9 44.6 18.7 84.6 45.6 119 80 34.3 34.3 61.3 74.4 80 119 19.4 46.2 29.1 95.2 28.9 145.8-.6 99.6-39.7 192.9-110.1 262.7z"/></symbol>
+</svg>
+
+<!-- ═══════════════════════ 1 · 今天 vs 建议（折叠） ═══════════════════════ -->
+<section class="b-part" id="part-1">
+  <h1 class="b-h1">Watching 里的会话并入 Tasks 停车条（web · 会话页）</h1>
+  <p class="b-lede">
+    你截图里 Watching 等的会话「Task: Android: …」，是 Tasks 里那条 Running 任务的<b>执行会话</b>（会话的 <span class="b-code">task_id</span> 就指向它）；
+    Tasks 头上的 <b>👁 1</b> 是 agent 对<b>同一条任务</b>的另一次等待。也就是说 agent 把一件事等了两次——
+    <span class="b-code">task_await</span>（任务失败）+ <span class="b-code">session_await</span>（执行会话结束或要人批准）——停车条就把它画了两行。
+  </p>
+  <p class="b-lede">
+    建议：<b>被等的会话如果在执行某条任务，就当成在等那条任务</b>，👁 落在那条任务的行上，Watching 行不再出现。
+    近 30 天本机 transcript 里，agent 等过的 110 个会话中 <b>81 个（74%）</b>都是这种「任务的执行会话」。
+    标题换成了示例文字（仓库公开）；停车条用仓库里的 <span class="b-code">index.css</span> 画，就是线上的样子。虚线框 = 有变化。
+  </p>
+
+  <div class="b-grid">
+    <figure style="margin:0">
+      <span class="b-tag now">① 今天</span>
+      <div class="b-pane" style="height:460px">
+        <div class="b-tail">
+          <p>任务 <a>Android: tapping a notification opens the session it names</a> 已经启动，执行会话是 <a>Task: Android: tapping a notification…</a>。</p>
+          <p>它交证据时，Orbit 会转给我按验收标准审。另外两种情况也会唤醒我：任务失败，执行会话结束或需要人批准。</p>
+        </div>
+        <div class="workspace-composer b-band">
+          <div class="b-hold"><span class="b-n b-mk">1</span>
+            <div class="bg-tray watch-strip"><div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-eye"/></svg></span>
+              <span class="bg-tray-title ct-head">Watching</span>
+              <span class="ct-one">Task: Android: tapping a notification opens the session it names</span>
+              <span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+            </div></div>
+          </div>
+          <div class="bg-tray"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-console"/></svg></span>
+            <span class="bg-tray-title">Background processes</span><span class="bg-tray-count">14 total</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="b-hold"><span class="b-n b-mk">2</span>
+            <div class="bg-tray"><div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+              <span class="bg-tray-title ct-head">Tasks</span>
+              <span class="ct-watching"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 1</span>
+              <span class="bg-tray-count ct-count">1 running · 1/2 done</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+            </div></div>
+          </div>
+          <div class="wt-bar"><div class="wt-row wt-row-toggle">
+            <button type="button" class="wt-branch"><span class="wt-branch-ico">⎇</span><span class="wt-branch-name"><span class="wt-dim">orbit/</span>notify<span class="wt-dim">-4613a1</span></span></button>
+            <span class="wt-stat"><span class="wt-add">+12</span><span class="wt-del">−2</span><span class="wt-files">· 1 file · committed</span></span>
+            <span class="wt-spacer"></span><span class="wt-merge-done">✓ Merged</span>
+          </div></div>
+          <div class="b-composer">
+            <div class="b-ph">Reply…</div>
+            <div class="b-cbar"><span class="b-plus">+</span><span>Auto</span><span class="b-sp"></span>
+              <span class="b-model"><b>Opus 5.5</b> Max</span><span><i class="b-meter"></i>93%</span><span><i class="b-ring"></i>29%</span><span class="b-send">↑</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-cap">
+        <b>同一条任务占了两行</b>
+        <ol>
+          <li><span class="b-n">1</span>Watching 等的会话，就是下面 Tasks 里那条 Running 任务的执行会话（<span class="b-code">session_await</span>：结束或要人批准）。展开后只有一句 Open session ›，内容和 Tasks 那一行重复。</li>
+          <li><span class="b-n">2</span>Tasks 的 👁 1 是同一条任务（<span class="b-code">task_await</span>：任务失败）。10-07 合并时只把「等任务」并进了 Tasks，「等会话」一律留在 Watching。</li>
+        </ol>
+      </div>
+    </figure>
+
+    <figure style="margin:0">
+      <span class="b-tag new">② 建议 · 折叠</span>
+      <div class="b-pane" style="height:460px">
+        <div class="b-tail">
+          <p>好，我把两条都派出去了。通知那条跑完先告诉我。</p>
+          <p>任务 <a>Android: tapping a notification opens the session it names</a> 已经启动，执行会话是 <a>Task: Android: tapping a notification…</a>。</p>
+          <p>它交证据时，Orbit 会转给我按验收标准审。另外两种情况也会唤醒我：任务失败，执行会话结束或需要人批准。</p>
+        </div>
+        <div class="workspace-composer b-band">
+          <div class="bg-tray"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-console"/></svg></span>
+            <span class="bg-tray-title">Background processes</span><span class="bg-tray-count">14 total</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="b-hold"><span class="b-n b-mk">1</span>
+            <div class="bg-tray b-new"><div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+              <span class="bg-tray-title ct-head">Tasks</span>
+              <span class="ct-watching"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 1</span>
+              <span class="bg-tray-count ct-count">1 running · 1/2 done</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+            </div></div>
+          </div>
+          <div class="wt-bar"><div class="wt-row wt-row-toggle">
+            <button type="button" class="wt-branch"><span class="wt-branch-ico">⎇</span><span class="wt-branch-name"><span class="wt-dim">orbit/</span>notify<span class="wt-dim">-4613a1</span></span></button>
+            <span class="wt-stat"><span class="wt-add">+12</span><span class="wt-del">−2</span><span class="wt-files">· 1 file · committed</span></span>
+            <span class="wt-spacer"></span><span class="wt-merge-done">✓ Merged</span>
+          </div></div>
+          <div class="b-composer">
+            <div class="b-ph">Reply…</div>
+            <div class="b-cbar"><span class="b-plus">+</span><span>Auto</span><span class="b-sp"></span>
+              <span class="b-model"><b>Opus 5.5</b> Max</span><span><i class="b-meter"></i>93%</span><span><i class="b-ring"></i>29%</span><span class="b-send">↑</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-cap">
+        <b>Watching 行没了，Tasks 这一行一个字不变</b>
+        <ol>
+          <li><span class="b-n">1</span>那条任务本来就在卡里，所以计数句不多算：仍是 <b>👁 1 · 1 running · 1/2 done</b>。👁 的意思从「在等这条任务」放宽成「在等这条任务<b>或它的执行会话</b>」。</li>
+        </ol>
+        <p>停车条 4 条 → 3 条，对话区多出 38px（约 2 行）。Background processes、分支条、输入框都不动。</p>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 2 · 展开 + 其它情况 ═══════════════════════ -->
+<section class="b-part" id="part-2">
+  <h2 class="b-h2">③ 展开态，和另外三种情况</h2>
+  <p class="b-lede">展开后还是一行一个任务；被等两次的任务也只有一行、一个 👁。右边三种是同一条规则落在别处的样子。</p>
+
+  <div class="b-grid">
+    <figure style="margin:0">
+      <span class="b-tag new">③ 建议 · 展开</span>
+      <div class="b-pane" style="height:530px">
+        <div class="b-tail">
+          <p>任务 <a>Android: tapping a notification opens the session it names</a> 已经启动，执行会话是 <a>Task: Android: tapping a notification…</a>。</p>
+          <p>它交证据时，Orbit 会转给我按验收标准审。另外两种情况也会唤醒我：任务失败，执行会话结束或需要人批准。</p>
+        </div>
+        <div class="workspace-composer b-band">
+          <div class="bg-tray"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-console"/></svg></span>
+            <span class="bg-tray-title">Background processes</span><span class="bg-tray-count">14 total</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="b-hold"><span class="b-n b-mk" style="top:38px">1</span>
+          <div class="bg-tray bg-open">
+            <div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+              <span class="bg-tray-title ct-head">Tasks</span>
+              <span class="ct-watching"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 1</span>
+              <span class="bg-tray-count ct-count">1 running · 1/2 done</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▾</button>
+            </div>
+            <div class="ct-list">
+              <a class="ct-row b-new" style="outline-offset:-2px">
+                <span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span></span>
+                <span class="ct-eye"><span class="anticon ct-eye-ico"><svg><use href="#i-eye"/></svg></span></span>
+                <span class="ct-title">Android: tapping a notification opens the session it names</span>
+                <span class="ct-age">25m ago</span><span class="ct-caret">›</span>
+              </a>
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+                <span class="ct-eye"></span>
+                <span class="ct-title">Android: unread-reply badge on the session list</span>
+                <span class="ct-age">10h ago</span><span class="ct-caret">›</span>
+              </a>
+            </div>
+            <div class="ct-foot"><a>View all in Tasks ›</a></div>
+          </div>
+          </div>
+          <div class="wt-bar"><div class="wt-row wt-row-toggle">
+            <button type="button" class="wt-branch"><span class="wt-branch-ico">⎇</span><span class="wt-branch-name"><span class="wt-dim">orbit/</span>notify<span class="wt-dim">-4613a1</span></span></button>
+            <span class="wt-stat"><span class="wt-add">+12</span><span class="wt-del">−2</span><span class="wt-files">· 1 file · committed</span></span>
+            <span class="wt-spacer"></span><span class="wt-merge-done">✓ Merged</span>
+          </div></div>
+          <div class="b-composer">
+            <div class="b-ph">Reply…</div>
+            <div class="b-cbar"><span class="b-plus">+</span><span>Auto</span><span class="b-sp"></span>
+              <span class="b-model"><b>Opus 5.5</b> Max</span><span><i class="b-meter"></i>93%</span><span><i class="b-ring"></i>29%</span><span class="b-send">↑</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-cap">
+        <b>两次等待，一行、一个 👁</b>
+        <ol>
+          <li><span class="b-n">1</span>这条任务同时被 <span class="b-code">task_await</span> 和 <span class="b-code">session_await</span> 等着：还是一行，被等的排最前（10-07 的规则不变）。只有 <span class="b-code">session_await</span>、没有 <span class="b-code">task_await</span> 时，这行照样带 👁。</li>
+        </ol>
+        <p>点这行进任务页，执行会话在任务页的 Runs 里——原来 Watching 展开后的 Open session ›，现在要多点一次。</p>
+      </div>
+    </figure>
+
+    <div>
+      <div class="b-case">
+        <h3><span class="b-tag new" style="margin:0">a</span>执行会话属于别处建的任务</h3>
+        <div class="b-mini">
+          <div class="b-lbl now">今天</div>
+          <div class="bg-tray watch-strip"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-eye"/></svg></span>
+            <span class="bg-tray-title ct-head">Watching</span>
+            <span class="ct-one">Task: iOS: share sheet saves the image to Photos</span>
+            <span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="b-lbl new">建议（展开）</div>
+          <div class="bg-tray bg-open b-new">
+            <div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+              <span class="bg-tray-title ct-head">Tasks</span>
+              <span class="ct-watching"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 1</span>
+              <span class="bg-tray-count ct-count">1 running · 1/2 done</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▾</button>
+            </div>
+            <div class="ct-list">
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span></span>
+                <span class="ct-eye"><span class="anticon ct-eye-ico"><svg><use href="#i-eye"/></svg></span></span>
+                <span class="ct-title">iOS: share sheet saves the image to Photos</span>
+                <span class="ct-age">elsewhere</span><span class="ct-caret">›</span>
+              </a>
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+                <span class="ct-eye"></span>
+                <span class="ct-title">Android: unread-reply badge on the session list</span>
+                <span class="ct-age">10h ago</span><span class="ct-caret">›</span>
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="b-cap">进卡时用<b>任务自己的标题和胶囊</b>（不是会话标题「Task: …」），年龄那一列写 <b>elsewhere</b>——和 10-07 时「别处建的、这里只是在等」的任务一样；等待结束后这行随之消失。</div>
+      </div>
+
+      <div class="b-case">
+        <h3><span class="b-tag new" style="margin:0">b</span>这条等待很久没人检查</h3>
+        <div class="b-mini">
+          <div class="bg-tray bg-open b-new">
+            <div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+              <span class="bg-tray-title ct-head">Tasks</span>
+              <span class="ct-watching is-stale"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 1</span>
+              <span class="bg-tray-count ct-count">1 running · 1/2 done</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▾</button>
+            </div>
+            <div class="ct-list">
+              <div class="watch-say"><span class="watch-say-stale">Not checked for 12m — the resume may be late.</span></div>
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span></span>
+                <span class="ct-eye"><span class="anticon ct-eye-ico is-stale"><svg><use href="#i-eye"/></svg></span></span>
+                <span class="ct-title">Android: tapping a notification opens the session it names</span>
+                <span class="ct-age">25m ago</span><span class="ct-caret">›</span>
+              </a>
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+                <span class="ct-eye"></span>
+                <span class="ct-title">Android: unread-reply badge on the session list</span>
+                <span class="ct-age">10h ago</span><span class="ct-caret">›</span>
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="b-cap">原来挂在 Watching 展开里的那句提醒，原样搬到 Tasks 列表顶部（任务的等待今天就是这么显示的）；那一行和卡头的 👁 变橙。</div>
+      </div>
+
+      <div class="b-case">
+        <h3><span class="b-tag new" style="margin:0">c</span>顺带：会话列表那一行、会话头部的状态词</h3>
+        <div class="b-pair">
+          <div>
+            <div class="b-lbl now">今天</div>
+            <div class="b-srow"><div class="t"><i></i>通知跳转设计咨询</div><div class="l">Watching 2 targets · 2 running · 0/2 done</div></div>
+            <div class="b-word" style="margin-top:6px">头部：<b>Watching 2 targets</b></div>
+          </div>
+          <div>
+            <div class="b-lbl new">建议</div>
+            <div class="b-srow b-new"><div class="t"><i></i>通知跳转设计咨询</div><div class="l">Watching Android: tapping a notification opens the session it names</div></div>
+            <div class="b-word" style="margin-top:6px">头部：<b>Watching 1 target</b></div>
+          </div>
+        </div>
+        <div class="b-cap">同一条规则：<b>任务和它的执行会话算一个目标</b>。只剩一个目标时按名字说（像只等一条任务时那样）。不然卡上是 👁 1，列表里却写 2 个目标、2 running。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 3 · 待定：不在跑任务的会话 ═══════════════════════ -->
+<section class="b-part" id="part-3">
+  <span class="b-tag open">待定 · 要你拍板</span>
+  <h2 class="b-h2">被等的会话没在跑任务时（<span class="b-code">session_create</span> 出来的子会话）</h2>
+  <p class="b-lede">
+    剩下的是没有 <span class="b-code">task_id</span> 的会话：部署、只读核查、探针这类子会话，没有任务可以挂。
+    近 30 天本机：被等的 110 个会话里 <b>27 个</b>是这种（25%），几乎都出自运维 / 协调类会话（P10 中继、发版、探针）。
+  </p>
+
+  <div class="b-grid">
+    <figure style="margin:0">
+      <span class="b-tag new">A（推荐）· 只为它们留一条瘦 Watching</span>
+      <div class="b-pane" style="height:300px">
+        <div class="b-tail">
+          <p>发版会话已经开出去了，40% 灰度跑完我再看下一步。</p>
+        </div>
+        <div class="workspace-composer b-band">
+          <div class="bg-tray watch-strip"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-eye"/></svg></span>
+            <span class="bg-tray-title ct-head">Watching</span>
+            <span class="ct-one">Deploy main 06f4463: runner 0.1.231 at 40%</span>
+            <span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="bg-tray"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+            <span class="bg-tray-title ct-head">Tasks</span>
+            <span class="ct-watching"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 1</span>
+            <span class="bg-tray-count ct-count">1 running · 1/2 done</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="b-composer">
+            <div class="b-ph">Reply…</div>
+            <div class="b-cbar"><span class="b-plus">+</span><span>Auto</span><span class="b-sp"></span>
+              <span class="b-model"><b>Opus 5.5</b> Max</span><span><i class="b-meter"></i>93%</span><span><i class="b-ring"></i>29%</span><span class="b-send">↑</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-cap">
+        <b>名字说的是实话</b>
+        <p>Watching 只在「等的会话没在跑任务」时出现，外观和今天一样。Tasks 卡里只有任务，计数句和 View all in Tasks › 都不用改口径。
+          代价：在开子会话的会话里，停车条还会有 4 条。改动最小，不加新行类型。</p>
+      </div>
+    </figure>
+
+    <figure style="margin:0">
+      <span class="b-tag alt">B · 也并进 Tasks，作为会话行</span>
+      <div class="b-case" style="padding:14px 18px">
+        <div class="b-mini" style="width:100%">
+          <div class="b-lbl">只开了子会话、没建任务（运维会话的常态）· 折叠</div>
+          <div class="bg-tray b-new"><div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+            <span class="bg-tray-title ct-head">Tasks</span>
+            <span class="ct-one">Deploy main 06f4463: runner 0.1.231 at 40%</span>
+            <span class="anticon ct-eye-ico"><svg><use href="#i-eye"/></svg></span>
+            <span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+          </div></div>
+          <div class="b-lbl" style="margin-top:14px">任务和子会话都有 · 展开</div>
+          <div class="bg-tray bg-open b-new">
+            <div class="bg-tray-row">
+              <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+              <span class="bg-tray-title ct-head">Tasks</span>
+              <span class="ct-watching"><span class="anticon"><svg><use href="#i-eye"/></svg></span> 2</span>
+              <span class="bg-tray-count ct-count">2 running · 1/3 done</span>
+              <span class="wt-spacer"></span><button type="button" class="wt-expand">▾</button>
+            </div>
+            <div class="ct-list">
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span></span>
+                <span class="ct-eye"><span class="anticon ct-eye-ico"><svg><use href="#i-eye"/></svg></span></span>
+                <span class="ct-title">Android: tapping a notification opens the session it names</span>
+                <span class="ct-age">25m ago</span><span class="ct-caret">›</span>
+              </a>
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-loading"/></svg></span>Running</span></span>
+                <span class="ct-eye"><span class="anticon ct-eye-ico"><svg><use href="#i-eye"/></svg></span></span>
+                <span class="ct-title"><span class="anticon b-sess"><svg><use href="#i-msg"/></svg></span>Deploy main 06f4463: runner 0.1.231 at 40%</span>
+                <span class="ct-age">session</span><span class="ct-caret">›</span>
+              </a>
+              <a class="ct-row">
+                <span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+                <span class="ct-eye"></span>
+                <span class="ct-title">Android: unread-reply badge on the session list</span>
+                <span class="ct-age">10h ago</span><span class="ct-caret">›</span>
+              </a>
+            </div>
+            <div class="ct-foot"><a>View all in Tasks ›</a></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-cap">
+        <b>永远最多 3 条，Watching 三端都能删</b>
+        <p>代价：Tasks 里出现会话行——胶囊用会话的词（Running、Waiting for your reply…），行尾写 <b>session</b>，点开进会话；
+          只开了子会话时，卡头写着 Tasks、点名的却是一个会话；计数句把会话也算进 done/total。多一种行类型，三端各改一遍。</p>
+      </div>
+    </figure>
+  </div>
+
+  <div class="b-rec">
+    <b>推荐 A。</b>你截图这种（会话在跑任务）占 74%，A 已经让它从停车条消失；剩下的子会话本来就不是任务，留在 Watching 名副其实，而且只出现在开子会话的会话里。
+    如果你更想要「停车条永远不超过 3 条」，选 B：工作量中等，多一种行类型和一个词 <b>session</b>。
+  </div>
+</section>
+
+<!-- ═══════════════════════ 4 · 规则 + 落地 ═══════════════════════ -->
+<section class="b-part" id="part-4">
+  <h2 class="b-h2">规则，和落地（按代价排）</h2>
+  <div class="b-cols">
+    <div class="b-col">
+      <h3>规则</h3>
+      <ul>
+        <li>被等的会话在执行一条任务（<span class="b-code">sessions.task_id</span>）→ 等同于在等那条任务，画在那条任务的行上。</li>
+        <li>同一条任务被 <span class="b-code">task_await</span> 和 <span class="b-code">session_await</span> 同时等：一行、一个 👁；其中任一条没人检查 → 橙色。</li>
+        <li>那条任务不是这里建的：作为 elsewhere 行进卡，用任务自己的标题和胶囊。</li>
+        <li>计数句只数任务；👁 N 数带眼睛的行。</li>
+        <li>会话列表那一行、头部状态词：任务和它的执行会话算一个目标。</li>
+        <li>服务端还没带新字段时：照旧画 Watching 行，什么都不丢。</li>
+        <li>会话没在跑任务：见待定（A 保留 Watching / B 也并进来）。</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <h3>落地（按代价排）</h3>
+      <ol>
+        <li><b>服务端（小）</b>：<span class="b-code">WatchesService.named()</span> 读会话时多带 <span class="b-code">task_id</span>，把那条任务的标题和状态一起读出（和 TASK 目标同一套 running / queued）；SESSION 目标多一个可选字段 <span class="b-code">targetTask</span>。不加表、不加迁移，watch-api pg spec 加一例。</li>
+        <li><b>三端客户端（中）</b>：<span class="b-code">watchedTasks</span> 把带 <span class="b-code">targetTask</span> 的会话目标映射成那条任务；<span class="b-code">waitsBeyondTasks</span> 不再算它；<span class="b-code">stripLine</span> / <span class="b-code">watchingWord</span> 先折叠再数。web <span class="b-code">lib/watches.ts</span>，OrbitKit <span class="b-code">SessionTaskCard.swift</span> + <span class="b-code">WatchProjection.swift</span>，Android <span class="b-code">SessionTaskCard.kt</span> + <span class="b-code">WatchProjection.kt</span>。iPhone 折叠条（10-16）的 👁 标记跟着 <span class="b-code">beyondTasks</span> 走，自动少一个。</li>
+        <li><b>夹具 + parity</b>：<span class="b-code">session-created-tasks.fixture.json</span>、<span class="b-code">watch-strip.fixture.json</span> 各加三例（这里建的任务的执行会话 / 别处任务的执行会话 / 同一任务两次等待），三端 parity 测试读同一份。</li>
+        <li><b>只在选 B 时</b>：卡片行加会话一类（会话胶囊、行尾 session、点开进会话），删 <span class="b-code">SessionWatchStrip</span> / <span class="b-code">WatchingCard</span> / <span class="b-code">WatchingStrip</span> 和它们的 parity 用例。</li>
+      </ol>
+    </div>
+    <div class="b-col">
+      <h3>数据（近 30 天，本机 runner 的 agent transcript）</h3>
+      <table class="b-data">
+        <tr><td class="num">110</td><td>个会话被 <span class="b-code">session_await</span> / <span class="b-code">watch_create</span> 等过（479 次）</td></tr>
+        <tr><td class="num">81</td><td>在执行任务（74%）→ 本方案直接并进 Tasks</td></tr>
+        <tr><td class="num">27</td><td>子会话（有 parent、没有任务）→ 待定 A / B</td></tr>
+        <tr><td class="num">2</td><td>两者都不是</td></tr>
+      </table>
+      <h3 style="margin-top:16px">文案</h3>
+      <ul>
+        <li>A：没有新文案，Watching / Tasks / elsewhere / Not checked for… 都是现成的英文。</li>
+        <li>B：多一个词 <b>session</b>（行尾）。</li>
+      </ul>
+      <h3 style="margin-top:16px">不变的</h3>
+      <ul>
+        <li>Background processes、分支条、输入框。</li>
+        <li>10-07 的排序和 👁 / 橙色规则；iOS、macOS、Android 的外观只是少一张卡。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
