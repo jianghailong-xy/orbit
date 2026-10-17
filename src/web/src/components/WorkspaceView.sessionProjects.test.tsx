@@ -148,7 +148,10 @@ async function settle(): Promise<void> {
     });
   }
 }
-async function mount(ready: () => void = () => expect(projectRows()).toHaveLength(1)): Promise<void> {
+async function mount(
+  ready: () => void = () => expect(projectRows()).toHaveLength(1),
+  path = `/sessions/${LOOSE.id}`,
+): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -159,7 +162,7 @@ async function mount(ready: () => void = () => expect(projectRows()).toHaveLengt
   await act(async () => {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
-        <MemoryRouter initialEntries={[`/sessions/${LOOSE.id}`]}>
+        <MemoryRouter initialEntries={[path]}>
           <WorkspaceView runner={RUNNER} />
           <SessionSearch />
           <LocationProbe />
@@ -507,5 +510,63 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, { ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', runningBgCount: 1, runningBgJobCount: 1 }];
     await mount();
     expect(projectRow().querySelector('.session-project-status')?.getAttribute('data-state')).toBe('jobs');
+  });
+});
+
+// Owner 10-17 (docs/mocks/project-row-other-workspace): outside its coordinator's workspace an entry holds that
+// workspace's own members, as a folder row does. The arrow keys pass over it and a landing never picks it,
+// because opening the coordinator would swap the list for the coordinator's workspace.
+describe('project entries in the arrow keys and the landing', { timeout: 60_000 }, () => {
+  const elsewhere = { workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } };
+  const OLDER = row(816, 'Older conversation', { lastTurnAt: '2026-10-02T08:00:00Z', lastAssistantText: 'An older session preview' });
+  // A session opened from the list in another workspace reads as itself, not as this workspace's first row.
+  beforeEach(() => {
+    vi.mocked(apiModule.getSession).mockImplementation(async (id) =>
+      ([...rows, ...remoteRows].find((r) => r.id === id) ?? LOOSE) as never);
+  });
+  const press = async (key: 'ArrowDown' | 'ArrowUp'): Promise<void> => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    });
+    await settle();
+  };
+
+  it('passes over an entry whose coordinator is in another workspace and stays in this list', async () => {
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    await mount();
+    expect(titles()).toEqual(['Loose conversation', 'Project Alpha', 'Older conversation']);
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
+    await press('ArrowUp');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(listCalls.some((p) => p.includes(`workspaceId=${OTHER_WORKSPACE_ID}`))).toBe(false);
+  });
+
+  it('opens the coordinator from its entry in the coordinator’s own workspace', async () => {
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, COORDINATOR, TASK];
+    await mount();
+    expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+  });
+
+  it('does not land on the coordinator when a workspace opens on an entry from another workspace', async () => {
+    // A workspace no other case opens: the list remembers each workspace's last session for the page's
+    // lifetime, and a remembered session is landed on whatever the entries hold.
+    const LANDING_ID = pid(808);
+    const here = { workspaceId: LANDING_ID, workspace: { id: LANDING_ID, name: 'landing workspace' } };
+    rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()!;
+    vi.mocked(apiModule.api).mockImplementation(((path: string, ...rest: unknown[]) => path === '/workspaces'
+      ? Promise.resolve([WORKSPACE, { id: LANDING_ID, name: 'landing workspace' }].map((workspace) => ({
+        ...workspace, runnerId: RUNNER_ID, lastProvider: 'claude', createdAt: '2026-01-01T00:00:00Z',
+      })))
+      : (fixtureApi as (...args: unknown[]) => unknown)(path, ...rest)) as unknown as typeof apiModule.api);
+    await mount(() => expect(projectRows()).toHaveLength(1), `/workspaces/${LANDING_ID}`);
+    await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
+    expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
   });
 });

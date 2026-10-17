@@ -399,12 +399,13 @@ final class WatchWakeCopyParityTests: XCTestCase {
                       "the strip stopped taking its line from \(Self.webWatches)'s `stripLine`, the one "
                           + "the session list's rows say as well.")
         let lib = try flat(Self.webWatches)
-        XCTAssertTrue(lib.contains("thresholdOf(waitingOn[0].predicate, live)"),
+        XCTAssertTrue(lib.contains("thresholdOf(waitingOn[0].predicate, named)"),
                       "the strip's middle stopped reading the lone watch's own threshold — the "
                           + "condition's count, not the target set's, is what the line states.")
-        XCTAssertTrue(lib.contains("targetNoun(waitingOn, live.length)"),
+        XCTAssertTrue(lib.contains("targetNoun(waited, live.length)"),
                       "how several watches are counted drifted: \(Self.webWatches) no longer "
-                          + "counts the distinct targets in the same noun the cards use.")
+                          + "counts the distinct targets in the same noun the cards use, a task's run "
+                          + "session as that task.")
         // Which shape the line takes: one watch over one live target names it, anything else counts.
         let lone = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
             WatchFixture.watch(id: "W1", targets: [WatchFixture.target("T1")]),
