@@ -386,6 +386,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { CURSOR_KEY_CHECK_V1, cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import {
   recordedEngine,
   SESSION_ENGINE_UNKNOWN_MESSAGE,
@@ -1661,6 +1662,11 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // Cursor API keys somebody is waiting on a check of (cursor-key-check-relay.ts), held in this process
+    // alone: handed only to a process that declares cursor-key-check/v1, each once.
+    const cursorKeyChecks = runnerSupportsCapability(capabilities, CURSOR_KEY_CHECK_V1)
+      ? cursorKeyCheckRelay.take(runner.id)
+      : [];
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
@@ -1692,6 +1698,8 @@ export class RunnerApiController {
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
+      // Present only when this beat hands a key over, for the same reason.
+      ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
     };
   }
 

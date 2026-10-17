@@ -1724,6 +1724,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}(ch.WorkDir)
 			}
+			// Check the Cursor API keys somebody is waiting on (cursor_key_check.go), off this goroutine for
+			// the reason the history scan is.
+			startCursorKeyChecks(resp.CursorKeyChecks, &heartbeatOps, t.cursorKeyCheckResult)
 		})
 	}()
 

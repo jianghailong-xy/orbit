@@ -190,7 +190,8 @@ test('P2 the server never spends a Cursor key itself: no held key, no quota prob
   assert.equal(subscriptionUsageRefusal(row, KEY), 'NOT_CLAUDE_RUNTIME');
   assert.equal(poolMemberRefusal({ ...row, ownerId: 'o' } as never), 'NOT_CLAUDE_RUNTIME');
 
-  // A connection test of a Cursor key sends it nowhere: it says Cursor CLI checks it on a runner.
+  // A connection test of a Cursor key sends it nowhere from here: a runner of the caller's checks it with
+  // `agent models` (cursor-key-check-relay.ts), and with none that can, the answer says so.
   const originalFetch = globalThis.fetch;
   const sent: string[] = [];
   globalThis.fetch = (async (input: unknown) => {
@@ -198,19 +199,13 @@ test('P2 the server never spends a Cursor key itself: no held key, no quota prob
     throw new Error('a request was made');
   }) as typeof fetch;
   try {
-    const providers = new ProvidersService({} as never, {} as never, {} as never);
-    let caught: unknown;
-    try {
-      await providers.testConnection({ baseUrl: 'https://api2.cursor.sh', apiKey: KEY, model: 'default[]', runtime: 'cursor' });
-    } catch (error) {
-      caught = error;
-    }
-    const e = caught as { getStatus(): number; getResponse(): { code: string; message: string } };
-    assert.equal(e.getStatus(), 400);
-    assert.deepEqual(e.getResponse(), {
-      code: 'CURSOR_KEY_CHECKED_ON_RUNNER',
-      message: 'A Cursor API key cannot be tested from here: Cursor CLI checks it on a runner before a session starts on it',
-    });
+    const providers = new ProvidersService({ runner: { findMany: async () => [] } } as never, {} as never, {} as never);
+    const checked = await providers.testConnection(
+      { baseUrl: 'https://api2.cursor.sh', apiKey: KEY, model: 'default[]', runtime: 'cursor' },
+      'o',
+    );
+    assert.deepEqual({ ok: checked.ok, keyCheck: (checked as { keyCheck?: string }).keyCheck }, { ok: false, keyCheck: 'NO_RUNNER' });
+    assert.ok(!checked.message.includes(KEY), 'the answer repeats the key');
     assert.deepEqual(sent, []);
     // The other protocols are probed exactly as before.
     const answer = await providers.testConnection({ baseUrl: 'https://api.z.ai/api/anthropic', apiKey: 'sk-glm', model: 'glm-5.2', runtime: 'claude' });

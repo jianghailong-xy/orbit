@@ -47,6 +47,15 @@ export class CursorKeyCheckDto {
   @IsString() @Matches(/^[0-9a-f]{16}$/) keyFingerprint!: string;
 }
 
+// A runner's answer about a Cursor key it was handed on a heartbeat to check (POST
+// /runner/cursor-key-check-result): the check it answers, what `agent models` said, and the key it asked
+// with, by fingerprint — never the key.
+export class CursorKeyCheckResultDto {
+  @IsString() @Matches(/^[0-9a-f]{32}$/) checkId!: string;
+  @IsIn([...CURSOR_KEY_CHECK_STATES]) state!: string;
+  @IsString() @Matches(/^[0-9a-f]{16}$/) keyFingerprint!: string;
+}
+
 // Validate an endpoint + freshly-typed key before saving. Stateless: nothing is persisted.
 export class TestModelProviderDto {
   @IsString() @MinLength(1) baseUrl!: string;

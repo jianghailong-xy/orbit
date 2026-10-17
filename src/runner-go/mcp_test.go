@@ -1596,8 +1596,8 @@ func TestMCPProviderAndAgentDescriptionsFollowTheDecoupledModel(t *testing.T) {
 	}
 	for _, tool := range []string{"provider_create", "provider_update"} {
 		schema, _ := mcpToolProps(tools, tool)["runtime"].(map[string]interface{})
-		if !reflect.DeepEqual(schema["enum"], []string{"claude", "codex", "kimi", "antigravity"}) {
-			t.Fatalf("%s runtime enum = %#v, want the four protocols", tool, schema["enum"])
+		if !reflect.DeepEqual(schema["enum"], []string{"claude", "codex", "kimi", "antigravity", "cursor"}) {
+			t.Fatalf("%s runtime enum = %#v, want the five protocols, a Cursor key's among them", tool, schema["enum"])
 		}
 		if text, _ := schema["description"].(string); !strings.Contains(text, "protocol") || strings.Contains(text, "coding engine that drives it") {
 			t.Fatalf("%s runtime is not described as the protocol: %q", tool, text)
