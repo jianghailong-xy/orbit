@@ -2,8 +2,10 @@ package io.orbitd.android.push
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -69,7 +71,10 @@ class FcmTokenDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a10@example.test")
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
+        Log.i("A10Fcm", "Sign In pressed; auth ${app.session.state.value::class.simpleName}")
         compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        await("signed in", 30_000) { app.session.state.value as? AuthState.SignedIn }
+        capture("fcm-after-sign-in")
         // The configured build asks once after the first sign-in (owner decision 34bbkPvI56b7ZUi8cJjX4).
         val allow = await("system notification permission request", 30_000) { permissionButton() }
         capture("fcm-permission-request")
@@ -137,7 +142,13 @@ class FcmTokenDeviceTest {
         val until = SystemClock.elapsedRealtime() + timeoutMillis
         while (true) {
             value()?.let { return it }
-            if (SystemClock.elapsedRealtime() >= until) { capture("fcm-timeout"); fail("Timed out: $what") }
+            if (SystemClock.elapsedRealtime() >= until) {
+                capture("fcm-timeout")
+                shell("dumpsys activity activities").decodeToString().lines()
+                    .filter { "io.orbitd" in it || "ResumedActivity" in it }.forEach { Log.i("A10Fcm", it.trim()) }
+                Looper.getMainLooper().thread.stackTrace.forEach { Log.i("A10Fcm", "main at $it") }
+                fail("Timed out: $what (auth ${app.session.state.value::class.simpleName}, permitted ${app.push.notifications.permitted()})")
+            }
             SystemClock.sleep(250)
         }
     }

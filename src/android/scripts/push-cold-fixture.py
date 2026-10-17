@@ -12,7 +12,9 @@ import importlib.util
 import json
 import pathlib
 import re
+import sys
 import uuid
+from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -45,6 +47,10 @@ reset()
 
 
 class Handler(cards.Handler):
+    def log_request(self, code='-', size='-'):
+        # Method, path and status only: no header or body reaches the log.
+        sys.stderr.write(f'{datetime.now(timezone.utc).isoformat(timespec="milliseconds")} {self.command} {urlparse(self.path).path} {code}\n')
+
     def do_POST(self):
         path = urlparse(self.path).path
         if path == '/__push_reset':

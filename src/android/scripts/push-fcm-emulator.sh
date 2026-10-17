@@ -180,8 +180,9 @@ fi
 stats "" > "$output/fixture-push.json" || true
 adbx -s "$serial" pull /data/local/tmp/a10-fcm "$output/screens" > /dev/null 2>&1 || true
 rm -f "$output/screens/broadcast.sh"
-# Firebase, Google Play services RPC and crash lines only; anything shaped like a token is masked.
-adbx -s "$serial" logcat -d -v threadtime | grep -E 'Firebase|FCM|GmsRpc|OrbitPush|AndroidRuntime' \
-  | sed -E 's/[A-Za-z0-9_-]+:APA91b[A-Za-z0-9_-]+/<fcm-token>/g' > "$output/logcat-firebase.txt" || true
+# The whole log of the run, with anything shaped like a token masked, and the Firebase lines on their own.
+adbx -s "$serial" logcat -d -v threadtime | sed -E 's/[A-Za-z0-9_-]+:APA91b[A-Za-z0-9_-]+/<fcm-token>/g' > "$output/logcat.txt" || true
+grep -E 'Firebase|FCM|GmsRpc|OrbitPush|AndroidRuntime' "$output/logcat.txt" > "$output/logcat-firebase.txt" || true
+adbx -s "$serial" shell dumpsys activity activities | grep -E 'io\.orbitd|ResumedActivity' > "$output/activities.txt" || true
 printf 'failures=%s\n' "$failures" >> "$output/result.txt"
 (( failures == 0 ))
