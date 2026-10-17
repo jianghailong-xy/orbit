@@ -1,0 +1,292 @@
+coordinator-pg-isolation database=pccspec_dev_18428 user=pccspec_ server=172.17.0.5/32:5432 system_identifier=7697669350346260521 version=16.15
+▶ managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends
+  ✖ (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [kubernetes] (211.276084ms)
+  ✖ (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [docker] (41.86103ms)
+  ✖ (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [kubernetes] (61.020562ms)
+  ✖ (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [docker] (35.354577ms)
+  ✖ (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [kubernetes] (57.806884ms)
+  ✖ (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [docker] (31.364189ms)
+  ✖ (4) an instance that stops after its owner asked it to sleep goes to sleep [kubernetes] (91.912107ms)
+  ✖ (4) an instance that stops after its owner asked it to sleep goes to sleep [docker] (40.165394ms)
+  ✖ (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [kubernetes] (463.64223ms)
+  ✖ (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [docker] (57.916359ms)
+  ✖ (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [kubernetes] (113.370785ms)
+  ✖ (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [docker] (60.218512ms)
+✖ managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends (1323.903777ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 0
+ℹ fail 13
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1667.015056
+
+✖ failing tests:
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [kubernetes] (211.276084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'FAILED'
+  - 'BACKOFF'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:269:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:263:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'BACKOFF',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [docker] (41.86103ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'FAILED'
+  - 'BACKOFF'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:269:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:263:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'BACKOFF',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [kubernetes] (61.020562ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'FAILED'
+  - 'BACKOFF'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:311:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:307:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'BACKOFF',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [docker] (35.354577ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'FAILED'
+  - 'BACKOFF'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:311:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:307:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'BACKOFF',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [kubernetes] (57.806884ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'FAILED'
+  - 'BACKOFF'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:355:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:352:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'BACKOFF',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [docker] (31.364189ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'FAILED'
+  - 'BACKOFF'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:355:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:352:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'BACKOFF',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (4) an instance that stops after its owner asked it to sleep goes to sleep [kubernetes] (91.912107ms)
+  AssertionError [ERR_ASSERTION]: FAILED → IDLE → IDLE → IDLE → IDLE → IDLE → IDLE → IDLE
+  
+  'IDLE' !== 'SLEEPING'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:391:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:385:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'IDLE',
+    expected: 'SLEEPING',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (4) an instance that stops after its owner asked it to sleep goes to sleep [docker] (40.165394ms)
+  AssertionError [ERR_ASSERTION]: FAILED → IDLE → IDLE → IDLE → IDLE → IDLE → IDLE → IDLE
+  
+  'IDLE' !== 'SLEEPING'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:391:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:385:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'IDLE',
+    expected: 'SLEEPING',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [kubernetes] (463.64223ms)
+  AssertionError [ERR_ASSERTION]: READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY → READY
+  
+  'READY' !== 'WAITING'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:404:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:398:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'READY',
+    expected: 'WAITING',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [docker] (57.916359ms)
+  AssertionError [ERR_ASSERTION]: FAILED
+  + actual - expected
+  
+  + 'FAILED'
+  - 'WAITING'
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:404:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:398:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'WAITING',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [kubernetes] (113.370785ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    ok((await r.manager.dueMappings(500)).includes(failed.id))
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:451:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:440:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at build/managed-runners/managed-runner-recovery.pg.spec.js:260:21
+✖ (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [docker] (60.218512ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    ok((await r.manager.dueMappings(500)).includes(failed.id))
+  
+      at <worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:451:26
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async both (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:260:13)
+      at async TestContext.<anonymous> (<worktree>/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:440:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+rc=1

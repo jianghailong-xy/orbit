@@ -97,7 +97,7 @@ export interface ManagedRunnerProfile {
     maxActiveUsers: number;
   };
   lifecycle: {
-    /** Attempts a transient failure may spend before the mapping is FAILED. */
+    /** Attempts in a row — failed tries on the way up, and restarts after an instance stopped — before the mapping is FAILED. */
     maxAttempts: number;
     backoffBaseSeconds: number;
     backoffMaxSeconds: number;

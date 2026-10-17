@@ -1,0 +1,119 @@
+{
+  "mappings": [
+    {
+      "runner": "01a14acb-ab39-723a-bd62-67a7587c6136",
+      "state": "FAILED",
+      "generation": 11,
+      "pvcName": "mr-data-01a14acb-ab39-723a-bd62-67a7587c6136",
+      "podUid": null
+    },
+    {
+      "runner": "01a14acb-ab46-759a-9466-b9b9bdd07bca",
+      "state": "SLEEPING",
+      "generation": 3,
+      "pvcName": "mr-data-01a14acb-ab46-759a-9466-b9b9bdd07bca",
+      "podUid": null
+    },
+    {
+      "runner": "01a14ad4-a29d-7348-8713-203100258298",
+      "state": "READY",
+      "generation": 1,
+      "pvcName": "mr-data-01a14ad4-a29d-7348-8713-203100258298",
+      "podUid": "d411adf3-2c46-4724-8ef4-2c7bfe63439a"
+    }
+  ],
+  "channel": {
+    "instanceId": "d2it-10171655c27a",
+    "volumes": [
+      {
+        "name": "mr-data-01a14acb-ab46-759a-9466-b9b9bdd07bca",
+        "kind": "data",
+        "uid": "dba1cead-a75b-47f8-8f66-7d55db0f28c2",
+        "ownerId": "01a14acb-ab24-7774-80db-ecf8faea76af",
+        "runnerId": "01a14acb-ab46-759a-9466-b9b9bdd07bca",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-18T00:57:04+08:00",
+        "usageBytes": 9529673
+      },
+      {
+        "name": "mr-data-01a14acb-ab39-723a-bd62-67a7587c6136",
+        "kind": "data",
+        "uid": "372d95ef-18c4-4c75-abab-a14a95480c19",
+        "ownerId": "01a14acb-ab1d-73d9-bf6e-bf6599be0e31",
+        "runnerId": "01a14acb-ab39-723a-bd62-67a7587c6136",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-18T00:57:04+08:00",
+        "usageBytes": 345972722
+      },
+      {
+        "name": "mr-boot-01a14ad4-a29d-7348-8713-203100258298-g1",
+        "kind": "bootstrap",
+        "uid": null,
+        "ownerId": "01a14ad4-a298-75bf-882f-c58778c40166",
+        "runnerId": "01a14ad4-a29d-7348-8713-203100258298",
+        "limitBytes": null,
+        "createdAt": "2026-10-18T01:07:23+08:00",
+        "usageBytes": 168
+      },
+      {
+        "name": "mr-data-01a14ad4-a29d-7348-8713-203100258298",
+        "kind": "data",
+        "uid": "7cd2e88a-9604-4f4c-977f-25758d69a5c3",
+        "ownerId": "01a14ad4-a298-75bf-882f-c58778c40166",
+        "runnerId": "01a14ad4-a29d-7348-8713-203100258298",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-18T01:07:22+08:00",
+        "usageBytes": 7355865
+      }
+    ],
+    "containers": [
+      {
+        "name": "mr-01a14ad4-a29d-7348-8713-203100258298",
+        "uid": "d411adf3-2c46-4724-8ef4-2c7bfe63439a",
+        "ownerId": "01a14ad4-a298-75bf-882f-c58778c40166",
+        "runnerId": "01a14ad4-a29d-7348-8713-203100258298",
+        "generation": 1,
+        "volumeUid": "7cd2e88a-9604-4f4c-977f-25758d69a5c3",
+        "volume": "mr-data-01a14ad4-a29d-7348-8713-203100258298",
+        "node": "workstation",
+        "status": "running",
+        "running": true,
+        "neverStarted": false,
+        "exitCode": null,
+        "startedAt": "2026-10-17T17:07:23.271697172Z",
+        "finishedAt": null,
+        "oomKilled": false,
+        "stopping": false,
+        "evicted": null
+      }
+    ],
+    "credentials": [
+      {
+        "uid": "4018988e-7d25-40b4-b145-8a2a2d9d3e13",
+        "ownerId": "01a14acb-ab1d-73d9-bf6e-bf6599be0e31",
+        "runnerId": "01a14acb-ab39-723a-bd62-67a7587c6136",
+        "generation": 11,
+        "createdAt": "2026-10-17T17:13:52Z"
+      },
+      {
+        "uid": "fe258cb9-3b8d-4de3-a3e5-d4bdbdfcf3fc",
+        "ownerId": "01a14acb-ab24-7774-80db-ecf8faea76af",
+        "runnerId": "01a14acb-ab46-759a-9466-b9b9bdd07bca",
+        "generation": 2,
+        "createdAt": "2026-10-17T17:06:20Z"
+      },
+      {
+        "uid": "a5b5fbc8-6fce-4fa7-b91f-c01e60248599",
+        "ownerId": "01a14ad4-a298-75bf-882f-c58778c40166",
+        "runnerId": "01a14ad4-a29d-7348-8713-203100258298",
+        "generation": 1,
+        "createdAt": "2026-10-17T17:07:22Z"
+      }
+    ]
+  },
+  "maxContainersPerVolume": {
+    "01a14acb-ab39-723a-bd62-67a7587c6136": 1,
+    "01a14acb-ab46-759a-9466-b9b9bdd07bca": 1,
+    "01a14ad4-a29d-7348-8713-203100258298": 1
+  }
+}

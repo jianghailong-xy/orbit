@@ -151,14 +151,14 @@ export class FakeKubeCluster {
     return clone(after);
   }
 
-  /** The kubelet reports every container of a stored Pod stopped: a terminal phase it vouches for. */
-  stopPod(name: string, exitCode = 0): void {
+  /** The kubelet reports every container of a stored Pod stopped: a terminal phase it vouches for (`reason` the runner's, e.g. OOMKilled). */
+  stopPod(name: string, exitCode = 0, reason = exitCode ? 'Error' : 'Completed'): void {
     this.mutate<Pod>('pods', name, (pod) => {
       const finishedAt = new Date().toISOString();
       const statuses = (key: 'initContainers' | 'containers') =>
         (Array.isArray(pod.spec[key]) ? (pod.spec[key] as Array<{ name: string }>) : []).map((c) => ({
           name: c.name,
-          state: { terminated: { exitCode: key === 'initContainers' ? 0 : exitCode, reason: exitCode ? 'Error' : 'Completed', finishedAt } },
+          state: { terminated: key === 'initContainers' ? { exitCode: 0, reason: 'Completed', finishedAt } : { exitCode, reason, finishedAt } },
         }));
       pod.status = {
         ...pod.status,

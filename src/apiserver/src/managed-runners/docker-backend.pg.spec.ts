@@ -14,8 +14,9 @@
  *       a wake starts the next generation on the same volume with the next credential;
  *   (3) an accepted drain that overruns its drain time is stopped through the channel, and the same
  *       report and removal end it; asking is never the proof;
- *   (4) an abnormal exit of a READY runner: FAILED with Docker's report as the proof, and an owner's
- *       retry replaces it on the same volume;
+ *   (4) an abnormal exit of a READY runner with no restart left (maxAttempts 1; the restarts are
+ *       managed-runner-recovery.pg.spec.ts's): FAILED with Docker's report as the proof, and an
+ *       owner's retry replaces it on the same volume;
  *   (5) a container removed by hand, outside the channel: FENCING, and only an operator's host check
  *       moves it on;
  *   (6) a disabled owner's runner that does not stop by itself is stopped past the drain time;
@@ -84,8 +85,8 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
   });
   await verifyCoordinatorPgIdentity(sql);
 
-  function world(capacity?: DockerRunnerProfile['capacity']) {
-    let profile = testDockerRunnerProfile({ clusterKey: `docker-${randomUUID().slice(0, 8)}`, capacity });
+  function world(capacity?: DockerRunnerProfile['capacity'], lifecycle?: Partial<DockerRunnerProfile['lifecycle']>) {
+    let profile = testDockerRunnerProfile({ clusterKey: `docker-${randomUUID().slice(0, 8)}`, capacity, lifecycle });
     const channel = new FakeDockerChannel(profile.docker.instanceId, profile.runner.image);
     const clock = { ms: Date.now() };
     const now = () => new Date(clock.ms);
@@ -304,7 +305,7 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
   });
 
   await t.test('(4) an abnormal exit fails the runner on Docker\'s report, and a retry replaces it on the same volume', async () => {
-    const w = world();
+    const w = world(undefined, { maxAttempts: 1 });
     const { ownerId, mapping } = await w.readyRunner('crash');
     w.channel.exit(mapping.runnerId, 137);
     assert.equal(await w.manager.reconcile(mapping.id), 'FAILED');
