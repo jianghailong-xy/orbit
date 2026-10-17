@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Compare `dumpsys notification` before and after an in-place upgrade (A10 channel migration).
 
-Usage: push-channel-upgrade.py BEFORE_DUMP AFTER_DUMP PACKAGE
+Usage: push-channel-upgrade.py BEFORE_DUMP AFTER_DUMP PACKAGE UID
+
+Only the installed package's own UID counts: after uninstall/reinstall cycles the dump can still list
+AppSettings of earlier installations of the same package under other UIDs.
 """
 import re
 import sys
@@ -9,11 +12,11 @@ import sys
 CHANNEL = re.compile(r"NotificationChannel\{mId='([^']+)'.*?mImportance=(-?\d+).*?mUserLockedFields=(\d+).*?mDeleted=(true|false)")
 
 
-def channels(path, package):
+def channels(path, package, uid):
     text = open(path, errors='replace').read()
     found = {}
     for block in re.split(r'\n\s*AppSettings: ', text)[1:]:
-        if not block.startswith(package + ' '):
+        if not block.startswith(f'{package} ({uid})'):
             continue
         for line in block.splitlines():
             match = CHANNEL.search(line)
@@ -24,7 +27,7 @@ def channels(path, package):
     return found
 
 
-before, after = channels(sys.argv[1], sys.argv[3]), channels(sys.argv[2], sys.argv[3])
+before, after = channels(sys.argv[1], sys.argv[3], sys.argv[4]), channels(sys.argv[2], sys.argv[3], sys.argv[4])
 print('before_upgrade', before)
 print('after_upgrade', after)
 assert before.get('orbit.needs-you', {}).get('importance') == 3, 'the earlier release must have created the DEFAULT channel'

@@ -227,16 +227,21 @@ if [[ "$phases" == *" upgrade "* ]]; then
     set -e
     adbx -s "$serial" uninstall "$package" > /dev/null 2>&1 || true
     adbx -s "$serial" install "$A10_OLD_APK" > "$output/upgrade-install-old.txt"
+    uid() { adbx -s "$serial" shell pm list packages -U "$package" | tr -d '\r' | sed -n "s/^package:$package uid:\([0-9]*\)$/\1/p"; }
+    old_uid="$(uid)"
     adbx -s "$serial" shell am start -W -n "$package/io.orbitd.android.MainActivity" > "$output/upgrade-launch-old.txt"
     sleep 3
     adbx -s "$serial" shell dumpsys notification > "$output/upgrade-channels-old.txt"
     adbx -s "$serial" shell am force-stop "$package"
     adbx -s "$serial" install -r "$apk" > "$output/upgrade-install-new.txt"
+    printf 'uid_before=%s\nuid_after=%s\n' "$old_uid" "$(uid)" > "$output/upgrade-uid.txt"
+    [[ -n "$old_uid" && "$(uid)" == "$old_uid" ]]
     adbx -s "$serial" shell am start -W -n "$package/io.orbitd.android.MainActivity" > "$output/upgrade-launch-new.txt"
     sleep 3
     adbx -s "$serial" shell dumpsys notification > "$output/upgrade-channels-new.txt"
     adbx -s "$serial" shell am force-stop "$package"
-    python3 "$scripts/push-channel-upgrade.py" "$output/upgrade-channels-old.txt" "$output/upgrade-channels-new.txt" "$package" > "$output/upgrade.txt"
+    python3 "$scripts/push-channel-upgrade.py" "$output/upgrade-channels-old.txt" "$output/upgrade-channels-new.txt" "$package" "$old_uid" \
+      > "$output/upgrade.txt"
   )
   upgrade_status=$?
   set -e
