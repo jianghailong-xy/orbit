@@ -1122,3 +1122,31 @@ reach on the host and its LAN, is not part of it. The operator's side is in
 | A cap on containers | `limits.maxContainers` in `channel.json`, optional. The channel counts every container of its instance, in any state (each one holds its volume until it is removed), and refuses a create past the cap with `429 CONTAINER_LIMIT` before anything is made. The count and the create are one step under one lock, and the containers already there are not touched. The default is one container per CPU and per GiB of the host's memory, whichever is fewer (Docker's `NCPU` and `MemTotal` at start-up). That holds every runner of any profile giving each at least one CPU and 1 GiB, which is more than the budget (the host less a quarter) can start. `/v1/info` reports the cap it applies, and `dockerCapacityBudget` holds the pool's pods, and the slots derived with them, to it. So the manager never admits a runner the channel would refuse, and a cap set below what the host fits makes runners wait for capacity rather than fail. 429 is also what the Docker backend already retries, should anything else have filled the cap. |
 | Volume removal | `allowVolumeRemoval` in `channel.json`, `false` unless set. Off, `DELETE /v1/volumes/…` is refused (`403 REMOVAL_REFUSED`) before anything is looked up. The manager never asked for it. The runbook's deletion procedure turns it on for one removal, by UID, and off again. |
 | An executable `/tmp` | The template's `/tmp` tmpfs asks for `exec` (`TmpfsOptions.Options [["exec"]]`). The task offered a second way, `TMPDIR` and `GOTMPDIR` on the data volume. It would leave a program in `/tmp` itself unable to run, and put scratch files on the account's volume, where they count against its disk limit and outlive the container. Docker keeps every tmpfs `nosuid` and `nodev` and accepts only `exec` and `noexec` as options there: in the probe of 2026-10-17 it refused `suid`, `dev`, `size` and `nr_inodes`. The size limit (`runner.tmpSizeLimit`) and its place in the memory limit are unchanged. Nothing is gained that the runner lacked: the data volume was writable and executable already. The template's rules accept that option or none, and nothing else. `TmpfsOptions.Options` came with Docker Engine 27 (API 1.46). An older engine ignores it, so `/tmp` stays `noexec` there, and the channel says so in its log at start-up. Nothing under `deploy/managed-runner/image` changed. |
+
+Verified on 2026-10-17 in an isolated Docker host on the HPC machine (`docker:29.8.2-dind`, capped, outside the
+runner's cgroup), whose Docker data root was on `/mnt/data` and whose deployment's checkout was on a 3 GiB tmpfs of
+its own ([evidence](evidence/managed-runner-docker-hardening/2026-10-17/README.md)):
+
+- **Before** (the project line at 1f5bc9cec, a fresh install): `/v1/info` measured the tmpfs (3,221,225,472 bytes),
+  and the first account's runner waited `short of storage`. Docker's disk had 15.3 TB free.
+- **`/upgrade` to this change**: the channel came back on the probe, and `/v1/info` and the pool measured the
+  15.87 TB disk. The waiting runner was admitted and its container made, with no file under `data/managed-runners`
+  changed.
+- **A fresh install**: the same.
+- **`/tmp` in a runner container**: `rw,nosuid,nodev,size=1048576k`. A script, a program and a Go binary ran from it,
+  `go test` and `go run` passed with the default temporary directory, and a write stopped at the 1 GiB limit
+  (`No space left on device`).
+- **The cap at 1, with two containers there**: neither was touched. A token holder's create was refused (429) with
+  nothing made. A third account's runner waited, and went on waiting, short of runner slots alone, after another
+  runner slept. With the cap removed it started at once.
+- **The runbook's deletion procedure**: off, refused (403); on, a wrong UID refused (409) and the volume's own
+  removed (204); off again, refused.
+- **A deployment without the profile**: both copies of `/upgrade` made the same Docker calls as before. `.env`,
+  `data/`, the services, volumes and networks were as installed, and nothing of managed runners appeared.
+
+Left to later work, or not shown here:
+
+- Docker older than 27 keeps `/tmp` `noexec` (logged); only 29.8.2 was run.
+- After the channel has been recreated, `docker compose down -v` leaves the empty probe volume behind; the runbook
+  says so.
+- What a runner may reach on the host and its LAN (D5's finding 6) waits for the owner.
