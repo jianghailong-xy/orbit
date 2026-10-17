@@ -1,0 +1,16 @@
+{"at":"2026-10-17T04:15:34.797400071Z","model":"Auto (default)","n":1,"note":"turn-1","scenario":"mcp-orbit","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:17:12.602629314Z","model":"Auto (default)","n":2,"note":"turn-1","scenario":"mcp-orbit","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:18:30.449071388Z","model":"Auto (default)","n":3,"note":"turn-1","scenario":"accept-edits-allow-deny","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:19:04.605581538Z","model":"Auto (default)","n":4,"note":"turn-1","scenario":"accept-edits-stop","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:19:20.839975132Z","model":"Auto (default)","n":5,"note":"turn-1","scenario":"accept-edits-disconnect","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:19:36.43545865Z","model":"Auto (default)","n":6,"note":"turn-1","scenario":"auto","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:20:08.289767873Z","model":"Auto (default)","n":7,"note":"turn-1","scenario":"dont-ask","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:20:47.6818265Z","model":"Auto (default)","n":8,"note":"turn-1","scenario":"plan","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:21:24.66089622Z","model":"Auto (default)","n":9,"note":"turn-1","scenario":"bypass","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:21:56.815923872Z","model":"Auto (default)","n":10,"note":"turn-1","scenario":"allow-always","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:25:57.420527252Z","model":"Auto (default)","n":11,"note":"turn-1","scenario":"accept-edits-allow-deny","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:26:31.923999789Z","model":"Auto (default)","n":12,"note":"turn-1","scenario":"allow-always","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:27:12.700145854Z","model":"Auto (default)","n":13,"note":"turn-1","scenario":"plan-switch-mode-raw","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:27:26.136656549Z","model":"Auto (default)","n":14,"note":"turn-1","scenario":"plan-switch-mode","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:27:44.977031712Z","model":"Auto (default)","n":15,"note":"turn-2","scenario":"plan-switch-mode","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}
+{"at":"2026-10-17T04:28:56.745416133Z","model":"Auto (default)","n":16,"note":"turn-1","scenario":"malicious-repo","task":"P5c 34h05fsaJBXkS3SDQ2smK","version":"2026.10.14-941492e"}

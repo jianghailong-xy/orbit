@@ -1,0 +1,5 @@
+{
+  "setup-worktree": [
+    "__WORK__/.cursor/hooks/mark.sh worktrees-setup"
+  ]
+}
