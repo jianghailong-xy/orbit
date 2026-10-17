@@ -3,8 +3,9 @@
 
 docs/managed-runner-design.md, "Optional test deployment boundary": root Compose, .env.example,
 /upgrade, the release and install paths and the normal start scripts neither reference
-deploy/managed-runner or scripts/managed-runner nor switch the feature on. This reads the tracked
-files of those entry points with `git grep`; nothing is built, started or sent anywhere.
+deploy/managed-runner, scripts/managed-runner or the single-machine lab (docs/managed-runner-lab.md)
+nor switch the feature on. This reads the tracked files of those entry points with `git grep`;
+nothing is built, started or sent anywhere.
 """
 
 from pathlib import Path
@@ -31,13 +32,18 @@ ENTRY_POINTS = [
     "scripts/ci/",
     "scripts/lib/",
 ]
-# What would wire the optional delivery in: its paths, and the switch or profile that enables it.
+# Git's `*` also crosses `/`, so `scripts/*.sh` takes in the optional delivery's own scripts, which
+# are not entry points: they may name its paths and the single-machine lab.
+EXCLUDED = [":(exclude)scripts/managed-runner/"]
+# What would wire the optional delivery in: its paths, the switch or profile that enables it, and
+# the single-machine lab (docs/managed-runner-lab.md, /mnt/data/managed-runner-lab).
 NEEDLES = [
     "deploy/managed-runner",
     "scripts/managed-runner",
     "ORBIT_MANAGED_RUNNERS_ENABLED",
     "ORBIT_MANAGED_RUNNERS_PROFILE",
     "pod-admission-webhook",
+    "managed-runner-lab",
 ]
 
 
@@ -48,7 +54,7 @@ class DeploymentBoundaryTest(unittest.TestCase):
 
     def git_grep(self, needle):
         result = subprocess.run(
-            ["git", "-C", str(REPO), "grep", "-n", "-F", needle, "--", *ENTRY_POINTS],
+            ["git", "-C", str(REPO), "grep", "-n", "-F", needle, "--", *ENTRY_POINTS, *EXCLUDED],
             capture_output=True, text=True, check=False)
         # 1: nothing found. Anything else but 0 is git failing, which must not read as clean.
         self.assertIn(result.returncode, (0, 1), result.stderr)
@@ -61,13 +67,16 @@ class DeploymentBoundaryTest(unittest.TestCase):
 
     def test_the_entry_points_are_really_searched(self):
         # A pattern that matched nothing would make the test above vacuous.
-        listed = subprocess.run(["git", "-C", str(REPO), "ls-files", "--", *ENTRY_POINTS],
+        listed = subprocess.run(["git", "-C", str(REPO), "ls-files", "--", *ENTRY_POINTS, *EXCLUDED],
                                 capture_output=True, text=True, check=True).stdout.splitlines()
         for expected in ("docker-compose.yml", ".env.example", "package.json"):
             self.assertIn(expected, listed)
         self.assertTrue(any(path.startswith(".github/workflows/") for path in listed))
         self.assertTrue(any(path.startswith(".claude/skills/upgrade/") for path in listed))
         self.assertIn("src/web/public/install.sh", listed)
+        # The exclusion keeps the other nested scripts and drops only the delivery's own directory.
+        self.assertTrue(any(path.startswith("scripts/ci/") for path in listed))
+        self.assertFalse(any(path.startswith("scripts/managed-runner/") for path in listed))
         self.assertNotEqual(self.git_grep("services:"), [], "git grep finds what is there")
 
 
