@@ -903,7 +903,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 8. 团队管理员否决 Run Everything（没有团队账号）；限流的形状；轮中认证失效的形状。
 9. deny 规则的强制力；`approvalMode: unrestricted`；`channel: static`；`--disable-codebase-ref` 对回答质量的影响；用别的 cwd load 会话。
 10. 审批进行中取消、审批中断开连接的行为。
-11. macOS：已由 P0b 交付（§18）。仍未验的 macOS 项：D4 方案 A 的 SHELL 包装实测（`shell-wrapper-env`，1 次 prompt）、带凭据的核心场景（`multi-turn-tools-default`、`cancel-mid-tool`，额度恢复后跑）、Keychain 存储下的 `agent logout`。Linux arm64、其他发行版。
+11. macOS：P0b 交付了 §18（安装、quarantine、目录、Keychain 机制与 launchd 行为、登录、D4 建议）。P0b 运行期所有者的 key 没放到 orbit-macos，带凭据的场景未跑（清单见 §18.8），由 macOS 跟进任务补测：核心场景（4 次 Auto prompt）、零 prompt 批次、Keychain 条目实测。Linux arm64、其他发行版。
 
 额度在 2026-10-24 重置（或换一个付费账号的 key），然后执行：
 
@@ -966,7 +966,7 @@ node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-wit
 - **结论**：runner 的 curl+tar 安装路径天然没有 quarantine；即便用户用浏览器下载 zip 解包（Safari 会给解出的每个文件打 quarantine），
   CLI 的启动路径（脚本 + 签名的 node）也不受影响。未签名的 `cursor-agent-sea` / worker 不进 ACP 路径，且它们被 exec 时的 exit 137 与 quarantine 无关（无 quarantine 时同样 137）。
 
-### 18.3 目录差异（对照 §8.1）【实测 `directory-variables` + 源码】
+### 18.3 目录差异（对照 §8.1）【实测（探针，见 evidence/probe/）+ 源码】
 
 | 文件 / 目录 | macOS 上决定它的变量 |
 | --- | --- |
@@ -981,7 +981,7 @@ node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-wit
 - 真实 HOME 下即使只跑 `--version` 也会写 `~/.cursor/cli-config.json`（和联网时 `statsig-cache.json`）【实测】——§8.4 事实 3 在 macOS 同样成立。
 - worker socket 的长路径回退公式与 Linux 相同（`/tmp/.cursor/<slug>-<hash>/`）【源码 `paths.js` 同段代码】。
 
-### 18.4 凭据存储（对照 §8.2）【实测 `credential-stores`、`macos-keychain-store` + 源码】
+### 18.4 凭据存储（对照 §8.2）【实测（探针，见 evidence/probe/）+ 源码】
 
 | `AGENT_CLI_CREDENTIAL_STORE` | macOS 上的结果 |
 | --- | --- |
@@ -989,13 +989,21 @@ node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-wit
 | `memory` | 什么都不写 |
 | 不设（`default`） | **Keychain**。实现是 shell out 到 `/usr/bin/security` 的 generic password【源码 `keychain/dist/index.js`】。条目：**acct `cursor-user`，svce `cursor-access-token`、`cursor-refresh-token`、`cursor-api-key`**（另有 `cursor-bedrock-*` 三个） |
 
-- **条目名是常量**：credential manager 以 `domain:"cursor"` 构造，与 HOME、CURSOR_CONFIG_DIR、XDG_CONFIG_HOME 都无关【源码 `index.js` 主入口 `jo({domain:"cursor",store})` + 实测：两个不同配置目录跑出的条目组完全相同】。
+- **条目名是常量**【源码】：credential manager 以 `domain:"cursor"` 构造（`jo({domain:"cursor",store})`，`index.js` 主入口），
+  名字与 HOME、CURSOR_CONFIG_DIR、XDG_CONFIG_HOME 都无关。条目在真实钥匙串里的实测观察（`macos-keychain-store`）需要有效 key，P0b 运行期 key 未到，未做（§17.1、§18.8）。
 - **Keychain 是 per-user 全局的**：同机多个 Cursor 账号共享同一组条目，后保存的覆盖先前的。**多账号隔离不能用默认 Keychain 存储**，必须 `file`（按账号 HOME 分目录）或 `memory`（注入，不落盘）。
 - **`/usr/bin/security` 按 `$HOME` 解析用户钥匙串**【实测矩阵】：
   - 真 HOME：写条目即时成功，无对话框（GUI 登录会话、钥匙串已解锁时）。
   - **外来 HOME（D4 方案 A 的账号 home）：写条目弹出 SecurityAgent 确认框（Aqua 会话）或挂死（无人应答）**。
   - CLI 自己的钥匙串调用有 30 s 超时【源码 `timeoutMs??3e4`】，超时后打印一次
     `⚠ Cursor couldn't save your credentials. This session continues with the credentials it already has.` 并继续（凭据留在内存）【源码 `credential-store` 错误处理】。
+- **默认存储的行为在无头 + 外来 HOME 环境下不稳定**【实测，多轮控制变量 A/B；同一变量集合、同一 HOME 的相邻两次运行可得到不同结果，未定位到稳定触发条件】：
+  - 模式一（快，约 0.4–1.4 s）：**不调钥匙串**（进程树里没有 `security` 子进程），把 token 写进 `$HOME/.cursor/auth.json`——行为等同 file 存储。
+  - 模式二（initialize 卡 **30 s**，什么都不落盘）：走钥匙串保存 → 超时 → 打印
+    `⚠ Cursor couldn't save your credentials. This session continues with the credentials it already has.` 加
+    `Error: Cursor couldn't save your login to the macOS keychain. The keychain item is stuck. Delete it and sign in again: security delete-generic-password -s cursor-access-token -a cursor-user` + `agent login`。
+  - 模式三（卡 30 s + 打印上述警告 + 仍写出 `auth.json`）：也观察到过。
+  - 三种模式都对 runner 不可接受（卡 30 s，或把凭据写到预期之外的位置）。**结论：任何路径都显式设 `AGENT_CLI_CREDENTIAL_STORE`（会话 `memory`、登录 `file`），绝不依赖 default。** 触发条件（疑似钥匙串守护进程状态或服务端下发配置）留给 macOS 跟进任务再测。
 - **启动探针**（只在「判定为 SSH 会话 + darwin + default 存储 + 非 CI」时）【源码 `keychain-check.ts`、`credential-store.ts`】：
   - SSH 判定：`SSH_CONNECTION`/`SSH_CLIENT`/`SSH_TTY`/`SSH2_*`、`MOSH_*`、`VSCODE_SSH_*`、`TERM` 含 mosh 任一即算；
     `CURSOR_*_ASSUME_SSH`/`CURSOR_*_FORCE_SSH`（真值）可强制。
@@ -1031,7 +1039,7 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 
 **事实**（macOS 新增的，其余同 §8.4）：
 
-1. **SHELL 选择规则与 Linux 相同**【源码 darwin 包同一段代码】：`$SHELL` 路径含 `bash` 就用它，否则从 PATH 找 bash；每条命令先 `-ilc` 快照环境再执行。所以 orbit-bash 包装（路径含 `bash`）会被采用——源码级结论，实测（`shell-wrapper-env`，1 次 prompt）在额度恢复后补（§17.1）。
+1. **SHELL 选择规则与 Linux 相同**【源码 darwin 包同一段代码】：`$SHELL` 路径含 `bash` 就用它，否则从 PATH 找 bash；每条命令先 `-ilc` 快照环境再执行。所以 orbit-bash 包装（路径含 `bash`）会被采用——源码级结论；实测（`shell-wrapper-env`，1 次 prompt）在 P0b 运行期 key 未到，**未运行**（§17.1，并入 macOS 跟进任务）。
 2. **方案 A 的「CLI 用账号 HOME」与默认 Keychain 存储冲突**：`/usr/bin/security` 按 HOME 解析钥匙串，账号 HOME 下保存凭据会弹框或挂 30 s（§18.4）。但这不影响 §16.3 的既定设计——契约本来就固定 `AGENT_CLI_CREDENTIAL_STORE=memory` 加注入 token/key，根本不碰 Keychain。
 3. **Keychain 不能用于多账号隔离**（条目 per-user 全局，§18.4）。macOS 上三种凭据的落盘方案：
    - API key：`CURSOR_API_KEY` + memory 存储（同 Linux）。
@@ -1043,13 +1051,15 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 
 ### 18.8 macOS 复现的核心场景
 
-已实测（无需凭据）：initialize 与未登录握手（`signed-out-handshake` 12/12）、进程信号（`process-signals`）、
-调试日志（`debug-log-location`）、登录链接与未完成登录（`login-link-and-logout`）、失败形状（`failure-shapes-without-prompt`：
+已实测（无需凭据，8/8 场景通过，证据目录同名 `scenarios/*.json`）：initialize 与未登录握手（`signed-out-handshake` 12/12）、进程信号（`process-signals`）、
+调试日志（`debug-log-location`）、登录链接与未完成登录（`login-link-and-logout`，完整超时 §18.5）、失败形状（`failure-shapes-without-prompt`：
 无效 key 的 `-32603`/`agent models` 报错、坏 cli.json 启动即退、`--authless` 拒绝；断网项 Linux-only 跳过）、
-安装与版本（`install-and-version`）。
-需真实凭据的核心场景（initialize → new → prompt → cancel → load，一次工具调用，一次 MCP 调用；`multi-turn-tools-default`、
-`cancel-mid-tool`、`shell-wrapper-env` 共 4 次 prompt）：在 P0b 运行期所有者把账号升级为 Premium 后由本任务补齐，
-结果见同一证据目录与 prompt 账本；如仍未运行，按 §17.1 处理。
+安装与版本（`install-and-version`）、quarantine（`macos-quarantine`）、launchd 里的 Keychain（`macos-launchd-keychain`）。
+
+**未运行（gaps）**：需要凭据的场景在 P0b 运行期因 key 未放到本机（所有者在协调会话的卡片上确认会放，但直到 2026-10-17T08:00Z 协调会话定的期限都没到）而没有跑成。这些场景的脚本已写好、在 macOS 上可用，由后续 macOS 跟进任务补测：
+- 真实 prompt：`multi-turn-tools-default`（2 次 Auto：initialize → new → prompt → load、一次工具调用、一次 MCP 调用）、`cancel-mid-tool`（1 次）、`shell-wrapper-env`（1 次，D4 方案 A 的实测）。
+- 零 prompt：`credential-stores`、`directory-variables`、`api-key-session-management`、`parameterized-model-picker`、`usage-api`（含 GetPlanInfo 的套餐核对）、`team-pin`、`mcp-and-hook-sources-at-startup`、`startup-processes-and-network`、`macos-keychain-store`（Keychain 条目的实测观察与清理）。
+- macOS 真实 prompt 账本：0/30（Linux 账本 20 次另计）。
 
 ---
 
