@@ -204,16 +204,13 @@ def cmd_import(args):
 
 # ---- the runner Pod -------------------------------------------------------------------------
 
-def pod_spec(name, image, first_start, expected_id, git_name, git_email):
+def pod_spec(name, image, first_start, expected_id):
     env = [{'name': 'ORBIT_RUNNER_SERVER_URL', 'value': POD_SERVER_URL},
            {'name': 'ORBIT_RUNNER_NAME', 'value': name},
            {'name': 'ORBIT_RUNNER_MAX_CONCURRENT', 'value': '2'},
            # The lab CA, in addition to the image's public roots (Go reads SSL_CERT_DIR besides
            # its default bundle); the test server's certificate names 10.0.2.2.
-           {'name': 'SSL_CERT_DIR', 'value': '/run/orbit-test-ca'},
-           # A runner needs a git identity for its baseline, finalize and checkpoint commits.
-           {'name': 'GIT_AUTHOR_NAME', 'value': git_name}, {'name': 'GIT_AUTHOR_EMAIL', 'value': git_email},
-           {'name': 'GIT_COMMITTER_NAME', 'value': git_name}, {'name': 'GIT_COMMITTER_EMAIL', 'value': git_email}]
+           {'name': 'SSL_CERT_DIR', 'value': '/run/orbit-test-ca'}]
     mounts = [{'name': 'user-state', 'mountPath': STATE_ROOT}, {'name': 'temporary', 'mountPath': '/tmp'},
               {'name': 'test-ca', 'mountPath': '/run/orbit-test-ca', 'readOnly': True}]
     volumes = [{'name': 'user-state', 'persistentVolumeClaim': {'claimName': f'{name}-data'}},
@@ -280,7 +277,7 @@ def cmd_start(args):
     kubectl('apply', '-f', '-', input=kubectl('create', 'configmap', f'{args.name}-ca',
                                                f'--from-file=lab-ca.crt={SERVER / "tls/ca.crt"}',
                                                '--dry-run=client', '-o', 'json').stdout)
-    spec = pod_spec(args.name, args.image, first_start, lab.get('runnerUuid'), args.git_name, args.git_email)
+    spec = pod_spec(args.name, args.image, first_start, lab.get('runnerUuid'))
     requested = now()
     kubectl('create', '-f', '-', input=json.dumps(spec))
     deadline = time.monotonic() + args.timeout
@@ -569,8 +566,6 @@ def main():
     start.add_argument('name')
     start.add_argument('--image', required=True)
     start.add_argument('--timeout', type=int, default=300)
-    start.add_argument('--git-name', default='Orbit lab runner')
-    start.add_argument('--git-email', default='lab-runner@lab.invalid')
     stop = sub.add_parser('stop')
     stop.add_argument('name')
     stop.add_argument('--grace', type=int, default=240)

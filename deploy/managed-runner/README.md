@@ -20,7 +20,11 @@ Claude Code 2.1.300 and a dated Debian package snapshot. Codex and Claude Code a
 engines (Claude Code runs Anthropic-dialect API keys, DeepSeek's included); Kimi, OpenCode,
 Antigravity and DeepSeek Harness are not installed. Both use their native binaries (Codex with its
 adjacent vendor tools), avoiding a Node wrapper between Orbit and the engine, and Claude Code's own
-updater is off (`DISABLE_AUTOUPDATER=1`). The generated `/usr/local/share/orbit/tool-versions.json`
+updater is off (`DISABLE_AUTOUPDATER=1`). A neutral git identity, `Orbit Runner <runner@orbit.invalid>`,
+is set at system level (`/etc/gitconfig`), so the runner's own commits (the `autoInitGit` baseline,
+finalize, checkpoints) work on a fresh volume; an identity in the repository, the user's
+`~/.gitconfig` or the environment takes precedence over it. The build checks both, and the image
+smoke repeats the check. The generated `/usr/local/share/orbit/tool-versions.json`
 records the source SHA, actual tool versions and installed package versions. That build artifact,
 the final image digest and actual test environment must accompany later acceptance evidence.
 

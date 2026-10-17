@@ -70,11 +70,16 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
     GOTOOLCHAIN=local \
     PYTHONDONTWRITEBYTECODE=1
 # COPY --chmod=0644 gives the directory it creates that mode too: make it traversable again.
+# The runner's commits (the autoInitGit baseline, finalize, checkpoints) need an identity, and
+# a fresh volume has none: give a neutral one at system level, the lowest precedence, so an
+# identity in the repository, the user's global config or the environment still wins.
 RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && ln -s /opt/claude/bin/claude /usr/local/bin/claude \
  && chown -R root:root /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit \
  && chmod -R go-w /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit \
- && chmod 0755 /usr/local/share/orbit
+ && chmod 0755 /usr/local/share/orbit \
+ && git config --system user.name 'Orbit Runner' \
+ && git config --system user.email runner@orbit.invalid
 # Record actual build-time versions without a login, registration or model call.
 RUN <<'SH'
 set -eu
@@ -112,6 +117,25 @@ for tool, expected in {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli
 orbit = json.loads(version('orbit', 'capabilities', '--json'))
 if orbit['sourceSha'] != os.environ['ORBIT_SOURCE_SHA']:
     raise SystemExit('Orbit source SHA did not reach the binary')
+# The runner's autoInitGit baseline (src/runner-go/worktree.go initGitRepo) with no identity
+# configured anywhere but the image, then a repository identity, which must win over it.
+repo = Path('/tmp/orbit-version-check/identity')
+repo.mkdir(parents=True)
+git_env = {key: value for key, value in env.items()
+           if not key.startswith(('GIT_AUTHOR_', 'GIT_COMMITTER_')) and key != 'EMAIL'}
+git_env['GIT_CONFIG_GLOBAL'] = '/dev/null'
+def git(*argv):
+    return subprocess.check_output(['git', '-C', str(repo), *argv], env=git_env, text=True).strip()
+git('init', '-q')
+git('commit', '--no-verify', '--allow-empty', '-q', '-m', 'orbit: baseline')
+actual['gitDefaultIdentity'] = git('log', '-1', '--format=%an <%ae>')
+if actual['gitDefaultIdentity'] != 'Orbit Runner <runner@orbit.invalid>':
+    raise SystemExit(f"baseline commit identity: {actual['gitDefaultIdentity']}")
+git('config', 'user.name', 'Repository User')
+git('config', 'user.email', 'repository@example.invalid')
+git('commit', '--no-verify', '--allow-empty', '-q', '-m', 'repository identity')
+if git('log', '-1', '--format=%an <%ae>') != 'Repository User <repository@example.invalid>':
+    raise SystemExit('a repository identity must override the image default')
 packages = version('dpkg-query', '-W', '-f=${binary:Package}\t${Version}\n')
 manifest = {'schemaVersion': 1, 'sourceSha': orbit['sourceSha'],
             'orbitVersion': orbit['cliVersion'], 'architecture': platform.machine(),
