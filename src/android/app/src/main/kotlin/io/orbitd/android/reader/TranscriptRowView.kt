@@ -221,6 +221,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { MarkdownText(text, open = open) }
                 TextButton(onClick = { if (text.length > COPY_TEXT_LIMIT) copyOverflow = text else clipboard.setText(AnnotatedString(text)) }) { Text("Copy message") }
             }
+        } else if (event.type == "interrupt") {
+            // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
+            // restart's reason), which the body below would print as raw JSON.
         } else {
             cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()

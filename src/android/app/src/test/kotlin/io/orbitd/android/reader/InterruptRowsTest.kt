@@ -18,8 +18,8 @@ import org.robolectric.annotation.GraphicsMode
  * One conversation with both kinds of interrupt, as session 34dLFOCjLz8KqyCiaECec recorded them on 2026-10-13: the owner's
  * Stop (claude's interrupt names the Stop's request), then the runner restarting under a turn still in flight
  * (`reason: runner_restart`, runner-go's watchShutdownDrain). Only the second row is the runner's doing, and says so (web
- * and iOS say the same). The production session page over [ComposerShell]; the screen goes to a PNG under
- * `src/android/build/evidence/interrupt-rows-android/` once the rows read right.
+ * and iOS say the same), and neither prints its payload under its title. The production session page over [ComposerShell];
+ * the screen goes to a PNG under `src/android/build/evidence/interrupt-rows-android/` once the rows read right.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ComposerShellApplication::class, qualifiers = "w411dp-h891dp-xxhdpi")
@@ -43,6 +43,9 @@ class InterruptRowsTest : ComposerShellTest() {
         assertTrue("the Stop reads as one", has(hasText("Interrupted") and row(3), unmerged = true))
         assertFalse(has(hasText("runner restarted", substring = true) and row(3), unmerged = true))
         assertTrue("the restart says so", has(hasText("Interrupted — the runner restarted") and row(7), unmerged = true))
+        // Each title is its whole row: neither payload is printed under it, as the rows once did, raw.
+        for (raw in listOf("{\"requestId\"", "req-22-1", "{\"reason\"", "runner_restart"))
+            assertFalse("$raw is on screen", has(hasText(raw, substring = true), unmerged = true))
         shot("interrupt-rows")
     }
 
