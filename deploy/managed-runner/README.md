@@ -173,7 +173,10 @@ admission reserves from; the lifecycle budgets include the idle interval before 
 sleep, how often an intent waiting for capacity looks again, and how long a stop for sleep may take
 before the delay is reported. The test owner supplies every value. Without a valid
 profile the feature reports itself unavailable and nothing is reconciled. Only the authorized isolated
-test apiserver may set these variables; no default entry point does.
+test apiserver may set these variables; no default entry point does. The optional `backend` field
+names the run backend: absent or `kubernetes` is this Kubernetes environment; `docker` is refused by
+this version, which does not implement it yet, so the feature is unavailable rather than run on
+Kubernetes instead.
 
 The manager creates the PVC above from `storage/pvc.template.json` and the Pod above, by the fixed
 names `mr-data-<runner-uuid>` and `mr-<runner-uuid>`, with the runner credential of the Pod's

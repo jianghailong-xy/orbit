@@ -170,10 +170,25 @@ func userTokenEnvCases() []userTokenEnvCase {
 		},
 		{
 			// dsh starts its stdio servers from the declared environment alone, so this is the whole of it.
-			name: "dsh orbit MCP server", sites: []string{"dsh_mcp.go dshOrbitMCPEnv"}, holds: []string{session},
+			name: "dsh orbit MCP server", sites: []string{"dsh_mcp.go orbitMCPDeclaredEnv"}, holds: []string{session},
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				var env []string
 				for _, pair := range dshOrbitMCPEnv(job) {
+					env = append(env, pair["name"]+"="+pair["value"])
+				}
+				return env
+			},
+		},
+		{
+			// Cursor CLI too hands a stdio server HOME, PATH and the env it declares, nothing else (contract §6).
+			name: "cursor orbit MCP server", holds: []string{session},
+			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
+				servers, err := cursorMCPServers(job)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var env []string
+				for _, pair := range mapValue(servers[0])["env"].([]map[string]string) {
 					env = append(env, pair["name"]+"="+pair["value"])
 				}
 				return env

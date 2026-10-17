@@ -106,6 +106,27 @@ test("antigravity's approval hook is answered from the same rules, as Kimi's bri
   );
 });
 
+test("P5c Cursor CLI's cards are answered from the same rules, and its own allowlist never gets them", () => {
+  // The runner never answers Cursor CLI "allow always" (it would allowlist the whole program), so a
+  // person's "always allow" lives here: the next card of its kind is answered from the rule, scoped as
+  // it was approved — every sub-command covered, nothing a prefix cannot describe.
+  assert.equal(serverMatchedRuntime(AgentProvider.CURSOR), true);
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('npm test'), NPM_TEST), true);
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('npm test && git push'), NPM_TEST), false);
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('npm test > out.txt'), NPM_TEST), false);
+  const gitStatus = [{ toolName: 'Bash', ruleContent: 'git status:*' }];
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('git status --short'), gitStatus), true);
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'Bash', bash('git push'), gitStatus), false);
+  const mcp = [{ toolName: 'mcp__docs__search', ruleContent: '' }];
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'mcp__docs__search', { q: 'x' }, mcp), true);
+  assert.equal(ruleCoversApproval(AgentProvider.CURSOR, 'mcp__docs__delete', { q: 'x' }, mcp), false);
+  assert.deepEqual(
+    dispatchAllowedTools(AgentProvider.CURSOR, BASE, [{ toolName: 'Bash', ruleContent: 'npm test:*' }]),
+    BASE,
+    'Cursor CLI dispatches with the base list only',
+  );
+});
+
 test('no other runtime gets them: the rest read this list as something else', () => {
   // OpenCode maps an entry onto a whole-tool permission and Kimi pastes the list into its
   // prompt as "only use these tools" — handing either the same rules changes what they do
