@@ -258,7 +258,11 @@ clients cooperatively; neither is the protection here. Three pieces are, togethe
    receipt bound to that instance and volume, with the object gone and the volume detached.
    Otherwise the mapping is FENCING: the predecessor's credential is replaced at once, the disk and
    Secret stay, and nothing starts. A stale heartbeat, an expired lease or an owner's retry never
-   opens it.
+   opens it. Every Pod the manager creates carries its finalizer `orbit.dev/managed-runner-stop-report`,
+   so a Pod deleted by anyone — `kubectl delete`, an eviction, `kubectl drain` — stays, terminal,
+   with its kubelet's report until the manager has recorded it; the manager then takes the
+   finalizer off and starts the next generation by itself. Without it the kubelet's final delete
+   would remove the report before the manager's next look, and a routine deletion would fence.
 
 ### Fencing receipt
 
@@ -280,13 +284,22 @@ the OSD map epoch and propagation time, a tested procedure reference, `persisten
 `expiresAt: null` and a rejoin policy. An incomplete or unbound receipt is reported on the mapping
 (`FENCING_RECEIPT_INVALID`) and opens nothing; an accepted one is recorded on the mapping. The
 manager can read ConfigMaps and cannot write them. The operator's runbook still has to remove the
-stale Pod object and attachment (`node.kubernetes.io/out-of-service`); the gate waits for both.
+stale Pod object and attachment (`node.kubernetes.io/out-of-service`); the gate waits for both. A
+Pod whose node cannot report keeps the manager's finalizer, and so its object, however it is
+deleted: once the node is powered off or fenced and the receipt is in place, the operator takes the
+finalizer off as well, and the manager reads the receipt when the object is gone:
+
+```bash
+kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMESPACE" patch pod "mr-$RUNNER_UUID" --type=json \
+  -p '[{"op":"test","path":"/metadata/finalizers/0","value":"orbit.dev/managed-runner-stop-report"},{"op":"remove","path":"/metadata/finalizers/0"}]'
+```
 
 ### Manager permissions
 
-In the managed namespace: Pods get, create (including `dryRun`), delete; PVCs get, create; Secrets
-get, create, delete; ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get,
-VolumeAttachments list. Nothing on nodes, Ceph or the webhook configuration.
+In the managed namespace: Pods get, create (including `dryRun`), delete, patch (only to take its own
+finalizer off a Pod whose stop it recorded); PVCs get, create; Secrets get, create, delete;
+ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get, VolumeAttachments list. Nothing
+on nodes, Ceph or the webhook configuration.
 
 ## Reproducible checks and pending acceptance
 

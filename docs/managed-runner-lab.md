@@ -169,8 +169,11 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
 | `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
 | `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
-| `test-server.sh start [--managed]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote; `secrets` only makes the secrets and the lab CA. |
+| `test-server.sh start [--managed\|--managed-false]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`; `secrets` only makes the secrets and the lab CA. |
 | `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
+| `manager-lab.py` | The manager against real k3s ([below](#manager-reconciliation-t04)): the T04 server directory, a second apiserver replica, owners and their concurrent sign-ins and ensures, the database against k3s (`consistency`), a recorder of every change, a stand-in Claude login on a runner's volume, a killed runner process, an operator's delete or eviction, an API outage, a controller crash timed on a create, the switch checks and one owner against another. |
+| `api-gate.py` | A pass-through in front of the k3s API forward that only the test manager's kubeconfig names: it logs each connection's TLS record sizes, never decrypting them, and can lose one create's answer after k3s applied it (and the read-back's), or hold it while the controller is killed. |
+| `qmp.py SOCKET hostfwd-remove\|hostfwd-add` | Takes the 127.0.0.1 forward of the k3s API (or SSH) away and puts it back: an outage of the API server for everything on the host. |
 | `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
 | `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
 | `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. |
@@ -293,6 +296,39 @@ python3 $W admission remove                   # before the test server stops
 | Generations | A SIGTERM to the runner (what the kubelet sends) ended the Pod `Succeeded`; the manager recorded the kubelet's report, deleted the Pod by UID, waited for the detach and started generation 2 on the same PVC in 11 s. After the VM restart the kubelet reported generation 2's runner stopped (exit 0) and generation 3 followed. Each older generation's credential was then refused 401 at heartbeat, claim and `GET /runner/me`; the current credential naming an older instance 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. |
 | No stop proof | An operator's graceful `kubectl delete pod` and a force delete each left the mapping `FENCING` (`PREDECESSOR_STOP_UNPROVEN`) with its generation, recorded Pod, Secret, PVC and compute reservation kept and no new Pod, for 14 and 6 minutes until the end of the window; the credential was replaced (401), the owner's retry refused (409), an incomplete fencing receipt rejected field by field (`FENCING_RECEIPT_INVALID`), and the manager identity's fixed-name Pods refused (`NOT_RESERVED`). The graceful delete fenced because the kubelet's terminal report was in the API for about a second and the manager polls every 5 s. |
 | Data | Ordinary file, Git commit (fsck clean), a 32 MiB random file and SQLite rows in WAL mode (`synchronous=FULL`) written inside the runner container: the same after the Pod's recreation as generation 2, and after the VM restart (written until the shutdown) every acknowledged row present, `integrity_check` `ok`, the earlier rows hashing as before. |
+
+## Manager reconciliation (T04)
+
+Recorded 2026-10-17 by task T04: the manager driving several owners' runners against the real k3s API server, with the
+switch off and on, two replicas, lost answers, crashes, outages and a VM restart. The records are in
+[the evidence](evidence/managed-runner-manager-lab/2026-10-17/README.md). No model was used: READY came from a stand-in
+Claude login on the runner's volume (no access token, so no request leaves the runner), which is no engine acceptance.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t04
+M=scripts/managed-runner/lab/manager-lab.py
+python3 $M prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token; identity; profile -> the gate
+python3 $M gate start && sudo scripts/managed-runner/lab/test-server.sh start --managed && python3 $M replica start
+python3 scripts/managed-runner/lab/single-writer.py admission install
+python3 $M owner alice --no-signin && python3 $M signin alice --parallel 8 && python3 $M ensure alice --parallel 8 --replica
+python3 $M consistency && python3 $M stand-in-login alice      # READY within the runner's 5-minute engine probe
+python3 $M api-outage 150                                      # also: kill-runner, delete [--force], evict, cross-user A B
+python3 $M gate arm --min-bytes 4000 --skip 1 --then 1         # the next Pod create's answer lost, and its read-back's
+python3 scripts/managed-runner/lab/single-writer.py admission remove   # before the test server stops
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset and `false` | On a fresh database and with live managed objects: the server answers, sign-in provisions nothing, every managed write is 404 `MANAGED_RUNNER_DISABLED`, not one connection reaches the gate in 60–90 s, and no object in the namespace changes. On again, the managers resume from the stored identities. |
+| Concurrent provisioning | 16 sign-ins and 16 ensures of two accounts across two replicas: one mapping, runner, workspace, PVC, Secret and Pod each; the gate saw one create of each, no duplicate even sent. |
+| Lost answers, a crash | A PVC create and a Pod create whose answers were lost after k3s applied them were found by name and recorded on the next pass; a Secret create whose answer was held while both apiservers were SIGKILLed was adopted, same UID, by the restarted ones after the dead lease expired. |
+| Outages | 150 s with no API forward: READY runners wrote and spent nothing; a STARTING runner spent no attempt (before this change it would have been FAILED in about 75 s). |
+| Stops | A killed runner process, a VM restart (the kubelet reported both Pods stopped after the boot, exit 255), `kubectl delete`, an eviction and a force delete: each started the next generation by itself on the same volume, the old attachment gone first. A Pod gone with its finalizer stripped fenced. |
+| Owners | Another owner's token and runner credential could not read, change or act as one owner's runner, workspace or instance; the guard refused Pods mixing their identities and volumes. |
+
+The manager's Pods now carry the finalizer `orbit.dev/managed-runner-stop-report`. A managed Pod deleted while no manager
+runs (the switch off, the test server stopped) stays Terminating until a manager records its stop, or until an operator
+removes the finalizer by hand.
 
 ## Known limits
 

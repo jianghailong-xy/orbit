@@ -353,7 +353,7 @@ export class DockerBackend implements ManagedRunnerBackend {
   }
 
   failure(error: unknown): ManagedRunnerBackendFailure | null {
-    if (error instanceof DockerChannelUnreachable) return { retryable: true };
+    if (error instanceof DockerChannelUnreachable) return error.connected ? { retryable: true } : { retryable: true, unreachable: true };
     if (!(error instanceof DockerChannelError)) return null;
     if (error.status >= 500 || error.status === 429 || error.status === 408) return { retryable: true };
     const log = `the Docker channel answered ${error.status} ${error.code}: ${error.message}`;

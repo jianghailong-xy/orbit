@@ -420,7 +420,8 @@ test('an operator\'s host check is the only receipt for a container that vanishe
 
 test('DockerBackend words the channel\'s failures for the manager', () => {
   const { backend } = world();
-  assert.deepEqual(backend.failure(new DockerChannelUnreachable('no socket')), { retryable: true });
+  assert.deepEqual(backend.failure(new DockerChannelUnreachable('the answer broke off')), { retryable: true });
+  assert.deepEqual(backend.failure(new DockerChannelUnreachable('no socket', false)), { retryable: true, unreachable: true }, 'no connection: nothing asked');
   assert.deepEqual(backend.failure(new DockerChannelError(502, 'DOCKER_ERROR', 'Docker answered 500')), { retryable: true });
   assert.deepEqual(backend.failure(new DockerChannelError(503, 'DOCKER_UNAVAILABLE', 'later')), { retryable: true });
   assert.deepEqual(backend.failure(new DockerChannelError(401, 'UNAUTHENTICATED', 'token')), {
@@ -473,11 +474,12 @@ test('the channel client speaks to the channel\'s socket with its token, and tel
     await client.removeContainer('mr-x', 'u-1');
     assert.equal(seen.at(-1)!.url, '/v1/containers/mr-x?uid=u-1');
     mode = 'garbage';
-    await assert.rejects(client.info(), DockerChannelUnreachable);
+    await assert.rejects(client.info(), (e: unknown) => e instanceof DockerChannelUnreachable && e.connected);
     mode = 'hang';
     const slow = new DockerChannelClient({ socketPath: socket }, 't', 200);
-    await assert.rejects(slow.info(), (e: unknown) => e instanceof DockerChannelUnreachable && /no answer within 200 ms/.test(e.message));
-    await assert.rejects(new DockerChannelClient({ socketPath: path.join(dir, 'nothing.sock') }, 't', 1_000).info(), DockerChannelUnreachable);
+    await assert.rejects(slow.info(), (e: unknown) => e instanceof DockerChannelUnreachable && /no answer within 200 ms/.test(e.message) && e.connected);
+    // No socket to connect to: nothing reached the channel.
+    await assert.rejects(new DockerChannelClient({ socketPath: path.join(dir, 'nothing.sock') }, 't', 1_000).info(), (e: unknown) => e instanceof DockerChannelUnreachable && !e.connected);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

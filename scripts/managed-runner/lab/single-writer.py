@@ -228,7 +228,8 @@ def manager_objects():
     return [
         {'apiVersion': 'v1', 'kind': 'ServiceAccount', 'metadata': meta, 'automountServiceAccountToken': False},
         {'apiVersion': 'rbac.authorization.k8s.io/v1', 'kind': 'Role', 'metadata': meta, 'rules': [
-            {'apiGroups': [''], 'resources': ['pods'], 'verbs': ['get', 'create', 'delete']},
+            # patch: only to take the manager's stop-report finalizer off a Pod whose stop it recorded.
+            {'apiGroups': [''], 'resources': ['pods'], 'verbs': ['get', 'create', 'delete', 'patch']},
             {'apiGroups': [''], 'resources': ['persistentvolumeclaims'], 'verbs': ['get', 'create']},
             {'apiGroups': [''], 'resources': ['secrets'], 'verbs': ['get', 'create', 'delete']},
             # Fencing receipts: read, never written.
@@ -275,8 +276,9 @@ def cmd_identity(_args):
     whoami = json.loads(kubectl('auth', 'whoami', '-o', 'json', manager=True).stdout)
     checks = {}
     for verb, resource, subresource, namespace in [
-            ('create', 'pods', '', NAMESPACE), ('delete', 'pods', '', NAMESPACE), ('list', 'pods', '', NAMESPACE),
-            ('update', 'pods', '', NAMESPACE), ('patch', 'pods', 'ephemeralcontainers', NAMESPACE),
+            ('create', 'pods', '', NAMESPACE), ('delete', 'pods', '', NAMESPACE), ('patch', 'pods', '', NAMESPACE),
+            ('list', 'pods', '', NAMESPACE), ('update', 'pods', '', NAMESPACE), ('patch', 'pods', 'ephemeralcontainers', NAMESPACE),
+            ('patch', 'pods', 'status', NAMESPACE),
             ('create', 'pods', 'exec', NAMESPACE), ('get', 'secrets', '', NAMESPACE), ('create', 'configmaps', '', NAMESPACE),
             ('delete', 'persistentvolumeclaims', '', NAMESPACE), ('create', 'pods', '', 'kube-system'),
             ('get', 'persistentvolumes', '', ''), ('list', 'volumeattachments.storage.k8s.io', '', ''), ('get', 'nodes', '', ''),

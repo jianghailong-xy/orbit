@@ -31,7 +31,19 @@
  *   (7) Docker only, since the cap is the channel's: a start refused at the channel's cap on
  *       containers (CONTAINER_LIMIT, the cap lowered under running runners) waits for room as for a
  *       held volume — nothing created or spent, no startup deadline running, said once — and starts
- *       by itself once another runner's container is removed.
+ *       by itself once another runner's container is removed;
+ *   (8) a backend that does not answer — 5xx and timeouts, or no connection at all — for many more
+ *       passes than the attempt budget spends nothing of a READY, DRAINING or FENCING runner and
+ *       writes nothing of it (a fenced one still says only why it is fenced), and no second
+ *       instance is made; one that cannot be reached at all spends nothing of a runner being
+ *       provisioned, restarted or started either, while one that answers with a transient failure
+ *       there still spends an attempt; each goes on as it was once the backend answers;
+ *   (9) Kubernetes only, since the finalizer is the Pod's: a Pod deleted by an operator — `kubectl
+ *       delete`, an eviction, a force delete on a node that answers — stays, ended, with its
+ *       kubelet's report until the manager has recorded it, however late the manager looks and
+ *       whichever replica it is, and the runner is started again by itself on the same volume; a Pod
+ *       gone with no report (its finalizer stripped) still fences, and so does one deleted on a node
+ *       that cannot report, once the control plane marks it, until an operator's receipt.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -56,7 +68,7 @@ import { DockerBackend } from './docker-backend';
 import type { PersistentVolumeClaim, Pod } from './kube-client';
 import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
-import { buildManagedPvc, managedPodName } from './managed-runner-resources';
+import { MANAGED_STOP_REPORT_FINALIZER, buildManagedPvc, managedPodName } from './managed-runner-resources';
 import type { ManagedRunnerRuntime } from './managed-runner-runtime';
 import { managedRunnerHeartbeat, storedWorkloadFor } from './managed-runner-sleep';
 import { recordManagedDemand } from './managed-runner-work';
@@ -102,6 +114,15 @@ interface Rig {
   raceHolder?(): void;
   /** Docker: the channel's cap on containers (`limits.maxContainers`), set after the pool was measured. */
   capContainers?(max: number): void;
+  /**
+   * The backend fails the first call of each of the next `passes` passes: `unanswered`, a 5xx or a
+   * timeout from a backend that was reached; `unreachable`, no connection to it at all. `first` is
+   * that call: the volume's read (READY, STARTING, PROVISIONING) or the instance's (DRAINING,
+   * FENCING, a restart's REQUESTED).
+   */
+  outage(kind: 'unanswered' | 'unreachable', passes: number, first: 'volume' | 'instance'): void;
+  /** A READY runner, idle past the profile's interval, drains to sleep and its instance accepts. */
+  accept(ownerId: string): Promise<ManagedRunner>;
   /** The volume deleted; the function puts it back as it was, identity and all. */
   loseVolume(mapping: ManagedRunner): () => void;
   /** Another volume under the mapping's volume name; the function removes it again. */
@@ -179,6 +200,21 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
       volumesCreated: () => w.cluster.calls.filter((c) => c.op === 'create' && c.kind === 'persistentvolumeclaims').length,
       instancesRemoved: () => w.cluster.count('delete', 'pods'),
       computeReserved: async () => (await w.ledger()).pool.pods,
+      outage: (kind, passes, first) => {
+        const target = first === 'volume' ? 'persistentvolumeclaims' : 'pods';
+        if (kind === 'unreachable') return void w.cluster.inject({ op: 'get', kind: target, mode: 'unreachable', times: passes });
+        // Half answered 503, half timed out.
+        const half = Math.ceil(passes / 2);
+        w.cluster.inject({ op: 'get', kind: target, mode: 'status', status: 503, times: half });
+        if (passes > half) w.cluster.inject({ op: 'get', kind: target, mode: 'timeout', times: passes - half });
+      },
+      accept: async (ownerId) => {
+        const ready = await w.mappingOf(ownerId);
+        w.advance(w.profile.lifecycle.idleSeconds * 1000 + 1_000);
+        await w.heartbeat(ready.runnerId, { idleSeconds: w.profile.lifecycle.idleSeconds + 1 });
+        assert.equal(await w.primary.reconcile(ready.id), 'DRAINING', 'idle long enough: it drains');
+        return accepted(w.prisma, await w.mappingOf(ownerId), w.now());
+      },
     };
   }
 
@@ -274,8 +310,40 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
         const { rows } = await sql.query(`SELECT pods_reserved FROM managed_runner_capacity WHERE cluster_key = $1 AND namespace = $2`, [profile.clusterKey, profile.docker.instanceId]);
         return Number(rows[0]?.pods_reserved ?? 0);
       },
+      outage: (kind, passes, first) => {
+        for (let i = 0; i < passes; i += 1) {
+          channel.failNext(first === 'volume' ? 'readVolume' : 'readContainer', kind === 'unreachable'
+            ? { kind: 'unreachable-before' }
+            : { kind: 'refused', status: 503, code: 'DOCKER_UNAVAILABLE' });
+        }
+      },
+      accept: async (ownerId) => {
+        const ready = await mappingOf(ownerId);
+        rig.advance(profile.lifecycle.idleSeconds * 1000 + 1_000);
+        await db.runner.update({
+          where: { id: ready.runnerId },
+          data: {
+            lastHeartbeatAt: now(),
+            managedWorkload: storedWorkloadFor({ ...IDLE, idleSeconds: profile.lifecycle.idleSeconds + 1 }, { mappingId: ready.id, generation: ready.generation, podUid: ready.podUid! }, false, now()) as unknown as Prisma.InputJsonValue,
+          },
+        });
+        assert.equal(await manager.reconcile(ready.id), 'DRAINING', 'idle long enough: it drains');
+        return accepted(prisma, await mappingOf(ownerId), now());
+      },
     };
     return rig;
+  }
+
+  /** The draining instance accepts, through the same function the heartbeat route answers with. */
+  async function accepted(prisma: PrismaService, draining: ManagedRunner, at: Date): Promise<ManagedRunner> {
+    const answer = await managedRunnerHeartbeat(
+      prisma,
+      { mappingId: draining.id, generation: draining.generation, podUid: draining.podUid! },
+      { ...IDLE, sleepReady: draining.stopRequestedAt!.toISOString() },
+      at,
+    );
+    assert.equal(answer.sleep?.confirmed, true, 'the idle instance\'s acceptance is confirmed');
+    return (await db.managedRunner.findUniqueOrThrow({ where: { id: draining.id } }));
   }
 
   /**
@@ -647,5 +715,199 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
       { generation: 2, runnerId: b.mapping.runnerId, pvcUid: b.mapping.pvcUid, attempt: 1, lastError: null, nextAttemptAt: null },
       'the same runner and volume; the restart counted once, the wait not at all',
     );
+  });
+
+  await both('(8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either', async (r) => {
+    const passes = r.lifecycle.maxAttempts * 4;
+    const { ownerId, mapping } = await r.readyRunner('outage');
+    /** `passes` passes changed nothing of the row the runner was in before them. */
+    const untouched = async (label: string, before: ManagedRunner) => {
+      const after = await r.mappingOf(ownerId);
+      const view = (m: ManagedRunner) => ({
+        state: m.managementState, attempt: m.attempt, revision: m.revision, lastError: m.lastError, nextAttemptAt: m.nextAttemptAt, podUid: m.podUid, generation: m.generation,
+      });
+      assert.deepEqual(view(after), view(before), `${label}: ${passes} passes without an answer, more than the attempt budget, spent and wrote nothing`);
+      assert.ok(r.onVolume(after) <= 1, `${label}: one instance at most on the volume`);
+    };
+
+    // READY: 5xx and timeouts, then no connection at all. The instance is left as it is, and nothing is made beside it.
+    for (const kind of ['unanswered', 'unreachable'] as const) {
+      r.outage(kind, passes, 'volume');
+      for (let i = 0; i < passes; i += 1) {
+        assert.equal(await r.manager.reconcile(mapping.id), 'BACKOFF');
+        r.advance(5_000);
+      }
+      await untouched(`READY, ${kind}`, mapping);
+    }
+    assert.equal(r.instance(mapping.runnerId)?.uid, mapping.podUid, 'the same instance throughout');
+    await r.heartbeat(mapping.runnerId);
+    assert.equal(await r.manager.reconcile(mapping.id), 'READY', 'answered again: READY as it was');
+
+    // DRAINING, its instance having accepted: the same; and its stop still ends the drain once the backend answers.
+    const draining = await r.accept(ownerId);
+    for (const kind of ['unanswered', 'unreachable'] as const) {
+      r.outage(kind, passes, 'instance');
+      for (let i = 0; i < passes; i += 1) assert.equal(await r.manager.reconcile(mapping.id), 'BACKOFF');
+      await untouched(`DRAINING, ${kind}`, draining);
+    }
+    r.stop(mapping.runnerId, 0);
+    const asleep = await settle(r, ownerId, 'SLEEPING');
+    assert.equal(asleep.at(-1), 'SLEEPING', asleep.join(' → '));
+
+    // FENCING: woken, then its instance gone with no report. The outage writes nothing either, so the owner's status says
+    // only why it is fenced, as it did before the outage; and nothing is made in its place.
+    assert.ok(await recordManagedDemand(prisma, mapping.runnerId, r.now()), 'a message wakes it');
+    assert.equal((await drive(r, ownerId)).at(-1), 'READY');
+    const woken = await r.mappingOf(ownerId);
+    r.vanish(woken.runnerId);
+    assert.equal(await r.manager.reconcile(woken.id), 'FENCING');
+    const fenced = await r.mappingOf(ownerId);
+    const shown = managedRunnerDisplay(await r.service.status(ownerId));
+    assert.deepEqual([shown?.kind, codeOf(fenced)], ['waitingOperator', 'PREDECESSOR_STOP_UNPROVEN']);
+    for (const kind of ['unanswered', 'unreachable'] as const) {
+      r.outage(kind, passes, 'instance');
+      for (let i = 0; i < passes; i += 1) assert.equal(await r.manager.reconcile(woken.id), 'BACKOFF');
+      await untouched(`FENCING, ${kind}`, fenced);
+    }
+    assert.equal(r.instance(woken.runnerId), null, 'nothing made in its place');
+    assert.deepEqual(managedRunnerDisplay(await r.service.status(ownerId)), shown, 'the owner sees what a fence shows, and nothing of the outage');
+    assert.equal(await r.manager.reconcile(woken.id), 'FENCING', 'answered again: still waiting for its proof');
+    assert.ok(r.logs.some((line) => line.includes('FENCING, and the') && line.includes('backend did not answer')), 'the operator\'s log says it');
+
+    // A restart (REQUESTED after its host reported a stop), the next generation being started (STARTING) and a new runner
+    // being provisioned (PROVISIONING), each with the backend unreachable for longer than the attempt budget: nothing spent.
+    const { ownerId: other, mapping: second } = await r.readyRunner('outage-start');
+    r.stop(second.runnerId, 1);
+    assert.equal(await r.manager.reconcile(second.id), 'BACKOFF');
+    const restarting = await r.mappingOf(other);
+    assert.deepEqual([restarting.managementState, restarting.attempt], ['REQUESTED', 1]);
+    r.skipTo(restarting.nextAttemptAt!);
+    for (const [state, first] of [['REQUESTED', 'instance'], ['STARTING', 'volume']] as const) {
+      if (state === 'STARTING') assert.equal((await untilStarted(r, other)).attempt, 1, 'the restart counted once');
+      r.outage('unreachable', passes, first);
+      for (let i = 0; i < passes; i += 1) {
+        assert.equal(await r.manager.reconcile(second.id), 'BACKOFF');
+        const m = await r.mappingOf(other);
+        assert.deepEqual([m.managementState, m.attempt, codeOf(m)], [state, 1, 'TRANSIENT'], `${state}, unreachable, pass ${i + 1}: nothing spent`);
+        r.skipTo(m.nextAttemptAt!);
+      }
+    }
+    const started = await r.mappingOf(other);
+    // Reached, and answering with a transient failure: an attempt is spent there, as before.
+    r.outage('unanswered', 1, 'volume');
+    assert.equal(await r.manager.reconcile(second.id), 'BACKOFF');
+    assert.deepEqual([(await r.mappingOf(other)).managementState, (await r.mappingOf(other)).attempt], ['STARTING', 2]);
+    const back = await drive(r, other);
+    assert.equal(back.at(-1), 'READY', back.join(' → '));
+    const up = await r.mappingOf(other);
+    assert.deepEqual({ generation: up.generation, podUid: up.podUid, attempt: up.attempt, pvcUid: up.pvcUid }, { generation: 2, podUid: started.podUid, attempt: 2, pvcUid: second.pvcUid },
+      'the instance it had started, never FAILED: the outages counted nothing, the answered failure one');
+    assert.ok(r.logs.some((line) => line.includes('backend cannot be reached') && line.includes('nothing spent (attempt 1 of 3)')));
+
+    const newcomer = (await db.user.create({ data: { email: `outage-new-${randomUUID()}@example.invalid`, name: 'outage-new' } })).id;
+    await r.service.ensure(newcomer, 'ensure-outage-new');
+    const requested = await r.mappingOf(newcomer);
+    r.outage('unreachable', passes, 'volume');
+    for (let i = 0; i < passes; i += 1) {
+      assert.equal(await r.manager.reconcile(requested.id), 'BACKOFF');
+      const m = await r.mappingOf(newcomer);
+      assert.deepEqual([m.managementState, m.attempt, m.pvcUid], ['PROVISIONING', 0, null], `PROVISIONING, unreachable, pass ${i + 1}: nothing spent or made`);
+      r.skipTo(m.nextAttemptAt!);
+    }
+    assert.equal((await drive(r, newcomer)).at(-1), 'READY');
+    assert.deepEqual([(await r.mappingOf(newcomer)).attempt, (await r.mappingOf(newcomer)).generation], [0, 1]);
+  });
+
+  await t.test('(9) a Pod an operator deletes keeps its kubelet\'s report until the manager has used it; one gone without a report still fences [kubernetes]', async () => {
+    const logs: string[] = [];
+    const w = managedRunnerWorld(db, { log: capture(logs) });
+    const { ownerId, mapping } = await w.readyRunner('deleted');
+    const name = managedPodName(mapping.runnerId);
+    const onVolume = (pvcName: string) => w.cluster.all<Pod>('pods').filter((pod) => (pod.spec.volumes ?? []).some((v) => v.persistentVolumeClaim?.claimName === pvcName)).length;
+
+    /** Passes of `m` until READY: never FENCING, never two Pods on the volume, heartbeating once a Pod runs. */
+    const restarted = async (m: ManagedRunnerManager, label: string) => {
+      const outcomes: ReconcileOutcome[] = [];
+      for (let i = 0; i < 40 && outcomes.at(-1) !== 'READY'; i += 1) {
+        outcomes.push(await m.reconcile(mapping.id));
+        const row = await w.mappingOf(ownerId);
+        assert.ok(onVolume(row.pvcName) <= 1, `${label}, ${row.managementState}: ${onVolume(row.pvcName)} Pods on the volume`);
+        assert.notEqual(row.managementState, 'FENCING', `${label}: ${outcomes.join(' → ')}`);
+        if (row.podUid && row.managementState === 'STARTING') {
+          w.advance(1_000);
+          await w.heartbeat(row.runnerId);
+        }
+        if (row.nextAttemptAt && row.nextAttemptAt > w.now()) w.clock.ms = row.nextAttemptAt.getTime() + 1;
+      }
+      assert.equal(outcomes.at(-1), 'READY', `${label}: ${outcomes.join(' → ')}`);
+      return w.mappingOf(ownerId);
+    };
+
+    // An operator's `kubectl delete pod`: the kubelet stops the runner and reports it, and the object stays — however late
+    // the manager looks (the kubelet's report used to be gone within a second, and it looks every pollIntervalSeconds),
+    // and whichever replica it is.
+    await w.cluster.deletePod(name);
+    w.advance(10 * 60_000);
+    const replica = w.manager('replica-b');
+    assert.equal(await replica.reconcile(mapping.id), 'BACKOFF');
+    const restarting = await w.mappingOf(ownerId);
+    assert.deepEqual(
+      { state: restarting.managementState, generation: restarting.generation, podUid: restarting.podUid, attempt: restarting.attempt, code: codeOf(restarting), proof: (restarting.fencingReceipt as { kind?: string }).kind },
+      { state: 'REQUESTED', generation: 1, podUid: mapping.podUid, attempt: 1, code: 'POD_RESTARTING', proof: 'OBSERVED_STOP' },
+      'the kubelet\'s report recorded as the stop proof: started again by itself',
+    );
+    const held = w.cluster.object<Pod>('pods', name);
+    assert.ok(held?.metadata.deletionTimestamp, 'deleted, and kept until the stop is used');
+    assert.deepEqual(held.metadata.finalizers, [MANAGED_STOP_REPORT_FINALIZER], 'by the manager\'s finalizer');
+    assert.match(logs.find((line) => line.includes('POD_TERMINATED'))!, /generation 1 stopped in READY with exit code 0, not out of memory; starting generation 2/);
+    const second = await restarted(replica, 'after kubectl delete');
+    assert.deepEqual(
+      { generation: second.generation, runnerId: second.runnerId, workspace: second.defaultWorkspaceId, pvcUid: second.pvcUid, volumeHandle: second.volumeHandle },
+      { generation: 2, runnerId: mapping.runnerId, workspace: mapping.defaultWorkspaceId, pvcUid: mapping.pvcUid, volumeHandle: mapping.volumeHandle },
+    );
+    assert.notEqual(second.podUid, mapping.podUid);
+    assert.equal(w.cluster.count('patch', 'pods'), 1, 'the finalizer taken off once, from that Pod');
+
+    // An eviction (a drain's): the Eviction API marks the Pod, then deletes it. Its kubelet's report is the proof as well.
+    w.cluster.mutate<Pod>('pods', name, (pod) => {
+      pod.status = { ...pod.status, conditions: [...(pod.status?.conditions ?? []), { type: 'DisruptionTarget', status: 'True', reason: 'EvictionByEvictionAPI' }] };
+    });
+    await w.cluster.deletePod(name, { username: 'system:serviceaccount:kube-system:disruption-controller' });
+    const third = await restarted(w.primary, 'after an eviction');
+    assert.deepEqual([third.generation, third.pvcUid, third.attempt], [3, mapping.pvcUid, 2]);
+
+    // Gone with no report — its finalizer stripped and the object force-deleted: no proof, FENCING, as before.
+    w.cluster.remove('pods', name);
+    assert.equal(await w.primary.reconcile(mapping.id), 'FENCING');
+    assert.deepEqual([codeOf(await w.mappingOf(ownerId)), (await w.mappingOf(ownerId)).generation], ['PREDECESSOR_STOP_UNPROVEN', 3]);
+
+    // Deleted on a node that cannot report: nothing is proven and nothing is started; once the control plane marks it
+    // terminal (PodGC, the out-of-service taint) it fences, the object still held; the operator's finalizer removal,
+    // after the node is powered off or fenced, lets the object go, and the mapping waits for the receipt.
+    const { ownerId: b, mapping: bm } = await w.readyRunner('unreported');
+    const bName = managedPodName(bm.runnerId);
+    w.cluster.kubeletReportsDeletions = false;
+    try {
+      await w.cluster.deletePod(bName);
+      await w.heartbeat(bm.runnerId);
+      assert.equal(await w.primary.reconcile(bm.id), 'READY', 'a deletion its kubelet never acted on proves nothing');
+      w.cluster.markFailedByControlPlane(bName);
+      assert.equal(await w.primary.reconcile(bm.id), 'FENCING');
+      const fenced = await w.mappingOf(b);
+      assert.equal(codeOf(fenced), 'PREDECESSOR_STOP_UNPROVEN');
+      assert.match((fenced.lastError as { detail: string }).detail, /is Failed, but not by its kubelet's report/);
+      assert.equal(await w.primary.reconcile(bm.id), 'FENCING');
+      assert.equal(w.cluster.object<Pod>('pods', bName)?.metadata.uid, bm.podUid, 'kept by its finalizer');
+      const operator = w.cluster.client({ username: 'cluster-admin' });
+      await operator.pods.patch(bName, [
+        { op: 'test', path: '/metadata/finalizers/0', value: MANAGED_STOP_REPORT_FINALIZER },
+        { op: 'remove', path: '/metadata/finalizers/0' },
+      ]);
+      assert.equal(w.cluster.object<Pod>('pods', bName), undefined, 'gone once its finalizer is off');
+      assert.equal(await w.primary.reconcile(bm.id), 'FENCING', 'and still waiting for an operator\'s receipt');
+      assert.equal(onVolume(bm.pvcName), 0, 'nothing started in its place');
+    } finally {
+      w.cluster.kubeletReportsDeletions = true;
+    }
   });
 });

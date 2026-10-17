@@ -10,6 +10,10 @@ kind: Pod
 metadata:
   name: __FIXED_USER_POD_NAME__
   namespace: __AUTHORIZED_TEST_NAMESPACE__
+  # The manager's own. Deleted by anyone, the Pod stays with its kubelet's report of the stop until
+  # the manager has recorded that report and takes this off; then the next generation can start.
+  # Only an operator taking over from a node that cannot report removes it by hand (README).
+  finalizers: [orbit.dev/managed-runner-stop-report]
   labels:
     app.kubernetes.io/name: orbit-managed-runner
     orbit-test-environment: __TEST_ENVIRONMENT_ID__

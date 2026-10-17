@@ -216,7 +216,7 @@ export class FakeDockerChannel implements DockerChannel {
     const at = this.failures.findIndex((f) => f.call === name);
     if (at < 0) return undefined;
     const [{ failure }] = this.failures.splice(at, 1);
-    if (failure.kind === 'unreachable-before') throw new DockerChannelUnreachable(`injected: ${name} never reached the channel`);
+    if (failure.kind === 'unreachable-before') throw new DockerChannelUnreachable(`injected: ${name} never reached the channel`, false);
     if (failure.kind === 'refused') throw new DockerChannelError(failure.status, failure.code, `injected refusal of ${name}`);
     return failure;
   }
