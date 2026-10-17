@@ -1069,6 +1069,24 @@ class ListingAndHostTest(ChannelFixture):
         with self.assertRaisesRegex(ValueError, "not a directory"):
             channel.prepare()
 
+    def test_what_the_channel_says_at_start_up_about_the_disk_the_cap_and_tmp(self):
+        said = []
+        self.ch.log = said.append
+        self.channel.prepare()  # Docker 29, no probe path, a data root this process cannot see
+        self.assertIn("at most 8 containers of this instance (one per CPU and per GiB of this host's memory, whichever is fewer)", said)
+        self.assertTrue(any("measures the disk under" in line and self.config["stateDir"] in line for line in said), said)
+        self.assertFalse(any("TmpfsOptions" in line for line in said), "Docker 29 makes /tmp executable")
+        said.clear()
+        self.docker.host.update(ServerVersion="26.1.4")
+        probe = Path(self.scratch.name) / "docker-volumes"
+        probe.mkdir()
+        self.ch.Channel(self.ch.parse_config({**self.config_value(Path(self.scratch.name)), "diskProbePath": str(probe),
+                                              "limits": {**self.config_value(Path(self.scratch.name))["limits"], "maxContainers": 3}}),
+                        self.docker, TOKEN).prepare()
+        self.assertIn("at most 3 containers of this instance", said)
+        self.assertTrue(any("Docker 26.1.4 ignores TmpfsOptions.Options" in line for line in said), said)
+        self.assertFalse(any("measures the disk under" in line for line in said), "a probe path is set")
+
     def test_a_fencing_receipt_is_read_from_the_state_directory_only(self):
         self.assertEqual(self.call("GET", f"/v1/fencing-receipts/{RUNNER}")[0], 404)
         receipt = Path(self.config["stateDir"]) / "fencing" / f"{RUNNER}.json"
