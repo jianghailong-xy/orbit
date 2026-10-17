@@ -1,8 +1,13 @@
 # Optional managed runner image and restore contract
 
-This directory is an independent test delivery. Root Compose, installation, release and upgrade
-entry points do not build or start it (`scripts/managed-runner/deployment_boundary_test.py` checks
-that). The product default remains disabled. The image starts the foreground `orbit run` protocol in
+This directory is an independent test delivery, except for the two parts a new deployment's Docker
+backend uses: the image below, which `scripts/install-server.sh` builds on the host, and the
+[restricted Docker channel](docker-channel/README.md), which root Compose runs under the
+`managed-runners-docker` profile a fresh install switches on (docs/self-hosting.md, "Managed
+runners"). Root Compose, installation, release and upgrade entry points reference nothing else here
+and nothing of Kubernetes, Rook, Ceph or CSI (`scripts/managed-runner/deployment_boundary_test.py`
+checks that). The server's switch is off unless a deployment's `.env` turns it on, which an upgrade
+never does. The image starts the foreground `orbit run` protocol in
 one of two ways: from the runner credential the manager issued for its Pod's generation (the managed
 path), or by one owner enrollment (standalone image smoke). The single-writer protection — the
 admission guard, generation-bound runner authentication and the manager's stop/fencing gate — is
@@ -15,10 +20,16 @@ or infer permission from available credentials. Local fixtures are preparation e
 
 ## Image and build
 
-[Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, Codex 0.158.0
-and a dated Debian package snapshot. Codex is the first supplied engine; Claude, Kimi, OpenCode and
-Antigravity are not installed. Codex uses its native binary with adjacent vendor tools, avoiding a
-Node wrapper between Orbit and the engine. The generated `/usr/local/share/orbit/tool-versions.json`
+[Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, Codex 0.158.0,
+Claude Code 2.1.300 and a dated Debian package snapshot. Codex and Claude Code are the supplied
+engines (Claude Code runs Anthropic-dialect API keys, DeepSeek's included); Kimi, OpenCode,
+Antigravity and DeepSeek Harness are not installed. Both use their native binaries (Codex with its
+adjacent vendor tools), avoiding a Node wrapper between Orbit and the engine, and Claude Code's own
+updater is off (`DISABLE_AUTOUPDATER=1`). A neutral git identity, `Orbit Runner <runner@orbit.invalid>`,
+is set at system level (`/etc/gitconfig`), so the runner's own commits (the `autoInitGit` baseline,
+finalize, checkpoints) work on a fresh volume; an identity in the repository, the user's
+`~/.gitconfig` or the environment takes precedence over it. The build checks both, and the image
+smoke repeats the check. The generated `/usr/local/share/orbit/tool-versions.json`
 records the source SHA, actual tool versions and installed package versions. That build artifact,
 the final image digest and actual test environment must accompany later acceptance evidence.
 
@@ -52,7 +63,7 @@ stay constant across rebuilds and nodes:
 | `/var/lib/orbit/home/.orbit/uploads` | Attachment scratch retained until ordinary session-aware GC. |
 | `/var/lib/orbit/home/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
 | `/var/lib/orbit/home/.codex` | Default Codex auth/configuration, transcripts and sessions. |
-| `/var/lib/orbit/home/.claude` | Reserved persistent location if a later image explicitly supplies Claude. |
+| `/var/lib/orbit/home/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
 | `/var/lib/orbit/home/orbit-repos/default` | Stable default workspace directory and original repository. |
 
 The entrypoint fixes `HOME`, `ORBIT_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` to these paths. Codex
@@ -106,7 +117,9 @@ existing registration ownership checks and recovery protocol, rather than creati
 The enrollment token passes through the existing CLI argument during registration; bootstrap logs
 and process inspection belong to the same isolated user's trust boundary.
 
-On rebuild, reuse the original PVC and supply `ORBIT_RUNNER_EXPECTED_ID` from the recorded mapping.
+On rebuild, reuse the original PVC and supply `ORBIT_RUNNER_EXPECTED_ID` from the recorded mapping:
+the runner UUID that `orbit register` printed and `orbit-container check` reports, not the public id
+the owner API shows for the same runner (that spelling is refused as a mismatch).
 Remove the enrollment Secret mount/reference and environment variable. The saved ID, token and config
 bytes are reused without calling register, forcing a registration or unregistering. Malformed or
 mismatched config fails closed. A populated repository/runtime home without config also fails; put

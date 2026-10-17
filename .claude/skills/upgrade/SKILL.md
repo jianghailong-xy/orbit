@@ -97,6 +97,13 @@ applied — this is the only path that may recreate (restart) `postgres`.
 
 ## Notes
 
+- Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
+  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
+  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  "Managed runners"). Where `.env` turns on the `managed-runners-docker` Compose profile, the script
+  also builds and recreates `docker-channel`, the restricted Docker channel, with the other services;
+  elsewhere Compose does not list that service and nothing is added. It never builds the managed
+  runner image or creates its network.
 - The default `up -d --wait apiserver wiki-worker web gateway` only recreates services whose
   image or config changed, so an upgrade with no source changes is a no-op (and
   stays healthy). `postgres` is never recreated unless you pass `--pull-base` and

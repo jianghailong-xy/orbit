@@ -45,6 +45,8 @@ Without `--pull-base`, the helper:
 
 Postgres is omitted from the recreate set. With `--pull-base`, the helper pulls `postgres` and `gateway`, then runs a full `up -d --wait` so changed base images take effect.
 
+The helper never writes `.env`, so managed runners stay as the deployment's `.env` has them: off unless it switches them on, which only a fresh install (`scripts/install-server.sh`) or an administrator does (docs/self-hosting.md, "Managed runners"). Where `.env` turns on the `managed-runners-docker` Compose profile, the helper also builds and recreates `docker-channel`, the restricted Docker channel; elsewhere Compose does not list that service and nothing is added. It never builds the managed runner image or creates its network.
+
 Concurrent upgrades are serialized with `/tmp/orbit-upgrade.lock`; a second invocation exits instead of starting another deployment.
 
 ## Requirements

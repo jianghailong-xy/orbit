@@ -197,13 +197,14 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     handed.push(claimed);
     return claimed;
   }
+  /** One poll of the runner's inbox. */
+  const dequeue = (runnerApi as unknown as {
+    dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
+      { kind: string; env?: Record<string, string> } | null
+    >;
+  }).dequeueTurn.bind(runnerApi);
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(sessionId: string, runnerId: string) {
-    const dequeue = (runnerApi as unknown as {
-      dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
-        { kind: string; env?: Record<string, string> } | null
-      >;
-    }).dequeueTurn.bind(runnerApi);
     for (let polls = 0; polls < 4; polls += 1) {
       const turn = await dequeue(sessionId, runnerId, null);
       assert.ok(turn, 'the inbox handed out nothing');
@@ -449,13 +450,17 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
         content: JSON.stringify({ provider: sharedClaude.slug }), status: 'PENDING',
       },
     });
-    await assert.rejects(
-      dequeueReload(session, at.runnerId).then((turn) => handedToMember.push(turn)),
-      (e: unknown) => e instanceof BadRequestException,
-    );
+    // Answered without being handed out, and the session says why in the words the claim holds it with.
+    const handed = await dequeue(session, at.runnerId, null);
+    handedToMember.push(handed);
+    assert.equal(handed, null, "the member's runner was handed the reload");
     assert.deepEqual(
       await db.conversationTurn.findUniqueOrThrow({ where: { id: reload.id }, select: { status: true, deliveredAt: true } }),
-      { status: 'PENDING', deliveredAt: null },
+      { status: 'ANSWERED', deliveredAt: null },
+    );
+    assert.deepEqual(
+      await recorded(session),
+      { provider: sharedClaude.slug, status: RunStatus.AWAITING_INPUT, error: ADMIN_ONLY_PROVIDER_ERROR },
     );
   });
 

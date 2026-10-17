@@ -597,7 +597,10 @@ test('(s) no compose service, daemon or replacement acceptance executor is intro
   // wiki-worker is the wiki's server-side executor, which the account owner added on 2026-10-07
   // (docs/wiki-server-execution-design.md §4.1), not this removal; test/compose-topology.test.mjs (l)
   // pins its whole definition.
-  assert.deepEqual(services, ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway']);
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
+  assert.deepEqual(services, ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel']);
   for (const word of ['admission', 'acceptance', 'dead-man', 'watchdog', 'coordinator']) {
     assert.equal(compose.toLowerCase().includes(word), false,
       `docker-compose.yml names ${word}: this removal adds no service`);

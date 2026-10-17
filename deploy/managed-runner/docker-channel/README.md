@@ -6,11 +6,13 @@ socket. The apiserver's Docker backend
 through it: JSON over HTTP on a local unix socket (or a loopback port), with a bearer token. Neither
 the apiserver process nor any managed runner container is given `docker.sock`.
 
-It is optional and off by default like the rest of `deploy/managed-runner`: no default entry point
-starts it (`scripts/managed-runner/deployment_boundary_test.py`). Wiring it into a new deployment is
-task D3's. The design record is
+Root Compose runs it as the `docker-channel` service, built from [Dockerfile](Dockerfile) (Python's
+standard library and this one file), under the `managed-runners-docker` profile: a fresh install
+(`scripts/install-server.sh`) switches that profile on in `.env`, and an upgrade never does, so a
+deployment installed without it does not run the channel. The design record is
 [docs/managed-runner-design.md](../../../docs/managed-runner-design.md), "Implementation record:
-Docker backend".
+Docker backend" and "Implementation record: new deployments"; operating it is in
+[docs/self-hosting.md](../../../docs/self-hosting.md), "Managed runners".
 
 ## Why a separate Python process
 
@@ -139,6 +141,13 @@ The apiserver's profile ([manager-profile.example.json](manager-profile.example.
 "docker"`) names the same instance and image, the channel's socket and the token file. At start-up the
 channel finishes any container create a previous run left unstarted, then serves; it holds no state a
 restart loses beyond what is in `stateDir` and Docker.
+
+In a Compose deployment, `scripts/install-server.sh` writes both files, the token and the network:
+`data/managed-runners/` holds `channel.json`, `profile.json` and `token` (the state directory and the
+socket are made there too), mounted at `/var/lib/orbit-managed-runners` in `docker-channel` and,
+read-only, in the apiserver; the network is `orbit-managed-runners`, with inter-container traffic
+off, and a runner reaches the apiserver through the gateway's published port at that network's
+gateway address.
 
 Tests: `scripts/managed-runner/docker_channel_test.py` (an in-memory Docker Engine, the real HTTP
 server) and, on real Docker, `scripts/managed-runner/docker-backend-it.py`, which runs the apiserver's
