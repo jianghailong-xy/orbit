@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { release, cpus } from 'node:os';
 import { ScenarioContext, realCursorState } from './lib/harness.mjs';
 import { writeProtocol } from './lib/record.mjs';
-import { VERSION, TARBALL_SHA256, AGENT, P0_ROOT, readApiKey, promptsSpent, PROMPT_CAP, LEDGER } from './lib/env.mjs';
+import { VERSION, PINNED_VERSION, TARBALL_SHA256, AGENT, P0_ROOT, readApiKey, promptsSpent, PROMPT_CAP, LEDGER, LEDGER_NAME, LEDGERS } from './lib/env.mjs';
 import { zeroA } from './scenarios/zero-a.mjs';
 import { zeroB } from './scenarios/zero-b.mjs';
 import { real } from './scenarios/real.mjs';
@@ -25,8 +25,14 @@ const opt = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] 
 // --selftest: the prompt scenarios against selftest-fake-agent.mjs, into scratch directories only.
 const selftest = args.includes('--selftest');
 if (selftest) process.env.CURSOR_P0_SELFTEST = '1';
-const out = opt('--out') ?? (selftest ? join(P0_ROOT, 'selftest', 'evidence') : join(repoRoot, 'docs', 'evidence', 'cursor-cli', VERSION));
-const fixturesDir = opt('--fixtures') ?? (selftest ? join(P0_ROOT, 'selftest', 'fixtures') : join(repoRoot, 'src', 'runner-go', 'testdata', 'cursor'));
+// Each ledger's runs have directories of their own, so a later task never overwrites an earlier one's
+// recordings (P0a's sit at the top level). Recordings of a build other than the pinned one are for
+// comparison only, not replay material: their fixtures stay in scratch.
+const defaultOut = LEDGER_NAME === 'p0a' ? join(repoRoot, 'docs', 'evidence', 'cursor-cli', VERSION) : join(repoRoot, 'docs', 'evidence', 'cursor-cli', VERSION, LEDGER_NAME);
+const defaultFixtures = VERSION !== PINNED_VERSION ? join(P0_ROOT, 'fixtures', VERSION, LEDGER_NAME)
+  : LEDGER_NAME === 'p0a' ? join(repoRoot, 'src', 'runner-go', 'testdata', 'cursor') : join(repoRoot, 'src', 'runner-go', 'testdata', 'cursor', LEDGER_NAME);
+const out = opt('--out') ?? (selftest ? join(P0_ROOT, 'selftest', 'evidence') : defaultOut);
+const fixturesDir = opt('--fixtures') ?? (selftest ? join(P0_ROOT, 'selftest', 'fixtures') : defaultFixtures);
 const all = [...zeroA, ...zeroB, ...real];
 
 if (args.includes('--list')) {
@@ -47,7 +53,12 @@ const key = readApiKey();
 if (!key) { console.error('no Cursor API key at the configured key file; ask the owner to place it'); process.exit(2); }
 const needed = selected.reduce((a, s) => a + s.real, 0);
 const spent = promptsSpent().length;
-if (!selftest && spent + needed > PROMPT_CAP) { console.error(`this selection needs ${needed} real prompts but only ${PROMPT_CAP - spent} of ${PROMPT_CAP} remain`); process.exit(2); }
+if (!selftest && spent + needed > PROMPT_CAP) { console.error(`this selection needs ${needed} real prompts but only ${PROMPT_CAP - spent} of ${PROMPT_CAP} remain in ledger ${LEDGER_NAME}`); process.exit(2); }
+if (!selftest && needed > 0 && VERSION !== PINNED_VERSION) { console.error(`real prompts go to the pinned build ${PINNED_VERSION} only, not ${VERSION}; use --zero`); process.exit(2); }
+// An evidence directory belongs to one ledger (P0a's prompts-ledger.json predates the field).
+const ledgerFile = join(out, 'prompts-ledger.json');
+const ownerLedger = existsSync(ledgerFile) ? (JSON.parse(readFileSync(ledgerFile, 'utf8')).ledger ?? 'p0a') : null;
+if (!selftest && ownerLedger && ownerLedger !== LEDGER_NAME) { console.error(`${relative(repoRoot, out)} holds ledger ${ownerLedger}'s runs; this run charges ${LEDGER_NAME} (set CURSOR_P0_LEDGER or --out)`); process.exit(2); }
 
 const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const runRoot = join(P0_ROOT, 'runs', runId);
@@ -84,15 +95,18 @@ for (const s of selected) {
 
 // The summary covers every scenario result in the evidence directory, not only this run's.
 const results = readdirSync(join(out, 'scenarios')).filter(f => f.endsWith('.json')).sort().map(f => JSON.parse(readFileSync(join(out, 'scenarios', f), 'utf8')));
-const ledger = promptsSpent().map(e => ({ n: e.n, at: e.at, scenario: e.scenario, runId: e.runId, note: e.note }));
-writeFileSync(join(out, 'prompts-ledger.json'), JSON.stringify({ cap: PROMPT_CAP, spent: ledger.length, model: 'Auto (default[])', entries: ledger }, null, 1) + '\n');
+const ledger = promptsSpent().map(e => ({ n: e.n, at: e.at, scenario: e.scenario, runId: e.runId, note: e.note, ...(e.version ? { version: e.version } : {}) }));
+// The ledger's copy goes with the results that spent from it; a directory of zero-prompt runs gets none.
+if (results.some(r => r.realPrompts.length > 0)) writeFileSync(ledgerFile, JSON.stringify({ ledger: LEDGER_NAME, task: LEDGERS[LEDGER_NAME].task, cap: PROMPT_CAP, spent: ledger.length, model: 'Auto (default[])', entries: ledger }, null, 1) + '\n');
 const summary = {
-  cli: { version: VERSION, tarballSha256: TARBALL_SHA256, launcherSha256: sha(join(dirname(AGENT), 'cursor-agent')), indexJsSha256: sha(join(dirname(AGENT), 'index.js')) },
+  cli: { version: VERSION, pinned: VERSION === PINNED_VERSION, tarballSha256: TARBALL_SHA256, launcherSha256: sha(join(dirname(AGENT), 'cursor-agent')), indexJsSha256: sha(join(dirname(AGENT), 'index.js')) },
   platform: { os: process.platform, arch: process.arch, kernel: release(), cpus: cpus().length, harnessNode: process.version },
   orbitCommit: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout.trim(),
   lastRunId: runId,
+  ledger: LEDGER_NAME,
   realPromptsSpent: ledger.length,
   realPromptCap: PROMPT_CAP,
+  realPromptsInTheseResults: results.reduce((a, r) => a + r.realPrompts.length, 0),
   realCursorDirsBefore: before,
   realCursorDirsAfter: realCursorState(),
   scenarios: results.map(r => {
@@ -115,16 +129,18 @@ writeFileSync(join(out, 'summary.json'), JSON.stringify(summary, null, 1) + '\n'
 const index = ['# Cursor ACP 样本索引（生成文件）', '', `由 \`scripts/cursor-p0/reproduce.mjs\` 按 \`${relative(repoRoot, out)}/scenarios/*.json\` 生成。`, '',
   '| 样本 | 场景结果 | 场景断言 |', '| --- | --- | --- |'];
 for (const r of results) for (const f of r.fixtures ?? []) {
+  if (!existsSync(join(fixturesDir, f))) continue; // recorded into another fixtures directory (e.g. scratch)
   const meta = existsSync(join(fixturesDir, f, 'meta.json')) ? JSON.parse(readFileSync(join(fixturesDir, f, 'meta.json'), 'utf8')) : {};
   const analysis = existsSync(join(out, 'analysis', `${r.name}.json`)) ? `<br>更正后的断言见 \`${relative(repoRoot, out)}/analysis/${r.name}.json\`` : '';
   index.push(`| \`${f}\` | ${r.passed ? 'PASS' : 'FAIL'}${all.some(s => s.name === r.name) ? '' : '（旧场景定义）'} | ${r.checks.map(c => `${c.ok ? '✓' : '✗'} ${c.name}`).join('<br>').replace(/\|/g, '\\|')}${analysis} |`);
 }
 writeFileSync(join(fixturesDir, 'INDEX.md'), index.join('\n') + '\n');
 const manifest = {};
-const walk = d => { for (const n of readdirSync(d, { withFileTypes: true })) { const f = join(d, n.name); n.isDirectory() ? walk(f) : n.name !== 'manifest.json' && (manifest[relative(out, f)] = sha(f)); } };
+// A nested directory with a summary of its own (another ledger's runs, e.g. p0c/) has its own manifest.
+const walk = d => { for (const n of readdirSync(d, { withFileTypes: true })) { const f = join(d, n.name); n.isDirectory() ? existsSync(join(f, 'summary.json')) || walk(f) : n.name !== 'manifest.json' && (manifest[relative(out, f)] = sha(f)); } };
 walk(out);
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1) + '\n');
-console.log(`\n${selected.length - failed}/${selected.length} selected scenarios passed; evidence in ${relative(repoRoot, out)}; real prompts spent so far ${ledger.length}/${PROMPT_CAP} (ledger ${LEDGER})`);
+console.log(`\n${selected.length - failed}/${selected.length} selected scenarios passed on ${VERSION}; evidence in ${relative(repoRoot, out)}; real prompts spent so far ${ledger.length}/${PROMPT_CAP} (ledger ${LEDGER_NAME}: ${LEDGER})`);
 process.exit(failed ? 1 : 0);
 
 function sha(f) { return existsSync(f) ? createHash('sha256').update(readFileSync(f)).digest('hex') : null; }

@@ -8,6 +8,15 @@ import { AUTO_MODEL, currentModel, sleep } from '../lib/harness.mjs';
 import { VERSION, TARBALL_SHA256, CLI_DIR, AGENT, P0_ROOT } from '../lib/env.mjs';
 
 const sha256File = f => createHash('sha256').update(readFileSync(f)).digest('hex');
+// Processes whose command line names a path under `dir`.
+function processesUnder(dir) {
+  const out = [];
+  for (const d of readdirSync('/proc')) {
+    if (!/^\d+$/.test(d) || Number(d) === process.pid) continue;
+    try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); if (c.includes(dir)) out.push({ pid: Number(d), cmdline: c }); } catch {}
+  }
+  return out;
+}
 const errOf = r => r.error ? { code: r.error.code, message: r.error.message, data: r.error.data } : null;
 const LOGIN_URL = /^https:\/\/cursor\.com\/loginDeepControl\?challenge=[^&]+&uuid=[^&]+&mode=login&redirectTarget=cli&supportsSelectedTeamLogin=true$/;
 
@@ -16,14 +25,14 @@ export const zeroA = [
     name: 'install-and-version', real: 0,
     async run(ctx) {
       const tarball = join(P0_ROOT, 'dl', VERSION, 'agent-cli-package.tar.gz');
-      ctx.check('pinned tarball sha256', existsSync(tarball) && sha256File(tarball) === TARBALL_SHA256, { bytes: existsSync(tarball) ? statSync(tarball).size : null });
+      ctx.check('the tarball of the build under test has the expected sha256', existsSync(tarball) && sha256File(tarball) === TARBALL_SHA256, { bytes: existsSync(tarball) ? statSync(tarball).size : null });
       const files = [];
       const walk = d => { for (const n of readdirSync(d)) { const f = join(d, n); const st = statSync(f); st.isDirectory() ? walk(f) : files.push(st.size); } };
       walk(CLI_DIR);
       ctx.note('unpacked', { files: files.length, bytes: files.reduce((a, b) => a + b, 0), indexJsSha256: sha256File(join(CLI_DIR, 'index.js')), launcherSha256: sha256File(join(CLI_DIR, 'cursor-agent')), nodeSha256: sha256File(join(CLI_DIR, 'node')) });
       const slot = ctx.slot('a');
       const v = ctx.cli(slot, ['--version'], { envOpts: { apiKey: false } });
-      ctx.check('--version is the pinned version', v.exit === 0 && v.stdout.trim() === VERSION, v.stdout.trim());
+      ctx.check('--version is the build under test', v.exit === 0 && v.stdout.trim() === VERSION, v.stdout.trim());
       for (const args of [['acp', '--help'], ['install', '--help'], ['update', '--help'], ['status', '--help'], ['about', '--help']]) {
         const r = ctx.cli(slot, args, { envOpts: { apiKey: false } });
         ctx.note(`help:${args[0]}`, r.stdout.trim());
@@ -31,16 +40,23 @@ export const zeroA = [
       const about = ctx.cli(slot, ['about', '--format', 'json'], { envOpts: { store: 'memory' } });
       const aboutJson = JSON.parse(about.stdout || '{}');
       ctx.note('about', aboutJson);
-      ctx.check('about reports the pinned version as latest (no newer build on the update channel)', aboutJson.cliVersion === VERSION && aboutJson.latestVersion === VERSION, { latestStatus: aboutJson.latestStatus });
+      // A newer official build is the normal course of things, not a failure: only recorded.
+      ctx.check('about reports the build under test as cliVersion', aboutJson.cliVersion === VERSION, aboutJson.cliVersion);
+      ctx.note('update channel: latest build and status (recorded, not asserted)', { latestVersion: aboutJson.latestVersion, latestStatus: aboutJson.latestStatus, isLatest: aboutJson.latestVersion === VERSION });
       // The CLI's own installer, into an isolated HOME. Its default URL prefix is the anysphere-binaries
       // S3 bucket (slow from here); the prefix argument points it at the installer script's CDN instead.
       const inst = ctx.slot('installer');
       const r = ctx.cli(inst, ['install', VERSION, `https://downloads.cursor.com/lab/${VERSION}`], { envOpts: { apiKey: false }, timeoutMs: 1200000 });
       ctx.note('install', { exit: r.exit, stdout: r.stdout.trim().slice(-800), stderr: r.stderr.trim().slice(-800), ms: r.ms });
+      // The installer leaves a detached `cleanup-install-versions` child running long after it exits (§1.1).
+      await sleep(3000);
+      const leftBehind = processesUnder(inst.home);
+      ctx.note('processes the installer left running (ended by the scenario)', leftBehind.map(p => p.cmdline));
+      for (const p of leftBehind) { try { process.kill(p.pid, 'SIGTERM'); } catch {} }
       const versionDir = join(inst.home, '.local', 'share', 'cursor-agent', 'versions', VERSION);
       const link = join(inst.home, '.local', 'bin', 'agent');
       ctx.check('install <version> unpacks into ~/.local/share/cursor-agent/versions/<version>', existsSync(join(versionDir, 'cursor-agent')));
-      ctx.check('installed index.js is byte-identical to the pinned tarball', existsSync(join(versionDir, 'index.js')) && sha256File(join(versionDir, 'index.js')) === sha256File(join(CLI_DIR, 'index.js')));
+      ctx.check('installed index.js is byte-identical to the tarball under test', existsSync(join(versionDir, 'index.js')) && sha256File(join(versionDir, 'index.js')) === sha256File(join(CLI_DIR, 'index.js')));
       ctx.check('~/.local/bin/agent points at the installed version', existsSync(link) && realpathSync(link) === realpathSync(join(versionDir, 'cursor-agent')));
       ctx.note('installer-home-tree', ctx.tree(inst.home).filter(l => !l.includes('/versions/' + VERSION + '/') || l.split('/').length < 8).slice(0, 60));
     },
@@ -326,6 +342,12 @@ export const zeroA = [
       const ri = await ctx.initialize(r);
       await r.waitExit(10000);
       ctx.check('an invalid project .cursor/cli.json makes `agent acp` exit 1 before answering initialize', ri.transportClosed === true && r.exit?.code === 1 && /schema validation failed/.test(r.stderr), { exit: r.exit });
+      // The same repository with project configs off: the file is never read.
+      const r2 = ctx.acp({ slot: ctx.slot('bad-cli-disabled'), cwd: bad, label: 'acp-invalid-cli-json-disabled', args: ['--disable-project-configs'], envOpts: { store: 'memory' } });
+      const r2i = await ctx.initialize(r2);
+      const r2n = r2i.result ? await ctx.newSession(r2, bad) : null;
+      ctx.check('with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize and session/new answer)', r2i.result?.protocolVersion === 1 && !!r2n?.result?.sessionId, { exit: r2.exit, stderr: r2.stderr.slice(-200), newError: r2n?.error });
+      await r2.dispose();
       // hidden local mode is not available in this build
       const al = ctx.cli(ctx.slot('authless'), ['acp', '--authless'], { envOpts: { apiKey: false, store: 'memory' } });
       ctx.check('`agent acp --authless` refuses: only for agent-cli-local (exit 2)', al.exit === 2 && /only be used with agent-cli-local/.test(al.stderr + al.stdout), (al.stderr + al.stdout).trim());
