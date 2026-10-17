@@ -1835,6 +1835,10 @@ describe('wiki contract', () => {
     expect(server.identity).toMatch(/the space's next run adopts what it left waiting through it once the job has ended/u);
     expect(server.skip).toMatch(/catch-up active or paused/u);
     expect(server.failureKinds).toMatch(/nothing is counted/u);
+    // The database failing under the run is the platform's (2026-10-17): a P2028 at the anchors step failed the canary's
+    // runs 6e62f826 and 34cadf93 as content, where it is retried and counted against nothing.
+    expect(server.failureKinds).toMatch(/^infra: [^]*the database failing under the run — a transaction it could not start in time or that its timeout closed \(P2028\), no connection in time \(P2024\)[^]*\. The run is not ended and nothing is counted[^]* content: /u);
+    expect(readFileSync(path.join(ROOT, 'docs/wiki-contract.md'), 'utf8')).toContain('事务没能按时开始、或被自己的超时关掉（P2028），按时拿不到连接（P2024）');
   });
 
   it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the switch (server execution P1b)', () => {

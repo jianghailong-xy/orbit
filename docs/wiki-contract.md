@@ -2711,6 +2711,12 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    `anchors` 仓库操作交给空间所在的 runner，结果按现有写入口
    `recordAnchorChecks` 写回（锚点状态、挑战 op），一次操作的条目按 `anchorRules.verify.rules.reportEntriesMax` 分成若干次报告写回，每条锚点的
    结果不变。
+   **每个条目的写回事务用 changeset 的预算**（2026-10-17）：`recordAnchorChecks` 每个条目一个事务，可以跑 15 秒、开事务可以等 5 秒
+   （`CHANGESET_TRANSACTION`；Prisma 交互事务默认是 5 秒和 2 秒）。这个事务十来条语句，平常几十毫秒就提交，但在负载高的库上一条语句
+   自己就可能要几秒：10-16 的 6e62f826 和 10-17 的 34cadf93 都是某个条目事务里的一条语句跑过了 5 秒，之后的 `wikiEntry.findFirst`
+   发现事务已经过期（P2028），整轮失败；两次都没有锁等待的日志。锚点坏了的条目还要在同一个事务里立挑战，本来就是一个 op 的
+   changeset；四天的 log_lock_waits 里最长的锁等待是 12.1 秒，15 秒都容得下。还超过 15 秒的仍是 P2028，按 §27.4 算 infra，
+   作业重试，重放只查还没写下检查的条目。
    **查过、之后没动过的不再重做**（2026-10-10，`anchorRules.verify.skip`，§17.3）：取列表之前先按 §17.3 发 diff（最多
    `maintenance.job.server.rules.anchorDiffsMax` 个，一次一个）；每条 git 锚点都仍然成立的条目这一轮整条不进操作——不送 runner、不写回；
    有一条不成立就整条照旧。报告里的 `anchors`
@@ -2750,8 +2756,12 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 
 ### 27.4 失败与恢复（设计 §5.5）
 
-- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 崩溃（租约自然过期）。运行行不结束，作业回 `queued` 按退避重试，
-  **不计入连续失败**（`consecutive_failures` 不动）。
+- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 崩溃（租约自然过期），以及数据库在运行底下出的故障
+  （`classifyTransactionFault` 的 TRANSIENT 与 RESOURCE）：事务没能按时开始、或被自己的超时关掉（P2028），按时拿不到连接（P2024），
+  连接或资源类 SQLSTATE（08、53、57、58 类），死锁或序列化冲突在事务自己的重试之后仍在。运行行不结束，作业回 `queued` 按退避重试，
+  **不计入连续失败**（`consecutive_failures` 不动）；这些故障都整个回滚，重放不会碰到写了一半的东西。2026-10-17 之前，除
+  `WikiJobInfraError` 外的错误一律算 content：canary 的 6e62f826（10-16 16:37:35）和 34cadf93（10-17 02:38:31）都是锚点步一个条目的
+  事务撞上 Prisma 默认的 5 秒（P2028，分别过了 6674、6002 ms），整轮按 content 失败、连续失败加一。
 - **content**：模型给不出可用的答案、dry run 通过却被服务端拒绝、某一步自己的错误。运行以 failed 结束：
   游标按规则不动，`consecutive_failures` 加一，连续三次通知 owner；作业以 `failure_kind = content` 结束。
 - **worker 停机**：模型请求与仓库等待被中止（`WikiModelWaitCancelled` / `WikiRepoOpWaitCancelled`），运行不结算，
