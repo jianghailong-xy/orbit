@@ -5,7 +5,10 @@ import { mkdirSync, readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const VERSION = '2026.10.14-941492e';
-export const TARBALL_SHA256 = '6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d';
+export const TARBALL_SHA256 = '6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d'; // linux/x64
+export const TARBALL_SHA256_DARWIN = 'c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77'; // darwin/arm64, measured 2026-10-17 on orbit-macos
+// The hash of the tarball for the platform this harness runs on (P0b added darwin/arm64).
+export const ACTIVE_TARBALL_SHA256 = process.platform === 'darwin' && process.arch === 'arm64' ? TARBALL_SHA256_DARWIN : TARBALL_SHA256;
 export const P0_ROOT = process.env.CURSOR_P0_ROOT ?? '/mnt/data/cursor-p0';
 export const CLI_DIR = process.env.CURSOR_P0_CLI ?? join(P0_ROOT, 'cli', VERSION);
 export const AGENT = join(CLI_DIR, 'cursor-agent');

@@ -17,13 +17,28 @@ const README = '# probe repo\nThe secret word in this README is TANGERINE.\n';
 // pids whose command line contains `needle` (to see whether a tool's process outlived a cancel or crash)
 function pidsMatching(needle) {
   const out = [];
-  for (const d of readdirSync('/proc')) {
-    if (!/^\d+$/.test(d)) continue;
-    try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' '); if (c.includes(needle) && !c.includes('pidsMatching')) out.push(Number(d)); } catch {}
+  if (process.platform === 'linux') {
+    for (const d of readdirSync('/proc')) {
+      if (!/^\d+$/.test(d)) continue;
+      try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' '); if (c.includes(needle) && !c.includes('pidsMatching')) out.push(Number(d)); } catch {}
+    }
+  } else {
+    // darwin: no /proc; `ps -axo pid=,command=` covers the harness user's processes.
+    const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+    for (const line of (r.stdout ?? '').split('\n')) {
+      const i = line.indexOf(' ');
+      if (i <= 0) continue;
+      const pid = Number(line.slice(0, i).trim());
+      const cmd = line.slice(i + 1);
+      if (Number.isInteger(pid) && cmd.includes(needle) && !cmd.includes('pidsMatching')) out.push(pid);
+    }
   }
   return out;
 }
 const killAll = pids => { for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch {} } };
+
+// A strace wrap on Linux (macOS has no strace); returns undefined there.
+const straceWrap = file => process.platform === 'linux' ? ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', file] : undefined;
 
 // `env | sort` output: names, plus the few values that matter here (paths are redacted later).
 function envDump(file) {
@@ -38,9 +53,10 @@ function envDump(file) {
 function orbitMcp() {
   const e = process.env;
   if (!e.ORBIT_SESSION_ID) return null;
+  const orbitBin = process.platform === 'darwin' ? '/Users/long/.orbit/bin/orbit' : '/usr/local/bin/orbit';
   const pairs = [['ORBIT_SESSION_ID', e.ORBIT_SESSION_ID], ['ORBIT_AGENT_ID', e.ORBIT_AGENT_ID], ['ORBIT_TASK_ID', e.ORBIT_TASK_ID], ['ORBIT_HOME', e.ORBIT_HOME ?? '/root/.orbit'],
     ['ORBIT_MCP_PERMISSION_PROMPT', '0'], ['ORBIT_ALLOW_ORCHESTRATION', '0'], ['ORBIT_WATCHES', 'off'], ['ORBIT_WIKI', 'off'], ['ORBIT_RUNNER_CHILD', '1']];
-  return { name: 'orbit', command: '/usr/local/bin/orbit', args: ['mcp'], env: pairs.filter(([, v]) => v).map(([name, value]) => ({ name, value })) };
+  return { name: 'orbit', command: orbitBin, args: ['mcp'], env: pairs.filter(([, v]) => v).map(([name, value]) => ({ name, value })) };
 }
 
 // Records every permission request with the answer given; `choose(msg)` returns an optionId.
@@ -84,7 +100,7 @@ export const real = [
         return 'allow-once';
       });
       const straceFile = join(ctx.dir, 'turns.strace');
-      const p = ctx.acp({ slot, cwd: work, env, label: 'turns', onRequest: policy, wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', straceFile] });
+      const p = ctx.acp({ slot, cwd: work, env, label: 'turns', onRequest: policy, wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work, servers);
       if (!ctx.check('session opens with the p0probe and orbit MCP servers injected', !!n.result?.sessionId, n.error)) return;
@@ -309,12 +325,15 @@ export const real = [
       mkdirSync(realHome, { recursive: true });
       mkdirSync(join(ctx.dir, 'tools'), { recursive: true });
       const wrapper = join(ctx.dir, 'tools', 'orbit-bash');
-      writeFileSync(wrapper, `#!/bin/bash\n# Agent commands get the runner user's HOME back, without Cursor credentials or account dirs.\nexport HOME='${realHome}'\nunset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR AGENT_CLI_CREDENTIAL_STORE\nexec /bin/bash "$@"\n`);
+      const wrapperRan = join(ctx.dir, 'wrapper-ran.log');
+      // Without strace (macOS) the wrapper proves its use by logging its own invocation.
+      const marker = process.platform === 'linux' ? '' : `echo ran >> '${wrapperRan}'\n`;
+      writeFileSync(wrapper, `#!/bin/bash\n# Agent commands get the runner user's HOME back, without Cursor credentials or account dirs.\n${marker}export HOME='${realHome}'\nunset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR AGENT_CLI_CREDENTIAL_STORE\nexec /bin/bash "$@"\n`);
       chmodSync(wrapper, 0o755);
       const asked = [];
       const straceFile = join(ctx.dir, 'turn.strace');
       const p = ctx.acp({ slot, cwd: work, label: 'wrapper', onRequest: recordingPolicy(asked, () => 'allow-once'), envOpts: { store: 'memory', extra: { SHELL: wrapper } },
-        wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', straceFile] });
+        wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work);
       const t = await ctx.promptAndWait(p, n.result.sessionId, 'Run these two shell commands, then reply DONE: `printenv HOME > home.txt` and `env | cut -d= -f1 | sort > env-names.txt`.', 'SHELL wrapper named *bash*: HOME and variable names agent commands see');
@@ -322,8 +341,8 @@ export const real = [
       const names = existsSync(join(work, 'env-names.txt')) ? readFileSync(join(work, 'env-names.txt'), 'utf8').trim().split('\n') : [];
       const st = parseStrace(straceFile);
       const shells = [...new Set(st.execs.filter(e => e.ok && /bash/.test(e.path)).map(e => `${e.path.replace(ctx.dir, '<RUN>')} ${e.argv.slice(1, 3).join(' ')}`))];
-      ctx.note('agent command environment under SHELL=<dir>/orbit-bash', { stopReason: t.response.result?.stopReason, home, names, shellsExecuted: shells, permissionRequests: asked.map(a => a.title) });
-      ctx.check('the wrapper runs the agent\'s commands (SHELL path containing "bash" is used)', shells.some(x => x.includes('orbit-bash')));
+      ctx.note('agent command environment under SHELL=<dir>/orbit-bash', { stopReason: t.response.result?.stopReason, home, names, shellsExecuted: shells, wrapperMarkerExists: existsSync(wrapperRan), permissionRequests: asked.map(a => a.title) });
+      ctx.check('the wrapper runs the agent\'s commands (SHELL path containing "bash" is used)', existsSync(wrapperRan) || shells.some(x => x.includes('orbit-bash')));
       ctx.check('agent commands see the wrapper\'s HOME (runner user\'s), not the CLI\'s account HOME', home === realHome, home);
       ctx.check('…and none of the Cursor credentials or account directories the wrapper unset', names.length > 0 && !names.some(x => ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN', 'XDG_CONFIG_HOME', 'CURSOR_CONFIG_DIR', 'CURSOR_DATA_DIR', 'AGENT_CLI_CREDENTIAL_STORE'].includes(x)), names.filter(x => /CURSOR|XDG|AGENT_CLI/.test(x)));
       ctx.check('the CLI itself still runs on the account HOME (its state file is there)', existsSync(join(slot.home, '.cursor', 'agent-cli-state.json')));
@@ -539,7 +558,7 @@ export const real = [
       const args = variant === 'baseline' ? [] : ['--disable-project-configs', '--exclude-workspace-context'];
       const straceFile = join(ctx.dir, 'turn.strace');
       const p = ctx.acp({ slot, cwd: repo, label: 'repo', args, onRequest: recordingPolicy(asked, () => 'allow-once'), envOpts: { store: 'memory' },
-        wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', straceFile] });
+        wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, repo);
       const sid = n.result.sessionId;

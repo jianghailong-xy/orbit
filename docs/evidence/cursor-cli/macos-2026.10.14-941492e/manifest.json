@@ -1,0 +1,20 @@
+{
+ "prompts-ledger.json": "1cb2f1e3ac199bbecf970edcfde967b6de5143b8bb20332a265155a73f55db19",
+ "protocol/debug-log-location.ndjson": "73e995c80efd2332dae0e3f5c27d75b30bd05b770db06de9b9dae8f491b8efb5",
+ "protocol/failure-shapes-without-prompt.ndjson": "cf00d984656ea0429071c2ef3a372820050344a810ac37244abecd494e795e52",
+ "protocol/install-and-version.ndjson": "da3a97cf261631213ebd1aa41f645eddc38f0e6175e30ff6c3ad36cd4f4aad5a",
+ "protocol/login-link-and-logout.ndjson": "7c99a54a7697148e06e94b8417338e781c6a1e4d8556eee2108a5756c8effd40",
+ "protocol/macos-launchd-keychain.ndjson": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "protocol/macos-quarantine.ndjson": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "protocol/process-signals.ndjson": "619a9f7bc745f81edb91696ea48160abbcf6843dab47ff68a357366e509996b0",
+ "protocol/signed-out-handshake.ndjson": "4811c5636f4d3a39a0c47539e7daf6ebf53f2cb8a42a29e7f124b116eee86279",
+ "scenarios/debug-log-location.json": "d1408683548312f4ed979fe82263274588128dfce88da71310eca0b16b665b9c",
+ "scenarios/failure-shapes-without-prompt.json": "57c6d1a6a915d74c41b0a3a1fe2e08076e2210896c2f5f1d0b1963f032f2d464",
+ "scenarios/install-and-version.json": "d132dc388bb0cd2047f7944d47b82067dd62cdb0110d0875dcedfcc8834a665d",
+ "scenarios/login-link-and-logout.json": "b7dd09f4d5cedf07cb365a40f4d81560ca7ce6033125523f1d5847ae40eeb826",
+ "scenarios/macos-launchd-keychain.json": "665132a981790ca32b5f1a0e947a3754eccf7678c4352e7dd981a0ac57a9ca1f",
+ "scenarios/macos-quarantine.json": "b2640413daaf9fde59709d682e20fcdb2e3724cd5cb76962b30f0c8518993282",
+ "scenarios/process-signals.json": "13aa5763f9fa6c50a6b1ee3182ea3efa6a8a59c5a839abdc1196743a321dd85e",
+ "scenarios/signed-out-handshake.json": "df34ef3ed23327c415431a2af2dbcc55d91f5d307723c0363b9f2e7b119044fa",
+ "summary.json": "38024d6003ce2a965811514dc844642b78638c23e05cec18518edf6b99de9715"
+}
