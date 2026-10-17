@@ -269,7 +269,12 @@ type sessionMeta struct {
 	// from (cursorSessionAccountDirToRecord): what a removal of that account refuses to take while the
 	// session is running. Empty on Default, and on a key.
 	CursorAccountDir string `json:"cursorAccountDir,omitempty"`
-	WorkDir          string `json:"workDir"`
+	// CursorIdentity is the credential a Cursor CLI session's conversation was opened on
+	// (cursorCredentialIdentity): an account's id, or a key's or a token's fingerprint, never the key or
+	// the token. A process that would continue the conversation on another is refused before it starts
+	// (cursorIdentityRefusal); one that opens or loads it records the one it runs on (writeCursorSessionMeta).
+	CursorIdentity string `json:"cursorIdentity,omitempty"`
+	WorkDir        string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
 	// to another of this machine's workspaces last ran, and so where its Claude conversation is
 	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
@@ -332,28 +337,34 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 }
 
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, "")
 }
 
 // writeClaudeSessionMeta records the account a Claude engine has actually started on. A generic
 // write before that start keeps the previous account so removing it cannot strand the conversation;
 // once the new engine is running, moving to Default must clear that old account from the record.
 func writeClaudeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true, false)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true, false, "")
 }
 
 // writeKimiSessionMeta is writeSessionMeta from a Kimi engine that has started in the KIMI_CODE_HOME
 // its claim names, the session's conversation carried there first (carryKimiConversation): the one
 // write that moves KimiCodeHome to another account.
 func writeKimiSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, true)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, true, "")
+}
+
+// writeCursorSessionMeta is writeSessionMeta from a Cursor CLI process that has opened or loaded the
+// session's conversation on identity (cursorCredentialIdentity): the one write that pins it there.
+func writeCursorSessionMeta(scratch string, job *ClaimedSession, execDir, identity string) {
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, identity)
 }
 
 func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
-	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false, false)
+	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false, false, "")
 }
 
-func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, claudeStarted, kimiStarted bool) {
+func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, claudeStarted, kimiStarted bool, cursorIdentity string) {
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
@@ -380,6 +391,11 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		if !claudeStarted && claudeDir == "" {
 			claudeDir = existing.ClaudeConfigDir
 		}
+		// A Cursor CLI conversation stays on the identity it was opened on until a process of the session
+		// opens or loads it on one (writeCursorSessionMeta): every write before then keeps it.
+		if cursorIdentity == "" && runtimeProvider(job) == providerCursor {
+			cursorIdentity = existing.CursorIdentity
+		}
 	}
 	// The directory the session ran in before this one is kept until the session moves again.
 	var previousWorkDir string
@@ -400,6 +416,7 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		AntigravityGoogleDir: antigravityDir,
 		KimiCodeHome:         kimiHome,
 		CursorAccountDir:     cursorSessionAccountDirToRecord(job),
+		CursorIdentity:       cursorIdentity,
 		WorkDir:              execDir,
 		PreviousWorkDir:      previousWorkDir,
 		Title:                job.Title,
