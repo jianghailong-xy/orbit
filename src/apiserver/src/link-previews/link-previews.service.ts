@@ -183,6 +183,9 @@ export class LinkPreviewsService {
   /**
    * The live RESUME_SESSION watches parked on each session, counted the way the session list words
    * them (`watchingWord` on the web, `WatchSessionSummary.word` natively).
+   *
+   * A session target whose session runs a task counts as a target on that task, as the watch read
+   * names it (`WatchTargetView.targetTask`): a task and its run session are one target.
    */
   private async watching(ownerId: string, sessionIds: string[]): Promise<Map<string, LinkPreviewWatching>> {
     const watches = await this.prisma.watch.findMany({
@@ -198,6 +201,22 @@ export class LinkPreviewsService {
         targets: { where: { state: { not: 'GONE' } }, select: { targetKind: true, targetResourceId: true } },
       },
     });
+    const watchedSessionIds = [
+      ...new Set(
+        watches
+          .filter((watch) => watch.state === 'ACTIVE')
+          .flatMap((watch) => watch.targets.filter((target) => target.targetKind === 'SESSION'))
+          .map((target) => target.targetResourceId),
+      ),
+    ];
+    // The session and its task both this owner's: the watch read names a task only when it can read both.
+    const runs = watchedSessionIds.length === 0
+      ? []
+      : await this.prisma.session.findMany({
+          where: { id: { in: watchedSessionIds }, ownerId, task: { ownerId } },
+          select: { id: true, taskId: true },
+        });
+    const runTask = new Map(runs.map((run) => [run.id, run.taskId]));
     const bySession = new Map<string, { active: number; paused: number; targets: Set<string> }>();
     for (const watch of watches) {
       if (!watch.observerSessionId) continue;
@@ -205,7 +224,10 @@ export class LinkPreviewsService {
       bySession.set(watch.observerSessionId, entry);
       if (watch.state === 'ACTIVE') {
         entry.active += 1;
-        for (const target of watch.targets) entry.targets.add(`${target.targetKind}:${target.targetResourceId}`);
+        for (const target of watch.targets) {
+          const task = target.targetKind === 'SESSION' ? runTask.get(target.targetResourceId) : undefined;
+          entry.targets.add(task ? `TASK:${task}` : `${target.targetKind}:${target.targetResourceId}`);
+        }
       } else {
         entry.paused += 1;
       }

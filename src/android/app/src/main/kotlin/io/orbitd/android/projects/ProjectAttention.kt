@@ -1,6 +1,9 @@
 package io.orbitd.android.projects
 
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.DirectorySession
+import io.orbitd.android.directory.SessionProjectGrouping
+import io.orbitd.android.directory.isRunning
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
@@ -28,6 +31,21 @@ enum class AttentionReason(val rank: Int, val ownerItem: Boolean = false) {
 /** The chip beside a row's title: `warning` is something a person should look at, else the brand tone. */
 data class AttentionChip(val warning: Boolean, val text: String)
 data class IntegrationChip(val text: String, val branch: Boolean)
+
+/** OrbitKit `ProjectDrawerMark`: how a project reads as one line of the navigation drawer. */
+sealed interface DrawerMark {
+    /** Something is waiting on the reader, with how many things wait ([ProjectAttention.needsYouItemCount]): the row's amber count. */
+    data class NeedsYou(val count: Int) : DrawerMark
+    /** Tasks are running, its coordinator is working, or a landing is in flight. */
+    data object Running : DrawerMark
+    data object Idle : DrawerMark
+}
+
+/** OrbitKit `ProjectCoordinatorPulse`: what the live session list says about a project's coordinator conversation — whether it draws
+ * the list's running spinner, and its newest turn, activity the project's own task stamps do not record. The drawer's project rows
+ * are fetched, but a coordinator's turns arrive with the session list: read beside the row, they make a project whose coordinator is
+ * working read as running, and sort where the work is, as soon as the session list shows it rather than at the next fetch. */
+data class CoordinatorPulse(val working: Boolean, val lastTurnAt: String?)
 
 /** A port of OrbitKit `ProjectAttention` over the `GET /projects` rows: a row first answers whether
  * something requires a person, then whether work is running; raw `ready` counts never rank projects. */
@@ -132,15 +150,94 @@ object ProjectAttention {
         else -> null
     }
 
+    // The drawer (OrbitKit `ProjectAttention`, `MARK: the drawer`).
+
+    /** The four owner items this project is waiting on the reader for, of the kinds this build names. */
+    private fun waitingOwnerItems(project: JsonObject): List<JsonObject> {
+        if (!open(project)) return emptyList()
+        return project.obj("attention")?.objects("ownerItems").orEmpty().filter { it.text("kind") in ownerItemOrder && (it.number("count") ?: 0) > 0 }
+    }
+    /** The coordinator's request to start this project, while it is open and waiting on the reader. */
+    private fun waitingStartRequest(project: JsonObject) = if (open(project)) startRequest(project) else null
+    /** The coordinator's request to record this project done, while it is open and waiting on the reader. */
+    private fun waitingDoneRequest(project: JsonObject) = if (open(project)) doneRequest(project) else null
+
     /** How many things wait on the reader in this project — a merge to approve, a question, an escalation, a pause, and a coordinator
      * asking to start it or to record it done — together: the drawer row's amber count (`ProjectAttention.needsYouItemCount`, web's
      * `projectNeedsYouCount`). An owner item of a kind this build does not name counts nothing, and a closed project asks nothing,
      * whatever it still carries. */
-    fun needsYouItemCount(project: JsonObject): Int {
-        if (!open(project)) return 0
-        val items = project.obj("attention")?.objects("ownerItems").orEmpty().filter { it.text("kind") in ownerItemOrder }
-        return items.sumOf { maxOf(0, it.number("count") ?: 0) } + (if (startRequest(project) != null) 1 else 0) +
-            (if (doneRequest(project) != null) 1 else 0)
+    fun needsYouItemCount(project: JsonObject): Int =
+        waitingOwnerItems(project).sumOf { it.number("count") ?: 0 } + (if (waitingStartRequest(project) != null) 1 else 0) +
+            (if (waitingDoneRequest(project) != null) 1 else 0)
+
+    /** Whether anything is waiting on the reader in this project: one of the four owner items, or its coordinator asking to start it
+     * or to record it done. */
+    fun needsYou(project: JsonObject) = needsYouItemCount(project) > 0
+
+    /** When the reader was first asked — the oldest of the things waiting on them. */
+    private fun oldestWait(project: JsonObject): String? {
+        var oldest = waitingStartRequest(project)?.text("waitingSince")
+        val done = waitingDoneRequest(project)?.text("waitingSince")
+        if (done != null && (oldest == null || byInstantAsc(done, oldest) < 0)) oldest = done
+        for (item in waitingOwnerItems(project)) {
+            if (oldest == null || byInstantAsc(item.text("oldestWaitingSince"), oldest) < 0) oldest = item.text("oldestWaitingSince")
+        }
+        return oldest
+    }
+
+    /** How many projects have something waiting on the reader in person — the drawer's Projects row's count. Deliberately not the
+     * Needs attention lane's size: a project that merely went quiet is not something the reader was asked for. */
+    fun needsYouCount(all: List<JsonObject>) = all.count(::needsYou)
+
+    /** A drawer row's mark: how many things wait on the reader; else running while tasks run, its coordinator works — as the live
+     * session list says ([coordinator]) when it has the conversation, else as the row's own `coordinatorActivity` says — or a landing
+     * is in flight; else idle. */
+    fun drawerMark(project: JsonObject, coordinator: CoordinatorPulse? = null): DrawerMark {
+        val waiting = needsYouItemCount(project)
+        if (waiting > 0) return DrawerMark.NeedsYou(waiting)
+        val working = if (coordinator != null) coordinator.working else project.obj("coordinatorActivity")?.flag("working") == true
+        if (count(project, "running") > 0 || working || (project.obj("integration")?.number("activeJobCount") ?: 0) > 0) return DrawerMark.Running
+        return DrawerMark.Idle
+    }
+
+    /** The coordinator conversations in a live session list, by [SessionProjectGrouping.key] of the project each coordinates. The
+     * running test is the session list's own spinner ([isRunning]), so the two marks cannot disagree about one conversation. */
+    fun coordinatorPulses(sessions: List<DirectorySession>): Map<String, CoordinatorPulse> {
+        val pulses = mutableMapOf<String, CoordinatorPulse>()
+        for (session in sessions) {
+            val projectId = session.projectMembership?.takeIf { it.isCoordinator }?.projectId ?: continue
+            val key = SessionProjectGrouping.key(projectId)
+            val seen = pulses[key]
+            val newest = if (at(session.lastTurnAt) > at(seen?.lastTurnAt)) session.lastTurnAt else seen?.lastTurnAt
+            pulses[key] = CoordinatorPulse(session.isRunning() || seen?.working == true, newest)
+        }
+        return pulses
+    }
+
+    /** A project's newest activity: its latest task write, or its coordinator's latest turn when that is newer. */
+    private fun latestActivity(project: JsonObject, coordinators: Map<String, CoordinatorPulse>): String? {
+        val pulse = project.text("id")?.let { coordinators[SessionProjectGrouping.key(it)] }
+        val turn = if (pulse != null) pulse.lastTurnAt else project.obj("coordinatorActivity")?.text("lastTurnAt")
+        return if (at(turn) > at(project.text("lastActivityAt"))) turn else project.text("lastActivityAt")
+    }
+
+    /** The drawer's project rows: open projects only, the ones waiting on the reader first (longest wait first), then by most recent
+     * activity — a task write or a coordinator turn, whichever is newer — then the newest created. */
+    fun drawerProjects(all: List<JsonObject>, coordinators: Map<String, CoordinatorPulse> = emptyMap()): List<JsonObject> =
+        all.filter(::open).sortedWith { a, b -> drawerOrder(a, b, coordinators) }
+
+    private fun drawerOrder(a: JsonObject, b: JsonObject, coordinators: Map<String, CoordinatorPulse>): Int {
+        val aNeeds = needsYou(a); val bNeeds = needsYou(b)
+        if (aNeeds != bNeeds) return if (aNeeds) -1 else 1
+        if (aNeeds) {
+            val byWait = byInstantAsc(oldestWait(a), oldestWait(b))
+            if (byWait != 0) return byWait
+        }
+        val byActivity = byInstantDesc(latestActivity(a, coordinators), latestActivity(b, coordinators))
+        if (byActivity != 0) return byActivity
+        val byCreated = byInstantDesc(a.text("createdAt"), b.text("createdAt"))
+        if (byCreated != 0) return byCreated
+        return byId(a, b)
     }
 
     /** Why an OPEN project needs a visible signal (`ProjectAttention.reason(of:now:)`). */

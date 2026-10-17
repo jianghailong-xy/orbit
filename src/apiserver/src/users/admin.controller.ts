@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
@@ -73,7 +74,9 @@ export class AdminController {
 
   /**
    * Every account, oldest first, each with how it signs in, when it was disabled, null while it is
-   * not (docs/google-sign-in-design.md §6), and when it last used Orbit (`lastActiveOf`).
+   * not (docs/google-sign-in-design.md §6), when it last used Orbit (`lastActiveOf`), and when its
+   * profile photo was set — the version the list fetches it by (`users/:id/avatar`), null while it
+   * has none, as on `me`.
    */
   @Get('users')
   async listUsers() {
@@ -85,17 +88,34 @@ export class AdminController {
         role: true,
         createdAt: true,
         disabledAt: true,
+        avatar: { select: { updatedAt: true } },
         ...SIGN_IN_METHODS_SELECT,
         clientVersions: { select: { kind: true, lastSeenAt: true } },
         personalAccessTokens: { where: { lastUsedAt: { not: null } }, orderBy: { lastUsedAt: 'desc' }, take: 1, select: { lastUsedAt: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
-    return users.map(({ passwordHash, identities, clientVersions, personalAccessTokens, ...user }) => ({
+    return users.map(({ avatar, passwordHash, identities, clientVersions, personalAccessTokens, ...user }) => ({
       ...user,
+      avatarUpdatedAt: avatar?.updatedAt ?? null,
       signInMethods: signInMethodsOf({ passwordHash, identities }),
       lastActive: lastActiveOf(clientVersions, personalAccessTokens),
     }));
+  }
+
+  /**
+   * An account's profile photo, as its bytes: what the list draws in the account's avatar, fetched by
+   * the `avatarUpdatedAt` its row answers — with the administrator's token, as `users/me/avatar` is
+   * with the account's own. 404 while the account has none.
+   */
+  @Get('users/:id/avatar')
+  async userAvatar(@Param('id', PublicIdPipe) id: string): Promise<StreamableFile> {
+    const photo = await this.prisma.userAvatar.findUnique({
+      where: { userId: id },
+      select: { mimeType: true, data: true },
+    });
+    if (!photo) throw new NotFoundException('no profile photo');
+    return new StreamableFile(photo.data, { type: photo.mimeType, disposition: 'inline', length: photo.data.length });
   }
 
   /** Create a user, or reset an existing one's password (force). Returns the generated

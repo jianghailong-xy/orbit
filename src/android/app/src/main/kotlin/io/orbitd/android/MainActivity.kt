@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -35,6 +36,7 @@ import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
 import io.orbitd.android.tasks.TasksScreen
+import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
@@ -181,11 +183,16 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         LaunchedEffect(route, signedIn.handle, live.first) {
             if (live.first === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
+        // iOS `NavigationDrawer(live: progress > 0)`: the drawer's animated marks move only while any of it is on screen. The closed
+        // drawer stays composed, one sheet's width off screen (Material's closed anchor), where a spinner would redraw every frame.
+        var sheetWidth by remember { mutableIntStateOf(0) }
+        val drawerLive by remember { derivedStateOf { sheetWidth > 0 && drawer.currentOffset > -sheetWidth } }
         ModalNavigationDrawer(drawerState = drawer,
             drawerContent = {
-                ModalDrawerSheet(drawerContainerColor = LocalOrbitColors.current.drawer,
+                ModalDrawerSheet(modifier = Modifier.onSizeChanged { sheetWidth = it.width }, drawerContainerColor = LocalOrbitColors.current.drawer,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface) {
                     Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
+                        val projects = rememberDrawerProjects(api, revision)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Orbit", style = MaterialTheme.typography.headlineMedium)
                             IconButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SEARCH, origin = Origin.DRAWER)) }) {
@@ -201,7 +208,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                         if (dest == Destination.WIKI && navigation.section != name) wikiEntered(app, signedIn.handle, navigation)
                                         select(name, OrbitRoute(dest, origin = Origin.DRAWER))
                                     },
-                                    badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle) }) else null)
+                                    badge = when (dest) {
+                                        Destination.WIKI -> ({ WikiDrawerCount(app, signedIn.handle) })
+                                        Destination.PROJECTS -> ({ ProjectsDrawerCount(projects) })
+                                        else -> null
+                                    })
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
@@ -222,7 +233,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
                         // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
-                        DrawerProjects(api, revision, navigation.section, root = { id ->
+                        DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
+                            navigation.section, root = { id ->
                             val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
                                 it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
                             }
