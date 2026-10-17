@@ -273,7 +273,7 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 	}
 
 	// On the wire: Default's windows where every reader has always found them, Work's under its id.
-	wire, err := json.Marshal(HeartbeatRequest{PlanUsage: combinePlanUsage(nil, got)})
+	wire, err := json.Marshal(HeartbeatRequest{PlanUsage: combinePlanUsage(nil, got, nil)})
 	if err != nil {
 		t.Fatal(err)
 	}

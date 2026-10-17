@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, decliningPrefix } from './ApprovalPanel';
@@ -26,6 +25,26 @@ vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null,
   saveTranscript: async () => {},
 }));
+// A batch card's picture is the project page's own canvas (React Flow and all), which jsdom cannot
+// lay out — so the canvas is a stub here. What it records is the two things the card is responsible
+// for: WHICH marks the canvas was handed, and whether anything reached for the canvas at all. The
+// card fetches it through a `lazy()` boundary, so a card nobody has rendered must not import it.
+const canvas = vi.hoisted(() => ({
+  imported: false,
+  marks: [] as Array<{ title: string; workState?: string }>,
+}));
+vi.mock('./ProjectDependencyGraph', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./ProjectDependencyGraph')>();
+  const { createElement } = await import('react');
+  canvas.imported = true;
+  return {
+    ...actual,
+    ProjectDependencyGraph: ({ data }: { data: { marks: Array<{ title: string; workState?: string }> } }) => {
+      canvas.marks = data.marks;
+      return createElement('div', { 'data-testid': 'project-canvas' });
+    },
+  };
+});
 
 const { api, getSessionEventPage, listApprovals } = await import('../api');
 const apiMock = vi.mocked(api);
@@ -219,6 +238,69 @@ describe('provider write approval', () => {
   });
 });
 
+describe('merge-check skip approval', () => {
+  const skip = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 's1',
+      toolName: 'orbit_integration_skip_merge_check',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        taskId: 't1',
+        taskTitle: 'Port the payment form',
+        checkCommand: 'npm test && go test ./...',
+        failure: 'Checks failed on the combined tree: the merge check exited 1 (expected 0)',
+        generation: '1',
+        reason: '本机 bash 3.2 没有 mapfile，也没有 GNU `timeout`，这条命令在这里必红。',
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('leads with the command that would not run, then the agent\'s claim about it', () => {
+    const html = render(skip());
+
+    expect(html).toContain('Confirm: land Port the payment form without the merge check?');
+    expect(html).toContain('In Checkout rewrite');
+    // The command itself, verbatim: the decision is whether THAT command should hold up THAT
+    // landing, and a card that paraphrased it would be asking about something nobody can see.
+    expect(html).toContain('npm test &amp;&amp; go test ./...');
+    // What it said last time, and that it did not run this time.
+    expect(html).toContain('the merge check exited 1 (expected 0)');
+    expect(html).toContain('This landing runs without the merge check');
+    // The agent's reason is marked as the agent's, because it is a claim being judged.
+    expect(html).toContain('The agent says this red is the check');
+    expect(html).toContain('GNU');
+    expect(html).toContain('Land it without the check');
+    // Once, said on the card: a skip is not the project's check being turned off.
+    expect(html).toContain('Once, and only this landing');
+    // Declining is "not this, and here is what instead", as it is on Orbit's other asks.
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_integration_skip_merge_check');
+  });
+
+  it('offers no standing yes', () => {
+    // "Always let this conversation land past the check" is every later landing unchecked, which is
+    // the project's setting — not a rule one card may leave behind.
+    expect(render(skip())).not.toContain('Always allow');
+  });
+
+  it('says what is not being skipped when it is declined', () => {
+    expect(decliningPrefix('orbit_integration_skip_merge_check')).toBe('Checking it after all: ');
+  });
+
+  it('says every merge into the project’s main branch is still checked, main as before', () => {
+    const note = (html: string) => /<p class="create-criteria-note">([\s\S]*?)<\/p>/.exec(html)?.[1];
+    const said = (main: string) => 'Once, and only this landing: the project’s check command is unchanged, '
+      + `and the next landing and every merge into ${main} are checked as before.`;
+    expect(note(render(skip({ input: { mainBranch: 'master' } })))).toBe(said('master'));
+    // Main by name, no repository bound (null) and a runner that predates the field (absent).
+    for (const input of [{ mainBranch: 'main' }, { mainBranch: null }, {}]) {
+      expect(note(render(skip({ input }))), JSON.stringify(input)).toBe(said('main'));
+    }
+  });
+});
+
 describe('blocker resolution approval', () => {
   const resolve = (over: Record<string, unknown> = {}): ApprovalInfo =>
     ({
@@ -285,6 +367,65 @@ describe('blocker resolution approval', () => {
   });
 });
 
+describe('merge check change approval', () => {
+  const change = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 'mc1',
+      toolName: 'orbit_project_update_integration',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        currentMergeCheckCommand: 'npm run lint',
+        currentMergeCheckTimeoutSeconds: 600,
+        mergeCheckCommand: 'npm test',
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('shows the check as it stands beside the check being asked for', () => {
+    const html = render(change());
+
+    expect(html).toContain('Confirm: change the merge check of Checkout rewrite?');
+    // Both commands, because their difference is the whole decision. The CURRENT one is the fact
+    // the agent's proposal is checked against, so a card with only the new command would be asking
+    // the owner to take the agent's word for what is being replaced.
+    expect(html).toContain('npm run lint');
+    expect(html).toContain('npm test');
+    expect(html).toContain('Change the check');
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_project_update_integration');
+  });
+
+  it('says in words when the check is being removed', () => {
+    // An empty line under "after" reads as a card that failed to load rather than as "no check".
+    const html = render(change({ input: { mergeCheckCommand: null } }));
+
+    expect(html).toContain('no check — nothing runs on the combined tree');
+    expect(html).toContain('no check configured');
+  });
+
+  it('names the budget only when the proposal named one', () => {
+    // Absent means "leave the budget as it is", which is not the same as "no budget" — a card that
+    // printed a zero would be describing a write nobody proposed.
+    expect(render(change())).not.toContain('killed after');
+    expect(render(change({
+      input: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 900 },
+    }))).toContain('killed after 900s');
+  });
+
+  it('offers no standing yes', () => {
+    // Every one of these is a different change to a different project, and "always allow" would
+    // turn the owner's answer to this one into a permission for the next.
+    expect(render(change())).not.toContain('Always allow');
+  });
+
+  it('says what is being left alone when it is declined', () => {
+    expect(decliningPrefix('orbit_project_update_integration'))
+      .toBe('Leaving the check as it is: ');
+  });
+});
+
 describe('batch create approval', () => {
   it('leads with how many actually start, not how many are written', () => {
     // Fifty tasks that wait on each other cost two runs; fifty independent ones cost fifty. The
@@ -330,7 +471,7 @@ describe('batch create approval', () => {
     expect(html).toContain('+39 more');
   });
 
-  it('draws the shape when the batch has one, and names it', () => {
+  it('names the shape the batch will have', () => {
     const html = render(
       batchApproval({
         taskCount: 3,
@@ -345,12 +486,13 @@ describe('batch create approval', () => {
       }),
     );
 
-    expect(html).toContain('<svg');
     expect(html).toContain('2 in parallel after 1');
   });
 
-  it('keeps the list when there is no shape to draw', () => {
+  it('draws none of its own picture: the titles stand until the canvas resolves', () => {
     // Unrelated tasks have no structure; a row of disconnected boxes is a worse list than a list.
+    // The picture itself is the project page's canvas, and a server render never resolves the
+    // `lazy()` import that reaches it — so what is on the card here is the list it hands over.
     const html = render(
       batchApproval({ taskCount: 2, startingNow: 0, tasks: [{ title: 'a' }, { title: 'b' }] }),
     );
@@ -360,11 +502,90 @@ describe('batch create approval', () => {
     expect(html).toContain('a</span>');
   });
 
+  // The picture is fetched behind a `lazy()` boundary and is React Flow, so it only appears in a
+  // real DOM — the rest of this file renders through `react-dom/server`, which never resolves a
+  // `lazy()` import at all.
+  describe('the batch card\'s picture', () => {
+    let mounted: Root | null = null;
+    let host: HTMLDivElement | null = null;
+    let width: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      vi.stubGlobal('ResizeObserver', class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      });
+      // jsdom lays nothing out: a card's width in the conversation is the test's to give.
+      width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(600);
+      host = document.createElement('div');
+      document.body.append(host);
+      mounted = createRoot(host);
+    });
+
+    afterEach(async () => {
+      const root = mounted;
+      mounted = null;
+      if (root) await act(async () => root.unmount());
+      width?.mockRestore();
+      host?.remove();
+      host = null;
+      vi.unstubAllGlobals();
+    });
+
+    const fanOut = (): ApprovalInfo =>
+      batchApproval({
+        taskCount: 3,
+        startingNow: 0,
+        needsManualStart: 1,
+        blocked: 2,
+        tasks: [
+          { title: 'root', ref: 'r' },
+          { title: 'left', ref: 'l', dependsOnRefs: ['r'] },
+          { title: 'right', ref: 'x', dependsOnRefs: ['r'] },
+        ],
+      });
+
+    it('does not reach for the canvas for a card that draws no plan', async () => {
+      // The plan canvas is React Flow and dagre, behind a `lazy()` boundary: a card that is not a
+      // batch — here a restructure — must not be what fetches it.
+      await act(async () => {
+        mounted!.render(<ApprovalPanel approval={dagApproval()} onDecide={() => {}} />);
+      });
+
+      expect(canvas.imported, 'a card with no plan to draw loaded the project canvas').toBe(false);
+    });
+
+    it('draws the plan on the project page\'s own canvas, marked what the batch will be', async () => {
+      await act(async () => {
+        mounted!.render(<ApprovalPanel approval={fanOut()} onDecide={() => {}} />);
+      });
+      // Waited out in act slices, not one act: the picture arrives through a `lazy()` import that
+      // resolves on its own schedule, and React queues every render scheduled inside an in-flight
+      // act callback until that callback settles. In slices the card can draw inside the wait.
+      for (let attempt = 0; attempt < 20 && !host!.querySelector('[data-testid="project-canvas"]'); attempt += 1) {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      }
+      expect(host!.querySelector('[data-testid="project-canvas"]')).not.toBeNull();
+      expect(canvas.marks.map((mark) => `${mark.title}:${mark.workState}`)).toEqual([
+        'root:READY',
+        'left:BLOCKED',
+        'right:BLOCKED',
+      ]);
+      // The picture replaces the list: the titles are what it hands over, not what it draws twice.
+      expect(host!.querySelector('.dag-approval-ops')).toBeNull();
+    });
+  });
+
   it('offers no "always allow" — a standing yes to creating tasks is a blank cheque', () => {
     const html = render(batchApproval({ taskCount: 2, startingNow: 2 }));
 
     expect(html).not.toContain('Always allow');
-    expect(html).toContain('Create them');
+    // The count it is agreeing to, the way the native card says it.
+    expect(html).toContain('Create 2 tasks');
     // Not creating them is not a verdict typed into the void: it is the question card's own
     // control, and the reason rides back with it (`decliningPrefix`).
     expect(html).toContain('Chat about this');
@@ -740,9 +961,7 @@ describe('one waiting completion decision on the session page', () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_ID}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -800,3 +1019,6 @@ describe('one waiting completion decision on the session page', () => {
     expect(scrolled).toEqual([page.querySelector('.evidence-decision')]);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

@@ -1,0 +1,106 @@
+HEAD 12fdef2f731f6e9c9440807f1c23bdcbac583823
+origin/main 945098b1188ab63dd7a0bb72078f4052b8c5b671 (2026-10-09T09:08:15+08:00)
+merge-base f1837de8e3b8c2a3e1d4096709b49d8cf27b6ac6
+
+== git merge-tree --write-tree --name-only HEAD origin/main
+256c196f5f7b9ea4939571065adb40382dc99609
+exit=0
+
+== files main changed since the merge base (git diff --stat merge-base origin/main)
+ .../coordinator-question-answered/1-today.png      | Bin 0 -> 793028 bytes
+ .../coordinator-question-answered/2-proposal.png   | Bin 0 -> 1128340 bytes
+ .../3-other-endings.png                            | Bin 0 -> 696172 bytes
+ .../coordinator-question-answered/4-decide.png     | Bin 0 -> 473614 bytes
+ .../coordinator-question-answered/5-landing.png    | Bin 0 -> 599885 bytes
+ .../mocks/coordinator-question-answered/board.html | 647 +++++++++++++++++++++
+ .../phone-new-sheet-note.png                       | Bin 0 -> 188718 bytes
+ .../phone-new-sheet.png                            | Bin 0 -> 235130 bytes
+ .../coordinator-question-answered/phone-new.png    | Bin 0 -> 220985 bytes
+ .../phone-today-sheet.png                          | Bin 0 -> 52786 bytes
+ .../coordinator-question-answered/phone-today.png  | Bin 0 -> 179367 bytes
+ docs/mocks/start-card-web-width/01-board.html      | 172 ++++++
+ docs/mocks/start-card-web-width/01-board.png       | Bin 0 -> 4929680 bytes
+ docs/mocks/start-card-web-width/01a-today.png      | Bin 0 -> 357391 bytes
+ docs/mocks/start-card-web-width/01b-proposal.png   | Bin 0 -> 329740 bytes
+ .../start-card-web-width/01c-proposal-card.png     | Bin 0 -> 629787 bytes
+ docs/mocks/start-card-web-width/01d-long-why.png   | Bin 0 -> 110389 bytes
+ .../start-card-web-width/01e-long-why-open.png     | Bin 0 -> 195425 bytes
+ .../start-card-web-width/01f-short-criteria.png    | Bin 0 -> 101798 bytes
+ .../mocks/start-card-web-width/01g-window-1280.png | Bin 0 -> 404629 bytes
+ docs/mocks/start-card-web-width/01h-width-640.png  | Bin 0 -> 365520 bytes
+ docs/mocks/start-card-web-width/01h-width-720.png  | Bin 0 -> 393725 bytes
+ docs/mocks/start-card-web-width/01h-width-880.png  | Bin 0 -> 420639 bytes
+ docs/mocks/start-card-web-width/02-plan-graph.html | 136 +++++
+ docs/mocks/start-card-web-width/02-plan-graph.png  | Bin 0 -> 1588164 bytes
+ docs/mocks/start-card-web-width/02a-plan-list.png  | Bin 0 -> 69122 bytes
+ docs/mocks/start-card-web-width/02b-plan-graph.png | Bin 0 -> 135732 bytes
+ .../start-card-web-width/02c-plan-list-link.png    | Bin 0 -> 71453 bytes
+ .../mocks/start-card-web-width/02d-full-screen.png | Bin 0 -> 73333 bytes
+ .../start-card-web-width/02e-plan-graph-lr.png     | Bin 0 -> 83313 bytes
+ .../02f-plan-graph-lr-wide.png                     | Bin 0 -> 158824 bytes
+ .../io/orbitd/android/DirectoryReviewTest.kt       |   2 +-
+ .../kotlin/io/orbitd/android/MainActivityTest.kt   |  18 +-
+ .../io/orbitd/android/auth/GoogleSignInFlowTest.kt |  18 +-
+ .../android/composer/AttachmentImportReviewTest.kt |   4 +-
+ .../android/management/ManagementPanelTest.kt      |  20 +-
+ .../android/management/ManagementShellTest.kt      |  39 +-
+ .../android/management/RunnerEnginePageTest.kt     |  18 +-
+ .../android/realtime/RealtimeLifecycleTest.kt      |   8 +-
+ .../io/orbitd/android/update/UpdateUiTest.kt       |   6 +-
+ .../orbitd/android/watch/WatchDestinationTest.kt   |  14 +-
+ .../io/orbitd/android/watch/WatchScreensTest.kt    |  12 +-
+ .../orbitd/android/wiki/WikiIncrementShellTest.kt  |   6 +-
+ .../io/orbitd/android/wiki/WikiPlanEditDragTest.kt |   4 +-
+ .../io/orbitd/android/wiki/WikiScreensTest.kt      |  22 +-
+ .../android/wiki/WikiServerExecutionShotsTest.kt   |   6 +-
+ .../kotlin/io/orbitd/android/wiki/WikiShellTest.kt |  37 +-
+ .../io/orbitd/android/wiki/WikiStoreHttpTest.kt    |   2 +-
+ .../orbitd/android/wiki/WikiTalkBackWordsTest.kt   |   8 +-
+ .../io/orbitd/android/wiki/WikiWritesTest.kt       |  11 +-
+ .../orbitd/android/core/net/HttpTransportTest.kt   |   6 +-
+ .../android/core/realtime/EventTransportTest.kt    |  18 +-
+ .../Sources/OrbitApp/Views/ApprovalCards.swift     | 182 ++++--
+ .../Sources/OrbitApp/Views/ProjectGraphView.swift  |   5 +-
+ .../Sources/OrbitApp/Views/ProjectsView.swift      |   3 +-
+ .../OrbitApp/Views/SessionProjectPage.swift        |   3 +-
+ .../Sources/OrbitKit/App/StartProject.swift        |  23 +
+ .../StartProjectCardCopyParityTests.swift          |   1 +
+ .../Tests/OrbitKitTests/StartProjectTests.swift    |  23 +
+ .../OrbitKitTests/StartProjectWiringTests.swift    |  11 +
+ .../src/components/ProjectDependencyGraph.test.tsx |  62 ++
+ src/web/src/components/ProjectDependencyGraph.tsx  | 175 ++++--
+ .../components/RunnerEngines.kimiAccounts.test.tsx |   8 +
+ src/web/src/components/RunnerEngines.tsx           |   4 +-
+ src/web/src/components/StartPlanGraph.tsx          |  65 +++
+ src/web/src/components/StartProjectCard.test.tsx   | 168 +++++-
+ src/web/src/components/StartProjectCard.tsx        | 182 ++++--
+ src/web/src/index.css                              |  16 +-
+ src/web/src/lib/projectStart.ts                    |   2 +
+ 69 files changed, 1882 insertions(+), 285 deletions(-)
+
+== overlap with this branch's files (merge-base..HEAD)
+src/web/src/components/RunnerEngines.kimiAccounts.test.tsx
+src/web/src/components/RunnerEngines.tsx
+(end of overlap)
+
+== main's src/web/src/index.css hunks (merge-base..origin/main)
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -10458,12 +10458,26 @@ button.chat-jump-start:hover {
+-   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07). */
++   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07); its width,
++   its toggles and the plan as a graph: docs/mocks/start-card-web-width (approved 2026-10-09). */
++/* In a conversation as wide as the window, the card keeps the width it was drawn for: a form whose
++   settings sit beside their names, and criteria a reader can follow from line to line. Narrower
++   conversations, the project page's dialog and the phone's sheet are under the cap already. */
++.start-card {
++  max-width: 720px;
++}
++/* The plan as the project page's task graph (`StartPlanGraph`), drawn only while it fits. */
++.start-card-graph {
++  margin: 2px 0 6px;
++}
++.start-card-graph-link {
++  margin-left: 14px;
++}
+lines naming menu/dropdown/orbit-floating/popup in that diff: 0

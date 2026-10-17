@@ -75,6 +75,31 @@ final class ProjectPageSectionsTests: XCTestCase {
         XCTAssertEqual(ProjectPage.blockerHeadline(scope).tag, "Needs your approval")
     }
 
+    /// §10.3's one kind for eight codes: the kind is the routing word ("someone has to change
+    /// configuration or land something first"), so the headline is the refused run's own, and the
+    /// row names the code, the ref and the tasks whose runs are refused while it stands.
+    func testASourceUnresolvedBlockerNamesTheRefusalAndWhoseRunsItRefuses() {
+        let blocker = ProjectBlocker(id: "b", kind: "SOURCE_UNRESOLVED", owner: "USER",
+                                     detail: .init(code: "BASE_REF_NOT_FOUND", fixAction: "FIX_REF",
+                                                   ref: "refs/heads/project/34bZ3i4AvgJaaow5E9tH",
+                                                   taskIds: ["t1", "t2"]))
+        let headline = ProjectPage.blockerHeadline(blocker)
+        XCTAssertEqual(headline.tag, "Needs you")
+        XCTAssertEqual(headline.tone, .warning)
+        XCTAssertEqual(headline.title, "Its baseline is a branch that doesn't exist yet")
+        XCTAssertEqual(SessionRunStart.refusalProse("FIX_REF").why, headline.title)
+
+        let named = [blocker.detail.taskIds[0]: "Wire the drain watchdog"]
+        XCTAssertEqual(ProjectPage.blockerSourceLines(blocker) { named[$0] },
+                       ["BASE_REF_NOT_FOUND · refs/heads/project/34bZ3i4AvgJaaow5E9tH",
+                        "Wire the drain watchdog",
+                        "t2"])
+        XCTAssertEqual(ProjectPage.blockerSourceLines(blocker), ["BASE_REF_NOT_FOUND · refs/heads/project/34bZ3i4AvgJaaow5E9tH",
+                                                                 "t1", "t2"])
+        // Every other kind draws its own subject and paths instead.
+        XCTAssertEqual(ProjectPage.blockerSourceLines(whoNotInTeam), [])
+    }
+
     func testABlockerSaysWhatWorkItIsAboutAndItsFilesInOneLine() {
         XCTAssertEqual(ProjectPage.blockerSubjectLine(whoNotInTeam), "合并 TasksView 的两个独立轮询循环")
         let moved = ProjectBlocker(id: "b", kind: "K", subjectTitle: "Task", criterionOrdinal: 3, criterionRevision: 2,

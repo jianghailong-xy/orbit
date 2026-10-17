@@ -28,7 +28,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { encryptSecret } from '../providers/provider-crypto';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { ANTIGRAVITY_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
+import { ANTIGRAVITY_RUNNER_UPGRADE_ERROR, PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -166,10 +166,12 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
     assert.equal(mine.agent.env?.GEMINI_API_KEY, key);
   });
 
-  await t.test('(5) a switched-off Gemini row dispatches as Claude, so it is not held back', async () => {
+  await t.test('(5) a switched-off Gemini row is unavailable instead of dispatching as Claude', async () => {
     const disabled = await queuedSession(await geminiProvider(`AIza-${randomUUID()}`, false));
     const claimed = await queue.claimSessionForRunner({ id: runnerId, supportedProviders: LEGACY }, 0, false, false);
-    assert.equal(claimed?.sessionId, disabled);
-    assert.equal(claimed?.provider, AgentProvider.CLAUDE);
+    assert.equal(claimed, null);
+    assert.deepEqual(await row(disabled), { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR });
+    const reclaimed = await runnerApi.reclaim(runner, undefined, CURRENT.join(','));
+    assert.ok(!reclaimed.sessions.some((session) => session.sessionId === disabled));
   });
 });

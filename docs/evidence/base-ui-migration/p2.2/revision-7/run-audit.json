@@ -1,0 +1,60 @@
+{
+  "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+  "allThreeEnvironmentsByteIdenticalToP0": true,
+  "originalWorkingReportsMovedTo": "/tmp/orbit-p22-r7-native-raw-wi3rli0e",
+  "checks": [
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r7-delivery-build-test.json",
+      "commit": "9ccb09e8661bccaee1779b9eaeb2c7584b47805a",
+      "exitCode": 0,
+      "command": [
+        "bash",
+        "-c",
+        "npm run build -w @orbit/web && npm run test -w @orbit/web"
+      ]
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r7-final-entry-eight.json",
+      "commit": "daae2304a485c77fecf179bb4e6b65552ecd29c9",
+      "exitCode": 0,
+      "command": [
+        "npm",
+        "run",
+        "test:ui-toasts",
+        "-w",
+        "@orbit/web",
+        "--",
+        "--grep",
+        "legacy AntApp confirmation",
+        "--trace=on"
+      ]
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r7-final-entry-finite.json",
+      "commit": "9ccb09e8661bccaee1779b9eaeb2c7584b47805a",
+      "exitCode": 0,
+      "command": [
+        "node",
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "docs/evidence/base-ui-migration/p2.2/revision-7/entry-synchronized.config.mjs",
+        "--repeat-each=5"
+      ]
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r7-original-entry-probe.json",
+      "commit": "ea9191d8165f827c83584087a59f4dfd0cfc2bcd",
+      "exitCode": 0,
+      "command": [
+        "node",
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "docs/evidence/base-ui-migration/p2.2/revision-7/entry-diagnostic.config.mjs",
+        "--project=webkit-dark-desktop",
+        "--repeat-each=5"
+      ]
+    }
+  ]
+}

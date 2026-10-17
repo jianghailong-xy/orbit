@@ -1,0 +1,731 @@
+{
+  "staticPixelPairs": 48,
+  "equalStylePairs": 48,
+  "historicalFilesUnchanged": 7812,
+  "p0Screenshots": 252,
+  "historyPixelPairs": 296,
+  "historyPixelDifferences": [
+    {
+      "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 2016,
+      "bounds": [
+        294,
+        224,
+        358,
+        256
+      ]
+    },
+    {
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 51763,
+      "bounds": [
+        879,
+        271,
+        1280,
+        459
+      ]
+    },
+    {
+      "file": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 12,
+      "bounds": [
+        654,
+        188,
+        657,
+        216
+      ]
+    },
+    {
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 45347,
+      "bounds": [
+        884,
+        276,
+        1280,
+        454
+      ]
+    },
+    {
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 47345,
+      "bounds": [
+        874,
+        138,
+        1272,
+        320
+      ]
+    },
+    {
+      "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 93,
+      "bounds": [
+        24,
+        320,
+        298,
+        392
+      ]
+    },
+    {
+      "file": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 765,
+      "bounds": [
+        32,
+        512,
+        142,
+        544
+      ]
+    },
+    {
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 47077,
+      "bounds": [
+        877,
+        138,
+        1272,
+        317
+      ]
+    },
+    {
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 52993,
+      "bounds": [
+        879,
+        135,
+        1280,
+        323
+      ]
+    },
+    {
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 44621,
+      "bounds": [
+        884,
+        140,
+        1280,
+        318
+      ]
+    },
+    {
+      "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 60,
+      "bounds": [
+        24,
+        320,
+        241,
+        392
+      ]
+    },
+    {
+      "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 865,
+      "bounds": [
+        24,
+        486,
+        142,
+        518
+      ]
+    },
+    {
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 45031,
+      "bounds": [
+        874,
+        274,
+        1272,
+        453
+      ]
+    },
+    {
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 48027,
+      "bounds": [
+        874,
+        274,
+        1272,
+        456
+      ]
+    },
+    {
+      "file": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 2014,
+      "bounds": [
+        760,
+        216,
+        824,
+        248
+      ]
+    }
+  ],
+  "stackPixelDifferences": [
+    {
+      "source": "main",
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 4315,
+      "bounds": [
+        370,
+        105,
+        1280,
+        426
+      ]
+    },
+    {
+      "source": "project",
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 51763,
+      "bounds": [
+        879,
+        271,
+        1280,
+        459
+      ]
+    },
+    {
+      "source": "main",
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 3077,
+      "bounds": [
+        370,
+        105,
+        1276,
+        426
+      ]
+    },
+    {
+      "source": "project",
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 45347,
+      "bounds": [
+        884,
+        276,
+        1280,
+        454
+      ]
+    },
+    {
+      "source": "main",
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 1534,
+      "bounds": [
+        1182,
+        268,
+        1256,
+        290
+      ]
+    },
+    {
+      "source": "project",
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 47345,
+      "bounds": [
+        874,
+        138,
+        1272,
+        320
+      ]
+    },
+    {
+      "source": "main",
+      "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 665,
+      "bounds": [
+        4,
+        199,
+        386,
+        392
+      ]
+    },
+    {
+      "source": "project",
+      "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 78,
+      "bounds": [
+        24,
+        320,
+        241,
+        392
+      ]
+    },
+    {
+      "source": "main",
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 1543,
+      "bounds": [
+        1182,
+        268,
+        1256,
+        290
+      ]
+    },
+    {
+      "source": "project",
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 47077,
+      "bounds": [
+        877,
+        138,
+        1272,
+        317
+      ]
+    },
+    {
+      "source": "main",
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 1987,
+      "bounds": [
+        370,
+        164,
+        1264,
+        352
+      ]
+    },
+    {
+      "source": "project",
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 52993,
+      "bounds": [
+        879,
+        135,
+        1280,
+        323
+      ]
+    },
+    {
+      "source": "main",
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 1992,
+      "bounds": [
+        370,
+        164,
+        1264,
+        352
+      ]
+    },
+    {
+      "source": "project",
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 44621,
+      "bounds": [
+        884,
+        140,
+        1280,
+        318
+      ]
+    },
+    {
+      "source": "main",
+      "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 3396,
+      "bounds": [
+        0,
+        195,
+        390,
+        392
+      ]
+    },
+    {
+      "source": "project",
+      "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 60,
+      "bounds": [
+        24,
+        320,
+        241,
+        392
+      ]
+    },
+    {
+      "source": "main",
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 1830,
+      "bounds": [
+        1169,
+        404,
+        1256,
+        426
+      ]
+    },
+    {
+      "source": "project",
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 45031,
+      "bounds": [
+        874,
+        274,
+        1272,
+        453
+      ]
+    },
+    {
+      "source": "main",
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 1820,
+      "bounds": [
+        1169,
+        404,
+        1256,
+        426
+      ]
+    },
+    {
+      "source": "project",
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 48027,
+      "bounds": [
+        874,
+        274,
+        1272,
+        456
+      ]
+    }
+  ]
+}

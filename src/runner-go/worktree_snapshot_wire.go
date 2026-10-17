@@ -23,18 +23,29 @@ func nonNilFilePatches(patches []FilePatch) []FilePatch {
 
 type turnCompleteRequestJSON TurnCompleteRequest
 
+// A turn whose usage is unknown omits costUsd (the shallower field shadows the embedded one):
+// servers read an absent cost as nothing added, never as a measured $0.
 func (r TurnCompleteRequest) MarshalJSON() ([]byte, error) {
+	var cost *float64
+	if !r.UsageUnknown {
+		cost = &r.CostUsd
+	}
 	if r.BaseSha == "" {
-		return json.Marshal(turnCompleteRequestJSON(r))
+		return json.Marshal(struct {
+			turnCompleteRequestJSON
+			CostUsd *float64 `json:"costUsd,omitempty"`
+		}{turnCompleteRequestJSON: turnCompleteRequestJSON(r), CostUsd: cost})
 	}
 	return json.Marshal(struct {
 		turnCompleteRequestJSON
 		ChangedFiles []ChangedFile `json:"changedFiles"`
 		ChangedDiff  []FilePatch   `json:"changedDiff"`
+		CostUsd      *float64      `json:"costUsd,omitempty"`
 	}{
 		turnCompleteRequestJSON: turnCompleteRequestJSON(r),
 		ChangedFiles:            nonNilChangedFiles(r.ChangedFiles),
 		ChangedDiff:             nonNilFilePatches(r.ChangedDiff),
+		CostUsd:                 cost,
 	})
 }
 

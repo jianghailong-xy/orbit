@@ -1,0 +1,148 @@
+{
+ "tests": [
+  112,
+  112
+ ],
+ "statusDifferences": [],
+ "failures": [
+  [
+   "chromium-dark-desktop",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-share-dialog.png",
+    722,
+    null
+   ],
+   [
+    "task-share-dialog.png",
+    722,
+    null
+   ]
+  ],
+  [
+   "chromium-dark-phone",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-share-dialog.png",
+    722,
+    null
+   ],
+   [
+    "task-share-dialog.png",
+    722,
+    null
+   ]
+  ],
+  [
+   "chromium-light-desktop",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-action-menu.png",
+    326,
+    null
+   ],
+   [
+    "task-action-menu.png",
+    326,
+    null
+   ]
+  ],
+  [
+   "chromium-light-phone",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-action-menu.png",
+    422,
+    null
+   ],
+   [
+    "task-action-menu.png",
+    422,
+    null
+   ]
+  ],
+  [
+   "webkit-dark-desktop",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-share-dialog.png",
+    706,
+    null
+   ],
+   [
+    "task-share-dialog.png",
+    706,
+    null
+   ]
+  ],
+  [
+   "webkit-dark-phone",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-share-dialog.png",
+    706,
+    null
+   ],
+   [
+    "task-share-dialog.png",
+    706,
+    null
+   ]
+  ],
+  [
+   "webkit-light-desktop",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-action-menu.png",
+    330,
+    null
+   ],
+   [
+    "task-action-menu.png",
+    330,
+    null
+   ]
+  ],
+  [
+   "webkit-light-phone",
+   "pages.browser.mjs",
+   "task",
+   [
+    "task-action-menu.png",
+    426,
+    null
+   ],
+   [
+    "task-action-menu.png",
+    426,
+    null
+   ]
+  ]
+ ],
+ "stats": [
+  {
+   "startTime": "2026-10-07T06:05:23.954Z",
+   "duration": 269918.788,
+   "expected": 93,
+   "skipped": 11,
+   "unexpected": 8,
+   "flaky": 0
+  },
+  {
+   "startTime": "2026-10-07T06:10:03.871Z",
+   "duration": 287563.26399999997,
+   "expected": 93,
+   "skipped": 11,
+   "unexpected": 8,
+   "flaky": 0
+  }
+ ],
+ "identical": true
+}

@@ -1,0 +1,50 @@
+== runs/official-toasts-v2-round-1/collected
+  chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers- expected   frames  111 shifted 0
+  chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exi expected   frames  101 shifted 0
+  chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exi expected   frames  113 shifted 0
+  chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-an expected   frames  111 shifted 0
+  chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit  expected   frames   96 shifted 0
+  chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit  expected   frames  113 shifted 0
+  chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers expected   frames  103 shifted 0
+  chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-ex expected   frames   98 shifted 0
+  chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-ex expected   frames  106 shifted 0
+  chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-a expected   frames  111 shifted 0
+  chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit expected   frames   94 shifted 0
+  chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit expected   frames  112 shifted 0
+  webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-an expected   frames  110 shifted 0
+  webkit-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit  expected   frames   91 shifted 0
+  webkit-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit  expected   frames  111 shifted 0
+  webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and- expected   frames  103 shifted 0
+  webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit    expected   frames   84 shifted 0
+  webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit    expected   frames  101 shifted 0
+  webkit-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-a expected   frames   97 shifted 0
+  webkit-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit expected   frames   88 shifted 0
+  webkit-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit expected   frames  101 shifted 0
+  webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and expected   frames  102 shifted 0
+  webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit   expected   frames   91 shifted 0
+  webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit   expected   frames  103 shifted 0
+== runs/official-toasts-v2-round-1/collected
+  entrance chromium-dark-desktop    expected   frames  26 max gap   30ms  first owned frame t=92 opacity=0.803  owned mid-opacity frames 8
+  entrance chromium-dark-phone      expected   frames  25 max gap   30ms  first owned frame t=87 opacity=0.803  owned mid-opacity frames 8
+  entrance chromium-light-desktop   expected   frames  22 max gap   51ms  first owned frame t=113 opacity=0.65  owned mid-opacity frames 8
+  entrance chromium-light-phone     expected   frames  25 max gap   26ms  first owned frame t=80 opacity=0.803  owned mid-opacity frames 8
+  entrance webkit-dark-desktop      expected   frames  22 max gap   51ms  first owned frame t=101 opacity=0.956  owned mid-opacity frames 6
+  entrance webkit-dark-phone        expected   frames  16 max gap   84ms  first owned frame t=139 opacity=0.99  owned mid-opacity frames 2
+  entrance webkit-light-desktop     expected   frames  20 max gap   60ms  first owned frame t=113 opacity=0.971  owned mid-opacity frames 5
+  entrance webkit-light-phone       expected   frames  14 max gap   67ms  first owned frame t=116 opacity=0.974  owned mid-opacity frames 3
+  exit no-preference chromium-dark-desktop    expected   connected frames  15 t=[15, 26, 42, 59, 76, 92, 117, 126, 142, 159, 176, 192, 209, 226, 242] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        chromium-dark-desktop    expected   connected frames  15 t=[8, 25, 41, 58, 74, 91, 116, 126, 141, 158, 174, 191, 208, 224, 242] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference chromium-dark-phone      expected   connected frames  14 t=[6, 34, 43, 56, 82, 117, 126, 139, 156, 173, 189, 206, 222, 239] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        chromium-dark-phone      expected   connected frames  15 t=[24, 34, 50, 66, 85, 106, 116, 133, 153, 167, 183, 204, 216, 233, 250] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference chromium-light-desktop   expected   connected frames  14 t=[3, 21, 35, 51, 72, 90, 130, 148, 159, 170, 185, 202, 220, 242] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        chromium-light-desktop   expected   connected frames  12 t=[3, 21, 44, 58, 73, 86, 159, 175, 192, 204, 218, 238] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference chromium-light-phone     expected   connected frames  16 t=[2, 20, 36, 52, 69, 86, 106, 119, 136, 152, 169, 186, 203, 219, 236, 252] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        chromium-light-phone     expected   connected frames  15 t=[4, 20, 37, 54, 70, 87, 106, 120, 137, 154, 170, 187, 206, 220, 237] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference webkit-dark-desktop      expected   connected frames  15 t=[5, 25, 38, 50, 66, 83, 125, 132, 161, 170, 179, 195, 213, 229, 245] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        webkit-dark-desktop      expected   connected frames  15 t=[11, 27, 43, 59, 75, 91, 127, 139, 155, 171, 187, 203, 219, 235, 252] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference webkit-dark-phone        expected   connected frames   9 t=[16, 32, 48, 64, 80, 125, 130, 206, 247] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        webkit-dark-phone        expected   connected frames  15 t=[4, 18, 34, 50, 66, 82, 127, 131, 147, 163, 179, 195, 211, 227, 243] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference webkit-light-desktop     expected   connected frames   8 t=[9, 27, 40, 56, 72, 88, 150, 169] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        webkit-light-desktop     expected   connected frames  13 t=[19, 27, 43, 59, 76, 92, 169, 176, 192, 204, 220, 236, 252] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit no-preference webkit-light-phone       expected   connected frames  13 t=[5, 18, 34, 52, 66, 82, 124, 131, 172, 207, 211, 227, 243] owners ['base-ui-_r_a_', 'base-ui-_r_d_']
+  exit reduce        webkit-light-phone       expected   connected frames  14 t=[4, 17, 33, 50, 67, 82, 132, 147, 163, 179, 195, 211, 227, 243] owners ['base-ui-_r_a_', 'base-ui-_r_d_']

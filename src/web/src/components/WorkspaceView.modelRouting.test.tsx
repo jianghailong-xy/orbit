@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -12,7 +11,8 @@ import type { Runner } from './TasksSidePanel';
  * design.md §9; the web mock §4): a ✦ and a light blue ground, nothing wider — and its menu opens on
  * why it is this model and closes on the way to the task, where the model is fixed for every run.
  * A session opened by hand, and a task run on an Agent that has not turned smart selection on, keep
- * the chip exactly as it was.
+ * the chip exactly as it was — and so does every run while the account's switch
+ * (`preferences.modelRouting`) is off, the default.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -36,6 +36,7 @@ const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueued
   await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
+const { meQuery } = await import('../lib/queries');
 const { encodeId } = await import('../lib/idCodec');
 
 const RUNNER_ID = '0195c0de-0000-7000-8000-0000000000f1';
@@ -123,14 +124,19 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
   };
   const chip = () => mounted().querySelector<HTMLButtonElement>('.composer-model-chip');
 
-  /** Mount over this session, and wait for the chip to read what the session runs on. */
-  const mount = async (session: Record<string, unknown>, chipText: string): Promise<void> => {
+  /** Mount over this session, and wait for the chip to read what the session runs on — for an account
+   *  with smart selection on unless `preferences` says otherwise. */
+  const mount = async (
+    session: Record<string, unknown>,
+    chipText: string,
+    preferences: Record<string, unknown> = { modelRouting: true },
+  ): Promise<void> => {
     vi.mocked(getSession).mockImplementation(async () => session as never);
     apiMock.mockImplementation((p: string, options?: { method?: string }) => {
       const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
       if (options?.method === 'PATCH') return reply({});
       if (p === '/users/me') {
-        return reply({ id: 'user-1', email: 'r@example.com', name: 'R', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
+        return reply({ id: 'user-1', email: 'r@example.com', name: 'R', createdAt: '2026-01-01T00:00:00Z', preferences });
       }
       if (p === '/providers') return reply([]);
       if (p === '/workspaces') {
@@ -162,14 +168,12 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION}`]}>
-            <AntApp>
-              <Where />
-              {/* As the app routes them: the console holds a session, and the task page is apart. */}
-              <Routes>
-                <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
-                <Route path="/tasks/:id" element={<div className="task-page-probe" />} />
-              </Routes>
-            </AntApp>
+            <Where />
+            {/* As the app routes them: the console holds a session, and the task page is apart. */}
+            <Routes>
+              <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
+              <Route path="/tasks/:id" element={<div className="task-page-probe" />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -185,16 +189,16 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
   };
-  /** Menu rows by the key rc-menu stamps into `data-menu-id`. */
-  const row = (key: string) =>
-    Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu .ant-dropdown-menu-item')).find((el) =>
-      el.getAttribute('data-menu-id')?.endsWith(`-${key}`),
+  /** A row of the chip's menu, by what it says (without the tick a picked row carries). */
+  const row = (label: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"]')).find(
+      (el) => (el.textContent ?? '').trim() === label,
     );
-  /** Open the chip's menu, and wait for antd's portal to hold its model rows. */
+  /** Open the chip's menu, and wait for its portal to hold its model rows. */
   const open = async () => {
     await click(chip(), 'the model chip');
     await act(async () => {
-      await vi.waitFor(() => expect(row('model:claude-opus-5-5')).toBeDefined(), { timeout: 20_000, interval: 20 });
+      await vi.waitFor(() => expect(row('Opus 5.5')).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
   };
   const note = () => document.querySelector<HTMLElement>('.composer-model-menu .composer-route-note');
@@ -268,14 +272,15 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       'Changing the model here applies to this run only. To fix the model for every run, set it on the task.',
     ]);
     // The models are still the ones to change it to, for this run.
-    expect(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1'].map((m) => row(`model:${m}`)?.textContent))
-      .toEqual(['Opus 5.5', 'Sonnet 5.5', 'Fable 5.1']);
+    const models = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > [role="menuitem"]:not([aria-haspopup])'))
+      .filter((el) => !el.classList.contains('composer-engine-title') && !el.querySelector('.composer-route-open'));
+    expect(models.map((el) => el.textContent)).toEqual(['Opus 5.5', 'Sonnet 5.5', 'Fable 5.1']);
     // The way to the task is the menu's last row.
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > .ant-dropdown-menu-item'));
-    expect(rows.at(-1)?.getAttribute('data-menu-id')?.endsWith('-open-task')).toBe(true);
-    expect(row('open-task')?.textContent).toBe('Open task ›');
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > [role="menuitem"]'));
+    expect(rows.at(-1)).toBe(row('Open task ›'));
+    expect(rows.at(-1)?.querySelector('.composer-route-open')?.textContent).toBe('Open task ›');
 
-    await click(row('open-task'), 'Open task');
+    await click(row('Open task ›'), 'Open task');
     await act(async () => {
       await vi.waitFor(() => expect(where).toBe(`/tasks/${TASK}`), { timeout: 20_000, interval: 20 });
     });
@@ -290,7 +295,7 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
     expect(chip()?.getAttribute('aria-label')).toBe('Model Opus 5.5, effort High');
     await open();
     expect(note()).toBeNull();
-    expect(row('open-task')).toBeUndefined();
+    expect(row('Open task ›')).toBeUndefined();
   });
 
   it('leaves a task run on an Agent without smart selection as it was, though it records what it would pick', async () => {
@@ -302,7 +307,7 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
     expect(chip()?.classList.contains('is-smart')).toBe(false);
     await open();
     expect(note()).toBeNull();
-    expect(row('open-task')).toBeUndefined();
+    expect(row('Open task ›')).toBeUndefined();
   });
 
   it('drops the mark once this run is on a model smart selection did not pick', async () => {
@@ -313,4 +318,30 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
     await open();
     expect(note()).toBeNull();
   });
+
+  const switchedOff: Array<[string, Record<string, unknown>]> = [
+    ['preferences without modelRouting', {}],
+    ['modelRouting: false', { modelRouting: false }],
+  ];
+  for (const [what, preferences] of switchedOff) {
+    it(`with the account switch off (${what}) nothing of smart selection shows`, async () => {
+      // The same run the chip marks while the switch is on: on the routed model, and the route applied.
+      await mount(TASK_RUN, 'Opus 5.5High', preferences);
+      // The account has been read, so the plain chip is the switch's answer rather than a read in flight.
+      await act(async () => {
+        await vi.waitFor(() => expect(client?.getQueryData(meQuery().queryKey)).toMatchObject({ preferences }), {
+          timeout: 20_000,
+          interval: 20,
+        });
+      });
+      expect(chip()?.textContent).toBe('Opus 5.5High');
+      expect(chip()?.classList.contains('is-smart')).toBe(false);
+      expect(chip()?.querySelector('.composer-model-spark')).toBeNull();
+      expect(chip()?.getAttribute('aria-label')).toBe('Model Opus 5.5, effort High');
+      await open();
+      expect(note()).toBeNull();
+      expect(row('Open task ›')).toBeUndefined();
+      expect(document.querySelector('.composer-model-menu')?.textContent).not.toContain('✦');
+    });
+  }
 });

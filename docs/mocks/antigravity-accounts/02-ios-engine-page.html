@@ -1,0 +1,112 @@
+<!doctype html>
+<!-- Design mock: Antigravity's engine page (RunnerEnginePage.swift) listing Google accounts the way
+     Claude Code's and Codex's list theirs. ① is today's page drawn from antigravitySection; ② and ③
+     are the proposal. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Antigravity accounts · engine page (iOS)</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+  .m-sheet { width: 1640px; }
+  .row3 { display: grid; grid-template-columns: 431px 431px minmax(0, 1fr); gap: 40px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Antigravity 账号 · 引擎页：Google 账号一个一个列出来，和 Claude Code / Codex 一样</h1>
+  <p class="m-sub zh">从运行器页点 Antigravity 进来的页面。现在只有一个「Sign-In」区：一行 Google account、四条额度、一个 Re-sign in 按钮，换账号只能把唯一的账号顶掉。改后换成 Claude Code / Codex 的 <b>Accounts</b> 区：每个 Google 账号一行，自己的登录状态、自己的额度、自己的 Sign In Again / Pause…，最下面 <b>Add Account</b> 加新账号。</p>
+
+  <div class="m-stage">
+    <div class="row3">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>引擎页（按现有代码画）</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>A</b> 区名是 Sign-In，只容得下一个账号。<b>B</b> 「Re-sign in · change Google account」：想换账号只能把现在这个顶掉，不能同时留两个。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>两个 Google 账号（整页长截图）</div>
+        <div id="p2"></div>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>说明</div>
+        <ul class="m-notes zh" style="margin-top:10px">
+          <li><span class="m-n">1</span><span><b>区名 Accounts</b>，和 Claude Code / Codex 的引擎页同一个区。Default 是这台机器原来那个 Google 登录（<code>~/.orbit/antigravity/google</code>），升级后原样保留，不用重新登录。</span></li>
+          <li><span class="m-n">2</span><span><b>每个账号一行</b>：名字、登录存放的位置、Signed in；下面是<b>这个账号自己的</b>四条额度——每个 Google 账号的额度各算各的。</span></li>
+          <li><span class="m-n">3</span><span><b>Sign In Again / Pause…</b>：和 Claude Code / Codex 账号同一组按钮。Sign In Again 只重登这一个账号；Pause… 让新会话暂时跳过它。原来的「Re-sign in · change Google account」不要了。</span></li>
+          <li><span class="m-n">4</span><span><b>Work</b> 是加出来的第二个账号，登录放在自己的目录（<code>~/.orbit/antigravity-accounts/&lt;id&gt;</code>），和 Default 互不影响。它的 gemini-5h 只剩 4%，条变橙——和别的引擎快到上限时一样。</span></li>
+          <li><span class="m-n">5</span><span><b>Add Account</b>：点下就开始一个新的 Google 登录（流程见图 3）。</span></li>
+          <li><span class="m-n">6</span><span><b>Google 条款</b>挪到 Accounts 区下面的说明里：这一页是所有 Google 登录发生的地方，条款一直在按钮下面看得到。运行器页的行上不再重复。</span></li>
+          <li><span class="m-n">7</span><span>改名（长按 → Rename…）、移除（左滑 → Remove，先确认）和 Claude Code 的账号完全一样，Default 不能移除。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="glyphs.js"></script>
+<script src="kit.js"></script>
+<script>
+  const head = `<div class="hd">${mark('antigravity', 30)}<div><div class="n">Antigravity</div><div class="s">1.3.0 · checked 17m ago</div></div></div>`;
+  const update = section({ rows: [btnRow('Update Engines Now')],
+    footer: '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>' });
+
+  // ① today: antigravitySection — every piece its own row of one "Sign-In" section.
+  const today = head + section({ header: '<span id="t-h">Sign-In</span>', rows: [
+    '<div class="r txt">Google account</div>',
+    ...agWindows().map((w) => `<div class="r">${win(w)}</div>`),
+    '<div class="r btn" id="t-b">Re-sign in · change Google account</div>',
+    `<div class="r"><div class="a-note">${GOOGLE_TERMS.replace(/<\/?p>/g, (t) => t === '<p>' ? '<div>' : '</div>')}</div></div>`,
+  ] }) + update;
+
+  // ② proposal: Claude Code's Accounts section, with Antigravity's four buckets per account.
+  const proposal = head + section({ header: '<span id="a-h">Accounts</span>', id: 'acc', rows: [
+    accountRow({ id: 'a-def', name: 'Default', sub: '~/.orbit/antigravity/google', status: { text: 'Signed in', tone: 'ok' },
+      windows: agWindows(), buttons: [BTN.again, BTN.pause] }),
+    accountRow({ id: 'a-work', name: 'Work', sub: '~/.orbit/antigravity-accounts/5c2e91a0', status: { text: 'Signed in', tone: 'ok' },
+      windows: [
+        { group: 'gemini-weekly', label: 'Weekly', pct: 61, remaining: true, resets: 'Resets Sat, Oct 10 at 8:05 AM' },
+        { group: 'gemini-5h', label: '5-hour', pct: 4, remaining: true, resets: 'Resets 7:40 PM', warn: true },
+        { group: '3p-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sat, Oct 10 at 8:05 AM' },
+        { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 7:40 PM' },
+      ], buttons: [BTN.again, BTN.pause] }),
+    `<div id="a-add">${btnRow('Add Account')}</div>`,
+  ], footer: `<div id="a-terms">${GOOGLE_TERMS}</div>` }) + update;
+
+  document.getElementById('p1').outerHTML = phone({ title: 'Antigravity', body: today, height: 1330, cls: 'tall' });
+  document.getElementById('p2').outerHTML = phone({ title: 'Antigravity', body: proposal, height: 1330, cls: 'tall' });
+
+  window.drawMarks = () => {
+    const [p1, p2] = document.querySelectorAll('.ph');
+    const at = (ph, sel) => {
+      const a = ph.getBoundingClientRect(), b = ph.querySelector(sel).getBoundingClientRect();
+      return { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height };
+    };
+    const ring = (ph, sel, n, pad = 4, dx = 0) => {
+      const r = at(ph, sel);
+      ph.insertAdjacentHTML('beforeend', marks([{ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad },
+        { n, x: r.x + r.w + pad - 12 + dx, y: r.y - pad - 12 }]));
+    };
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"');
+    const a = at(p1, '#t-h'), b = at(p1, '#t-b');
+    p1.insertAdjacentHTML('beforeend', grey(marks([{ x: a.x - 4, y: a.y - 3, w: a.w + 8, h: a.h + 6 }, { n: 'A', x: a.x + a.w + 2, y: a.y - 14 },
+      { x: b.x - 2, y: b.y + 4, w: b.w + 4, h: b.h - 8 }, { n: 'B', x: b.x + b.w - 14, y: b.y - 6 }])));
+    ring(p2, '#a-h', '1', 4);
+    const def = at(p2, '#a-def');
+    p2.insertAdjacentHTML('beforeend', marks([{ n: '2', x: def.x + def.w - 4, y: def.y + 30 }]));
+    ring(p2, '#a-def .bbs', '3', 5, -40);
+    const work = at(p2, '#a-work');
+    p2.insertAdjacentHTML('beforeend', marks([{ n: '4', x: work.x + work.w - 4, y: work.y + 30 }]));
+    const w5 = p2.querySelectorAll('#a-work .w')[1];
+    const wr = w5.getBoundingClientRect(), pr = p2.getBoundingClientRect();
+    p2.insertAdjacentHTML('beforeend', marks([{ x: wr.left - pr.left - 5, y: wr.top - pr.top - 4, w: wr.width + 10, h: wr.height + 8 }]));
+    ring(p2, '#a-add', '5', 0);
+    ring(p2, '#a-terms', '6', 3);
+  };
+</script>
+</body>
+</html>

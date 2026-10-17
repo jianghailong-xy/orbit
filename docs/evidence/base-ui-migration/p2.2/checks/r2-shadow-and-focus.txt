@@ -1,0 +1,110 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --project=webkit-dark-phone --grep normal bottom|popover matches|tooltip matches|Dialog Popover Select|normal popover can reopen --max-failures=1
+
+[WebServer] (node:3118149) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 22 tests using 1 worker
+
+(node:3118385) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.0s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.6s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment (2.4s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches expiry (2.7s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches search (2.9s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches multiple (2.6s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches popover (2.4s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches tooltip (2.6s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.9s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (3.1s)
+(node:3130232) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (4.1s)
+  ✓  13 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (2.3s)
+  ✓  14 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.6s)
+  ✘  15 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment (2.0s)
+Testing stopped early after 1 maximum allowed failures.
+
+
+  1) [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -8,24 +8,24 @@
+              "computedOffset": 0,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 0,
+              "opacity": "0",
+              "transform": "scaleY(0.8)",
+    -         "transformOriginX": "0%",
+    -         "transformOriginY": "0%",
+    -         "transformOriginZ": "0px",
+    +         "transformOriginX": "",
+    +         "transformOriginY": "",
+    +         "transformOriginZ": "",
+            },
+            Object {
+              "composite": "auto",
+              "computedOffset": 1,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 1,
+              "opacity": "1",
+              "transform": "scaleY(1)",
+    -         "transformOriginX": "0%",
+    -         "transformOriginY": "0%",
+    -         "transformOriginZ": "0px",
+    +         "transformOriginX": "",
+    +         "transformOriginY": "",
+    +         "transformOriginZ": "",
+            },
+          ],
+          "origin": "0px 0px",
+        },
+      ]
+
+      68 |   for (const phase of ['enter', 'exit']) {
+      69 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))
+    > 70 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })));
+         |        ^
+      71 |   }
+      72 | }
+      73 |
+        at compare (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:70:8)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:100:5
+
+    Error Context: .choices-results/choices-motion.browser.mjs-564a6-t-motion-matches-attachment-webkit-dark-phone/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-motion.browser.mjs-564a6-t-motion-matches-attachment-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-motion.browser.mjs-564a6-t-motion-matches-attachment-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment 
+  7 did not run
+  14 passed (40.0s)
+  1 error was not a part of any test, see above for details
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --project=webkit-dark-phone --grep 'normal bottom|popover matches|tooltip matches|Dialog Popover Select|normal popover can reopen' --max-failures=1

@@ -11,7 +11,8 @@ test('runner restart reclaims every open session so cold checkouts remain protec
   let where: unknown;
   const prisma = {
     // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
-    // (providerSlugsOn); none do here.
+    // (providerSlugsOn), of the rows its owner may use; none do here.
+    user: { findUnique: async () => null },
     modelProvider: { findMany: async () => [] },
     session: {
       findMany: async (args: { where: unknown }) => {
@@ -81,7 +82,8 @@ test('reclaim preserves lease state and snapshots an inherited runtime model onc
       findUniqueOrThrow: async () => ({ model: storedModel }),
     },
     user: { findUnique: async () => null },
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+    $queryRaw: async () => [{ max: 0 }],
     $transaction: async () => {
       transactionCalls += 1;
       throw new Error('reclaim must not mutate lease state');
@@ -155,7 +157,8 @@ test('a concurrent Session model edit wins reclaim materialization', async () =>
       findUniqueOrThrow: async () => ({ model: 'gpt-user-choice' }),
     },
     user: { findUnique: async () => null },
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+    $queryRaw: async () => [{ max: 0 }],
     $executeRaw: async () => 0,
   } as never;
   const controller = new RunnerApiController(
@@ -202,7 +205,9 @@ test('session meta preserves the OpenCode runtime provider', async () => {
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
 
+  // `engine` is the session's own (§6.3); `provider` carries it too, for an older `orbit resume`.
   assert.deepEqual(await controller.getSessionMeta({ id: runnerId }, sessionId), {
+    engine: AgentProvider.OPENCODE,
     provider: AgentProvider.OPENCODE,
     sessionUuid: 'opencode-runtime-1',
     runtimeSessionId: 'opencode-runtime-1',
@@ -240,6 +245,7 @@ test('session meta preserves the Antigravity runtime provider', async () => {
   );
 
   assert.deepEqual(await controller.getSessionMeta({ id: runnerId }, sessionId), {
+    engine: AgentProvider.ANTIGRAVITY,
     provider: AgentProvider.ANTIGRAVITY,
     sessionUuid: 'agy-conversation-1',
     runtimeSessionId: 'agy-conversation-1',

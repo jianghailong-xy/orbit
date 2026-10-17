@@ -22,6 +22,16 @@ final class PublicIDTests: XCTestCase {
         XCTAssertEqual(PublicID.storageKey(uuid), PublicID.storageKey(base62))
     }
 
+    /// The key is kept once read: asked again, either spelling answers the same, uppercase too.
+    func testAStorageKeyReadAgainAnswersTheSame() {
+        for id in [base62, uuid, uuid.uppercased(), "not an id"] {
+            let first = PublicID.storageKey(id)
+            XCTAssertEqual(PublicID.storageKey(id), first)
+        }
+        XCTAssertEqual(PublicID.storageKey(uuid.uppercased()), uuid)
+        XCTAssertEqual(PublicID.storageKey(base62), uuid)
+    }
+
     func testRejectsWhatIsNeitherSpelling() {
         XCTAssertNil(PublicID.toUUID(""))
         XCTAssertNil(PublicID.toUUID("not an id"))

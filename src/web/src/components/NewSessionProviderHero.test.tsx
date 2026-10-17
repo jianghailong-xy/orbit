@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
+import { encodeId } from '../lib/idCodec';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
-import { providerChoices, currentProviderChoice } from '../lib/sessionProviderChoices';
-import type { ConfiguredProvider } from '../lib/workspaceDefaults';
-import type { RunnerAntigravityState, RunnerEngineHealth } from '@orbit/shared';
+import { currentEngineChoice, engineChoices, type ChoiceSources } from '../lib/sessionProviderChoices';
+import { defaultEngineOf, type ConfiguredProvider } from '../lib/workspaceDefaults';
+import { AgentProvider, type RunnerAntigravityState, type RunnerEngineHealth } from '@orbit/shared';
 
 const configured: ConfiguredProvider[] = [
   {
@@ -26,6 +27,8 @@ const configured: ConfiguredProvider[] = [
 ];
 const catalog = { claude: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }] } as never;
 
+const RUNNER_ID = '019fc086-c7c7-7c92-8215-778ad8a6280a';
+
 function markup(
   provider: string,
   opts: {
@@ -37,14 +40,18 @@ function markup(
     antigravity?: RunnerAntigravityState;
   } = {},
 ) {
-  const choices = providerChoices(configured, catalog, undefined, opts.engines, [], undefined, opts.antigravity);
+  const sources: ChoiceSources = { configured, modelCatalog: catalog, engineHealth: opts.engines, antigravity: opts.antigravity };
+  // As WorkspaceView builds them: each engine lands on the pick when it is that engine's, and the
+  // current one is the pick's own engine on the pick itself, listed there or not.
+  const engine = defaultEngineOf(provider, configured) ?? AgentProvider.CLAUDE;
+  const engines = engineChoices(sources, [{ engine, provider }]);
   return renderToStaticMarkup(
     <MemoryRouter>
       <NewSessionProviderHero
-        current={currentProviderChoice(provider, choices, catalog, configured, undefined, opts.antigravity)}
-        choices={choices}
+        current={currentEngineChoice(engine, provider, engines, sources)}
+        engines={engines}
         onPick={() => {}}
-        runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
+        runnerId={RUNNER_ID}
         disabled={opts.disabled}
         note={opts.note}
         currentModelLabel={opts.currentModelLabel}
@@ -55,9 +62,11 @@ function markup(
 }
 
 describe('NewSessionProviderHero', () => {
-  it('preserves the hidden Antigravity current choice and explains its environment credential', () => {
+  it('names Antigravity alone, by its CLI’s name, however it signs in — that is the Provider menu’s to say', () => {
     const html = markup('antigravity');
-    expect(html).toContain('env key');
+    expect(html).toContain('aria-label="Engine: Antigravity CLI"');
+    expect(html).not.toContain('env key');
+    expect(html).not.toContain('Google account');
     expect(html).toContain('Gemini 3.8 Flash');
     expect(html).not.toContain('Managed by the provider');
   });
@@ -91,13 +100,15 @@ describe('NewSessionProviderHero', () => {
     );
     expect(html).not.toContain('Start a new session');
     expect(html).not.toContain('Orbit remembers who runs it.');
+    // Where what it runs on is managed: Infrastructure.
+    expect(html).toMatch(/<a href="\/infrastructure"[^>]*>Manage<\/a>/);
   });
 
-  it('shows the current provider as the collapsed identity, name under the mark', () => {
+  it('shows the current engine as the collapsed identity, its CLI’s name under the mark', () => {
     const html = markup('claude');
     // Mark first, name second — the vertical order is the point of the layout.
     expect(html.indexOf('np-mark')).toBeLessThan(html.indexOf('np-name'));
-    expect(html).toContain('Claude');
+    expect(html).toContain('Claude Code');
     expect(html).toContain('np-chev');
   });
 
@@ -125,14 +136,19 @@ describe('NewSessionProviderHero', () => {
     const html = markup('kimi', {
       engines: [{ engine: 'kimi', installed: false, auth: 'unknown' }],
     });
+    // Named by the engine — it is the engine's own sign-in that cannot run.
+    expect(html).toContain('<b>Kimi Code</b>');
     expect(html).toContain('Not installed on this runner');
     expect(html).toContain('engine=kimi');
     expect(html).not.toContain('runner login');
+    // Its fix is that engine's row on this machine's card in Infrastructure.
+    expect(html).toContain(`<a href="/infrastructure?runner=${encodeId(RUNNER_ID)}&amp;engine=kimi"`);
+    expect(html).toMatch(/<a href="\/infrastructure\?runner=[^"]*"[^>]*>Fix it<\/a>/);
   });
 
-  it('sends a configured provider’s fix to the engine it borrows, not to its own slug', () => {
-    // Kimi (Moonshot) runs on the Kimi CLI, and `moonshot` has no row on the Providers page to
-    // land on — the install that fixes it is the kimi engine's.
+  it('sends a key’s fix to the engine that runs it, not to its own slug', () => {
+    // Kimi (Moonshot) runs on Kimi Code, and `moonshot` has no row on Infrastructure to land on —
+    // the install that fixes it is the kimi engine's.
     const html = markup('moonshot', {
       engines: [{ engine: 'kimi', installed: false, auth: 'unknown' }],
     });
@@ -141,9 +157,25 @@ describe('NewSessionProviderHero', () => {
     expect(html).not.toContain('engine=moonshot');
   });
 
-  it('labels an unknown provider truthfully instead of falling back to Claude', () => {
-    const html = markup('gone-away');
-    expect(html).toContain('gone-away');
-    expect(html).not.toContain('>Claude<');
+  it('offers OpenCode on a runner that has not got it, with the install and never a sign-in', () => {
+    // Orbit installs it, so the row is listed rather than dropped — and it has no sign-in to relay,
+    // so the reason must not promise one (web parity: mirror of AgentIdentity's row). A runner that
+    // reports its engines and not OpenCode has not got it.
+    const report = [{ engine: 'claude' as const, installed: true, auth: 'yes' as const }];
+    const html = markup('opencode', { engines: report });
+    const engines = engineChoices({ configured, modelCatalog: catalog, engineHealth: report }, [{ engine: 'opencode', provider: 'opencode' }]);
+    const row = engines.find((engine) => engine.slug === 'opencode');
+    expect(row).toMatchObject({ label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+    expect(html).toContain('aria-label="Engine: OpenCode"');
+    expect(html).toContain('Not installed');
+    expect(html).toContain('engine=opencode');
+    expect(html).not.toContain('sign in');
+  });
+
+  it('names the engine on the card, and not the provider of it the draft spends', () => {
+    const html = markup('deepseek');
+    expect(html).toContain('aria-label="Engine: Claude Code"');
+    expect(html).not.toContain('DeepSeek</small>');
+    expect(html).not.toContain('via ');
   });
 });

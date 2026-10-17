@@ -64,9 +64,10 @@ test('workspace scope, tag filter and page size narrow the query, and stay off i
 
   assert.match(statements[0], /AND s\.workspace_id = \?::uuid/);
   assert.match(statements[0], /stl\.tag_id = \?::uuid/);
-  assert.match(statements[0], /LIMIT \?::int/);
+  assert.match(statements[0], /LIMIT \?::int\s*$/);
   assert.doesNotMatch(statements[1], /AND s\.workspace_id/);
   // (the per-row tags aggregate mentions stl.tag_id too, hence matching on the filter's own form)
   assert.doesNotMatch(statements[1], /stl\.tag_id = \?::uuid/);
-  assert.doesNotMatch(statements[1], /LIMIT/);
+  // Only the final LIMIT pages sessions; membership subqueries choose one matching project.
+  assert.doesNotMatch(statements[1], /LIMIT \S+\s*$/);
 });

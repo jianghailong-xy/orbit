@@ -39,8 +39,11 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
 
   const owner = randomUUID();
   const otherOwner = randomUUID();
+  // Both accounts have smart model selection on, as an account whose runs were routed has.
   for (const id of [owner, otherOwner]) {
-    await db.user.create({ data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h' } });
+    await db.user.create({
+      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true } },
+    });
   }
   const agent = await db.workspace.create({ data: { ownerId: owner, name: 'first agent' } });
   const laterAgent = await db.workspace.create({ data: { ownerId: owner, name: 'later agent' } });
@@ -223,12 +226,12 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     assert.deepEqual(group(report, 'shadow', 1, 'S', 'claude', OPUS), {
       policyVersion: 1, level: 'S', provider: 'claude', model: OPUS, sampleCount: 5,
       taskCount: 4, completedTaskCount: 3, firstPassTaskCount: 1, firstPassRate: 0.25,
-      averageFailureCount: 0.75, tokensPerCompletedTask: 600, costUsdPerCompletedTask: 3, durationP50Ms: 30_000,
+      averageFailureCount: 0.75, tokensPerCompletedTask: 600, costUsdPerCompletedTask: 3, usageUnknownCompletedTaskCount: 0, durationP50Ms: 30_000,
     });
     assert.deepEqual(group(report, 'applied', 2, 'L', 'claude', OPUS), {
       policyVersion: 2, level: 'L', provider: 'claude', model: OPUS, sampleCount: 1,
       taskCount: 0, completedTaskCount: 0, firstPassTaskCount: 0, firstPassRate: null,
-      averageFailureCount: null, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, durationP50Ms: 50_000,
+      averageFailureCount: null, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, usageUnknownCompletedTaskCount: 0, durationP50Ms: 50_000,
     });
     assert.equal(group(report, 'shadow', 1, 'S', 'claude', SONNET).sampleCount, 1);
     assert.equal(group(report, 'shadow', 1, 'S', 'claude-pool', OPUS).sampleCount, 1);
@@ -237,21 +240,21 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     assert.deepEqual(group(await get(), 'applied', 1, 'S', 'claude', OPUS), {
       policyVersion: 1, level: 'S', provider: 'claude', model: OPUS, sampleCount: 2,
       taskCount: 2, completedTaskCount: 1, firstPassTaskCount: 1, firstPassRate: 0.5,
-      averageFailureCount: 0, tokensPerCompletedTask: 500, costUsdPerCompletedTask: 2, durationP50Ms: 11_000,
+      averageFailureCount: 0, tokensPerCompletedTask: 500, costUsdPerCompletedTask: 2, usageUnknownCompletedTaskCount: 0, durationP50Ms: 11_000,
     });
   });
   await t.test('NULL level retains the control group, including Codex cached tokens and null-error failures', async () => {
     assert.deepEqual(group(await get(), 'shadow', 2, null, 'codex-pool', CODEX), {
       policyVersion: 2, level: null, provider: 'codex-pool', model: CODEX, sampleCount: 2,
       taskCount: 2, completedTaskCount: 1, firstPassTaskCount: 1, firstPassRate: 0.5,
-      averageFailureCount: 0.5, tokensPerCompletedTask: 800, costUsdPerCompletedTask: 0, durationP50Ms: 12_000,
+      averageFailureCount: 0.5, tokensPerCompletedTask: 800, costUsdPerCompletedTask: 0, usageUnknownCompletedTaskCount: 0, durationP50Ms: 12_000,
     });
   });
   await t.test('unfinished runs with no usage, completion or finish time return defined counts and NULL ratios', async () => {
     assert.deepEqual(group(await get(), 'shadow', 3, 'M', 'codex', null), {
       policyVersion: 3, level: 'M', provider: 'codex', model: null, sampleCount: 1,
       taskCount: 1, completedTaskCount: 0, firstPassTaskCount: 0, firstPassRate: 0,
-      averageFailureCount: 0, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, durationP50Ms: null,
+      averageFailureCount: 0, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, usageUnknownCompletedTaskCount: 0, durationP50Ms: null,
     });
   });
   await t.test('since is inclusive and never reclassifies a later run as the first', async () => {
@@ -283,7 +286,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     assert.deepEqual(group(report, 'shadow', 1, 'S', 'claude', OPUS), {
       policyVersion: 1, level: 'S', provider: 'claude', model: OPUS, sampleCount: 1,
       taskCount: 1, completedTaskCount: 1, firstPassTaskCount: 1, firstPassRate: 1,
-      averageFailureCount: 0, tokensPerCompletedTask: 1_000_000, costUsdPerCompletedTask: 10_000, durationP50Ms: 100_000,
+      averageFailureCount: 0, tokensPerCompletedTask: 1_000_000, costUsdPerCompletedTask: 10_000, usageUnknownCompletedTaskCount: 0, durationP50Ms: 100_000,
     });
   });
   await t.test('HTTP authentication and filter validation are enforced and repeated GETs do not mutate data', async () => {

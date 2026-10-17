@@ -1,0 +1,252 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:19:14.396Z",
+    "duration": 129801.447,
+    "expected": 16,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "91e405ba204faff00712bc6bd08c8491e3b2c0c941fbe2175be691725f13c0e9"
+        },
+        {
+          "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "821b4a02a7772d5deb1babe9ba0365f977fb8337d8af5933a3f6fa1e5f55dfb1"
+        },
+        {
+          "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "cb24269019ab17a447d8523c73de1cd0271a4778874ba86fab69d1eaa7f7c75d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "c5a7412da90974519aef1f482ecb1e8eee25dc9238d334bacce598428be80e76"
+        },
+        {
+          "file": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "67f34fe9883ec437fb9209e15f70f1b41a8b2dbff54a570c1f4657b891f140b6"
+        },
+        {
+          "file": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "546f223d78b6c204730a77d2eedb4db87a9f8e1b216165ac6c39f9bf44ff96dd"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "58e371fcc622683f713d6feab43fd8d6e7e5bdb9319872d905543eccf80d9775"
+        },
+        {
+          "file": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "d922334539e68c8c892f1d5c097c6843a6aa0464d103a6be482cd99e65e7b93e"
+        },
+        {
+          "file": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "7d5dde5208df2b3e62b998d553a418574d820d4daab895ececfe9e02e75a68b0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "fbee0b8b2413f4ef6e56b8d64327c5ca225bc44933ec523e4b5879cb8ad23a4a"
+        },
+        {
+          "file": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "2d69b9420ff66934b9e9f2bfabcc12604f5e26772f3c71e92cf4b319ff2e4c15"
+        },
+        {
+          "file": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "73cd7d6d06e66bddf0a53f98ad9a3ee99c84f4102e497794eb6e767a22c596f6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "aab873387f11713cd374a27506d9a8b703ec48e7b7d6062e69d1ece1e94ee554"
+        },
+        {
+          "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "7b3a1f3ba2558ac1ef4da226964ef344e41399255992abcb1ac0a238f1580a57"
+        },
+        {
+          "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "27d69f40ff94998c6a08e216106d682a0738b3ac94e0ad507c053b7d83ba87cf"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "2bcec70b225f953b4a73faa3efe146f24234b8403d395fe53f11f666acd9eedf"
+        },
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "489a861eb0bab4593cc3cc7ce2c7ffafab91e5dc5758aa9c2c74e8c1b8297f39"
+        },
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "1cb05ad79f4a53b85ee006c34a5ca311512c70f1de551eb873251551870e75a7"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "e7d941579c1a4c2c0b001c9fcdb632f28c24c2698bc0aff4f7a1491d4f3d86c8"
+        },
+        {
+          "file": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "9b26416d9f1deecf31eecc2bd0fa6f7bed5315889991979ca8cceb2f86aa78a0"
+        },
+        {
+          "file": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "7aee6ee90a4eb24a0232aa92eaa6573f8747c31da857f519ac543bfe77c10609"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "9ad9cefcad6e5152fb0cd4702d138d517e87906f4069f551eadaf2c9107fac82"
+        },
+        {
+          "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "eb7cca0123307297933e5e46efc53824fee4da5af297df6c6ae34fa8cda98e2f"
+        },
+        {
+          "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "3cc856ed1e6af72af204f0f5aaad5baf18cf7b1a2e66ad79b4ffe1c79a2ab1c9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+ "stats": {
+  "startTime": "2026-10-06T22:04:11.092Z",
+  "duration": 352898.053,
+  "expected": 93,
+  "skipped": 11,
+  "unexpected": 8,
+  "flaky": 0
+ },
+ "unexpected": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 10
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 83
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 135
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 22
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 18
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 95
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 376
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 339
+  }
+ ],
+ "flaky": [],
+ "expectedFailures": 16,
+ "skipped": 11,
+ "passed": 77
+}

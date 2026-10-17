@@ -2,8 +2,11 @@ import { Prisma } from '@prisma/client';
 import {
   IntegrationCheckResult,
   OpenItemAction,
+  OpenItemChat,
+  OpenItemChatRefusal,
   OpenItemDeliveryCard,
   OpenItemFacts,
+  OpenItemStage,
   OwnerItemKind,
   SessionLifecycleState,
   SessionRunState,
@@ -12,8 +15,18 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 
-import { taskLanding, readLandingBranches } from './project-criterion-landing';
+import { landingBranchesFor, mainBranchOf, taskLanding } from './project-criterion-landing';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
+import {
+  doorsForOpenItem,
+  failureClassForOpenItem,
+  openItemActionsFromDoors,
+  openItemDoorMessageNames,
+  sourceJobForOpenItem,
+  type OpenItemDoorInput,
+  type OpenItemDoorMessageNames,
+} from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
@@ -149,6 +162,12 @@ export interface OpenItemActionsSource {
   /** Whether this project has a coordinator conversation left to ask again (§4.8) — the one press
    *  that turns on a fact outside the row. */
   askable: boolean;
+  /** Optional matrix dimensions carried by newer integration payloads. */
+  sourceJob?: string | null;
+  failureClass?: string | null;
+  phase?: string | null;
+  jobKind?: string | null;
+  payload?: unknown;
 }
 
 /**
@@ -160,33 +179,262 @@ export interface OpenItemActionsSource {
  * beside an item's delivery — and two derivations of one answer are two things free to disagree.
  */
 export function openItemActions(source: OpenItemActionsSource): OpenItemAction[] {
-  if (source.fuseEpisodeId) return ['RESUME'];
-  if (source.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
-  // A merge into main is decided on its own card, which says what would land and what the checks
-  // came to (§7.5): the row is the way in. An integration failure of that merge that has become the
-  // owner's also has the way back a task's item has (§4.7): the press puts it back in front of the
-  // coordinator, whose door for it is the candidate's re-check (`decidePromotionRetry`). The merge
-  // card itself is the owner's to decide and has no such way back.
-  if (source.promotionId) {
-    return source.assignee === 'OWNER'
-      && source.askable
-      && INTEGRATION_ITEM_KINDS.includes(source.kind as OpenItemKind)
-      ? ['ASK_COORDINATOR_AGAIN', 'REVIEW']
-      : ['REVIEW'];
+  return openItemActionsFromDoors(source);
+}
+
+/** One item's "Chat about this", as a reader that has to draw it needs it: the columns that say
+ *  where its handling stands, and the project's coordinator conversation. */
+export interface OpenItemChatSource {
+  assignee: OpenItemAssignee | string;
+  /** Whether the coordinator's rerun of it is queued or running (§4.7 H1). */
+  handling: boolean;
+  /** How the coordinator's handling ended it, on a settled row (§4.7 H2, H3); null on an open one. */
+  resolution: 'HANDLED' | 'RETRIED' | null;
+  /** The project's coordinator conversation and whether it can be handed a message now, or null
+   *  when the project has none. One project's answer, read once for every row of its list. */
+  coordinator: { sessionId: string; receiving: boolean } | null;
+}
+
+/**
+ * "Chat about this" for one item (§4.8): where its handling stands, and whether a message about it
+ * can reach the project's coordinator conversation.
+ *
+ * Not one of `openItemActions`, and on purpose: those are doors that write, each with an owner of
+ * its own, and this writes nothing — it is a message the account owner sends to their own
+ * conversation. So it is offered on every stage, whoever holds the item, and refused only where the
+ * message would have nowhere to go, or would be about an item a newer one has replaced. Who may
+ * rerun, merge or close the item is still decided by `openItemActions` and the doors behind it.
+ *
+ * Whether the conversation can take the message is the same answer every session payload publishes
+ * as `canSend`, not `sessionHasEnded`: a conversation that ended and can still be resumed is one a
+ * person may write to — a message from its owner is what resumes it — while a platform turn may not.
+ */
+export function openItemChat(source: OpenItemChatSource): OpenItemChat {
+  const stage: OpenItemStage = source.resolution === 'RETRIED' ? 'SUPERSEDED'
+    : source.resolution === 'HANDLED' ? 'HANDLED'
+      : source.handling ? 'HANDLING'
+        : source.assignee === 'OWNER' ? 'WITH_OWNER'
+          : 'WITH_COORDINATOR';
+  const refusal: OpenItemChatRefusal | null = stage === 'SUPERSEDED' ? 'SUPERSEDED'
+    : !source.coordinator ? 'NO_COORDINATOR'
+      : !source.coordinator.receiving ? 'COORDINATOR_UNAVAILABLE'
+        : null;
+  return { sessionId: source.coordinator?.sessionId ?? null, stage, refusal };
+}
+
+/**
+ * The small row shape needed by the two human-facing next-step projections.
+ *
+ * It is deliberately wider than `OpenItemActionsSource`: list rows carry state and the tasks
+ * filed against them, while a delivery card carries only the immutable item columns.  Keeping
+ * those facts optional lets an older reader ask the same pure functions without manufacturing a
+ * second, subtly different matrix input.
+ */
+export interface OpenItemDecisionRow {
+  kind?: OpenItemKind | string;
+  /** Matrix fixtures sometimes call the same dimension `todoType`. */
+  todoType?: OpenItemKind | string;
+  assignee: OpenItemAssignee | string;
+  taskId?: string | null;
+  promotionId?: string | null;
+  fuseEpisodeId?: string | null;
+  askable?: boolean;
+  sourceJob?: string | null;
+  failureClass?: string | null;
+  phase?: string | null;
+  jobKind?: string | null;
+  payload?: unknown;
+  state?: string | null;
+  status?: string | null;
+  handledBy?: ReadonlyArray<{ taskId?: string; title?: string; state?: string }>;
+  handled_by?: ReadonlyArray<{ taskId?: string; title?: string; state?: string }>;
+  handoverNote?: string | null;
+  /** Accept the database spelling too: fixtures and raw reads sometimes use snake case. */
+  handover_note?: string | null;
+  source_job?: string | null;
+  failure_class?: string | null;
+  /** The project's main branch by name (`mainBranchOf`), which the next step says a merge reaches;
+   *  null or absent with no repository bound, and the sentence then says main. */
+  mainBranch?: string | null;
+}
+
+function doorInputForRow(row: OpenItemDecisionRow): OpenItemDoorInput {
+  return {
+    kind: row.kind ?? row.todoType ?? '',
+    assignee: row.assignee,
+    taskId: row.taskId ?? null,
+    promotionId: row.promotionId ?? null,
+    fuseEpisodeId: row.fuseEpisodeId ?? null,
+    askable: row.askable ?? true,
+    sourceJob: row.sourceJob ?? row.source_job,
+    failureClass: row.failureClass ?? row.failure_class,
+    phase: row.phase,
+    jobKind: row.jobKind,
+    payload: row.payload,
+  };
+}
+
+function decisionRowIsClosed(row: OpenItemDecisionRow): boolean {
+  const state = row.state ?? row.status;
+  return state != null && state !== 'OPEN';
+}
+
+function hasLiveFix(row: OpenItemDecisionRow): boolean {
+  return [...(row.handledBy ?? []), ...(row.handled_by ?? [])].some((task) => {
+    const state = task.state?.toUpperCase();
+    return state == null || (state !== 'DONE' && state !== 'CANCELLED');
+  });
+}
+
+function hasFix(row: OpenItemDecisionRow): boolean {
+  return (row.handledBy?.length ?? 0) + (row.handled_by?.length ?? 0) > 0;
+}
+
+/**
+ * The short reason an owner sees beside an owner item in a session row.
+ *
+ * Escalated rows intentionally retain their original kind in the open-item query.  Reading that
+ * kind here means the signal needs no follow-up query (and does not collapse every exception into
+ * the unhelpful word "Escalated").  These are also the words used by the clients for the card kind.
+ */
+export function ownerItemNeed(kind: OpenItemKind | string): string {
+  switch (kind) {
+    case 'INTEGRATION_CONFLICT': return 'Merge conflict';
+    case 'INTEGRATION_CHECK_FAILED': return 'Checks failed';
+    case 'INTEGRATION_ERROR': return 'Integration error';
+    case 'TASK_FAILED': return 'Task failed';
+    case 'PROMOTION_APPROVAL': return 'Approve merge to main';
+    case 'COORDINATOR_QUESTION': return 'Question from coordinator';
+    case 'FUSE_PAUSED': return 'Paused';
+    case 'START_REQUEST': return 'Ready to start';
+    case 'DONE_REQUEST': return 'Ready to close';
+    case 'DELIVERY_REVIEW': return 'Delivery review';
+    default: return 'Exception';
   }
-  if (!source.taskId) return [];
-  if (source.assignee === 'COORDINATOR') {
-    // The coordinator's own: it can be looked at, run again, or stopped.
-    return ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'];
+}
+
+/** Backwards-friendly alias for callers that name the field rather than the owner surface. */
+export const openItemNeed = ownerItemNeed;
+
+function primaryActionPreference(row: OpenItemDecisionRow): OpenItemAction[] {
+  const sourceJob = sourceJobForOpenItem(doorInputForRow(row));
+  const owner = row.assignee === 'OWNER';
+  if (owner) return ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'REVIEW', 'ANSWER', 'RESUME'];
+  if (row.kind === 'TASK_FAILED') return ['RETRY', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
+  if (row.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
+  if (row.kind === 'FUSE_PAUSED') return ['RESUME'];
+  if (row.kind === 'PROMOTION_APPROVAL') return ['REVIEW'];
+  if (row.kind === 'START_REQUEST' || row.kind === 'DONE_REQUEST') return [];
+  if (row.kind === 'DELIVERY_REVIEW') return ['OPEN_TASK_SESSION', 'RETRY', 'OPEN_COORDINATOR'];
+  if (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION') {
+    return ['RETRY', 'REVIEW', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR'];
   }
-  // An escalated item's route back is through the coordinator that should have had it (§4.7) —
-  // the owner's press is to ask again, not to retry work the coordinator owns — and to stop the
-  // task outright.
-  return [
-    ...(source.askable ? ['ASK_COORDINATOR_AGAIN' as const] : []),
-    'OPEN_TASK_SESSION',
-    'CANCEL_TASK',
-  ];
+  return ['OPEN_TASK_SESSION', 'RETRY', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
+}
+
+/**
+ * Pick the first compact action backed by this row's actual door cell.
+ *
+ * `openItemActions` remains the compatibility projection consumed by older clients.  This helper
+ * only chooses its lead, and falls back to a directly named door for rows whose legacy identifiers
+ * are absent (for example a synthetic matrix fixture).  It never invents an action.
+ */
+export function primaryAction(row: OpenItemDecisionRow): OpenItemAction | undefined {
+  if (decisionRowIsClosed(row)) return undefined;
+  const input = doorInputForRow(row);
+  const doors = doorsForOpenItem(input);
+  const backed = (action: OpenItemAction): boolean => doors.some((candidate) =>
+    candidate.implemented && candidate.holder === (row.assignee === 'OWNER' ? 'OWNER' : 'COORDINATOR')
+      && candidate.action === action);
+  const projected = openItemActionsFromDoors(input);
+  for (const action of primaryActionPreference(row)) {
+    if (projected.includes(action) && backed(action)) return action;
+  }
+  for (const action of projected) {
+    if (backed(action)) return action;
+  }
+  return doors.find((candidate) => candidate.implemented && candidate.action !== undefined)?.action;
+}
+
+function ownerOrCoordinator(row: OpenItemDecisionRow): string {
+  return row.assignee === 'OWNER' ? 'You' : 'The coordinator';
+}
+
+/**
+ * One sentence explaining the next decision for an open item.
+ *
+ * The dimensions are read through the same door matrix as `openItemActions`; the prose therefore
+ * cannot describe a retry, hand-back, or review that this particular cell does not hold.  Status
+ * and hand-off facts are handled first because they change the question from "what failed?" to
+ * "what is already in motion?".
+ */
+export function openItemRequiredAction(row: OpenItemDecisionRow): string {
+  if (decisionRowIsClosed(row)) return 'This item is already settled — no action is required.';
+  if (hasLiveFix(row)) {
+    return 'A repair task is already handling this item — let it finish or open the task to see what it needs.';
+  }
+  if (hasFix(row)) {
+    return 'A repair task is linked to this item — inspect its result, then use the available door if the item still needs a decision.';
+  }
+  const handover = (row.handoverNote ?? row.handover_note ?? '').trim();
+  if (handover) {
+    return `The coordinator handed this item over with this note: “${handover}” — follow it, then use the available door.`;
+  }
+
+  const input = doorInputForRow(row);
+  const sourceJob = sourceJobForOpenItem(input);
+  const failureClass = failureClassForOpenItem(input);
+  const actor = ownerOrCoordinator(row);
+  const main = row.mainBranch ?? 'main';
+
+  // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
+  // the three clients render this field, they do not translate it. Its main is the project's main
+  // branch by name, so a project on main reads every sentence as it always did.
+  if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
+      && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
+      && failureClass !== 'CONFLICT') {
+    return `Nothing on the project branch reaches ${main} until this check passes — re-run it or ask the coordinator to fix it.`;
+  }
+
+  if (row.kind === 'COORDINATOR_QUESTION') {
+    return row.assignee === 'OWNER'
+      ? 'The coordinator is waiting for your answer — choose an option or reply to the question.'
+      : 'The coordinator must answer this open question — choose an option or reply to the question.';
+  }
+  if (row.kind === 'FUSE_PAUSED') return 'The coordinator is paused — resume the project when you are ready.';
+  if (row.kind === 'START_REQUEST') return 'The project is ready to start — approve or decline the start request.';
+  if (row.kind === 'DONE_REQUEST') return 'The project may be finished — review the work and record it done or send it back.';
+  if (row.kind === 'PROMOTION_APPROVAL') {
+    return `${actor} must decide whether this promotion reaches ${main} — review it, then approve, decline, or cancel it.`;
+  }
+  if (row.kind === 'TASK_FAILED') {
+    return `${actor} must get this task past its failure — retry it, file a repair task, or close it.`;
+  }
+  if (row.kind === 'DELIVERY_REVIEW') {
+    return `This delivery needs a landing decision — ${actor === 'You' ? 'review it and' : 'review it, then'} retry, repair, or close it.`;
+  }
+  if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT') {
+    return 'The project branch cannot move until this sync conflict is repaired — record the fix and reopen the task.';
+  }
+  if (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION') {
+    if (failureClass === 'CONFLICT') {
+      return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.`;
+    }
+    if (failureClass === 'CHECK_TIMED_OUT') {
+      return `The project branch cannot reach ${main} until this check finishes — re-run it with a reason or ask the coordinator to fix it.`;
+    }
+    return `The project branch cannot reach ${main} until this integration is repaired — re-run it or ask the coordinator to fix it.`;
+  }
+  if (failureClass === 'CONFLICT') {
+    return 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.';
+  }
+  if (failureClass === 'CHECK_FAILED' || failureClass === 'CHECK_TIMED_OUT') {
+    return 'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.';
+  }
+  if (failureClass === 'ERROR') {
+    return 'This task cannot reach the project branch until the integration error is repaired — retry it or ask the coordinator to fix it.';
+  }
+  return `${actor} must use the available door to move this exception forward.`;
 }
 
 /**
@@ -495,8 +743,16 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    the two facts `resolveByFact` answers it with. A task that LANDED is deliberately not among
  *    them: the item is about landing on this project's line, and that the work reached some other
  *    branch instead is in no row, so such an item stays owed and the backstop only reports it;
- *  - anything else — a task's failure, a question, a pause, a request — while it is open: what
- *    answers those is a person, or a fact this predicate has no row for.
+ *    `handling_job_id` does not change this answer while H1 is in flight. H2/H3 are the terminal
+ *    edges for a handled item; until one commits, M-T11 and the readers that use this predicate
+ *    still count the OPEN item, including an owner-held item under H4;
+ *  - a task's failure, while the task still stands where the failure left it: not DONE, not
+ *    cancelled, not replaced, and no attempt at it in flight. That is the exact complement of the
+ *    four facts `resolveByFact`'s first statement answers a failure with — `TASK_DONE`,
+ *    `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` — read off the same rows, so a failure whose task
+ *    moved on is owed by nobody and an edge that missed it leaves nothing in front of anybody;
+ *  - anything else — a question, a pause, a request — while it is open: what answers those is a
+ *    person, or a fact this predicate has no row for.
  *
  * Parameter-free, like `escalatesAt`: it splices into a statement without moving that statement's
  * placeholders, and its text is the text `scripts/project-liveness-audit.sql` spells, which has no
@@ -506,6 +762,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
+  const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   return Prisma.sql`(CASE
       WHEN ${item}."promotion_id" IS NOT NULL AND ${item}."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
         SELECT 1 FROM "project_promotion" owed_promotion
@@ -525,6 +782,17 @@ export function openItemOwed(alias: string): Prisma.Sql {
          WHERE owed_task."id" = ${item}."task_id"
            AND owed_task."status" = 'DONE'
            AND owed_task."superseded_by_task_id" IS NULL)
+      WHEN ${item}."task_id" IS NOT NULL AND ${item}."kind" = 'TASK_FAILED' THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = ${item}."task_id"
+           AND owed_task."status" NOT IN ('DONE', 'CANCELLED')
+           AND owed_task."superseded_by_task_id" IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM "session" owed_session
+              WHERE owed_session."task_id" = owed_task."id"
+                AND owed_session."starts_task_work"
+                AND owed_session."status" IN (${liveSessions})
+                AND owed_session."id" IS DISTINCT FROM ${item}."session_id"))
       ELSE true
     END)`;
 }
@@ -788,6 +1056,31 @@ export async function resolveIntegrationItemsOnLanding(
   });
 }
 
+/**
+ * §4.4 X-D4 (5), revision 13: a task filed to fix an exception has landed, so that exception goes
+ * back in front of the coordinator, which closes it or reruns what it is about.
+ *
+ * Called in the transaction that wrote the fix's landing receipt. The item is about ANOTHER task's
+ * work, and whether that work reached the line with the fix is a question about commits this server
+ * cannot answer (it has no git), so nothing here closes it. It is re-keyed instead, the way X-D5
+ * re-keys a drained turn — `assigned_at` moves, `waiting_since` and `escalate_at` stay — and the
+ * caller delivers it after the commit, worded with what landed (`openItemMessage`). Only an item
+ * still the coordinator's and not a candidate's: a candidate's failure is closed by the candidate
+ * the landing opens, and an item the owner holds is delivered to no conversation (X-D7).
+ */
+export async function rearmItemFixedBy(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<string | null> {
+  const fix = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
+  if (!fix?.fixesOpenItemId) return null;
+  const rearmed = await tx.projectOpenItem.updateMany({
+    where: { id: fix.fixesOpenItemId, state: 'OPEN', assignee: 'COORDINATOR', promotionId: null },
+    data: { assignedAt: new Date() },
+  });
+  return rearmed.count > 0 ? fix.fixesOpenItemId : null;
+}
+
 /** What a finished delivery whose landing somebody has to decide is filed under (0375). */
 export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
 
@@ -879,8 +1172,10 @@ export async function recordDeliveryReview(
 export interface OpenItemHandlingStart {
   /** The job the rerun queued: the task's next LAND_TASK, or the candidate's next CHECK_PROMOTION. */
   jobId: string;
-  /** The coordinator conversation that asked for it. */
-  sessionId: string;
+  /** The coordinator conversation that asked for it, or null for an owner press. */
+  sessionId?: string | null;
+  /** The account owner that asked for it, or null for a coordinator press. */
+  userId?: string | null;
   reason: string;
 }
 
@@ -903,11 +1198,17 @@ export async function markOpenItemsHandling(
   handling: OpenItemHandlingStart,
 ): Promise<void> {
   if (itemIds.length === 0) return;
+  const owner = handling.userId != null;
   await tx.projectOpenItem.updateMany({
-    where: { id: { in: [...itemIds] }, state: 'OPEN', assignee: 'COORDINATOR' },
+    where: {
+      id: { in: [...itemIds] },
+      state: 'OPEN',
+      assignee: owner ? 'OWNER' : 'COORDINATOR',
+    },
     data: {
       handlingJobId: handling.jobId,
-      handlingSessionId: handling.sessionId,
+      handlingSessionId: owner ? null : (handling.sessionId ?? null),
+      handlingUserId: owner ? handling.userId : null,
       handlingReason: handling.reason,
       handlingStartedAt: new Date(),
     },
@@ -919,13 +1220,12 @@ export async function markOpenItemsHandling(
  * or a blocked candidate's check came back READY — so the items it was handling are HANDLED, in the
  * transaction that wrote the job's terminal state.
  *
- * Every column of the ending is a fact somebody can check: the coordinator (`resolved_by`), the
- * conversation that asked for the rerun, the reason it gave, and the job that answered it — beside the
- * task or the candidate the item was always about. Only the items still the coordinator's: one the
- * clock handed to the account owner while the rerun ran is theirs (§4.6), and nothing closes it in the
- * coordinator's name after that — a landing answers it as it answers every item about the task
- * (LANDED, by the platform, J-T5), and a candidate's passing check leaves it to the owner, whose card
- * the merge then waits on (M-T11 counts it).
+ * Every column of the ending is a fact somebody can check: the coordinator or owner (`resolved_by`),
+ * the conversation or account that asked for the rerun, the reason it gave, and the job that answered
+ * it — beside the task or the candidate the item was always about. Only the items still the
+ * coordinator's, plus an item explicitly handled by its owner, are closed as HANDLED. One the clock
+ * handed to the account owner while a coordinator rerun ran is left to the owner (§4.6), and a task
+ * landing answers it as LANDED by the platform instead.
  *
  * Returns the items it closed.
  */
@@ -934,19 +1234,25 @@ export async function resolveHandledItems(
   jobId: string,
 ): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "project_open_item"
+    UPDATE "project_open_item" item
        SET "state" = 'RESOLVED',
            "resolution" = 'HANDLED',
            "resolved_at" = now(),
-           "resolved_by" = 'COORDINATOR',
-           "resolved_by_session_id" = "handling_session_id",
+           "resolved_by" = CASE
+             WHEN item."handling_user_id" IS NOT NULL THEN 'USER'
+             ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = item."handling_user_id",
+           "resolved_by_session_id" = item."handling_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "updated_at" = now()
-     WHERE "handling_job_id" = ${jobId}::uuid
-       AND "state" = 'OPEN'
-       AND "assignee" = 'COORDINATOR'
-    RETURNING "id"`);
+      FROM "project_integration_job" job
+     WHERE item."handling_job_id" = ${jobId}::uuid
+       AND item."handling_job_id" = job."id"
+       AND item."state" = 'OPEN'
+       AND (item."assignee" = 'COORDINATOR'
+         OR (item."assignee" = 'OWNER' AND item."handling_user_id" IS NOT NULL))
+    RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
 
@@ -990,20 +1296,25 @@ export async function supersedeHandledItems(
   byItemId: string,
 ): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "project_open_item"
+    UPDATE "project_open_item" item
        SET "state" = 'SUPERSEDED',
            "resolution" = 'RETRIED',
            "resolved_at" = now(),
-           "resolved_by" = 'COORDINATOR',
-           "resolved_by_session_id" = "handling_session_id",
+           "resolved_by" = CASE
+             WHEN item."handling_user_id" IS NOT NULL THEN 'USER'
+             ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = item."handling_user_id",
+           "resolved_by_session_id" = item."handling_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "superseded_by_item_id" = ${byItemId}::uuid,
            "updated_at" = now()
-     WHERE "handling_job_id" = ${jobId}::uuid
-       AND "state" = 'OPEN'
-       AND "id" <> ${byItemId}::uuid
-    RETURNING "id"`);
+      FROM "project_integration_job" job
+     WHERE item."handling_job_id" = ${jobId}::uuid
+       AND item."handling_job_id" = job."id"
+       AND item."state" = 'OPEN'
+       AND item."id" <> ${byItemId}::uuid
+    RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
 
@@ -1157,6 +1468,23 @@ export interface OpenItemMessageSource {
   /** The candidate a promotion's failure is about; absent or null for every other item. */
   promotionId?: string | null;
   payload: unknown;
+  /** The fixes of this item whose landing is in (§4.4 X-D4 5); absent or empty before any has. */
+  landedFixes?: readonly LandedFix[];
+  /** The commit the item's own failed landing was handed (its job's `source_sha`), when it has one. */
+  failedSourceSha?: string | null;
+}
+
+/**
+ * One fix of an item whose landing is in, as its re-keyed delivery words it (§4.4 X-D4 5). Only
+ * what no longer changes — the task's id and its finished landing job, never the task's title — so
+ * the same key words the same text (G6).
+ */
+export interface LandedFix {
+  taskId: string;
+  jobId: string;
+  state: string;
+  targetRef: string;
+  landedSha: string | null;
 }
 
 /** The payload fields an integration item carries (§4.2's payload column), all of them optional
@@ -1186,6 +1514,8 @@ interface IntegrationItemPayload {
     retryOfJobId?: string;
     failureClass?: string | null;
     reason?: string | null;
+    requestedBySessionId?: string | null;
+    requestedByUserId?: string | null;
   } | null;
 }
 
@@ -1201,36 +1531,37 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
   if (kind === 'INTEGRATION_CONFLICT') {
     const files = payload.files ?? [];
     return [
-      `合并冲突（${payload.phase ?? '未记录阶段'}），目标分支 ${payload.targetRef ?? '未记录'} 没有动。`,
+      `Merge conflict (${payload.phase ?? 'phase not recorded'}); the target branch ${payload.targetRef ?? '(not recorded)'} did not move.`,
       files.length > 0
-        ? `冲突的文件（${files.length} 个）：\n${files.map((file) => `- ${file}`).join('\n')}`
-        : '这次冲突没有报出文件名。',
+        ? `Conflicting files (${files.length}):\n${files.map((file) => `- ${file}`).join('\n')}`
+        : 'This conflict reported no file names.',
     ];
   }
   if (kind === 'INTEGRATION_CHECK_FAILED') {
     const check = payload.check;
-    if (!check?.name) return ['合并后的树上有一条检查没过，这条待办没有记下是哪一条。'];
+    if (!check?.name) return ['A check on the merged tree did not pass, and this item did not record which one.'];
     const tail = typeof check.outputTail === 'string' ? check.outputTail : '';
     return [
-      `检查 ${check.name} 的退出码是 ${check.exitCode}（声明要求 ${check.expectedExitCode}），`
-        + '目标分支没有动。',
-      ...(check.command ? [`它跑的是：${check.command}`] : []),
-      ...(tail ? [`它的输出末尾：\n${clip(tail.slice(-MAX_CHECK_TAIL_IN_MESSAGE))}`] : []),
+      `Check ${check.name} exited with code ${check.exitCode} (its declaration expects ${check.expectedExitCode}); `
+        + 'the target branch did not move.',
+      ...(check.command ? [`It ran: ${check.command}`] : []),
+      ...(tail ? [`The end of its output:\n${clip(tail.slice(-MAX_CHECK_TAIL_IN_MESSAGE))}`] : []),
     ];
   }
   const detail = payload.errorDetail == null ? null : JSON.stringify(payload.errorDetail);
   return [
-    `集成作业以一个错误结束：${payload.errorCode ?? '未记录错误码'}。`,
-    ...(detail ? [`错误详情：${clip(detail)}`] : []),
+    `The integration job ended with an error: ${payload.errorCode ?? 'no error code recorded'}.`,
+    ...(detail ? [`Error detail: ${clip(detail)}`] : []),
   ];
 }
 
 /** What each failure class means, in the sentence a coordinator decides the next step from. */
 const FAILURE_CLASS_MEANING: Readonly<Record<string, string>> = {
-  CONFLICT: '两边改了同一处，git 合不上',
-  CHECK_FAILED: '检查跑完了，退出码与声明不一致',
-  CHECK_TIMED_OUT: '有一条检查跑到它的时间预算还没结束，被平台终止，没有给出结论',
-  ERROR: '集成作业本身出了错，不是检查的结论',
+  CONFLICT: 'both sides changed the same place, and git cannot merge them',
+  CHECK_FAILED: 'the check ran to the end, and its exit code disagrees with its declaration',
+  CHECK_TIMED_OUT: 'a check was still running when its time budget ran out, and the platform stopped it before it '
+    + 'reached a verdict',
+  ERROR: 'the integration job itself went wrong; this is not a check’s verdict',
 };
 
 /**
@@ -1241,46 +1572,102 @@ function failureClassLines(payload: IntegrationItemPayload, aboutTask: boolean):
   const lines: string[] = [];
   if (payload.failureClass) {
     const meaning = FAILURE_CLASS_MEANING[payload.failureClass];
-    lines.push(`失败分类：${payload.failureClass}${meaning ? `（${meaning}）` : ''}。`);
+    lines.push(`Failure class: ${payload.failureClass}${meaning ? ` (${meaning})` : ''}.`);
   }
   const retry = payload.retry;
   if (retry?.retryOfJobId) {
     lines.push(
       (aboutTask
-        ? `这是这项任务的第 ${payload.generation ?? '?'} 代落地，由协调会话要求重跑：上一代`
-        : `这是这个合入 main 的候选的第 ${payload.generation ?? '?'} 次检查，由协调会话要求重跑：上一次`)
-      + `（作业 ${uuidToBase62(retry.retryOfJobId)}）的失败分类是 ${retry.failureClass ?? '未记录'}，`
-      + `重跑的理由是「${retry.reason ?? ''}」。同一个失败又出现了一次，不要再原样重跑。`,
+        ? `This is generation ${payload.generation ?? '?'} of this task’s landing, rerun at the coordinator session’s request: the previous generation`
+        : `This is check ${payload.generation ?? '?'} of this candidate for merging into main, rerun at the coordinator session’s request: the previous check`)
+      + ` (job ${uuidToBase62(retry.retryOfJobId)}) failed with class ${retry.failureClass ?? 'not recorded'}, `
+      + `and the reason given for the rerun was “${retry.reason ?? ''}”. The same failure has happened again: do not rerun it as it stands.`,
     );
   }
   return lines;
 }
 
 /**
+ * The parts of a message this cell can write, in order: a part that would name a door the cell does
+ * not hold is null, and is left out rather than written with a literal name the server would refuse
+ * (`openItemDoorMessageNames`).
+ */
+function lines(...parts: Array<string | null>): string {
+  return parts.filter((part): part is string => part != null && part !== '').join('\n');
+}
+
+/** The same parts, joined as the sentences they are: one after another, a space between them. */
+function composed(...parts: Array<string | null>): string {
+  return parts.filter((part): part is string => part != null && part !== '').join(' ');
+}
+
+/**
+ * What an integration item says about the owner (§4.6 and §4.7, revision 13): once the coordinator
+ * has taken it up it stays the coordinator's — no clock hands it over — so what the owner has to
+ * decide is ASKED, and the item is handed over only when the owner has to act on it themselves.
+ *
+ * Each half is written only where this cell holds that door: a cell with no ask-owner door says
+ * nothing about asking, and one with no hand-over door says nothing about handing over.
+ */
+function askOwnerFirst(
+  projectId: string,
+  itemId: string,
+  doors: Pick<OpenItemDoorMessageNames, 'askOwnerMcp' | 'handOverMcp'>,
+): string | null {
+  const ask = doors.askOwnerMcp == null ? null
+    : `If handling it runs into a trade-off only the account owner can decide (skipping or changing the merge check, for example), ask with ${doors.askOwnerMcp}`
+      + ' (with a recommended option and your reason): the item stays with you, and the answer comes back to this session as a turn; '
+      + 'once you have taken it up, the platform does not hand it to the account owner because time ran out.';
+  const handOver = doors.handOverMcp == null ? null
+    : `Only what the account owner must handle in person (their device, account or keys) is handed to them, with ${doors.handOverMcp}`
+      + ` (projectId: ${projectId}, itemId: ${itemId}, note: why).`;
+  return composed(ask, handOver) || null;
+}
+
+/**
  * The next step a LAND_TASK's failure leaves its coordinator, by the class it failed of (J-T1b).
  *
- * The task is already DONE — a landing is what follows a DONE — so the one door this message must not
- * point at is `task_start`: it runs the task again on a new branch and never queues another landing
- * of the work it finished, which is how three DONE tasks of 34Y7My8sqhKLWtmCQYv1l stopped at their
- * first landing on 2026-10-01 with nothing able to move them.
+ * The task is already DONE — a landing is what follows a DONE — so no sentence here sends the
+ * coordinator to run the task again: a fresh run starts on a new branch and never queues another
+ * landing of the work it finished, which is how three DONE tasks of 34Y7My8sqhKLWtmCQYv1l stopped at
+ * their first landing on 2026-10-01 with nothing able to move them. It is said without naming
+ * `task_start`: this cell holds no such door, and the message names only doors the cell really has.
  */
-function landingNextStep(projectId: string, taskId: string, payload: IntegrationItemPayload): string {
-  const read = `先读这条任务（task_get，taskId 传 ${taskId}，评论与它的会话都在上面）。任务本身已经是 DONE，`
-    + '落地失败不改它的状态；task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地。\n';
-  const rework = '用 task_reopen 把任务退回返工、另起一个取代它的任务（task_create 带 supersedesTaskId），'
-    + '或者取消（task_update 置 CANCELLED）';
-  if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload);
+function landingNextStep(
+  projectId: string,
+  itemId: string,
+  taskId: string,
+  payload: IntegrationItemPayload,
+  doors: OpenItemDoorMessageNames,
+): string {
+  const read = `Read the task first (${doors.taskGetMcp}, taskId: ${taskId}; its comments and its session are there). The task itself is already DONE, `
+    + 'and a failed landing does not change its status; starting the task again runs it on a new branch and does not queue this landing again.\n';
+  const rework = `send the task back for rework with ${doors.taskReopenMcp}, or cancel it (${doors.taskUpdateMcp} to CANCELLED)`;
+  const repair = `if you judge it a code or delivery problem, file a fix task with ${doors.taskCreateMcp} and attach it to this item with fixesOpenItemId: ${itemId}`
+    + '; that is repair work, not a rewrite of a task that is already DONE.';
+  const handOver = askOwnerFirst(projectId, itemId, doors);
+  if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload, doors);
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
-    return read
-      + '冲突只有改过的分支才能解开：原样重跑会再冲突一次，integration_retry 也不接受冲突。'
-      + `${rework}。`;
+    // No rerun is offered in a conflict's cell, so this sentence names none: the landing rerun is
+    // what a conflict is refused, and the two doors that answer it are named instead.
+    return read + lines(
+      'Only a branch that changed can resolve a conflict: rerunning the landing as it stands would conflict again. '
+        + `Instead, ${rework}; ${repair}`,
+      handOver,
+    );
   }
-  return read
-    + '先判断红的是谁。是交付本身的问题，就' + `${rework}。`
-    + '不是交付的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 integration_retry'
-    + `（projectId 传 ${projectId}，taskId 传 ${taskId}，reason 写明这次为什么会不同）重排一次落地：`
-    + '它入队这项任务的下一代落地，成了就进项目分支、继续往后的合并检查，没成会再开一条待办给你。'
-    + '这类落地去留由你判，不拿去问账号所有者。';
+  // The rerun paragraph is written only where the cell really holds that door — the classes that
+  // reach here are the ones a rerun answers, and the matrix gives them the door.
+  const rerun = doors.retryMcp == null ? null
+    : `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the check timed out, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
+      + ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `
+      + 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
+      + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.';
+  return read + lines(
+    'First work out whose red it is. If the delivery itself is the problem, ' + `${rework}; ${repair}`,
+    rerun,
+    handOver,
+  );
 }
 
 /**
@@ -1292,22 +1679,33 @@ function landingNextStep(projectId: string, taskId: string, payload: Integration
  * stopped in the same place. What resolves it is a source branch that already contains that absorb:
  * J-S2 then leaves the project branch's tip alone and J-S4 lands the source by MERGE.
  */
-function mainSyncNextStep(payload: IntegrationItemPayload): string {
-  const line = payload.targetRef ? `项目分支 ${payload.targetRef} ` : '项目分支';
-  return `这次冲突停在 MAIN_SYNC：平台先把 upstream（project_get 的 integration.upstreamRef）合进${line}的 tip，`
-    + '在那里就冲突了，还没看这项任务的提交。冲突在项目线和 upstream 之间，不在这项任务的工作里：'
-    + '原样重跑会再冲突一次，integration_retry 也不接受冲突；只让任务重做自己的工作也解不开，'
-    + '下一次落地照样先停在这里。\n'
-    + '先在项目线上吸收 upstream、解决冲突，再落地：\n'
-    + `1. 在这项任务的源分支上，把${line}的 tip 和 upstream 的 tip 合进来，解掉上面这些文件的冲突，`
-    + '提交这个合并提交。任务原来的工作留着，不用重做。\n'
-    + '2. 源分支同时包含这两个 tip，它的下一次落地就不再先合 upstream，而是按 J-S4 的 MERGE 模式落地，'
-    + '进项目分支的树就是源分支的树。落地时其中一个 tip 又往前走了，源分支就缺了它，'
-    + '落地会照旧停在 MAIN_SYNC，那就再合一次。\n'
-    + '3. 这个合并提交由这项任务自己的会话放进源分支：先用 task_comment 在任务上写明这一轮只做第 1 步，'
-    + '再用 task_reopen 把它退回。它再次 DONE 就会排下一次落地。\n'
-    + '这条待办开着时，同一条集成线上其他任务的落地都在等（M2），只有这项任务自己的下一次落地不用等。'
-    + '它落进项目分支后，这条待办由平台关闭，排着的落地接着走。';
+function mainSyncNextStep(
+  payload: IntegrationItemPayload,
+  doors: Pick<OpenItemDoorMessageNames, 'taskCommentMcp' | 'taskReopenMcp'>,
+): string {
+  const line = payload.targetRef ? `the project branch ${payload.targetRef}` : 'the project branch';
+  // The recipe's third step is the one that names doors, and it is written from the cell: the real
+  // MAIN_SYNC conflict cell holds both, and a cell that holds only the re-open still gets the step.
+  const stepThree = doors.taskReopenMcp == null ? null
+    : `3. The merge commit is put into the source branch by this task’s own session: ${doors.taskCommentMcp == null
+        ? `send it back with ${doors.taskReopenMcp}, saying in that round that it does step 1 only`
+        : `first write on the task with ${doors.taskCommentMcp} that this round does step 1 only, then send it back with ${doors.taskReopenMcp}`}. `
+      + 'When it is DONE again, its next landing is queued.';
+  return `This conflict stopped at MAIN_SYNC: the platform first merges the upstream (integration.upstreamRef in project_get) into the tip of ${line}, `
+    + 'and the conflict happened there, before it looked at this task’s commits. The conflict is between the project line and the upstream, not in this task’s work: '
+    + 'rerunning the landing as it stands would conflict again, and merely having the task redo its own work does not resolve it, '
+    + 'because the next landing stops here first just the same.\n'
+    + 'Absorb the upstream on the project line and resolve the conflict first, then land:\n'
+    + `1. On this task’s source branch, merge in the tip of ${line} and the tip of the upstream, resolve the conflicts in the files above, `
+    + 'and commit that merge commit. The task’s original work stays; it does not need redoing.\n'
+    + '2. With both tips in the source branch, its next landing no longer merges the upstream first but lands in J-S4’s MERGE mode, '
+    + 'and the tree that goes into the project branch is the source branch’s tree. If either tip moves on again while it lands, what happens '
+    + 'depends on which one it is: if the PROJECT BRANCH tip moves, the source branch lacks its new tip, the landing stops at MAIN_SYNC as before, '
+    + 'and that tip has to be merged in once more; if only the UPSTREAM moves, the landing merges the new upstream into this very source branch '
+    + 'and, when that merge is clean, lands by MERGE with nothing more to do — only an upstream commit that really touches the resolved lines '
+    + 'conflicts again.\n'
+    + lines(stepThree == null ? null : `${stepThree}\n`, 'While this item is open, the landings of the other tasks on the same integration line wait (M2); only this task’s own next landing does not wait. '
+      + 'Once it lands in the project branch, the platform closes this item, and the queued landings move on.');
 }
 
 /**
@@ -1323,23 +1721,40 @@ function mainSyncNextStep(payload: IntegrationItemPayload): string {
 function promotionNextStep(
   projectId: string,
   promotionId: string | null,
+  itemId: string,
   payload: IntegrationItemPayload,
+  doors: OpenItemDoorMessageNames,
 ): string {
-  const about = '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
-    + '任务做事。\n';
+  const about = 'No task stands behind this item: it comes from the job of a promotion (merging the project branch into main), and such a job does no work for any single '
+    + 'task.\n';
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
-    return about
-      + '冲突只有改过的项目分支才能解开：原样重跑会再冲突一次，integration_retry 也不接受冲突。'
-      + '另起一个任务在项目分支上解决它；那个任务落地后，平台会为新的分支尖端开一个新的候选并重新检查，'
-      + '这个候选和这条待办随之由平台关闭。';
+    // The re-check is not named here: a conflict's cell holds no such door, and the sync task below
+    // is the one that answers it.
+    return about + lines(
+      'Only a project branch that changed can resolve a conflict: rerunning the check as it stands would conflict again. '
+        + `File a sync task with ${doors.taskCreateMcp} that starts from the project branch tip and merges the upstream tip into its source branch, resolving the conflict and committing it; `
+        + `attach it to this item with fixesOpenItemId: ${itemId}. `
+        + 'Once that task lands, the platform opens a new candidate for the new branch tip and checks it again, '
+        + 'and closes this candidate and this item with it.',
+      askOwnerFirst(projectId, itemId, doors),
+    );
   }
-  const candidate = promotionId ? uuidToBase62(promotionId) : '这个候选的编号';
-  const retry = `（projectId 传 ${projectId}，promotionId 传 ${candidate}，reason 写明这次为什么会不同）`;
-  return about
-    + '先判断红的是谁。是项目分支上的工作有问题，就另起一个任务修它，它落地后平台会开新的候选。'
-    + '不是工作的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 integration_retry'
-    + `${retry}把这个候选的检查重跑一次。检查通过之后，合并照旧由账号所有者在卡上确认，或由 Automatic `
-    + '设置按原来的规则自动合并：这扇门只让候选回到可以合并的状态，不替任何人合并。';
+  const candidate = promotionId ? uuidToBase62(promotionId) : 'this candidate’s id';
+  const retry = ` (projectId: ${projectId}, promotionId: ${candidate}, reason: why this time will be different)`;
+  const rerun = doors.retryMcp == null ? null
+    : `If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
+      + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, or done automatically by the Automatic `
+      + 'setting under its usual rule: this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
+  const tradeOff = doors.askOwnerMcp == null ? null
+    : `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
+      + ', giving at least two options, with the reason in the recommended one.';
+  return about + lines(
+    'First work out whose red it is. If it is a code problem on the project branch, file a fix task with ' + `${doors.taskCreateMcp}`
+      + ` and attach it to this item with fixesOpenItemId: ${itemId}; once it lands, the platform opens a new candidate.`,
+    rerun,
+    tradeOff,
+    askOwnerFirst(projectId, itemId, doors),
+  );
 }
 
 /**
@@ -1457,8 +1872,77 @@ function checkResult(value: IntegrationItemPayload['check']): IntegrationCheckRe
  * disagreed and what it returned, the error code — because the reader's first question is which of
  * the two branches moved, and the answer is a column of this row. A promotion's failure names no
  * task, so it does not pretend to.
+ *
+ * Re-keyed because a fix of it landed (§4.4 X-D4 5), it opens with what landed — the reason it is in
+ * front of the coordinator again — and then says everything it said the first time.
  */
 export function openItemMessage(item: OpenItemMessageSource): string {
+  const landed = landedFixPreface(item);
+  return landed ? `${landed}\n\n${openItemBody(item)}` : openItemBody(item);
+}
+
+/**
+ * What a re-keyed item says first once a fix of it has landed (§4.4 X-D4 5).
+ *
+ * It says what landed and leaves the judgement where it was. The item is about ANOTHER task's work,
+ * and whether that work went in with the fix is a question about commits, which this server cannot
+ * ask — so the coordinator is handed the two commits to ask it of, and the door for each answer.
+ */
+function landedFixPreface(item: OpenItemMessageSource): string | null {
+  const fixes = item.landedFixes ?? [];
+  if (fixes.length === 0) return null;
+  const payload = (item.payload ?? {}) as IntegrationItemPayload;
+  const doors = openItemDoorMessageNames({
+    kind: item.kind,
+    assignee: 'COORDINATOR',
+    taskId: item.taskId,
+    promotionId: item.promotionId ?? null,
+    payload,
+    phase: payload.phase ?? null,
+    jobKind: payload.jobKind ?? null,
+    failureClass: payload.failureClass ?? null,
+  });
+  const projectId = uuidToBase62(item.projectId);
+  const resolve = `${doors.resolveMcp} (projectId: ${projectId}, itemId: ${uuidToBase62(item.id)})`;
+  // Both of these name a door, so both are written only where the item's own cell holds it.
+  const ask = doors.askOwnerMcp == null ? null
+    : `Anything that needs the account owner’s decision is asked with ${doors.askOwnerMcp}, and the item stays with you.`;
+  const landedLines = fixes.map((fix) => {
+    const target = fix.targetRef.startsWith('refs/heads/') ? fix.targetRef.slice('refs/heads/'.length) : fix.targetRef;
+    const result = fix.state === 'NOTHING_TO_LAND'
+      ? 'result NOTHING_TO_LAND (it had no commits of its own to land)'
+      : `result ${fix.state}, on ${target}${fix.landedSha ? ` at ${fix.landedSha.slice(0, 12)}` : ''}`;
+    return `- Fix task ${uuidToBase62(fix.taskId)}: ${result} (job ${uuidToBase62(fix.jobId)}).`;
+  });
+  const head = `From Orbit · fix landed: ${fixes.length === 1 ? 'the fix task attached to this item has' : 'the fix tasks attached to this item have'} landed:\n${landedLines.join('\n')}\n`;
+  const aboutTask = item.taskId ? uuidToBase62(item.taskId) : null;
+  if (!aboutTask || !(INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
+    return head + lines(
+      'The platform does not close this item just because a fix landed. It is yours to judge whether the fix has answered it: '
+        + `if it has, close it with ${resolve}, giving your reason; if it has not, handle it as its original content below says.`
+        + (ask == null ? '' : ` ${ask}`),
+      'Below is this item’s original content.',
+    );
+  }
+  const landedTip = [...fixes].reverse().find((fix) => fix.landedSha)?.landedSha ?? null;
+  const check = item.failedSourceSha && landedTip
+    ? `for example git merge-base --is-ancestor ${item.failedSourceSha} ${landedTip}`
+    : 'against the target branch’s current tip';
+  const requeue = doors.retryMcp == null ? null
+    : `- If they are not (the fix only repaired the baseline), requeue its landing with ${doors.retryMcp} (projectId: ${projectId}, taskId: ${aboutTask}, `
+      + 'reason: the fix has landed);';
+  return head + lines(
+    `The platform does not close this item just because a fix landed: it is about task ${aboutTask}’s own landing, `
+      + 'and the server cannot tell whether that work went live together with the fix. Finishing it is yours:',
+    `- First check whether the commits task ${aboutTask} delivered are already on the target branch (${check});`,
+    `- If they are, close the item with ${resolve}, giving your reason;`,
+    requeue,
+    ask == null ? null : `- ${ask}`,
+    'Below is this item’s original content.',
+  );
+}
+
+function openItemBody(item: OpenItemMessageSource): string {
   const projectId = uuidToBase62(item.projectId);
   const payload = (item.payload ?? {}) as {
     how?: string;
@@ -1467,60 +1951,74 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     error?: string;
     chain?: { failuresInChain?: number; limit?: number };
   } & IntegrationItemPayload;
-  const notice = `待办编号 ${uuidToBase62(item.id)}。这是一条通知，不是打断：你正在跑的那一轮不会被它中断，`
-    + '你是在那一轮结束之后才读到它的，所以以你自己刚读到的库里状态为准。';
+  const doorNames = openItemDoorMessageNames({
+    kind: item.kind,
+    assignee: 'COORDINATOR',
+    taskId: item.taskId,
+    promotionId: item.promotionId ?? null,
+    payload,
+    phase: payload.phase ?? null,
+    jobKind: payload.jobKind ?? null,
+    failureClass: payload.failureClass ?? null,
+  });
+  const notice = `Item id: ${uuidToBase62(item.id)}. This is a notice, not an interruption: the turn you were running was not interrupted by it, `
+    + 'and you are reading it only after that turn ended, so go by the database state you have just read yourself.';
   // The one ending the platform cannot produce for itself, and the only place a coordinator is told
   // the door exists: work that landed by HAND — a replay of the branch that the platform never saw —
   // leaves the item saying "this did not land" for ever, because the branch tip is not an ancestor of
   // anything and no job will ever report a landing for it again.
-  const handClose = '平台自己关不掉的情况——这项工作已经用别的方式在目标分支上了，或者你已经另行处理过——'
-    + '用 open_item_resolve 写明理由把它关掉：它标为已处理（HANDLED），你的会话和理由会留在待办上。';
+  const handClose = 'Where the platform cannot close it by itself — the work is already on the target branch some other way, or you have dealt with it separately — '
+    + `close it with ${doorNames.resolveMcp}, giving your reason: it is marked handled (HANDLED), and your session and reason stay on the item.`;
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
     // §4.7 H1–H3, said once for both scopes: a rerun does not close this item, its result does.
-    const handling = (what: string, success: string) => `用 integration_retry ${what}后，这条待办显示为`
-      + `处理中、仍然开着，直到重跑的那次作业有结果：${success}，它自动标为已处理（HANDLED），记下你的会话`
-      + '和理由；又失败了，它标为已取代（RETRIED），新的失败另开一条待办。';
-    return `【例外待办】${item.title}\n\n`
-      + `项目 ${projectId} 的一次集成没有把工作放进集成线：\n`
+    // Written only where this cell holds the rerun door — a conflict's item is not put into
+    // "being handled" by any press, and its message names none.
+    const handling = (what: string, success: string): string => doorNames.retryMcp == null ? ''
+      : `After you ${what} with ${doorNames.retryMcp}, this item shows as `
+        + `being handled and stays open until the rerun job has a result: if ${success}, it is marked handled (HANDLED) automatically, with your session `
+        + 'and reason recorded; if it fails again, it is marked superseded (RETRIED), and the new failure opens an item of its own.';
+    return `From Orbit · exception item: ${item.title}\n\n`
+      + `An integration in project ${projectId} did not put the work on the integration line:\n`
       + `${[...integrationItemFacts(item.kind, payload), ...failureClassLines(payload, taskId !== null)].join('\n')}\n\n`
-      + '这条待办的负责人是你。平台不会自己重试一次没有落地的集成，所以不会有第二次作业自己出现；'
-      + '要判断的是下一步。\n'
+      + 'This item is yours. The platform does not by itself retry an integration that did not land, so no second job will appear on its own; '
+      + 'what you have to judge is the next step.\n'
       + (taskId
-        ? `${landingNextStep(projectId, taskId, payload)}\n`
-          + '任务落地、被取消或被取代之后，这条待办由平台自己关闭。'
-          + `${handling('重排', '落地了')}你不用回报。${handClose}\n`
-        : `${promotionNextStep(projectId, item.promotionId ?? null, payload)}\n`
-          + '这个候选被新的落地取代、被拒绝或已经合并之后，这条待办由平台自己关闭。'
-          + `${handling('重跑检查', '检查通过了')}你不用回报。${handClose}\n`)
+        ? `${landingNextStep(projectId, uuidToBase62(item.id), taskId, payload, doorNames)}\n`
+          + 'When the task lands, is cancelled or is superseded, the platform closes this item itself; the landing of a fix task attached to it does not count: '
+          + `the platform then delivers this item again, for you to check and then close or requeue. `
+          + composed(handling('requeue its landing', 'it lands'), `You do not need to report back. ${handClose}`) + '\n'
+        : `${promotionNextStep(projectId, item.promotionId ?? null, uuidToBase62(item.id), payload, doorNames)}\n`
+          + 'When this candidate is superseded by a new landing, declined or merged, the platform closes this item itself. '
+          + composed(handling('rerun the check', 'the check passes'), `You do not need to report back. ${handClose}`) + '\n')
       + `\n${notice}`;
   }
   if (item.kind === DELIVERY_REVIEW_KIND && item.taskId) {
-    return deliveryReviewMessage(item, projectId, payload, notice);
+    return deliveryReviewMessage(item, projectId, payload, notice, doorNames);
   }
   if (item.kind !== 'TASK_FAILED' || !item.taskId) {
-    return `【例外待办】${item.title}\n\n`
-      + `项目 ${projectId} 有一条需要你处理的例外。待办编号 ${uuidToBase62(item.id)}。\n\n`
-      + `这是一条通知，不是打断：你是在上一轮结束之后才读到它的，以你自己读到的库里状态为准。`;
+    return `From Orbit · exception item: ${item.title}\n\n`
+      + `Project ${projectId} has an exception for you to handle. Item id: ${uuidToBase62(item.id)}.\n\n`
+      + 'This is a notice, not an interruption: you are reading it only after your previous turn ended, so go by the database state you read yourself.';
   }
   const taskId = uuidToBase62(item.taskId);
   const attempt = payload.chain?.failuresInChain ?? 1;
   const limit = payload.chain?.limit ?? TASK_FAILURE_CHAIN_LIMIT;
   const detail = [
     payload.exitCode !== undefined
-      ? `验收命令的退出码是 ${payload.exitCode}，声明要求 ${payload.expectedExitCode ?? 0}。`
+      ? `The acceptance command exited with code ${payload.exitCode}; its declaration expects ${payload.expectedExitCode ?? 0}.`
       : null,
-    payload.error ? `失败信息：\n${payload.error}` : null,
+    payload.error ? `Failure message:\n${payload.error}` : null,
   ].filter((line): line is string => !!line);
-  return `【例外待办】${item.title}\n\n`
-    + `项目 ${projectId} 的任务 ${taskId} 失败了：${howInChinese(payload.how)}。\n`
+  return `From Orbit · exception item: ${item.title}\n\n`
+    + `Task ${taskId} in project ${projectId} failed: ${howInWords(payload.how)}.\n`
     + (detail.length > 0 ? `${detail.join('\n')}\n` : '')
-    + `这是这条取代链上的第 ${attempt} 次失败（上限 ${limit} 次；到第 ${limit} 次，待办不再发给你，`
-    + `直接交给账号所有者）。\n\n`
-    + `这条待办的负责人是你，要判断的是下一步：重新运行（task_start）、另起一个取代它的任务`
-    + `（task_create 带 supersedesTaskId）、还是取消（task_update 置 CANCELLED）。`
-    + `失败原因先用 task_get（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
-    + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。`
+    + `This is failure ${attempt} on this chain of attempts (the limit is ${limit}; at failure ${limit} the item no longer comes to you `
+    + 'and goes straight to the account owner).\n\n'
+    + `This item is yours, and what you have to judge is the next step: run it again (${doorNames.taskStartMcp}), file a task that supersedes it `
+    + `(${doorNames.taskCreateMcp} with supersedesTaskId), or cancel it (${doorNames.taskUpdateMcp} to CANCELLED). `
+    + `For why it failed, first read the task’s comments and its session with ${doorNames.taskGetMcp} (taskId: ${taskId}); do not guess from this message.\n`
+    + 'When the task runs again, is superseded, is cancelled or is done, the platform closes this item itself; you do not need to report back. '
     + `${handClose}\n\n`
     + notice;
 }
@@ -1541,59 +2039,67 @@ export function deliveryReviewDetailLine(payload: unknown): string {
     : `${files} outside its declaration${named}`;
 }
 
-/** Explain the mechanical observation and the bounded coordinator choices. */
+/**
+ * Explain the mechanical observation and the bounded coordinator choices.
+ *
+ * Every executable it names is one of this cell's own doors, read from the table like the rest of
+ * the prose: a review's send-back is `task_comment` + `task_reopen`, its supersession
+ * `task_update` + `task_create`, and its rerun the landing's own door. The one thing it says about
+ * the account owner is that this is NOT their question, so it names no owner door at all.
+ */
 function deliveryReviewMessage(
   item: OpenItemMessageSource,
   projectId: string,
   payload: unknown,
   notice: string,
+  doors: OpenItemDoorMessageNames,
 ): string {
   const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
   const taskId = uuidToBase62(item.taskId!);
   const itemId = uuidToBase62(item.id);
   const listed = (label: string, all: readonly string[]): string => {
-    if (all.length === 0) return `${label}：无\n`;
+    if (all.length === 0) return `${label}: none\n`;
     const shown = all.slice(0, MAX_REVIEW_PATHS_IN_MESSAGE).map((file) => `- ${file}`).join('\n');
     const more = all.length > MAX_REVIEW_PATHS_IN_MESSAGE
-      ? `\n- ……另有 ${all.length - MAX_REVIEW_PATHS_IN_MESSAGE} 个`
+      ? `\n- … and ${all.length - MAX_REVIEW_PATHS_IN_MESSAGE} more`
       : '';
-    return `${label}（${all.length} 个）：\n${shown}${more}\n`;
+    return `${label} (${all.length}):\n${shown}${more}\n`;
   };
-  const resolve = `open_item_resolve（projectId 传 ${projectId}，itemId 传 ${itemId}）`;
-  const retry = `integration_retry（projectId 传 ${projectId}，taskId 传 ${taskId}，`
-    + 'reason 写明这次为什么会不同）';
+  const resolve = `${doors.resolveMcp} (projectId: ${projectId}, itemId: ${itemId})`;
+  const retry = `${doors.retryMcp} (projectId: ${projectId}, taskId: ${taskId}, `
+    + 'reason: why this time will be different)';
   const conflict = review?.reason === 'MERGE_REFUSED_BY_GIT';
   const observed = conflict
-    ? `项目 ${projectId} 的任务 ${taskId} 有一条合并回执说 git 拒绝了合并。\n`
-      + listed('git 报告冲突的文件', review?.paths ?? [])
-    : `项目 ${projectId} 的任务 ${taskId} 的交付改了它自己的声明里没有提到的文件。`
-      + '这是一条机械的范围告警：平台只拿任务标题、描述和验收标准里写到的路径，去比这次交付实际改动的'
-      + '文件，不判断这些改动对不对。\n'
-      + listed('声明里写到的路径', review?.declaredPaths ?? [])
-      + listed('声明之外改动的文件', review?.paths ?? []);
+    ? `Task ${taskId} in project ${projectId} has a merge receipt saying git refused the merge.\n`
+      + listed('Files git reported as conflicting', review?.paths ?? [])
+    : `The delivery of task ${taskId} in project ${projectId} changed files its own declaration does not mention. `
+      + 'This is a mechanical scope warning: the platform only compares the paths written in the task’s title, description and acceptance criteria with the files '
+      + 'this delivery actually changed, and does not judge whether those changes are right.\n'
+      + listed('Paths the declaration names', review?.declaredPaths ?? [])
+      + listed('Files changed outside the declaration', review?.paths ?? []);
   const answers = conflict
     ? [
-        `退回：task_comment 写清冲突在哪，再 task_reopen（taskId 传 ${taskId}），让它在任务分支上解决；`,
-        '取代：task_update 置 CANCELLED，再 task_create 带 supersedesTaskId，另起一个能合进去的任务；',
-        `已经手工解决并合入：用 merge_receipt 记下那次合并（成果落地后这条待办自己关闭），或用 ${resolve} 写明你是怎么处理的；`,
-        '不要原样重跑：同样的提交再合一次还会冲突，integration_retry 也不接受冲突。',
+        `Send it back: write with ${doors.taskCommentMcp} where the conflict is, then ${doors.taskReopenMcp} (taskId: ${taskId}), so that it is resolved on the task branch;`,
+        `Supersede it: ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, filing a task that can be merged;`,
+        `Already resolved and merged by hand: record that merge with merge_receipt (this item closes by itself once the work lands), or use ${resolve} to say how you dealt with it;`,
+        'Do not rerun it as it stands: merging the same commits again would conflict again, and the landing rerun does not accept a conflict either.',
       ]
     : [
-        `接受范围：这些文件属于这份交付该做的事——用 ${resolve} 写明你的判断，理由会留在待办上。接受只记下判断、本身不合并；`,
-        `退回：交付里有不该改的部分——task_comment 写清要撤回或拆出的改动，再 task_reopen（taskId 传 ${taskId}）让它按原任务重做；`,
-        '取代：任务的范围本身就写错了——task_update 置 CANCELLED，再 task_create 带 supersedesTaskId，新任务把要改的路径写进声明；',
-        `重跑落地：交付没问题，是落地检查失败、超时或集成出错——用 ${retry} 重排一次落地；冲突不能重跑。`,
+        `Accept the scope: these files belong to what this delivery had to do — use ${resolve} to state your judgment, and the reason stays on the item. Accepting only records the judgment and merges nothing by itself;`,
+        `Send it back: the delivery changed something it should not have — write with ${doors.taskCommentMcp} which changes to withdraw or split out, then ${doors.taskReopenMcp} (taskId: ${taskId}) so that it is redone as the original task;`,
+        `Supersede it: the task’s scope itself was written wrong — ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, the new task’s declaration naming the paths it has to change;`,
+        `Rerun the landing: the delivery is fine, and the landing check failed, timed out or hit an integration error — requeue the landing once with ${retry}; a conflict cannot be rerun.`,
       ];
-  return `【例外待办】${item.title}\n\n`
+  return `From Orbit · exception item: ${item.title}\n\n`
     + `${observed}\n`
-    + '这个项目开着 Automatic：这份交付的落地去留由你判，不先交给账号所有者。'
-    + `先读任务的声明（task_get，taskId 传 ${taskId}）、它服务的那条判据（project_get 的 `
-    + 'acceptanceCriteriaItems）和它实际的改动，再选一条：\n'
+    + 'This project has Automatic on: whether this delivery lands is yours to judge, and it does not go to the account owner first. '
+    + `Read the task’s declaration (${doors.taskGetMcp}, taskId: ${taskId}), the criterion it serves (acceptanceCriteriaItems in `
+    + 'project_get) and its actual changes, then choose one:\n'
     + `${answers.map((line) => `- ${line}`).join('\n')}\n`
-    + '任务被退回、取消或被取代之后，这条待办由平台自己关闭；这条会话停着不处理超过项目的 '
-    + 'exceptionEscalationSeconds，它会交给账号所有者。\n'
-    + '这不是验收标准的问题，不要为它 ask_owner：改验收标准、确认标准集仍然只有账号所有者能做；'
-    + '交付声称某条判据不适用、或判据在它开工之后被改过，那两种情况是账号所有者的 blocker。\n\n'
+    + 'When the task is sent back, cancelled or superseded, the platform closes this item itself; once you take it up it stays yours, '
+    + 'and the platform does not hand it to the account owner because time ran out.\n'
+    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do; '
+    + 'a delivery that claims a criterion does not apply, or a criterion changed after the work started — those two cases are the account owner’s blockers.\n\n'
     + notice;
 }
 
@@ -1616,9 +2122,11 @@ function deliveryReviewMessage(
 export async function readOpenItemDeliveryCard(
   prisma: Pick<PrismaService, 'projectOpenItem' | 'projectCodebase' | 'task'>,
   itemId: string,
+  /** The owner of the session the turn is on: an item of anybody else's is no card of this turn's. */
+  ownerId: string,
 ): Promise<OpenItemDeliveryCard | null> {
-  const item = await prisma.projectOpenItem.findUnique({
-    where: { id: itemId },
+  const item = await prisma.projectOpenItem.findFirst({
+    where: { id: itemId, ownerId },
     select: {
       id: true,
       kind: true,
@@ -1628,6 +2136,8 @@ export async function readOpenItemDeliveryCard(
       sessionId: true,
       projectId: true,
       assignee: true,
+      state: true,
+      handoverNote: true,
       promotionId: true,
       fuseEpisodeId: true,
     },
@@ -1649,7 +2159,13 @@ export async function readOpenItemDeliveryCard(
         },
       })
     : null;
-  const branches = await readLandingBranches(prisma, item.projectId);
+  // The binding, read once: the branches the landing is judged against, and the main branch the next
+  // step names (main with no repository bound).
+  const codebase = await prisma.projectCodebase.findFirst({
+    where: { projectId: item.projectId, slot: 'primary' },
+    select: { upstreamRef: true, integrationRef: true },
+  });
+  const branches = landingBranchesFor(codebase);
   const receipts = task?.mergeReceipts ?? [];
   return {
     itemId: item.id,
@@ -1691,6 +2207,30 @@ export async function readOpenItemDeliveryCard(
       promotionId: item.promotionId,
       fuseEpisodeId: item.fuseEpisodeId,
       askable: false,
+      payload: item.payload,
+    }),
+    requiredAction: openItemRequiredAction({
+      kind: item.kind,
+      assignee: item.assignee,
+      taskId: item.taskId,
+      promotionId: item.promotionId,
+      fuseEpisodeId: item.fuseEpisodeId,
+      askable: false,
+      payload: item.payload,
+      state: item.state,
+      handoverNote: item.handoverNote,
+      mainBranch: mainBranchOf(codebase),
+    }),
+    primaryAction: primaryAction({
+      kind: item.kind,
+      assignee: item.assignee,
+      taskId: item.taskId,
+      promotionId: item.promotionId,
+      fuseEpisodeId: item.fuseEpisodeId,
+      askable: false,
+      payload: item.payload,
+      state: item.state,
+      handoverNote: item.handoverNote,
     }),
     landing: {
       receipts: receipts.length,
@@ -1701,24 +2241,24 @@ export async function readOpenItemDeliveryCard(
   };
 }
 
-function howInChinese(how: string | undefined): string {
+function howInWords(how: string | undefined): string {
   switch (how) {
     case 'ACCEPTANCE_EXIT_MISMATCH':
-      return '验收命令的退出码与声明不一致';
+      return 'the acceptance command’s exit code disagreed with its declaration';
     case 'RUN_FAILED':
-      return '执行会话的一轮以失败结束';
+      return 'a turn of its run session ended in failure';
     case 'RUNNER_FINALIZED_FAILED':
-      return 'runner 把这次执行以失败收尾';
+      return 'the runner finished this run as failed';
     case 'REAPED_API_ERROR':
-      return '这次执行停在一次 API 或登录错误上，被平台回收';
+      return 'this run stopped on an API or sign-in error and was reclaimed by the platform';
     case 'ATTEMPT_LOST_RUNNER_OFFLINE':
-      return '执行它的 runner 失联，这次执行被收回，任务回到待开工';
+      return 'the runner executing it lost contact, so this run was taken back and the task returned to waiting to start';
     case 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED':
-      return '执行会话的运行时一直没起来，这次执行被收回，任务回到待开工';
+      return 'the run session’s runtime never came up, so this run was taken back and the task returned to waiting to start';
     case 'REPORTED_FAILED':
-      return '有人把它置为 FAILED';
+      return 'somebody set it to FAILED';
     default:
-      return '执行失败';
+      return 'the run failed';
   }
 }
 

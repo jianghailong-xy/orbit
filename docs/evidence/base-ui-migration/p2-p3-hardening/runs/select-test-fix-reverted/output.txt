@@ -1,0 +1,157 @@
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","Enter"] from "1" with focus in the list (the reference) 154ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","Enter"] from "1" with focus in the list (the reference) 33ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","ArrowUp","Enter"] from "1" with focus in the list (the reference) 29ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","ArrowDown","Enter"] from "1" with focus in the list (the reference) 23ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from "1" with focus in the list (the reference) 23ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowUp","Enter"] from "1" with focus in the list (the reference) 25ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowDown","Enter"] from "1" with focus in the list (the reference) 23ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowDown","Enter"] from "1" with focus in the list (the reference) 24ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowUp","Enter"] from "1" with focus in the list (the reference) 22ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from "1" with focus in the list (the reference) 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from null with focus in the list (the reference) 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","Enter"] from null with focus in the list (the reference) 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from null with focus in the list (the reference) 20ms
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 23ms
+   → expected [ 'never' ] to deeply equal [ '7' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 15ms
+   → expected [] to deeply equal [ 'never' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 22ms
+   → expected [ '7' ] to deeply equal [ 'never' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 22ms
+   → expected 'false' to be 'true' // Object.is equality
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 17ms
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 15ms
+   → expected [] to deeply equal [ 'never' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+   → expected [ 'never' ] to deeply equal [ '7' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+   → expected [ 'never' ] to deeply equal [ '7' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 14ms
+   → expected [] to deeply equal [ 'never' ]
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from "1" before focus enters the list picks what the reference picks 16ms
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from null before focus enters the list picks what the reference picks 16ms
+   → expected [] to deeply equal [ 'never' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","Enter"] from null before focus enters the list picks what the reference picks 16ms
+   → expected [] to deeply equal [ '7' ]
+ × src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from null before focus enters the list picks what the reference picks 17ms
+   → expected [] to deeply equal [ 'never' ]
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks
+AssertionError: expected [ 'never' ] to deeply equal [ '7' ]
+
+- Expected
++ Received
+
+  [
+-   "7",
++   "never",
+  ]
+
+ ❯ src/components/ui/Select.test.tsx:154:20
+    152|     expect(document.activeElement).toBe(trigger());
+    153|     for (const key of rest) await press(key);
+    154|     expect(picked).toEqual(picks);
+       |                    ^
+    155|     await runFrames();
+    156|     expect(picked).toEqual(picks);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from null before focus enters the list picks what the reference picks
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from null before focus enters the list picks what the reference picks
+AssertionError: expected [] to deeply equal [ 'never' ]
+
+- Expected
++ Received
+
+- [
+-   "never",
+- ]
++ []
+
+ ❯ src/components/ui/Select.test.tsx:154:20
+    152|     expect(document.activeElement).toBe(trigger());
+    153|     for (const key of rest) await press(key);
+    154|     expect(picked).toEqual(picks);
+       |                    ^
+    155|     await runFrames();
+    156|     expect(picked).toEqual(picks);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks
+AssertionError: expected [ '7' ] to deeply equal [ 'never' ]
+
+- Expected
++ Received
+
+  [
+-   "never",
++   "7",
+  ]
+
+ ❯ src/components/ui/Select.test.tsx:154:20
+    152|     expect(document.activeElement).toBe(trigger());
+    153|     for (const key of rest) await press(key);
+    154|     expect(picked).toEqual(picks);
+       |                    ^
+    155|     await runFrames();
+    156|     expect(picked).toEqual(picks);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks
+AssertionError: expected 'false' to be 'true' // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ expectEnd src/components/ui/Select.test.tsx:126:51
+    124| /** After the sequence: closed, or still open on the option `leftOn`. …
+    125| function expectEnd(leftOn: string | null) {
+    126|   expect(trigger().getAttribute('aria-expanded')).toBe(leftOn === null…
+       |                                                   ^
+    127|   if (leftOn !== null) expect(highlighted()).toBe(leftOn);
+    128| }
+ ❯ src/components/ui/Select.test.tsx:157:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","Enter"] from null before focus enters the list picks what the reference picks
+AssertionError: expected [] to deeply equal [ '7' ]
+
+- Expected
++ Received
+
+- [
+-   "7",
+- ]
++ []
+
+ ❯ src/components/ui/Select.test.tsx:154:20
+    152|     expect(document.activeElement).toBe(trigger());
+    153|     for (const key of rest) await press(key);
+    154|     expect(picked).toEqual(picks);
+       |                    ^
+    155|     await runFrames();
+    156|     expect(picked).toEqual(picks);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  11 failed | 15 passed (26)
+   Start at  20:05:30
+   Duration  1.96s (tests 35%, import 31%, environment 27%, transform 7%)
+
+JSON report written to /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/docs/evidence/base-ui-migration/p2-p3-hardening/runs/select-test-fix-reverted/vitest.json

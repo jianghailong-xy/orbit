@@ -1,0 +1,1587 @@
+{
+  "about": [
+    "The managed runner states the three clients are proved against (docs/managed-runner-design.md,",
+    "\"Server and three client interfaces\"): one file, read by the apiserver, @orbit/shared, the web and",
+    "OrbitKit (macOS and iOS).",
+    "",
+    "`capabilities`: `GET /api/auth/capabilities` answers. `offered` is whether a client shows any",
+    "managed UI (`managedRunnersOffered`). The apiserver spec checks the two switch answers against its",
+    "own route; the others are what an older or newer server could send.",
+    "",
+    "`states`: each case's `server` is what the apiserver stores and knows (`enabled` is the switch,",
+    "`available` whether its environment profile is valid, `eligible` the eligibility answer for an owner",
+    "without a mapping, `ownerDisabled` whether an administrator disabled the account; `mapping` lists the managed_runner fields that differ from a blank row, with",
+    "`lastErrorCode` naming the manager's stored reason and `capacityShort` a capacity refusal; `runner`",
+    "is the runner row's heartbeat), all at `now` with `heartbeatFreshMs`. `status` is the body",
+    "`GET /api/managed-runner` answers for it, public ids and their twins included: the apiserver spec",
+    "derives it from `server` with managedRunnerStatus and the public id mapping, and fails if it differs.",
+    "",
+    "`display` is what every client shows for that status (`managedRunnerDisplay`, null: no managed UI).",
+    "`title` and `detail` are the exact words; `detail` is the server's reason sentence when the status",
+    "carries one. `retry` offers Retry (POST /managed-runner/retry with the read revision), `ensure` offers",
+    "Set up (POST /managed-runner/ensure), `signIn` points at the runner's runtimes in Infrastructure.",
+    "`acceptsWork`: a message or turn sent now is accepted and waits for the runner, so a client does not",
+    "refuse it as offline. `startsNewSession`: a first session in the managed default workspace can start",
+    "(the runner was found ready with `initialProvider`); before that no client offers a default engine",
+    "there. `moving`: read the status again soon (MANAGED_RUNNER_STATUS_POLL_SECONDS).",
+    "",
+    "A reason `code` is an open string: a server can add one (C6b adds ACCOUNT_DISABLED), so a client",
+    "shows any reason's `message` and never needs to know its code. The two `failed`/`preparing` cases",
+    "with REASON_FROM_A_NEWER_SERVER hold that, and so does ACCOUNT_DISABLED (\"asleep, its account",
+    "disabled\"): the server offers no action and no wake, so nothing is accepted for it.",
+    "",
+    "`newer`: answers this server cannot give but a newer one could, made from the `available` case",
+    "with `patch` applied: a management state or a contract version this client does not know. Each",
+    "must decode and show no managed UI (`display` null), never fail or wait.",
+    "",
+    "`copy` is MANAGED_RUNNER_COPY's action words, the same in every client."
+  ],
+  "now": "2026-10-09T08:00:00.000Z",
+  "heartbeatFreshMs": 90000,
+  "ids": {
+    "runner": "0195c0de-0000-7000-8000-00000000e001",
+    "workspace": "0195c0de-0000-7000-8000-00000000e002"
+  },
+  "copy": {
+    "retry": "Retry",
+    "ensure": "Set up",
+    "signIn": "Open Infrastructure",
+    "registerOwn": "Register your own machine"
+  },
+  "capabilities": [
+    {
+      "name": "a server from before the feature",
+      "httpStatus": 404,
+      "body": {
+        "message": "Cannot GET /api/auth/capabilities",
+        "error": "Not Found",
+        "statusCode": 404
+      },
+      "offered": false
+    },
+    {
+      "name": "no managedRunners member",
+      "httpStatus": 200,
+      "body": {},
+      "offered": false
+    },
+    {
+      "name": "switched off",
+      "httpStatus": 200,
+      "body": {
+        "managedRunners": {
+          "enabled": false,
+          "contractVersion": 1
+        }
+      },
+      "offered": false
+    },
+    {
+      "name": "a contract this client does not know",
+      "httpStatus": 200,
+      "body": {
+        "managedRunners": {
+          "enabled": true,
+          "contractVersion": 2
+        }
+      },
+      "offered": false
+    },
+    {
+      "name": "malformed",
+      "httpStatus": 200,
+      "body": {
+        "managedRunners": {
+          "enabled": "true",
+          "contractVersion": 1
+        }
+      },
+      "offered": false
+    },
+    {
+      "name": "switched on",
+      "httpStatus": 200,
+      "body": {
+        "managedRunners": {
+          "enabled": true,
+          "contractVersion": 1
+        }
+      },
+      "offered": true
+    }
+  ],
+  "states": [
+    {
+      "name": "no mapping, offered",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "eligible": true,
+        "mapping": null,
+        "runner": null
+      },
+      "display": {
+        "kind": "setup",
+        "title": "Set up a managed runner",
+        "detail": "This Orbit server can run a runner for you, so you can start sessions without setting up a machine of your own.",
+        "retry": false,
+        "ensure": true,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 0,
+        "managementState": "NOT_PROVISIONED",
+        "desiredState": null,
+        "runnerId": null,
+        "workspaceId": null,
+        "heartbeatStatus": null,
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": true,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": null,
+        "runnerPublicId": null
+      }
+    },
+    {
+      "name": "no mapping, account not eligible",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "eligible": false,
+        "mapping": null,
+        "runner": null
+      },
+      "display": {
+        "kind": "notOffered",
+        "title": "No managed runner",
+        "detail": "This Orbit server does not give your account a managed runner. Your own runners are unaffected.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 0,
+        "managementState": "NOT_PROVISIONED",
+        "desiredState": null,
+        "runnerId": null,
+        "workspaceId": null,
+        "heartbeatStatus": null,
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "MANAGED_RUNNER_NOT_ELIGIBLE",
+          "message": "This Orbit server does not give your account a managed runner. Your own runners are unaffected.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": null,
+        "runnerPublicId": null
+      }
+    },
+    {
+      "name": "no mapping, environment unavailable",
+      "server": {
+        "enabled": true,
+        "available": false,
+        "mapping": null,
+        "runner": null
+      },
+      "display": {
+        "kind": "notOffered",
+        "title": "No managed runner",
+        "detail": "Managed runners are switched on, but this server's managed environment is not configured correctly. An operator has to fix it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 0,
+        "managementState": "NOT_PROVISIONED",
+        "desiredState": null,
+        "runnerId": null,
+        "workspaceId": null,
+        "heartbeatStatus": null,
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "MANAGED_RUNNER_UNAVAILABLE",
+          "message": "Managed runners are switched on, but this server's managed environment is not configured correctly. An operator has to fix it.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": null,
+        "runnerPublicId": null
+      }
+    },
+    {
+      "name": "preparing: requested",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "REQUESTED",
+          "desiredState": "RUNNING",
+          "revision": 1
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "preparing",
+        "title": "Preparing your managed runner",
+        "detail": "Orbit is setting up a runner for you. Sessions can start here once it is ready.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 1,
+        "managementState": "REQUESTED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "preparing: provisioning, retrying a transient error",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "PROVISIONING",
+          "desiredState": "RUNNING",
+          "revision": 3,
+          "attempt": 1,
+          "lastErrorCode": "TRANSIENT",
+          "nextAttemptAt": "2026-10-09T08:00:30.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "preparing",
+        "title": "Preparing your managed runner",
+        "detail": "A transient infrastructure error interrupted provisioning; it is retried automatically.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 3,
+        "managementState": "PROVISIONING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "TRANSIENT",
+          "message": "A transient infrastructure error interrupted provisioning; it is retried automatically.",
+          "retryable": true
+        },
+        "retryAfter": "2026-10-09T08:00:30.000Z",
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "preparing: starting",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 5,
+          "generation": 1
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "preparing",
+        "title": "Preparing your managed runner",
+        "detail": "Orbit is setting up a runner for you. Sessions can start here once it is ready.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 5,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "model unavailable: started without a signed-in runtime",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 6,
+          "generation": 1,
+          "lastErrorCode": "MODEL_UNAVAILABLE"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:50.000Z"
+        }
+      },
+      "display": {
+        "kind": "modelUnavailable",
+        "title": "Your managed runner needs a model",
+        "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "retry": false,
+        "ensure": false,
+        "signIn": true,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 6,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MODEL_UNAVAILABLE",
+          "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waiting for capacity before the first start",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "WAITING_CAPACITY",
+          "desiredState": "RUNNING",
+          "revision": 2,
+          "capacityShort": [
+            "cpu",
+            "memory"
+          ],
+          "nextAttemptAt": "2026-10-09T08:01:00.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "waitingCapacity",
+        "title": "Waiting for capacity",
+        "detail": "The managed environment has no room for this runner right now (CPU, memory). It starts by itself when room frees up; nothing was removed or resized to make room.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 2,
+        "managementState": "WAITING_CAPACITY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+          "message": "The managed environment has no room for this runner right now (CPU, memory). It starts by itself when room frees up; nothing was removed or resized to make room.",
+          "retryable": true
+        },
+        "retryAfter": "2026-10-09T08:01:00.000Z",
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "available",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "READY",
+          "desiredState": "RUNNING",
+          "revision": 8,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:45.000Z"
+        }
+      },
+      "display": {
+        "kind": "available",
+        "title": "Managed runner ready",
+        "detail": "Sessions here run on the runner Orbit manages for you.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 8,
+        "managementState": "READY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
+        "usable": true,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": true,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "unresponsive: ready with a stale heartbeat",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "READY",
+          "desiredState": "RUNNING",
+          "revision": 8,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "unresponsive",
+        "title": "Managed runner not responding",
+        "detail": "Orbit has not heard from it recently. Messages sent meanwhile wait for it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 8,
+        "managementState": "READY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": true,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "stopping: draining for sleep",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "DRAINING",
+          "desiredState": "SLEEPING",
+          "revision": 10,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:55.000Z"
+        }
+      },
+      "display": {
+        "kind": "stopping",
+        "title": "Managed runner going to sleep",
+        "detail": "It was idle and is stopping. Work sent now waits, and starts it again once it has stopped.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 10,
+        "managementState": "DRAINING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:55.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": true,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "sleeping",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "SLEEPING",
+          "revision": 12,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "sleeping",
+        "title": "Managed runner asleep",
+        "detail": "It went to sleep while idle. Send a message to wake it; its workspace and files are kept.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": true,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waking: a message asked the sleeping runner",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "RUNNING",
+          "revision": 12,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "It is starting again. Messages sent meanwhile wait for it and run once it is up.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": true,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waking: starting again",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 15,
+          "generation": 2,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "It is starting again. Messages sent meanwhile wait for it and run once it is up.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 15,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waiting for capacity to wake",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "WAITING_CAPACITY",
+          "desiredState": "RUNNING",
+          "revision": 14,
+          "generation": 1,
+          "initialProvider": "claude",
+          "capacityShort": [],
+          "nextAttemptAt": "2026-10-09T08:01:00.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waitingCapacity",
+        "title": "Waiting for capacity",
+        "detail": "The managed environment had no room for this runner when it was admitted. It starts by itself when room frees up; nothing was removed or resized to make room.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 14,
+        "managementState": "WAITING_CAPACITY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+          "message": "The managed environment had no room for this runner when it was admitted. It starts by itself when room frees up; nothing was removed or resized to make room.",
+          "retryable": true
+        },
+        "retryAfter": "2026-10-09T08:01:00.000Z",
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waiting for an operator: fencing",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FENCING",
+          "desiredState": "RUNNING",
+          "revision": 20,
+          "generation": 2,
+          "initialProvider": "claude",
+          "lastErrorCode": "PREDECESSOR_STOP_UNPROVEN"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:50:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waitingOperator",
+        "title": "Waiting for an operator",
+        "detail": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator’s fencing receipt.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 20,
+        "managementState": "FENCING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:50:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "PREDECESSOR_STOP_UNPROVEN",
+          "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator’s fencing receipt.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: retryable",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 9,
+          "attempt": 5,
+          "lastErrorCode": "RETRY_EXHAUSTED"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.",
+        "retry": true,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 9,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "RETRY_EXHAUSTED",
+          "message": "Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": true,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: no runtime signed in by the startup deadline",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 11,
+          "generation": 1,
+          "lastErrorCode": "MODEL_UNAVAILABLE"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:40.000Z"
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "retry": true,
+        "ensure": false,
+        "signIn": true,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 11,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:40.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MODEL_UNAVAILABLE",
+          "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": true,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: needs an operator",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 4,
+          "lastErrorCode": "PVC_CONFLICT"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "A data volume under this runner's name is not the recorded one, so nothing was replaced. An operator has to review it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 4,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "PVC_CONFLICT",
+          "message": "A data volume under this runner's name is not the recorded one, so nothing was replaced. An operator has to review it.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "preparing: a reason this client does not know",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "REQUESTED",
+          "desiredState": "RUNNING",
+          "revision": 2,
+          "lastError": {
+            "code": "REASON_FROM_A_NEWER_SERVER",
+            "message": "A newer server says why in its own words.",
+            "retryable": false
+          }
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "preparing",
+        "title": "Preparing your managed runner",
+        "detail": "A newer server says why in its own words.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 2,
+        "managementState": "REQUESTED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "REASON_FROM_A_NEWER_SERVER",
+          "message": "A newer server says why in its own words.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: a reason this client does not know",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 7,
+          "lastError": {
+            "code": "REASON_FROM_A_NEWER_SERVER",
+            "message": "A newer server says why in its own words.",
+            "retryable": false
+          }
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "A newer server says why in its own words.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 7,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "REASON_FROM_A_NEWER_SERVER",
+          "message": "A newer server says why in its own words.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "removing",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "DELETING",
+          "desiredState": "DELETED",
+          "revision": 30,
+          "generation": 2,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-08T08:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "removing",
+        "title": "Removing managed runner",
+        "detail": "It is being removed and is not recreated.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 30,
+        "managementState": "DELETING",
+        "desiredState": "DELETED",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-08T08:00:00.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "removed",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "DELETED",
+          "desiredState": "DELETED",
+          "revision": 31,
+          "generation": 2,
+          "initialProvider": "claude",
+          "deletedAt": "2026-10-09T07:00:00.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-08T08:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "removed",
+        "title": "Managed runner removed",
+        "detail": "It was removed. Signing in again does not recreate it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 31,
+        "managementState": "DELETED",
+        "desiredState": "DELETED",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-08T08:00:00.000Z",
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "switched off with a mapping left from before",
+      "server": {
+        "enabled": false,
+        "available": false,
+        "mapping": {
+          "managementState": "READY",
+          "desiredState": "RUNNING",
+          "revision": 8,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:45.000Z"
+        }
+      },
+      "display": null,
+      "status": {
+        "contractVersion": 1,
+        "enabled": false,
+        "revision": 8,
+        "managementState": "READY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
+        "usable": true,
+        "reason": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "message": "Managed runners are not enabled on this Orbit server (ORBIT_MANAGED_RUNNERS_ENABLED), so nothing was written.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "switched on without a usable environment, asleep",
+      "server": {
+        "enabled": true,
+        "available": false,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "SLEEPING",
+          "revision": 12,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "sleeping",
+        "title": "Managed runner asleep",
+        "detail": "Managed runners are switched on, but this server's managed environment is not configured correctly. An operator has to fix it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MANAGED_RUNNER_UNAVAILABLE",
+          "message": "Managed runners are switched on, but this server's managed environment is not configured correctly. An operator has to fix it.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "asleep, its account disabled",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "ownerDisabled": true,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "SLEEPING",
+          "revision": 12,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "sleeping",
+        "title": "Managed runner asleep",
+        "detail": "This Orbit account is disabled, so its managed runner is not started or woken, and a running one is put to sleep with its data kept. An administrator can enable the account again.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "ACCOUNT_DISABLED",
+          "message": "This Orbit account is disabled, so its managed runner is not started or woken, and a running one is put to sleep with its data kept. An administrator can enable the account again.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    }
+  ],
+  "newer": [
+    {
+      "name": "a management state this client does not know",
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 8,
+        "managementState": "STATE_FROM_A_NEWER_SERVER",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
+        "usable": true,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": true,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      },
+      "display": null
+    },
+    {
+      "name": "a contract version this client does not know",
+      "status": {
+        "contractVersion": 2,
+        "enabled": true,
+        "revision": 8,
+        "managementState": "READY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
+        "usable": true,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": true,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      },
+      "display": null
+    }
+  ]
+}

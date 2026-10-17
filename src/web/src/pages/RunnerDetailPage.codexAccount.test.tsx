@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
@@ -65,8 +64,8 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // antd's Select measures its box, and jsdom ships no layout to measure: nothing asserted here
-  // depends on one.
+  // The account picker measures its box, and jsdom ships no layout to measure: nothing asserted
+  // here depends on one.
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -126,15 +125,13 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
-            <Routes>
-              <Route path="/runners/:id" element={<RunnerDetailPage />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+          <Routes>
+            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   return { patches };
@@ -151,6 +148,19 @@ const byText = (selector: string, text: string) => {
 const click = async (el: HTMLElement) => {
   await act(async () => {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await settle();
+};
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+const press = async (el: HTMLElement) => {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
   });
   await settle();
 };
@@ -172,18 +182,16 @@ const field = () =>
     (el) => el.querySelector('.rd-form-label')?.textContent === 'Codex account',
   );
 
+/** The account picker, as its role names it. */
+const picker = () => field()?.querySelector<HTMLElement>('[role="combobox"]');
+
 /** Open the account dropdown and read its options: each account's name, then its own line. */
 async function options() {
-  await act(async () => {
-    field()!
-      .querySelector('.ant-select-content')!
-      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  await click(picker()!);
+  return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].map((o) => {
+    const status = o.querySelector('.rd-codex-account-status');
+    return { el: o, text: [status?.previousElementSibling?.textContent, status?.textContent] };
   });
-  await settle();
-  return [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')].map((o) => ({
-    el: o,
-    text: [...o.querySelectorAll('.ant-select-item-option-content > div > div')].map((d) => d.textContent),
-  }));
 }
 
 describe('which Codex account a workspace runs on', () => {
@@ -191,7 +199,7 @@ describe('which Codex account a workspace runs on', () => {
     const { patches } = mount(runner([DEFAULT, WORK]), workspace(null));
     await openAdvanced();
     // Nothing picked, on a runner with two accounts, is Automatic.
-    expect(field()?.querySelector('.ant-select')?.textContent).toContain('Automatic');
+    expect(picker()?.textContent).toContain('Automatic');
 
     const offered = await options();
     expect(offered.map((o) => o.text)).toEqual([
@@ -200,7 +208,7 @@ describe('which Codex account a workspace runs on', () => {
       // Only Default has a quota reported: the usage probe reads Default.
       ['Work', 'signed in'],
     ]);
-    await click(offered[2].el);
+    await press(offered[2].el);
     await click(byText('button', 'Save'));
     expect(patches).toHaveLength(1);
     expect(patches[0].codexAccount).toBe(WORK.id);
@@ -228,9 +236,9 @@ describe('which Codex account a workspace runs on', () => {
       // Folded, the disclosure still says something is set behind it.
       expect(document.body.querySelector('.rd-adv-badge')?.textContent).toBe('1 configured');
       await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
-      expect(field()?.querySelector('.ant-select')?.textContent).toContain('Work');
+      expect(picker()?.textContent).toContain('Work');
       const offered = await options();
-      await click(offered[pick].el);
+      await press(offered[pick].el);
       await click(byText('button', 'Save'));
       expect(patches[0].codexAccount).toBe(saved);
       act(() => root?.unmount());
@@ -260,7 +268,7 @@ describe('which Codex account a workspace runs on', () => {
       ['Default (~/.codex)', '5h limit 62% · signed in'],
       ['Account 5e6f7a8b', 'not on this runner — sessions run on Default'],
     ]);
-    await click(offered[0].el);
+    await press(offered[0].el);
     await click(byText('button', 'Save'));
     expect(patches[0].codexAccount).toBeNull();
   });

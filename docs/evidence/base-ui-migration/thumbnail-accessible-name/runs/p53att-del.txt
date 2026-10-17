@@ -1,0 +1,69 @@
+argv: env P53_SNAPSHOTS=/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots P53_OUTPUT=/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-out npx playwright test --config ui-migration/p53.config.mjs -g attachments --update-snapshots=all
+tree: /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/del
+head: 01713ca80794e84e570378824d1632c5076ee314
+uncommitted:
+load: 23.46 22.92 23.88 16/3562 3833325
+mem: 5536M available
+disk: / 63161M available, TMPDIR /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/tmp
+started: 2026-10-10T12:31:17Z
+
+
+Running 8 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-desktop/p53-attach-file.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (7.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-light-phone/p53-attach-file.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (5.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-desktop/p53-attach-file.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (7.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/chromium-dark-phone/p53-attach-file.png, writing actual.
+  ✓  4 [chromium-dark-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-desktop/p53-attach-file.png, writing actual.
+  ✓  5 [webkit-light-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (8.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-light-phone/p53-attach-file.png, writing actual.
+  ✓  6 [webkit-light-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-desktop/p53-attach-file.png, writing actual.
+  ✓  7 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (8.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-del-shots/webkit-dark-phone/p53-attach-file.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (5.5s)
+
+  8 passed (58.1s)
+exit=0
+load: 17.28 21.27 23.25 13/3581 3842401
+ended: 2026-10-10T12:32:17Z

@@ -1,0 +1,419 @@
+argv: env P43B_SNAPSHOTS=/mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots P43B_OUTPUT=/mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-out npx playwright test --config ui-migration/p43b.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/ref
+head: 40f79c5ab4618c4718201cd13a096b66fbd5977c
+uncommitted:
+load: 32.18 33.19 29.13 15/4172 1493150
+mem: 3860M available, swap 16117M free
+disk: / 17778M available, TMPDIR /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/tmp
+started: 2026-10-09T09:11:51Z
+
+
+Running 80 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-settled-open.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (14.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-graph-truncated.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (8.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-geometry-639.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-geometry-641.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-geometry-1280.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects (7.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-task-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-task-graph-full.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (16.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-crossings-error.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (9.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-question-refused.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-merge-refused.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-done-refused.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-unread.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (14.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-desktop/p43b-start-task-graph.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-settled-open.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (9.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-graph-truncated.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (6.2s)
+  -  13 [chromium-light-phone] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-task-graph-full.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (13.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-crossings-error.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (8.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-question-refused.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-merge-refused.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-done-refused.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-unread.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (10.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-light-phone/p43b-start-task-graph.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-settled-open.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (9.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-graph-truncated.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-geometry-639.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-geometry-641.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-geometry-1280.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-task-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-task-graph-full.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (24.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-crossings-error.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (8.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-question-refused.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-merge-refused.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-done-refused.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-unread.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (12.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-desktop/p43b-start-task-graph.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-settled-open.png, writing actual.
+  ✓  31 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (8.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-graph-truncated.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (6.5s)
+  -  33 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-task-graph-full.png, writing actual.
+  ✓  34 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (15.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-crossings-error.png, writing actual.
+  ✓  35 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (10.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-question-refused.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-merge-refused.png, writing actual.
+  ✓  37 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-done-refused.png, writing actual.
+  ✓  38 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-unread.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (10.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/chromium-dark-phone/p43b-start-task-graph.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-settled-open.png, writing actual.
+  ✓  41 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (11.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-graph-truncated.png, writing actual.
+  ✓  42 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (5.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-geometry-639.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-geometry-641.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-geometry-1280.png, writing actual.
+  ✓  43 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-task-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-task-graph-full.png, writing actual.
+  ✓  44 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (15.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-crossings-error.png, writing actual.
+  ✓  45 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (8.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-question-refused.png, writing actual.
+  ✓  46 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-merge-refused.png, writing actual.
+  ✓  47 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-done-refused.png, writing actual.
+  ✓  48 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-unread.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (15.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-desktop/p43b-start-task-graph.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-settled-open.png, writing actual.
+  ✓  51 [webkit-light-phone] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (28.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-graph-truncated.png, writing actual.
+  ✓  52 [webkit-light-phone] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (6.6s)
+  -  53 [webkit-light-phone] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-task-graph-full.png, writing actual.
+  ✓  54 [webkit-light-phone] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (14.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-crossings-error.png, writing actual.
+  ✓  55 [webkit-light-phone] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (9.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-question-refused.png, writing actual.
+  ✓  56 [webkit-light-phone] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-merge-refused.png, writing actual.
+  ✓  57 [webkit-light-phone] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-done-refused.png, writing actual.
+  ✓  58 [webkit-light-phone] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-unread.png, writing actual.
+  ✓  59 [webkit-light-phone] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (11.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-light-phone/p43b-start-task-graph.png, writing actual.
+  ✓  60 [webkit-light-phone] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-settled-open.png, writing actual.
+  ✓  61 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (11.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-graph-truncated.png, writing actual.
+  ✓  62 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (6.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-geometry-639.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-geometry-641.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-geometry-1280.png, writing actual.
+  ✓  63 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-task-graph-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-task-graph-full.png, writing actual.
+  ✓  64 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (14.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-crossings-error.png, writing actual.
+  ✓  65 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (8.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-question-refused.png, writing actual.
+  ✓  66 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-merge-refused.png, writing actual.
+  ✓  67 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-done-refused.png, writing actual.
+  ✓  68 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-unread.png, writing actual.
+  ✓  69 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (15.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-desktop/p43b-start-task-graph.png, writing actual.
+  ✓  70 [webkit-dark-desktop] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (9.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-full.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-full-motif.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-run-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-settled-open.png, writing actual.
+  ✓  71 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:122:3 › P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened (14.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-graph-truncated.png, writing actual.
+  ✓  72 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:227:3 › P4.3b dependency graphs › the project graph: loading, failed and retried, empty, truncated (7.7s)
+  -  73 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:274:3 › P4.3b dependency graphs › the project graph at 639, 641 and 1280px, where the P0 baseline recorded its layout defects
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-task-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-task-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-task-graph-full.png, writing actual.
+  ✓  74 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:292:3 › P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen (18.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-crossings-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-crossings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-crossings-approve.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-crossings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-crossings-refuse.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-crossings-error.png, writing actual.
+  ✓  75 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:383:3 › P4.3b project decision cards › crossings: loading, the list, a refused answer, asking to refuse; a failed read (11.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-question.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-question-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-question-refused.png, writing actual.
+  ✓  76 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:446:3 › P4.3b project decision cards › a coordinator question: answering in one’s own words, refused (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-merge-refused.png, writing actual.
+  ✓  77 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:470:3 › P4.3b project decision cards › a merge into main, refused (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-done-not-yet.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-done-not-yet-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-done-refused.png, writing actual.
+  ✓  78 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:489:3 › P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again (6.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-manual.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-line-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-unread.png, writing actual.
+  ✓  79 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:532:3 › P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread (15.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-plan-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-plan-levels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-p43b-ref-shots/webkit-dark-phone/p43b-start-task-graph.png, writing actual.
+  ✓  80 [webkit-dark-phone] › ui-migration/p43b.browser.mjs:607:3 › P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not (5.0s)
+
+  4 skipped
+  76 passed (10.8m)
+exit=0
+load: 33.45 31.38 30.12 23/4145 1621207
+mem: 2331M available, swap 16156M free
+ended: 2026-10-09T09:22:50Z

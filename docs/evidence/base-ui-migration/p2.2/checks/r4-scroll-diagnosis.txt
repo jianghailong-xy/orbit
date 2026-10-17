@@ -1,0 +1,153 @@
+[WebServer] (node:303367) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:303458) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.2s)
+(node:303645) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.6s)
+  ✓   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.2s)
+(node:303929) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓   6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+(node:304129) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.6s)
+  ✓   8 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:304714) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.8s)
+  ✓  10 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:305076) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  11 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.1s)
+(node:305413) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  12 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+(node:305649) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  14 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:305886) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  15 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+(node:306081) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  16 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+
+
+  1) [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time 
+
+    Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit
+
+       at scroll-observation.mjs:75
+
+      73 |   });
+      74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.
+    > 75 |   await page.mouse.wheel(0, 240);
+         |                    ^
+      76 |   return page.evaluate(async () => {
+      77 |     const state = window.choicePageScroll;
+      78 |     await state.complete;
+        at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18
+
+    Error Context: src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time 
+
+    Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit
+
+       at scroll-observation.mjs:75
+
+      73 |   });
+      74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.
+    > 75 |   await page.mouse.wheel(0, 240);
+         |                    ^
+      76 |   return page.evaluate(async () => {
+      77 |     const state = window.choicePageScroll;
+      78 |     await state.complete;
+        at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18
+
+    Error Context: src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time 
+
+    Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit
+
+       at scroll-observation.mjs:75
+
+      73 |   });
+      74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.
+    > 75 |   await page.mouse.wheel(0, 240);
+         |                    ^
+      76 |   return page.evaluate(async () => {
+      77 |     const state = window.choicePageScroll;
+      78 |     await state.complete;
+        at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18
+
+    Error Context: src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time 
+
+    Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit
+
+       at scroll-observation.mjs:75
+
+      73 |   });
+      74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.
+    > 75 |   await page.mouse.wheel(0, 240);
+         |                    ^
+      76 |   return page.evaluate(async () => {
+      77 |     const state = window.choicePageScroll;
+      78 |     await state.complete;
+        at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18
+
+    Error Context: src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time 
+  12 passed (36.2s)

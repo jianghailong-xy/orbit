@@ -1,0 +1,46 @@
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4227 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     5.99 kB │ gzip:   2.55 kB
+dist/assets/Transcript-BtITXXF3.css                 6.36 kB │ gzip:   1.80 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-BYK24f9m.css                    368.00 kB │ gzip:  61.27 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-CblTMY4z.js            1.01 kB │ gzip:   0.59 kB
+dist/assets/ProjectDependencyGraph-CTm7h45N.js     14.24 kB │ gzip:   5.21 kB
+dist/assets/projectDependencyGraph-B9WKFHZ7.js    163.57 kB │ gzip:  55.38 kB
+dist/assets/TaskDependencyGraph-DFFlaenE.js       188.58 kB │ gzip:  60.86 kB
+dist/assets/taskDependencyGraph-B91604km.js       538.24 kB │ gzip: 176.90 kB
+dist/assets/sessionExport-BpMpfX1F.js             798.74 kB │ gzip: 193.49 kB
+dist/assets/Transcript-De3P0BTq.js                811.72 kB │ gzip: 250.73 kB
+dist/assets/index-BWrkP7DV.js                   1,721.91 kB │ gzip: 516.13 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 850ms
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web
+
+
+ Test Files  295 passed (295)
+      Tests  3668 passed (3668)
+   Start at  20:22:19
+   Duration  197.08s (tests 51%, import 35%, environment 12%, transform 2%)
+
+     Import  652 modules were evaluated 2529 times · 132.80s total, 35% of tracked time
+             ~40.51s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+

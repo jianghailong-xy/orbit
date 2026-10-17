@@ -1,0 +1,151 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-8/production-notifications/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5905,
+   "sha256": "b4fdf30d1e0f5182b2b47ba20284a814bf5726cea76cf872ddcf014747f07755",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "P2.3 production notification compatibility",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1044,
+   "sha256": "cf89e4da16348501ca07530ee1de81227d7389ca092451d326f6916ba6aa58dc"
+  },
+  {
+   "name": "chromium-dark-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5903,
+   "sha256": "46c35cad98ca0adb59df3b0aa410eec3f7785ace1ff9761820db9ba771e95c3d",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "P2.3 production notification compatibility",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1037,
+   "sha256": "619706f5374e7cca53a3270623eae186b069eeb0c517f619bc364395567b2a74"
+  },
+  {
+   "name": "chromium-light-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5907,
+   "sha256": "403083b0271da1649bc27fa0ed59f7ae36525ccd2e83d07b2a058af704aa1fa8",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "P2.3 production notification compatibility",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1033,
+   "sha256": "1fdf3ed3c589cf0de3f14609b32d38e9b7d18b74268eeb40646f0b50f7d535ae"
+  },
+  {
+   "name": "chromium-light-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5912,
+   "sha256": "9a359ab3d12e442fe63f254a4cf4811afc2d33613be34476f3093e9305e247e2",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "P2.3 production notification compatibility",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1026,
+   "sha256": "dceb069b8caa2178eade8e2a5899763b78ed9724339924cdf8e49f4709cc7b5c"
+  },
+  {
+   "name": "webkit-dark-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5861,
+   "sha256": "d4931fd6565f0a79182aa18b135b076f0a8bbfc1e8f329d51f4ddaac1aeb2a42",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "P2.3 production notification compatibility",
+    "browser": "26.6",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1028,
+   "sha256": "3aebcf6913caee8978c14331cafbf225eb3b0b286d89a719f8cdbe54f5b8ea3f"
+  },
+  {
+   "name": "webkit-dark-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5859,
+   "sha256": "1709efba3990aece9e58c297ce22f1323762f20c2e2f5e6ed6afaafb9b4427ae",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "P2.3 production notification compatibility",
+    "browser": "26.6",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1021,
+   "sha256": "2c329e0a5769442c93e21887d3bad660b8bd4762964186c2796eed04a02914db"
+  },
+  {
+   "name": "webkit-light-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5862,
+   "sha256": "916e93fc633e69a607f68aa992d91668e22dc68d86e94f51b352d97d85e75c1e",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "P2.3 production notification compatibility",
+    "browser": "26.6",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1017,
+   "sha256": "878bda7c75e17cd4d3a52d308f64167a06688f7b82a8763a7e73e7e020f32dfc"
+  },
+  {
+   "name": "webkit-light-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+   "bytes": 5868,
+   "sha256": "c253e3b0663e2a1abcaa55f717981b33948dea18b5ea66289b8652dc060a132e",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "P2.3 production notification compatibility",
+    "browser": "26.6",
+    "captures": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+   "bytes": 1010,
+   "sha256": "706efeaad06e84ba1832f3a2ec4a22d4564210e5b8aa08e8dfb5c043ab482f3a"
+  }
+ ]
+}

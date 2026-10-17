@@ -2,11 +2,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CrossingRow,
+  MOVE_TASK_APPROVE_CONSEQUENCE,
+  MOVE_TASK_CRITERION_GONE,
+  MOVE_TASK_DENY_CONSEQUENCE,
+  MOVE_TASK_REQUESTED_CRITERION_LABEL,
+  MOVE_TASK_STATE_MEANING,
+  MOVE_TASK_SUBJECT_LABEL,
+  MOVE_TASK_WITHDRAWN_CRITERION_LABEL,
+  MOVE_TASK_WITHDRAWN_CRITERION_NOTE,
   crossingConfirmPrompt,
   decideCrossing,
   isAnswerable,
 } from './ProjectCrossingsCard';
-import type { ProjectCrossingRow } from '../lib/attribution';
+import { CROSSING_STATE_MEANING, type ProjectCrossingRow } from '../lib/attribution';
 
 const api = vi.fn(() => Promise.resolve({}));
 vi.mock('../api', () => ({ api: (...args: unknown[]) => api(...(args as [])) }));
@@ -143,5 +151,159 @@ describe('ProjectCrossingsCard — the question a person answers', () => {
     });
     expect(html).toContain('That answer was not recorded');
     expect(html).toContain('APPROVAL_TARGET_MISMATCH');
+  });
+});
+
+/** A request to move a task that already exists, as `GET /projects/:id/handoffs` serves one. */
+function moveRow(over: Partial<ProjectCrossingRow> = {}): ProjectCrossingRow {
+  return row({
+    kind: 'MOVE_TASK',
+    subjectTaskId: 'AAAMovedTask',
+    subjectTaskPublicId: 'AAAMovedTask',
+    subjectTask: { id: 'AAAMovedTask', publicId: 'AAAMovedTask', title: 'Wire the drain watchdog' },
+    // The title the task had when the move was asked; the card reads the task as it is now.
+    title: 'Watchdog (as first asked)',
+    requestedCriterion: { key: 'AAATargetCriterion', text: 'A wedged drain restarts within a minute.' },
+    withdrawnCriterion: { key: 'AAASourceCriterion', text: 'The control loop never drops a turn.' },
+    reason: 'the watchdog belongs to the runner goal',
+    ...over,
+  });
+}
+
+describe('ProjectCrossingsCard — a request to move a task that already exists', () => {
+  it('names the task it moves by its title now AND by its id', () => {
+    const html = paint({ row: moveRow() });
+    expect(html).toContain(`${MOVE_TASK_SUBJECT_LABEL}: `);
+    expect(html).toContain('Wire the drain watchdog');
+    expect(html).toContain('AAAMovedTask');
+    expect(html).not.toContain('Watchdog (as first asked)');
+    // A subject read that came back empty still names the task, by the title it was asked under.
+    expect(paint({ row: moveRow({ subjectTask: null }) })).toContain('Watchdog (as first asked)');
+  });
+
+  it('names the project it leaves and the one it joins, by title and by id', () => {
+    const html = paint({ row: moveRow() });
+    expect(html).toContain('Coordinator control loop');
+    expect(html).toContain('AAAFrom');
+    expect(html).toContain('Runner hardening');
+    expect(html).toContain('AAATo');
+    expect(html.indexOf('AAAFrom')).toBeLessThan(html.indexOf('AAATo'));
+  });
+
+  it('shows the target criterion the request names, and the source criterion the move takes back', () => {
+    const html = paint({ row: moveRow() });
+    expect(html).toContain(`${MOVE_TASK_REQUESTED_CRITERION_LABEL}: `);
+    expect(html).toContain('A wedged drain restarts within a minute.');
+    expect(html).toContain('AAATargetCriterion');
+    expect(html).toContain(`${MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: `);
+    expect(html).toContain('The control loop never drops a turn.');
+    expect(html).toContain('AAASourceCriterion');
+    expect(html).toContain(MOVE_TASK_WITHDRAWN_CRITERION_NOTE);
+  });
+
+  it('says nothing about criteria the request does not touch', () => {
+    const bare = paint({ row: moveRow({ requestedCriterion: null, withdrawnCriterion: null }) });
+    expect(bare).not.toContain(MOVE_TASK_REQUESTED_CRITERION_LABEL);
+    expect(bare).not.toContain(MOVE_TASK_WITHDRAWN_CRITERION_LABEL);
+    // An older server sends neither field at all.
+    const older = paint({
+      row: moveRow({ requestedCriterion: undefined, withdrawnCriterion: undefined, subjectTask: undefined }),
+    });
+    expect(older).not.toContain(MOVE_TASK_REQUESTED_CRITERION_LABEL);
+    expect(older).toContain('AAAMovedTask');
+  });
+
+  it('says so when the target project no longer states the criterion the request names', () => {
+    const html = paint({ row: moveRow({ requestedCriterion: { key: 'AAATargetCriterion', text: null } }) });
+    expect(html).toContain(MOVE_TASK_CRITERION_GONE);
+    expect(html).toContain('AAATargetCriterion');
+  });
+
+  it('says what each state means for a move, never what it means for a filing', () => {
+    for (const state of ['PENDING', 'APPROVED', 'DENIED', 'APPLIED'] as const) {
+      const html = paint({ row: moveRow({ state }) });
+      expect(html).toContain(MOVE_TASK_STATE_MEANING[state]);
+      expect(html).not.toContain(CROSSING_STATE_MEANING[state]);
+    }
+    expect(MOVE_TASK_STATE_MEANING.PENDING).toBe(
+      'the task stays in its project until you answer, and confirming moves it',
+    );
+    expect(MOVE_TASK_STATE_MEANING.APPLIED).toBe('the task was moved when this request was confirmed');
+  });
+
+  it('takes two presses, and the second says that confirming IS the move', () => {
+    const first = paint({ row: moveRow() });
+    expect(first).toContain('Approve…');
+    expect(first).not.toContain('Yes, approve');
+    expect(first).not.toContain(MOVE_TASK_APPROVE_CONSEQUENCE);
+
+    const second = paint({ row: moveRow(), confirming: 'APPROVE' });
+    expect(second).toContain(
+      'Approve moving “Wire the drain watchdog” from Coordinator control loop to Runner hardening?',
+    );
+    expect(second).toContain(MOVE_TASK_APPROVE_CONSEQUENCE);
+    expect(second).toContain('Yes, approve');
+    expect(second).toContain(KEY.slice(0, 12));
+    // The filing's sentence is false of a move: this answer is what moves it.
+    expect(second).not.toContain('It is not filed by this answer.');
+  });
+
+  it('gives each answer to a move its own consequence', () => {
+    const approve = crossingConfirmPrompt(moveRow(), 'APPROVE');
+    expect(approve).toEqual({
+      verb: 'Approve',
+      from: 'Coordinator control loop',
+      to: 'Runner hardening',
+      subject: 'Wire the drain watchdog',
+      consequence: MOVE_TASK_APPROVE_CONSEQUENCE,
+    });
+    expect(MOVE_TASK_APPROVE_CONSEQUENCE).toBe(
+      'Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again.',
+    );
+    const deny = crossingConfirmPrompt(moveRow(), 'DENY');
+    expect(deny.verb).toBe('Refuse');
+    expect(deny.consequence).toBe(MOVE_TASK_DENY_CONSEQUENCE);
+    expect(MOVE_TASK_DENY_CONSEQUENCE).toBe(
+      'Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself.',
+    );
+    expect(paint({ row: moveRow(), confirming: 'DENY' })).toContain(MOVE_TASK_DENY_CONSEQUENCE);
+  });
+
+  it('leaves the words of a filing and of a dependency exactly as they were', () => {
+    for (const kind of ['FILE_TASK', 'DEPEND_ON_TASK']) {
+      const asked = row({ kind, subjectTaskId: kind === 'DEPEND_ON_TASK' ? 'AAAWaitedOn' : null });
+      expect(crossingConfirmPrompt(asked, 'APPROVE')).toEqual({
+        verb: 'Approve',
+        from: 'Coordinator control loop',
+        to: 'Runner hardening',
+        subject: 'Fix the drain race',
+        consequence:
+          'The writer may then file this work under the target project. It is not filed by this answer.',
+      });
+      expect(crossingConfirmPrompt(asked, 'DENY').consequence).toBe(
+        'Refusing is final for this crossing. If you change your mind, file the work yourself.',
+      );
+      const html = paint({ row: asked });
+      expect(html).toContain(CROSSING_STATE_MEANING.PENDING);
+      expect(html).not.toContain(MOVE_TASK_SUBJECT_LABEL);
+      expect(html).not.toContain(MOVE_TASK_STATE_MEANING.PENDING);
+    }
+  });
+
+  it('shows the code and the reason the server refused a confirmation with', () => {
+    const refusal = Object.assign(
+      new Error(
+        'task AAAMovedTask is being landed (LAND_TASK AAAJob is RUNNING), and a landing belongs to the '
+          + 'project the task is in — nothing was written and the request is still waiting. Confirm it '
+          + 'again once that job has ended, or deny it.',
+      ),
+      { code: 'MOVE_TASK_LANDING_IN_FLIGHT' },
+    );
+    const html = paint({ row: moveRow(), confirming: 'APPROVE', error: refusal });
+    expect(html).toContain('That answer was not recorded');
+    expect(html).toContain('MOVE_TASK_LANDING_IN_FLIGHT');
+    expect(html).toContain('the request is still waiting. Confirm it again once that job has ended');
+    // The second step stays open, so the same request can be confirmed again once the job ends.
+    expect(html).toContain('Yes, approve');
   });
 });

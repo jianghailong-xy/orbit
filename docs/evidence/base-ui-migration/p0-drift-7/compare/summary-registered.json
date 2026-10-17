@@ -1,0 +1,54 @@
+{
+ "registered__base": {
+  "total": 252,
+  "missing": 0,
+  "same": 219,
+  "noise": 16,
+  "changed": 17,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 91,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "notification-error.png": [
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "profile-validation.png": [
+    "webkit-light-phone"
+   ],
+   "project-graph-fullscreen.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-phone",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ }
+}

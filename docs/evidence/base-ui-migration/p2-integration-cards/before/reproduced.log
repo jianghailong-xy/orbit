@@ -1,0 +1,1103 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/components/CriteriaDecisionCard.receipt.test.tsx src/components/CriteriaDecisionCard.sessionSwitch.test.tsx src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx src/components/WorkspaceView.criteriaDecisionCard.test.tsx src/components/WorkspaceView.promotionPlacement.test.tsx src/components/WorkspaceView.settlementPointer.test.tsx --reporter=default --reporter=json --outputFile=/tmp/orbit-p2-cards-before.json
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn among the events, at the moment it happened, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > leads at the head of a conversation whose window begins after the merge
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > leads at the head of a conversation whose window begins after the merge
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > leads at the head of a conversation whose window begins after the merge
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card, and leaves the record — with them — where it happened
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card, and leaves the record — with them — where it happened
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card, and leaves the record — with them — where it happened
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card, and leaves the record — with them — where it happened
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws a message about merging as a message, not as a card made out of it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card strip > does not keep a card of its own for a promotion that has already merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card strip > does not keep a card of its own for a promotion that has already merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.promotionPlacement.test.tsx > the card strip > does not keep a card of its own for a promotion that has already merged
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx (13 tests | 6 failed) 49460ms
+   ❯ the record a merge leaves, in the conversation it happened in (4)
+     ✓ is drawn among the events, at the moment it happened, and not in the pane’s card strip 430ms
+     × still says its own merge once the project has moved on to the next candidate 8117ms
+     ✓ leads at the head of a conversation whose window begins after the merge 113ms
+     ✓ is drawn in no conversation that coordinates no project, which reads nothing for one 93ms
+   ❯ the card a blocked candidate leaves, in the conversation it happened in (4)
+     × is drawn among the events, at the moment it was blocked, and not in the pane’s card strip 8115ms
+     × keeps saying who is on it, from the item read, rather than only what was true when it was blocked 8094ms
+     × goes once the branch is offered again, which the strip draws as the question it is 8085ms
+     × keeps the strip’s card when the stamp is one nothing can parse 8071ms
+   ❯ what is not a record (2)
+     × draws no card, and leaves the events as themselves, when nothing has merged 8076ms
+     ✓ draws a message about merging as a message, not as a card made out of it 189ms
+   ✓ the card strip (1)
+     ✓ does not keep a card of its own for a promotion that has already merged 71ms
+   ✓ where the record comes from (2)
+     ✓ reads the merges already made, and places each one where it happened 1ms
+     ✓ reads the candidate on offer, and places a blocked one at the moment a check refused it 1ms
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn among the events, above what came after it, and not at the pane’s tail
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn once, through every re-read of the read it comes from
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > leads at the head of a conversation whose window begins after it was signed
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the record a confirmation leaves, in the conversation it was made in > is drawn in no conversation that coordinates no project, which reads nothing for one
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project, and Enter on the emptied box starts it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project, and Enter on the emptied box starts it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project, and Enter on the emptied box starts it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project, and Enter on the emptied box starts it
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Ask the coordinator to handle it, on the project settlement card > sends the card’s own facts as a turn, and leaves the card where it stands
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Ask the coordinator to handle it, on the project settlement card > sends the card’s own facts as a turn, and leaves the card where it stands
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Ask the coordinator to handle it, on the project settlement card > sends the card’s own facts as a turn, and leaves the card where it stands
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Ask the coordinator to handle it, on the project settlement card > sends the card’s own facts as a turn, and leaves the card where it stands
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Ask the coordinator to handle it, on the project settlement card > sends the card’s own facts as a turn, and leaves the card where it stands
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (16 tests | 8 failed) 66284ms
+   ❯ the start card in WorkspaceView (5)
+     × is drawn once in a coordinator conversation, beside the criteria card, through every re-read 8450ms
+     × is drawn in no conversation that coordinates no project, which reads nothing for one 8326ms
+     × is drawn on the coordinator’s request only: a plan with work and no request draws nothing 8117ms
+     × is named Ready to start on the pinned line 8148ms
+     × starts the project with the settings on the card, and leaves the record — with them — where it happened 8128ms
+   ❯ the change card in WorkspaceView (1)
+     × confirms the new criteria, and the record says what the confirmation changed 8080ms
+   ✓ what a session row and its header say while the start card waits (1)
+     ✓ says Ready to start, not Waiting for approval 1ms
+   ✓ the record a confirmation leaves, in the conversation it was made in (4)
+     ✓ is drawn among the events, above what came after it, and not at the pane’s tail 217ms
+     ✓ is drawn once, through every re-read of the read it comes from 207ms
+     ✓ leads at the head of a conversation whose window begins after it was signed 193ms
+     ✓ is drawn in no conversation that coordinates no project, which reads nothing for one 72ms
+   ❯ Chat about this on the start card (2)
+     × arms the composer with this plan, keeps the card up with Start the project live, and reaches no door 8086ms
+     × sends what was typed on Enter without starting the project, and Enter on the emptied box starts it 8104ms
+   ✓ Ask the coordinator to handle it, on the project settlement card (1)
+     ✓ sends the card’s own facts as a turn, and leaves the card where it stands 152ms
+   ✓ where the card is mounted (2)
+     ✓ is mounted once, after the evidence card, keyed by the session under a key neither sibling carries 1ms
+     ✓ sends a plan change as an ordinary turn carrying the plan, through no door 1ms
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > draws the receipt of an answer already on the read, in the conversation — the reload case
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > draws the receipt of an answer already on the read, in the conversation — the reload case
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > draws the receipt of an answer already on the read, in the conversation — the reload case
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ❯ src/components/WorkspaceView.criteriaDecisionCard.test.tsx (4 tests | 3 failed) 24540ms
+   ❯ the criteria decision card in an open coordinator conversation (4)
+     × is on the page once for its intent, through every re-read and after the answer elsewhere 8305ms
+     × offers no answer once settled — from any card on the page — and sends nothing to the door 8077ms
+     ✓ draws the receipt of an answer already on the read, in the conversation — the reload case 69ms
+     × leaves no card behind on New session, which has no project 8087ms
+ ❯ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx (3 tests | 2 failed) 162ms
+   ❯ the criteria card when the view moves from one project’s conversation to another’s (3)
+     × draws P1’s held proposal in P1’s coordinator conversation 92ms
+     × draws none of P1’s proposals in P2’s conversation, only P2’s own 68ms
+     ✓ is keyed by the session on screen, on the element WorkspaceView mounts it with 1ms
+ ❯ src/components/CriteriaDecisionCard.receipt.test.tsx (2 tests | 2 failed) 156ms
+   ❯ a criteria card answered in this window (1)
+     × hands the door’s answer on, and gives way to the receipt the read publishes 96ms
+   ❯ a criteria card answered from the keyboard (1)
+     × approves on ⌘/Ctrl + Enter, says so on the button, and leaves the bare key alone 60ms
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ❯ src/components/WorkspaceView.settlementPointer.test.tsx (9 tests | 9 failed) 65237ms
+   ❯ the settlement question on the pinned line (8)
+     × is one more in the count while the card is on screen and still a question, and opens no list 8319ms
+     × stops counting it once the set is confirmed at another end, while the card stays where it was 8105ms
+     × counts nothing for the card while it has not been drawn, and counts it once it is 225ms
+     × counts nothing for it in a conversation that coordinates no project, straight after one that did 8115ms
+     × leaves no line on New session, and counts the card again on the way back 8077ms
+     × takes the reader to the card with one press when it is the only question, and asks the server nothing 8076ms
+     × reaches the card after the weakening drawn above it, one press each, and says which it went to 8105ms
+     × offers no answer to the settlement question on the strip, only the way to its card 8110ms
+   ❯ the settlement question on the pinned line on a phone (1)
+     × is the same one line, and the line itself takes the reader to the card 8106ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 30 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/CriteriaDecisionCard.receipt.test.tsx > a criteria card answered in this window > hands the door’s answer on, and gives way to the receipt the read publishes
+AssertionError: waited for the card to offer its answer: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ until src/components/CriteriaDecisionCard.receipt.test.tsx:159:40
+    157|     });
+    158|   }
+    159|   expect(done(), `waited for ${what}`).toBe(true);
+       |                                        ^
+    160| }
+    161|
+ ❯ src/components/CriteriaDecisionCard.receipt.test.tsx:201:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/30]⎯
+
+ FAIL  src/components/CriteriaDecisionCard.receipt.test.tsx > a criteria card answered from the keyboard > approves on ⌘/Ctrl + Enter, says so on the button, and leaves the bare key alone
+AssertionError: waited for the card to offer its answer: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ until src/components/CriteriaDecisionCard.receipt.test.tsx:159:40
+    157|     });
+    158|   }
+    159|   expect(done(), `waited for ${what}`).toBe(true);
+       |                                        ^
+    160| }
+    161|
+ ❯ src/components/CriteriaDecisionCard.receipt.test.tsx:250:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/30]⎯
+
+ FAIL  src/components/CriteriaDecisionCard.sessionSwitch.test.tsx > the criteria card when the view moves from one project’s conversation to another’s > draws P1’s held proposal in P1’s coordinator conversation
+AssertionError: waited for P1’s read to be drawn: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ until src/components/CriteriaDecisionCard.sessionSwitch.test.tsx:224:40
+    222|     });
+    223|   }
+    224|   expect(done(), `waited for ${what}`).toBe(true);
+       |                                        ^
+    225| }
+    226|
+ ❯ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx:232:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/30]⎯
+
+ FAIL  src/components/CriteriaDecisionCard.sessionSwitch.test.tsx > the criteria card when the view moves from one project’s conversation to another’s > draws none of P1’s proposals in P2’s conversation, only P2’s own
+AssertionError: waited for P1’s proposal in P1’s conversation: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ until src/components/CriteriaDecisionCard.sessionSwitch.test.tsx:224:40
+    222|     });
+    223|   }
+    224|   expect(done(), `waited for ${what}`).toBe(true);
+       |                                        ^
+    225| }
+    226|
+ ❯ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx:240:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read
+AssertionError: expected 0 to be greater than 0
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:547:52
+    545|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    546|     await waitForUi(() => {
+    547|       expect(count('.settlement-card.start-card')).toBeGreaterThan(0);
+       |                                                    ^
+    548|       expect(count('.criteria-decision')).toBeGreaterThan(0);
+    549|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:581:41
+    579|     });
+    580|     await waitForUi(() => {
+    581|       expect(count('.settlement-card')).toBe(1);
+       |                                         ^
+    582|     });
+    583|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing
+AssertionError: expected 0 to be greater than 0
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:589:43
+    587|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    588|     await waitForUi(() => {
+    589|       expect(count('.criteria-decision')).toBeGreaterThan(0);
+       |                                           ^
+    590|     });
+    591|     await reread(['project', PROJECT_PUBLIC, 'open-items'], () => requ…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > is named Ready to start on the pinned line
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:607:52
+    605|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    606|     await waitForUi(() => {
+    607|       expect(count('.settlement-card.start-card')).toBe(1);
+       |                                                    ^
+    608|       expect(mounted().querySelector('.decision-strip-title')?.textCon…
+    609|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card, and leaves the record — with them — where it happened
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:616:52
+    614|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    615|     await waitForUi(() => {
+    616|       expect(count('.settlement-card.start-card')).toBe(1);
+       |                                                    ^
+    617|     });
+    618|     const card = (): HTMLElement => mounted().querySelector<HTMLElemen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:695:46
+    693|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    694|     await waitForUi(() => {
+    695|       expect(count('.criteria-change-card')).toBe(1);
+       |                                              ^
+    696|       expect(mounted().querySelector('.decision-strip-title')?.textCon…
+    697|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:854:41
+    852|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    853|     await waitForUi(() => {
+    854|       expect(count('.settlement-card')).toBe(1);
+       |                                         ^
+    855|     });
+    856|     const card = (): HTMLElement => mounted().querySelector<HTMLElemen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/30]⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > Chat about this on the start card > sends what was typed on Enter without starting the project, and Enter on the emptied box starts it
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:903:41
+    901|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    902|     await waitForUi(() => {
+    903|       expect(count('.settlement-card')).toBe(1);
+       |                                         ^
+    904|     });
+    905|     const card = (): HTMLElement => mounted().querySelector<HTMLElemen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/30]⎯
+
+ FAIL  src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere
+ FAIL  src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door
+ FAIL  src/components/WorkspaceView.criteriaDecisionCard.test.tsx > the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project
+AssertionError: expected [] to include 'A weakening change to this project’s …'
+ ❯ src/components/WorkspaceView.criteriaDecisionCard.test.tsx:370:42
+    368|   await mount();
+    369|   await waitForUi(() => {
+    370|     expect(cardsOnPage().map(headingOf)).toContain(CRITERIA_DECISION_H…
+       |                                          ^
+    371|   });
+    372|   const arrived = cardsOnPage().find((card) => headingOf(card) === CRI…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/30]⎯
+
+ FAIL  src/components/WorkspaceView.promotionPlacement.test.tsx > the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate
+AssertionError: the next candidate is not being asked about: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx:457:84
+    455|
+    456|     await waitForUi(() => {
+    457|       expect(cardsOfState('READY'), 'the next candidate is not being a…
+       |                                                                                    ^
+    458|       // The record too, and in the same window: it is drawn from its …
+    459|       // record, and reading it synchronously right after the window i…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/30]⎯
+
+ FAIL  src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip
+AssertionError: no blocked candidate is drawn: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx:517:72
+    515|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    516|     await waitForUi(() => {
+    517|       expect(cardsOfState('BLOCKED'), 'no blocked candidate is drawn')…
+       |                                                                        ^
+    518|     });
+    519|     await note(COORDINATOR_PUBLIC, 2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/30]⎯
+
+ FAIL  src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked
+AssertionError: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx:544:42
+    542|     // with how long they have had it — and the wait is the row's to k…
+    543|     await waitForUi(() => {
+    544|       expect(blockedCard()?.textContent).toContain(`${RESOLVING} · `);
+       |                                          ^
+    545|     });
+    546|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/30]⎯
+
+ FAIL  src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx:552:39
+    550|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    551|     await waitForUi(() => {
+    552|       expect(cardsOfState('BLOCKED')).toBe(1);
+       |                                       ^
+    553|     });
+    554|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/30]⎯
+
+ FAIL  src/components/WorkspaceView.promotionPlacement.test.tsx > the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx:567:39
+    565|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    566|     await waitForUi(() => {
+    567|       expect(cardsOfState('BLOCKED')).toBe(1);
+       |                                       ^
+    568|     });
+    569|     await note(COORDINATOR_PUBLIC, 2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/30]⎯
+
+ FAIL  src/components/WorkspaceView.promotionPlacement.test.tsx > what is not a record > draws no card, and leaves the events as themselves, when nothing has merged
+AssertionError: no candidate is being asked about: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.promotionPlacement.test.tsx:590:74
+    588|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    589|     await waitForUi(() => {
+    590|       expect(cardsOfState('READY'), 'no candidate is being asked about…
+       |                                                                          ^
+    591|     });
+    592|     expect(count('.project-promotion-receipt'), 'a receipt was drawn f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/30]⎯
+
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.settlementPointer.test.tsx:465:31
+    463|   await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    464|   await waitForUi(() => {
+    465|     expect(settlementCards()).toHaveLength(1);
+       |                               ^
+    466|     expect(counted()).toBe(needsDecisionCount(2));
+    467|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/30]⎯
+
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.settlementPointer.test.tsx:521:31
+    519|       expect(counted()).toBe(needsDecisionCount(2));
+    520|     });
+    521|     expect(settlementCards()).toHaveLength(1);
+       |                               ^
+    522|   });
+    523|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/30]⎯
+
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.settlementPointer.test.tsx:557:33
+    555|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    556|     await waitForUi(() => {
+    557|       expect(settlementCards()).toHaveLength(1);
+       |                                 ^
+    558|       expect(counted()).toBe(needsDecisionCount(1));
+    559|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/30]⎯
+
+ FAIL  src/components/WorkspaceView.settlementPointer.test.tsx > the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/WorkspaceView.settlementPointer.test.tsx:608:33
+    606|     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    607|     await waitForUi(() => {
+    608|       expect(settlementCards()).toHaveLength(1);
+       |                                 ^
+    609|       expect(counted()).toBe(needsDecisionCount(1));
+    610|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/30]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  30 failed | 17 passed (47)
+   Start at  18:02:17
+   Duration  118.80s (tests 96%, import 2%, transform 1%, environment 1%)
+
+JSON report written to /tmp/orbit-p2-cards-before.json
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c vitest run --maxWorkers=2 src/components/CriteriaDecisionCard.receipt.test.tsx src/components/CriteriaDecisionCard.sessionSwitch.test.tsx src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx src/components/WorkspaceView.criteriaDecisionCard.test.tsx src/components/WorkspaceView.promotionPlacement.test.tsx src/components/WorkspaceView.settlementPointer.test.tsx --reporter=default --reporter=json --outputFile=/tmp/orbit-p2-cards-before.json

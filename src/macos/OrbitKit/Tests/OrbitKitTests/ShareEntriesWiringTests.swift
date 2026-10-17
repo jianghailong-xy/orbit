@@ -140,7 +140,10 @@ final class ShareEntriesWiringTests: XCTestCase {
 
     func testTheIOSSessionMenuKeepsTrashAndPermanentDeletionSeparate() throws {
         let console = code(try appSource("Views/Console/ConsoleView.swift"))
-        let menu = try slice(console, from: "private func sessionMenu(", to: "\n    }")
+        // The menu's own items, up to the confirmation that hangs off it (iOS 26 anchors that panel
+        // to the view it is declared on, so the ⋯ carries it): the list below is what the menu
+        // offers, and the confirmation is read on its own further down.
+        let menu = try slice(console, from: "private func sessionMenu(", to: ".orbitConfirmation(")
         let trash = try slice(menu, from: "if session.effectiveLifecycleState == .trash {", to: "} else {")
         XCTAssertTrue(trash.contains("appModel.moveSessionToOpen(session.id)"))
         XCTAssertTrue(trash.contains("canRestore"))
@@ -149,7 +152,7 @@ final class ShareEntriesWiringTests: XCTestCase {
             XCTAssertFalse(trash.contains(action), "Trash cannot offer \(action)")
         }
         XCTAssertFalse(menu.contains("appModel.purgeSession("), "the menu only requests confirmation")
-        let confirmation = try slice(console, from: ".confirmationDialog(\"Delete permanently?\"",
+        let confirmation = try slice(console, from: ".orbitConfirmation(\"Delete permanently?\"",
                                      to: "} message: {")
         XCTAssertTrue(confirmation.contains("appModel.purgeSession(sessionID)"))
         XCTAssertTrue(confirmation.contains("role: .destructive"))

@@ -10,6 +10,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -46,12 +47,12 @@ class DirectoryDeviceTest {
         MockWebServer().use { server ->
             server.dispatcher = fixtureDispatcher()
             try {
-                compose.onNodeWithText("Instance address").performTextReplacement(server.url("/").toString())
-                compose.onNodeWithText("Email").performTextInput("a05@example.test")
-                compose.onNodeWithText("Password").performTextInput("a05-fixture-password")
+                compose.chooseServer(server.url("/").toString())
+                compose.onNodeWithText("Email").performTextReplacement("a05@example.test")
+                compose.onNodeWithText("Password").performTextReplacement("a05-fixture-password")
                 tap(compose.onNodeWithText("Password"), requireAboveIme = false)
                 awaitIme(true)
-                val signIn = compose.onAllNodesWithText("Sign in")[1]
+                val signIn = compose.onNodeWithText("Sign In")
                 signIn.performScrollTo()
                 capture("login-ime")
                 tap(signIn, requireAboveIme = true)
@@ -82,7 +83,7 @@ class DirectoryDeviceTest {
                 awaitIme(true)
                 hit.performScrollTo()
                 tap(hit, true)
-                compose.waitUntil(10_000) { compose.onAllNodesWithText("Session options").fetchSemanticsNodes().isNotEmpty() }
+                compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
                 awaitIme(false)
                 key(KeyEvent.KEYCODE_BACK)
                 compose.waitUntil(5_000) { compose.onAllNodesWithText("Review").fetchSemanticsNodes().isNotEmpty() }
@@ -95,6 +96,11 @@ class DirectoryDeviceTest {
                     completed && live.directoryFresh && !live.directoryRefreshing &&
                         live.directory?.sessions?.get("completed")?.any { it["id"]?.jsonPrimitive?.content == sessionId } == true
                 }
+                // The outcome is the app's toast (A05-4): "Session completed" with Undo, a card under the bar for six seconds.
+                compose.waitUntil(10_000) { compose.onAllNodes(hasText("Session completed") and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isNotEmpty() }
+                capture("completed-toast")
+                compose.mainClock.advanceTimeBy(6_500)
+                compose.waitUntil(10_000) { compose.onAllNodes(hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isEmpty() }
                 directoryScrollTo("Completed")
                 compose.onNodeWithText("Completed").performClick()
                 directoryScrollTo("Review navigation")
@@ -142,12 +148,15 @@ class DirectoryDeviceTest {
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 compose.onNodeWithContentDescription("Open navigation").performClick()
                 compose.onNodeWithText("Settings").performScrollTo().performClick()
-                compose.onNodeWithText("Signed in").assertIsDisplayed()
+                // Settings opens on the account it is signed in as, once its read answers (A13's page has no "Signed in" line).
+                compose.waitUntil(15_000) { compose.onAllNodesWithText("Directory fixture").fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithText("Directory fixture").assertIsDisplayed()
                 compose.onNodeWithText("Build information").performScrollTo().performClick()
                 compose.onNodeWithText("Source SHA").performScrollTo().assertIsDisplayed()
                 capture("build")
                 key(KeyEvent.KEYCODE_BACK)
-                compose.onNodeWithText("Signed in").assertIsDisplayed()
+                // Back on Settings where it was left: scrolled down to the Build information it opened.
+                compose.onNodeWithText("Build information").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                 key(KeyEvent.KEYCODE_BACK)
                 compose.onNodeWithText("Research").assertIsDisplayed()
@@ -204,13 +213,16 @@ class DirectoryDeviceTest {
         override fun dispatch(request: RecordedRequest): MockResponse {
             val path = request.requestUrl!!.encodedPath
             apiCalls += "${request.method} ${request.path}"
+            // The login page asks the typed instance what it offers, with no credential; this one predates Google sign-in.
+            if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
             if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertEquals("Bearer a05-fixture-access", request.getHeader("Authorization"))
             if (path == "/api/workspaces" && forbiddenDirectory) return MockResponse().setResponseCode(403).setBody("{}")
             val session = """{"id":"$sessionId","title":"Review navigation","status":"ENDED","runState":"SUCCEEDED","lifecycleState":"${if (completed) "COMPLETED" else "OPEN"}","agent":{"id":"$workspaceId","name":"Field notes"},"folderId":"$folderId","createdAt":"2026-10-01T08:00:00Z","capabilities":{"canComplete":${!completed},"canRestore":$completed},"tags":[],"pendingApprovals":0,"lastAssistantText":"Same dataset across light and dark"}"""
             val body = when (path) {
                 "/api/auth/login" -> """{"accessToken":"a05-fixture-access","refreshToken":"a05-fixture-refresh","user":{"id":"fixture-user","email":"a05@example.test","name":"Directory fixture"}}"""
                 "/api/users/me" -> """{"id":"fixture-user","email":"a05@example.test","name":"Directory fixture"}"""
-                "/api/workspaces" -> """[{"id":"$workspaceId","name":"Field notes","runnerId":"runner","enabled":true}]"""
+                // Never reordered: the server sends an explicit null position.
+                "/api/workspaces" -> """[{"id":"$workspaceId","name":"Field notes","runnerId":"runner","enabled":true,"position":null}]"""
                 "/api/runners" -> """[{"id":"runner","name":"Fixture runner","online":true}]"""
                 "/api/session-folders" -> """[{"id":"$folderId","workspaceId":"$workspaceId","name":"Research"}]"""
                 "/api/sessions" -> if (request.requestUrl!!.queryParameter("view") == if (completed) "completed" else "open") "[$session]" else "[]"

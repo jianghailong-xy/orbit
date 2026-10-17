@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep ' (orbit\\-menu\\ menu\\-enter\\ burst\\ sample\\ 7|orbit\\-menu\\-sample\\ menu\\-enter\\ paced\\ sample\\ 4|orbit\\-menu\\ menu\\-enter\\-down\\-enter\\ paced\\ sample\\ 4|orbit\\-menu\\-sample\\ menu\\-enter\\-down\\-enter\\ burst\\ sample\\ 0|orbit\\-menu\\-sample\\ menu\\-enter\\-enter\\ burst\\ sample\\ 1|orbit\\-field\\ select\\-down\\-enter\\-from\\-7\\ paced\\ sample\\ 4|orbit\\-field\\ select\\-down\\-enter\\-from\\-7\\ paced\\ sample\\ 12|antd\\-sample\\ select\\-down\\-home\\-enter\\ paced\\ sample\\ 15|orbit\\-field\\ select\\-down\\-end\\-enter\\ burst\\ sample\\ 6|orbit\\-sample\\ select\\-down\\-pageup\\-enter\\ paced\\ sample\\ 2|orbit\\-field\\ select\\-down\\-pagedown\\-enter\\ burst\\ sample\\ 19|orbit\\-sample\\ select\\-down\\-space\\ burst\\ sample\\ 15|antd\\-sample\\ select\\-down\\-n\\-enter\\ paced\\ sample\\ 10)$'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_793da11276e8",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "7676745ffbd214b72e91c62e36cc399a1799078b",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T13:23:14.598552+00:00",
+ "exitCode": 0,
+ "outputSha256": "4a093586d3e588e051ac9506c70cfc0e8992de45baa9fb4340e0720a5a68c660",
+ "outputBytes": 2782,
+ "note": "13 passed: the 13 baseline samples whose page never mounted (5 menu, 8 select), run again with the same probe; with them every target and sequence has 20 burst + 20 paced samples."
+}

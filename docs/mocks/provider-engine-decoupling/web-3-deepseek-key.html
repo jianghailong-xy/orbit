@@ -1,0 +1,162 @@
+<!doctype html>
+<!-- Design board 3 (web): a DeepSeek key's own page — balance, the engines it works with, and what editing,
+     turning off and deleting it do. "现在" is drawn from today's ProviderConnectPage.tsx (edit mode, main
+     0a887da2c), DeepSeekBalance.tsx and the keys table's Popconfirm; "改后" is the proposal. Copy for refusals
+     follows the T1 contract (§3.6, §3.7). Hand-drawn on the shipped tokens; not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>3 · A DeepSeek key's page (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .formcol .w-page { padding: 24px 40px 28px; }
+  .imp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px; align-items: start; }
+  .imp .w-dlg { width: auto; }
+  .imp .w-pop { display: block; }
+  .sub-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 16px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .sub-l:first-child { margin-top: 0; }
+  .use { display: flex; gap: 8px; align-items: baseline; }
+  .use + .use { margin-top: 2px; }
+  .w-dlg .use b { font-weight: 600; color: var(--text-1); }
+  .err { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--error-bg); border: 1px solid var(--error-border); color: var(--text-1); font-size: 12.5px; line-height: 1.65; }
+  .err b { color: var(--error); }
+  .opt-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; margin: 0 0 12px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">3 · DeepSeek key 的页面（Web）：余额照旧；写出这把 key 能用的 engine；停用、删除影响它在所有 engine 上的会话</h1>
+  <p class="m-sub zh">在 Infrastructure 的 API keys 里点一把 DeepSeek key 的 Edit 进来。今天这页说「Runs on Claude Code」；停用就是关掉开关再 Save，没有确认；删除只问一句「Delete DeepSeek?」。合并以后一把 key 同时挂在三个 engine 上。按契约 §3.6，停用或删除会让它在所有 engine 上的会话都停下：会话保留原 engine，重新启用、或在 Provider 菜单换一把兼容的凭据后，从原处继续，不会落回 runner 自己的登录。改 endpoint 或协议时，如果有未结束的会话或任务 pin 在用新协议跑不了的 engine，就拒绝保存。拒绝的文案用契约 §3.7 的 <code>PROVIDER_DIALECT_IN_USE</code>。要不要在停用、删除前先弹窗说明影响，是待定项，见 ②。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① key 的页面（Edit）</div>
+    <div class="cols2 formcol">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>同一把 key 也配成了 DeepSeek Harness 时</div>
+        <div class="w-app"><div class="w-page"><div class="w-form" id="now"></div></div></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>一把 key，三个 engine（停用 / 删除的确认按 ② 的选择）</div>
+        <div class="w-app"><div class="w-page"><div class="w-form" id="after"></div></div></div>
+      </div>
+    </div>
+    <div id="notes"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="tbd">待定</span>② 停用、删除 key 前是否先确认影响</div>
+    <div class="cols2" id="ab"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 改 endpoint 或协议：有不兼容的使用就拒绝（两个选项都要）</div>
+    <div class="cols2" id="edit"></div>
+  </div>
+</section>
+
+<script>
+const back = '<div class="w-back">‹ Infrastructure</div>';
+const idbar = (sub) => `<div class="w-idbar">${tile('deepseek', 40)}<div><div class="n">DeepSeek</div><div class="s">${sub}</div></div></div>`;
+const nameStep = '<div class="w-step"><div class="w-step-h"><span>Name</span></div><div class="w-input">DeepSeek</div></div>';
+const keyStep = (extra = '') => `<div class="w-step"><div class="w-step-h"><span>Paste your DeepSeek API key</span><span class="w-link">Get your API key ↗</span></div>
+  <div class="w-input ph">Leave blank to keep the current key<span class="eye">◌</span></div>
+  <div class="w-hint">Stored encrypted — only you can see it. <span class="w-link">Show the current key</span>${extra}</div></div>`;
+const balance = `<div class="w-step"><div class="w-step-h"><span>DeepSeek account balance</span><span class="w-link">Top up on DeepSeek ↗</span></div>
+  <div class="w-bal"><div class="top"><div><div class="cap">Total</div><div class="amt">¥110.00<small>CNY</small></div></div>
+    <div class="upd">Updated 2 min ago<span class="w-btn sm">⟳ Refresh</span></div></div>
+    <div class="split"><i></i></div><div class="leg"><span>Granted <b>¥10.00</b></span><span>Topped up <b>¥100.00</b></span></div></div>
+  <div class="w-hint">The balance of the whole DeepSeek account this key belongs to — every app and person using that account draws on it, so it is not what Orbit or this session spent. Granted credit is spent before topped-up credit.</div>`;
+const adv = '<div class="w-adv"><span class="w-muted" style="font-size:10px">▶</span>Advanced<span class="tag">From preset</span></div>';
+const foot = '<div class="w-foot"><span class="w-btn">Cancel</span><span class="w-btn primary">Save</span></div>';
+
+document.getElementById('now').innerHTML = `${back}
+  <div class="w-h1" style="margin-top:10px">Edit DeepSeek</div>
+  ${mk('A', idbar('Runs on Claude Code · 2 models configured'))}
+  ${nameStep}${keyStep()}${balance}
+  ${mk('B', '<div class="w-hint" style="margin-top:4px">Same DeepSeek account as <b style="color:var(--text-2)">DeepSeek Harness</b> — both show this balance.</div>')}</div>
+  ${adv}
+  ${mk('C', '<div class="w-row-sw" style="margin-top:0"><span class="w-switch"></span><span>Enabled</span><span class="w-hint">Disabled providers are hidden from the pickers.</span></div>', false, 'margin-top:22px')}
+  ${foot}`;
+
+const usage = (e, text) => `<div class="w-er2"><span>${eng(e, 18)}</span><span class="d">${text}</span></div>`;
+document.getElementById('after').innerHTML = `${back}
+  <div class="w-h1" style="margin-top:10px">Edit DeepSeek</div>
+  ${mk(1, idbar('Anthropic-compatible · 2 models configured'))}
+  ${nameStep}${keyStep()}${balance}</div>
+  <div class="w-step">${mk(2, `<div class="w-box"><div class="w-box-h">Works with<small>— pick it in the Provider menu of a session on any of these</small></div>
+    ${usage('claude', 'DeepSeek V4 Pro, V4 Flash')}
+    ${usage('opencode', 'DeepSeek V4 Pro, V4 Flash')}
+    ${usage('dsh', 'models from its catalogue on each machine')}</div>`)}</div>
+  ${adv}
+  ${mk(3, '<div class="w-row-sw"><span class="w-switch"></span><span>Enabled</span><span class="w-hint">Off stops it on Claude Code, OpenCode and DeepSeek Harness, and hides it from their Provider menus.</span></div>')}
+  ${foot}`;
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>身份条说「Runs on Claude Code」</b>，可这把 key 另外还配成了 DeepSeek Harness。'],
+  ['B', '<b>「Same DeepSeek account as DeepSeek Harness」</b>：同一把 key 配了两次，才需要这句解释。'],
+  ['C', '<b>停用的说明只说「hidden from the pickers」</b>，没说用着它的会话会怎样。'],
+  [1, '<b>身份条写协议：</b>「Anthropic-compatible · 2 models configured」。返回链接是 main 上已有的「‹ Infrastructure」。'],
+  [2, '<b>新增「Works with」：</b>三个 engine 各一行，写各自的模型。顺序按兼容表。余额卡片和说明不变。「Same DeepSeek account as …」只在两行确实是同一把 key 时才出现：迁移时有一方停用、没有去重，就会这样（契约 §7.2）。'],
+  [3, '<b>Enabled 的说明写影响：</b>「Off stops it on Claude Code, OpenCode and DeepSeek Harness, and hides it from their Provider menus.」两个选项都有这一句。'],
+  ['·', '<b>不变的：</b>名字、key 输入框、显示当前 key、余额（含过低、拿不到的样子）、Advanced、Cancel / Save。'],
+]);
+
+/* ② A/B */
+const dlg = (title, body, acts, icon = '<span class="w-warnico">▲</span>') => `<div class="w-dlg"><h4>${icon}${title}</h4>${body}<div class="acts">${acts}</div></div>`;
+const usesList = `<div class="use">${eng('claude', 16)}<span>— <b>2 open sessions</b>, 1 task pinned</span></div>
+  <div class="use">${eng('opencode', 16)}<span>— not in use</span></div>
+  <div class="use">${eng('dsh', 16)}<span>— <b>1 open session</b></span></div>`;
+document.getElementById('ab').innerHTML = `
+  <div class="ab-opt rec" style="padding:16px 18px">
+    <div class="opt-h"><span class="ab-k" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--brand);color:#fff;font-size:12px">A</span>加确认：先列出用量，再停用或删除（推荐）</div>
+    <div class="ab-sub zh" style="margin-bottom:12px">key 页的「Works with」每行加上正在用它的未结束会话数和任务 pin 数。关掉 Enabled 按 Save 时（有人在用才问），以及列表或本页的删除，都先弹窗列出三个 engine 的用量。数字和 T3 拒绝改协议时的查询是同一个（契约 §3.7 <code>PROVIDER_DIALECT_IN_USE</code> 带 <code>engines</code>、<code>sessions</code>、<code>tasks</code>），需要 T3 再开放一个只读接口给界面。</div>
+    <div class="w-app" style="padding:12px 16px"><div class="w-box"><div class="w-box-h">Works with<small>— in use right now</small></div>
+      ${usage('claude', '<b>2 open sessions</b> · 1 task pinned')}${usage('opencode', 'Not in use')}${usage('dsh', '<b>1 open session</b>')}</div></div>
+    <div class="sub-l zh">关掉 Enabled 后按 Save</div>
+    ${dlg('Turn off DeepSeek?', `<p>It stops on all three engines it works with:</p>${usesList}
+      <p style="margin-top:8px">Those sessions and the pinned task keep their engine and can't run until you turn the key back on or switch them to another key — nothing falls back to a runner's own sign-in.</p>`,
+      '<span class="w-btn">Cancel</span><span class="w-btn primary">Turn off</span>')}
+    <div class="sub-l zh">列表上的 Delete，或本页左下角新加的「Delete key」</div>
+    ${dlg('Delete DeepSeek?', `<p>It goes from all three engines it works with:</p>${usesList}
+      <p style="margin-top:8px">They keep their engine and can't run until you switch them to another key. To pause the key instead, turn it off.</p>`,
+      '<span class="w-btn">Cancel</span><span class="w-btn dangerfill">Delete key</span>', '<span class="w-errico">▲</span>')}
+  </div>
+  <div class="ab-opt" style="padding:16px 18px">
+    <div class="opt-h"><span class="ab-k" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--fill-muted);font-size:12px">B</span>不加确认，只靠文案</div>
+    <div class="ab-sub zh" style="margin-bottom:12px">停用仍是关开关再 Save，不弹窗。删除仍是列表上那句 Popconfirm，只在下面补一行影响说明。「Works with」不显示用量，不需要新接口。影响只写在 Enabled 的说明里（①-3）。</div>
+    <div class="sub-l zh">关掉 Enabled 后按 Save：直接保存</div>
+    <div class="w-app" style="padding:12px 16px"><div class="w-row-sw" style="margin:0"><span class="w-switch off"></span><span>Enabled</span><span class="w-hint">Off stops it on Claude Code, OpenCode and DeepSeek Harness, and hides it from their Provider menus.</span></div>
+      <div class="w-foot" style="margin-top:12px;padding-top:12px"><span class="w-btn">Cancel</span><span class="w-btn primary">Save</span></div></div>
+    <div class="sub-l zh">列表上的 Delete：今天的 Popconfirm，补一行说明</div>
+    <div class="w-pop"><div style="display:flex;gap:8px;align-items:center"><span class="w-warnico">▲</span><b style="font-weight:600">Delete DeepSeek?</b></div>
+      <div class="w-hint" style="margin:6px 0 0 22px">Sessions on it stop on every engine until you switch them to another key.</div>
+      <div class="acts"><span class="w-btn sm">Cancel</span><span class="w-btn sm primary">OK</span></div></div>
+    <div class="sub-l zh">对照：今天的 Popconfirm</div>
+    <div class="w-pop"><div style="display:flex;gap:8px;align-items:center"><span class="w-warnico">▲</span><b style="font-weight:600">Delete DeepSeek?</b></div>
+      <div class="acts"><span class="w-btn sm">Cancel</span><span class="w-btn sm primary">OK</span></div></div>
+  </div>`;
+
+/* ③ edit refusal */
+document.getElementById('edit').innerHTML = `
+  <div>
+    <div class="w-app" style="padding:14px 16px">
+      <div class="w-step" style="margin-top:0"><div class="w-step-h" style="font-size:13.5px"><span>Endpoint</span></div>
+        <div class="w-input">https://api.example.com/v1/responses</div></div>
+      ${mk(4, `<div class="err"><b>Couldn't save the provider.</b> provider "DeepSeek" is in use on Claude Code, DeepSeek Harness by 3 open sessions and 1 task pins; its endpoint can't change while they use it</div>`)}
+      <div class="w-foot" style="margin-top:12px;padding-top:12px"><span class="w-btn">Cancel</span><span class="w-btn primary">Save</span></div></div>
+  </div>
+  <div>${notes([
+    [4, '<b>拒绝时说清楚：</b>文案原样取契约 §3.7 的 <code>PROVIDER_DIALECT_IN_USE</code>。改 endpoint 时把「protocol」换成「endpoint」；换成 Claude 订阅 token 时换成「key」（§3.6）。只有协议真的变了，又有未结束会话或任务 pin 在用新协议跑不了的 engine 时才拒绝。同一协议换 endpoint、换 key、改名都直接保存。'],
+    ['·', '<b>两个选项都要：</b>这是服务端规则（T3），界面只负责显示它的回答。T6 可以把 <code>engines</code> / <code>sessions</code> / <code>tasks</code> 组织成更好读的一句；板上先按原文画。'],
+  ])}</div>`;
+finish();
+</script>
+</body>
+</html>

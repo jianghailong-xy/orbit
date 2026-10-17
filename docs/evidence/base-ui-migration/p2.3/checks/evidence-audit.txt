@@ -1,0 +1,448 @@
+/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/docs/evidence/base-ui-migration/p2.3/audit.py:37: DeprecationWarning: Image.Image.getdata is deprecated and will be removed in Pillow 14 (2027-10-15). Use get_flattened_data instead.
+  diffs=[(i,x,y) for i,(x,y) in enumerate(zip(a.getdata(),b.getdata())) if x!=y]
+{
+  "baselinePNGsUnchanged": 252,
+  "attachments": {
+    "reference-run": 96,
+    "toasts-run": 232,
+    "overlays-regression": 256,
+    "production-run": 24,
+    "production-reference-run": 24
+  },
+  "overlayPairs": [
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 51552,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 51552,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 51552,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 51552,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 51552,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 51552,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 50400,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 50400,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 50400,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 46080,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "Bottom-drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 50400,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "Dialog",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 50400,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "Drawer",
+      "strictComputedParity": true,
+      "png": {
+        "comparedPixels": 50400,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    }
+  ],
+  "production": [
+    {
+      "project": "chromium-dark-desktop",
+      "box": [
+        892,
+        4,
+        1276,
+        174
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 65280,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 1152000,
+        "differentPixels": 638,
+        "maxChannelDelta": 161
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 1152000,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 71052,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "box": [
+        892,
+        4,
+        1276,
+        174
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 65280,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 1152000,
+        "differentPixels": 633,
+        "maxChannelDelta": 214
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 1152000,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 71052,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "box": [
+        884,
+        4,
+        1268,
+        174
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 65280,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 1152000,
+        "differentPixels": 642,
+        "maxChannelDelta": 159
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 1152000,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 71052,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "box": [
+        884,
+        4,
+        1268,
+        174
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 65280,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 1152000,
+        "differentPixels": 648,
+        "maxChannelDelta": 214
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 1152000,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "comparedPixels": 71052,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePage": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "wholePageAgainstTaskStart": {
+        "comparedPixels": 329160,
+        "differentPixels": 0,
+        "maxChannelDelta": 0
+      }
+    }
+  ]
+}

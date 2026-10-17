@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web 项目会话页：对齐清单</title>
+<link rel="stylesheet" href="web.css"></head>
+<body style="width:1700px">
+<h1>④ 对齐清单：iOS 怎么做，Web 现在怎么做，改成什么样</h1>
+<p class="lede" style="width:1600px">“整体”的范围我先按<b>项目会话页这一整页</b>来理解，下面是全部 15 项。如果你说的整体还包括别的页面（比如项目页 <code>/projects/:id</code>），告诉我范围再补。<span class="bug">红字</span>是现在就和 iOS 行为不一致的 bug，蓝底是新加的东西。</p>
+
+<div class="box">
+  <h2>页头与进入</h2>
+  <table>
+    <tr><th style="width:30px">#</th><th style="width:150px">项</th><th style="width:330px">iOS（参照）</th><th style="width:360px">Web 现在</th><th>Web 方案</th></tr>
+    <tr><td>1</td><td class="k">页头的操作</td><td>右边一个 ⊞，打开项目页</td><td>⋯ 菜单：Open Project、Open Coordinator</td><td class="new">换成一个 ⊞ 按钮（title “Open project”）。Open Coordinator 去掉，协调者那一行就在下面。</td></tr>
+    <tr><td>2</td><td class="k">手机顶栏</td><td>一层</td><td>两层：全局 “☰ Orbit” 加项目页头</td><td class="new">项目页只留页头，规则和打开会话时一样（复用现有的 <code>:has(.show-conversation)</code> 写法）。</td></tr>
+    <tr><td>3</td><td class="k">从侧栏进项目</td><td>iPad：只换列表栏，右边的对话保留</td><td>整个地址换掉，右边的对话被关掉</td><td class="new">只换会话栏（加 <code>?project=</code>），保留右边正在看的对话。</td></tr>
+    <tr><td>4</td><td class="k">加载中</td><td>也先写 “Project · 0 sessions”（这次一起改）</td><td>先写 “Project · 0 sessions”</td><td class="new">会话还没读到时只写 Project，不写 0 sessions；iOS 同步改。</td></tr>
+  </table>
+</div>
+
+<div class="box">
+  <h2>进度卡、启动、落地</h2>
+  <table>
+    <tr><th style="width:30px">#</th><th style="width:150px">项</th><th style="width:330px">iOS（参照）</th><th style="width:360px">Web 现在</th><th>Web 方案</th></tr>
+    <tr><td>5</td><td class="k">进度的形态</td><td>列表里第一张灰卡，随列表滚动；进度条 66pt；没有链接</td><td>钉在列表上方的横带，带底线；进度条 32px；↗ 打开项目页</td><td class="new">同 iOS：灰底圆角卡（<code>#f2f3f5</code>，圆角 10），放进滚动区，进度条 66px，去掉 ↗。</td></tr>
+    <tr><td>6</td><td class="k">没有计数时</td><td>写项目状态</td><td>只剩一个 ↗</td><td class="new">写项目状态（Open / Done …）。</td></tr>
+    <tr><td>7</td><td class="k">没启动</td><td>Not started · N tasks，下面是启动行（本次 iOS 已实现）</td><td>“0/N done · 0 running”，没有入口</td><td class="new">同 iOS。判断用 <code>projectStart.ts</code> 里和项目页同一条规则；数据用 sidebar 新加的 <code>startedAt</code>，没启动时再读 open items（这次服务端已加）。</td></tr>
+    <tr><td>8</td><td class="k">点启动</td><td>起始卡以 sheet 盖在本页上</td><td>—</td><td class="new">桌面：现有的 <code>ProjectStartDialog</code>；已请求时换成请求的那一版。手机：底部面板（图 ③）。</td></tr>
+    <tr><td>9</td><td class="k">有任务在落地</td><td>卡里一行：Landing · 状态 · 时长 · 任务，每秒走，点开项目页</td><td>没有（只在工作区列表的项目行第二行出现）</td><td class="new">同 iOS，复用 Web 现成的 <code>LandingRow</code> 和 <code>landingLine()</code>。</td></tr>
+  </table>
+</div>
+
+<div class="box">
+  <h2>合入卡与时间线</h2>
+  <table>
+    <tr><th style="width:30px">#</th><th style="width:150px">项</th><th style="width:330px">iOS（参照）</th><th style="width:360px">Web 现在</th><th>Web 方案</th></tr>
+    <tr><td>10</td><td class="k">合入卡的位置</td><td>进度卡下面，随列表滚动</td><td>钉在列表上方，占着位置不走</td><td class="new">挪进滚动区，放在进度卡下面。</td></tr>
+    <tr><td>11</td><td class="k">询问时的内容</td><td>图标块、分隔线、判据进度（“1 of 5 met on this branch …”）</td><td>没有图标、分隔线和判据那一行</td><td class="new">补齐这三样。判据数取项目的判据里已满足的条数，和 iOS 的 <code>criteriaMet</code> 一样。Details 保留。</td></tr>
+    <tr><td>12</td><td class="k">受阻时去协调者</td><td>打开协调会话，项目页留在下面</td><td><span class="bug">链接丢掉 <code>?project=</code>：会话栏被换掉，没有滑动动画</span></td><td class="new">和页头原来的 Open Coordinator 一样，带着 <code>?project=</code> 推进去。</td></tr>
+    <tr><td>13</td><td class="k">已合入那一行</td><td>绿圆里是合入箭头</td><td>绿圆里是 ✓</td><td class="new">换成合入箭头。</td></tr>
+  </table>
+</div>
+
+<div class="box">
+  <h2>行操作与空状态</h2>
+  <table>
+    <tr><th style="width:30px">#</th><th style="width:150px">项</th><th style="width:330px">iOS（参照）</th><th style="width:360px">Web 现在</th><th>Web 方案</th></tr>
+    <tr><td>14</td><td class="k">手机上的行操作</td><td>左滑的 Move 只有协调者有；长按出菜单</td><td><span class="bug">每一行左滑都有 Move（菜单里却只给协调者）</span>；手机上没有长按</td><td class="new">Move 只给协调者。长按出和桌面 ⋯ 一样的菜单（会影响所有会话列表，不只这一页；iOS 菜单里的 Rename… 和 Tags… 这次不加）。</td></tr>
+    <tr><td>15</td><td class="k">空和出错</td><td>中间写 No sessions，或 Couldn’t load sessions 加原因；可以下拉刷新</td><td>列表底部一行小字，没有重试</td><td class="new">中间写清楚，出错时加 Retry（图 ②）。</td></tr>
+  </table>
+</div>
+
+<div class="box">
+  <h2>不变的</h2>
+  <table>
+    <tr><td class="k" style="width:190px">Coordinator 分区</td><td>协调者固定排第一，下面按时间分组（Today / Yesterday …），已合入的记录夹在会话中间。两端已经一样。</td></tr>
+    <tr><td class="k">会话行</td><td>行的样子、悬停 ⋯、选中后右边打开对话（桌面）或推入（手机）、上下键切换，都不动。</td></tr>
+    <tr><td class="k">轮询</td><td>Web 有 SSE 时 60 秒、没有时 4 秒，比 iOS 固定 4 秒更省，不改。</td></tr>
+  </table>
+</div>
+<p class="foot">数据来源：这次已经补上的 sidebar <code>startedAt</code>，以及现有的 <code>projectOpenItemsQuery</code>、<code>projectIntegrationQuery</code>、<code>projectPromotionQuery</code>。不需要新接口。</p>
+</body></html>

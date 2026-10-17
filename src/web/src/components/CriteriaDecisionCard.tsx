@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import { CardActionButton, CardActions } from './CardAction';
+import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { api } from '../api';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
@@ -773,17 +775,20 @@ export function CriteriaDecisionCard({
   onDecide: (decision: CriteriaDecision) => void;
 }): JSX.Element {
   const answerable = isAnswerable(standing);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const stale = staleExplanation(standing);
   const row =
     standing.state === 'DECIDABLE' || standing.state === 'BASE_SEAL_MOVED' ? standing.row : null;
   const anchor = useRef<HTMLDivElement>(null);
-  const keys = useCardKeyClaim(answerable && !busy, anchor);
-  useApproveHotkey(keys, () => onDecide('APPROVE'));
+  const keys = useCardKeyClaim((!narrow || reviewOpen) && answerable && !busy, anchor);
+  useApproveHotkey(keys, () => onDecide('APPROVE'), { anchor });
   return (
+    <ReviewCard title={headingFor(standing)} summary={row ? changeSummary(row.diff) : stale ?? ''}
+      id={`criteria-decision-${standing.intentId}`} open={reviewOpen} onOpenChange={setReviewOpen}>
     <div
       ref={anchor}
       className={`approval-card criteria-decision${isStale(standing) ? ' is-stale' : ''}`}
-      id={`criteria-decision-${standing.intentId}`}
     >
       <div className="approval-head criteria-decision-head">
         <span className="criteria-decision-heading">{headingFor(standing)}</span>
@@ -840,8 +845,7 @@ export function CriteriaDecisionCard({
         <Alert
           className="criteria-decision-error"
           type="error"
-          showIcon
-          message="That decision was not recorded"
+          title="That decision was not recorded"
           description={error.message}
         />
       ) : null}
@@ -871,6 +875,7 @@ export function CriteriaDecisionCard({
         </span>
       </CardActions>
     </div>
+    </ReviewCard>
   );
 }
 

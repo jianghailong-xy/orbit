@@ -1,0 +1,182 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T22:51:30.337Z",
+    "duration": 28466.005,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2575
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2339
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-1--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3943
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-2--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2047
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-3--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1918
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-4--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1984
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-5--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1889
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-6--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1930
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-7--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2498
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-8--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2063
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-9--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "claim": "在任务分支整合项目18e75cfe14d0a0858c9a46e514535439c9cdf9d8与采用的最新main d22b276cccbac66b672e25944be0317d6df420eb，最终验证提交d6d32fe69a8e331b199f08022979d95d0fc1eb94、树d305ba27745d341c017b8f006254014a3f5ba77f。逐项解决ToastViewport/index.css通知冲突，保留P2.3稳定host/manual popover、跨模态操作及悬停/原计时，也保留main的key/id单呈现、250ms inert/aria-hidden退场和主action跳转规则；修复动画阶段delay、退出焦点和失效悬停暂停的组合回归。原232场景全部保留，新增40场景，最终272/272浏览器、build、295文件3668单测及通知类型通过。48组双侧静态截图及样式一致；7812历史文件和252张P0原图未改写，所有失败诊断、原始图/时钟和源码保留。来源、双方diff、原始结果与边界详见本目录README.md及索引。后续交付提交仅增加本目录证据。 两条失败工具引用为机械合并修复前的可复现负对照，最终正向检查均成功。P2.2第5版已独立CONFIRM但尚未落地，交接后复核实际项目tip仍18e75cfe1；其三份配置和入口无本任务差异，后续由平台组合。",
+  "criterion": {
+    "key": "1BvO6hYrlFnU60JqxQPUHt",
+    "text": "P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。"
+  },
+  "checks": [
+    {
+      "kind": "TOOL_CALL",
+      "ref": "exec-f9b93073-52bb-403e-83e4-b81eb1a2895f"
+    },
+    {
+      "kind": "TOOL_CALL",
+      "ref": "exec-e9e44fca-1e37-4d28-8940-350d0d769192"
+    },
+    {
+      "kind": "TOOL_CALL",
+      "ref": "exec-967d9afb-0a2d-45b4-9d35-5721f6d218cb"
+    },
+    {
+      "kind": "TOOL_CALL",
+      "ref": "exec-12b627c7-2cd6-48e8-8d12-713b1a4db435"
+    },
+    {
+      "kind": "TOOL_CALL",
+      "ref": "exec-c3ce6976-a1fa-4c70-9270-87ae93736b7f"
+    },
+    {
+      "kind": "TOOL_CALL",
+      "ref": "exec-aac3fbbc-cfca-484f-b2c4-9ed420697f8f"
+    }
+  ],
+  "gaps": [
+    "本证据只确立本任务的通知晋升冲突与组合行为，不证明P2.2、完整P2/P7或其他迁移批次完成。",
+    "Linux手机模拟不等于真机iOS、IME/软键盘、实际读屏听测或系统剪贴板授权；真实后端鉴权/重连未在本轮建立。",
+    "不同轮次的历史整页对照存在main已有堆叠顺序、文字选区及通知之外的控件状态差异，均分类保留；不主张所有历史整页零像素差异。",
+    "最终交付在任务分支，等待平台落到项目分支并创建新晋升候选；未手工修改main/项目分支，未部署。"
+  ]
+}

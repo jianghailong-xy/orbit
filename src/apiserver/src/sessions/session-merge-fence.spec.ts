@@ -27,6 +27,8 @@ function harness(overrides: Record<string, unknown> = {}, capabilities = [SESSIO
   const lockCalls: unknown[][] = [];
   const writes: unknown[] = [];
   const workspaceWrites: unknown[] = [];
+  // Transaction commits and runner wakes, in the order they happened.
+  const order: string[] = [];
   const tx = {
     runner: { findUnique: async () => ({ capabilities }) },
     $queryRaw: async (...args: unknown[]) => {
@@ -42,18 +44,24 @@ function harness(overrides: Record<string, unknown> = {}, capabilities = [SESSIO
     },
   };
   const prisma = {
-    $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
+    $transaction: async (fn: (client: typeof tx) => unknown) => {
+      const result = await fn(tx);
+      order.push('commit');
+      return result;
+    },
     workspace: {
       update: async (args: unknown) => {
         workspaceWrites.push(args);
       },
     },
   } as never;
+  const realtime = { notifyRunnerWake: (runnerId: string) => order.push(`wake ${runnerId}`) } as never;
   return {
-    service: new SessionsService(prisma, {} as never, {} as never),
+    service: new SessionsService(prisma, {} as never, realtime),
     lockCalls,
     writes,
     workspaceWrites,
+    order,
   };
 }
 
@@ -202,6 +210,24 @@ for (const status of [
     );
   });
 }
+
+test('a queued merge wakes its runner once the queue has committed', async () => {
+  const h = harness();
+
+  await h.service.mergeToMain(OWNER_ID, SESSION_ID);
+
+  assert.deepEqual(h.order, ['commit', 'wake runner-1']);
+});
+
+test('a merge request that queued nothing wakes no runner', async () => {
+  const pending = harness({ mergeStatus: 'pending', mergeOperationId: 'operation-1' });
+  await pending.service.mergeToMain(OWNER_ID, SESSION_ID);
+  const running = harness({ status: RunStatus.RUNNING });
+  await assert.rejects(() => running.service.mergeToMain(OWNER_ID, SESSION_ID));
+
+  assert.deepEqual(pending.order, ['commit']);
+  assert.deepEqual(running.order, []);
+});
 
 test('merge queueing cannot overlap a runner-claimed commit', async () => {
   const h = harness({

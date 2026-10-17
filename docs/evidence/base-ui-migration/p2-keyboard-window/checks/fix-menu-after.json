@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" menu-\"'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_646d9028ca73",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "4fb7ee43f",
+ "webTree": "c3c0956ee13af6c020a3de630819693c99dcd270",
+ "outputLastWritten": "2026-10-07T05:03:48.487436+00:00",
+ "exitCode": 0,
+ "outputSha256": "3cefa08ea2303fa73230e0abfc31565aa21f91d64237c0bfd0a49aeaa430e50e",
+ "outputBytes": 242029,
+ "note": "Fixed tree (this worktree at the fix commit 4fb7ee43f when the run started; later commits during the run touched only Menu.test.tsx and this directory, which the dev server does not serve to the fixture), the same 1320 tests: 1320 passed (50.0 min), no page failed to mount. Simultaneous with fix-menu-before; archived as fix-menu-after."
+}

@@ -80,6 +80,10 @@ struct SessionReplyCardsView: View {
     var ts: String?
     /// What else delivery appended to the same turn, as its own folded entry.
     var attached: (kind: String, text: String)?
+    var undelivered: Bool = false
+    /// Withdraws the reply turn while it is still queued behind the running turn; nil once a runner
+    /// has taken it (web parity: the queued tail's `QueuedTurnMeta`).
+    var onCancelQueued: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -87,6 +91,18 @@ struct SessionReplyCardsView: View {
                 SessionReplyCardView(reply: reply, ts: ts)
             }
             if let attached { AttachedNoteEntry(attached: attached) }
+            if undelivered {
+                Text(ProjectStartedCard.undelivered).font(.orbitMeta).foregroundStyle(.orange)
+            } else if let onCancelQueued {
+                HStack(spacing: 8) {
+                    Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+                    Button("Cancel") { onCancelQueued() }
+                        .buttonStyle(.plain)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.tint)
+                        .contentShape(Rectangle())
+                }
+            }
         }
     }
 }

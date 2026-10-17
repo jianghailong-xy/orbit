@@ -192,7 +192,7 @@ function merge(left: AttemptSpend, right: AttemptSpend): AttemptSpend {
     turns: Math.max(left.turns, right.turns),
     wallClockMs: Math.max(left.wallClockMs, right.wallClockMs),
     toolCalls: Math.max(left.toolCalls, right.toolCalls),
-    costMicros: Math.max(left.costMicros, right.costMicros),
+    costMicros: Math.max(left.costMicros ?? 0, right.costMicros ?? 0),
     contextTokens: Math.max(left.contextTokens ?? 0, right.contextTokens ?? 0) || null,
     contextWindow: Math.max(left.contextWindow ?? 0, right.contextWindow ?? 0) || null,
     coordinatorSteers: Math.max(left.coordinatorSteers, right.coordinatorSteers),

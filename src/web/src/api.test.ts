@@ -5,7 +5,19 @@ import {
   TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS,
   transientDbConflictBody,
 } from '@orbit/shared';
-import { ApiError, api, getSessionEventPage, listQueuedTurns, resumeSession, sendTurn, setAvatar } from './api';
+import {
+  ApiError,
+  api,
+  getSessionEventPage,
+  getShareLink,
+  listQueuedTurns,
+  listShareLinks,
+  putShareLink,
+  resendSessionRetryMessage,
+  resumeSession,
+  sendTurn,
+  setAvatar,
+} from './api';
 
 const okJson = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as Response;
@@ -56,6 +68,35 @@ describe('getSessionEventPage', () => {
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.signal).toBeUndefined();
+  });
+});
+
+describe('public links', () => {
+  it('Settings → Shared links names every kind it draws, so a server lists a wiki link to it', async () => {
+    // A server lists only the kinds a client asks for by name: an app that cannot decode a wiki link
+    // is never handed one. This client draws all four.
+    const fetchMock = vi.fn(async () => okJson({ links: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listShareLinks();
+
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toContain('/api/share-links?kind=SESSION,TASK,PROJECT,WIKI');
+  });
+
+  it('a wiki space’s link lives under its space', async () => {
+    const fetchMock = vi.fn(async () => okJson({ link: null, counts: { documents: 0, footnotes: 0 } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getShareLink('WIKI', 'W1');
+    await putShareLink('WIKI', 'W1', { include: { footnotes: true } });
+
+    const urls = fetchMock.mock.calls.map((call) => (call as unknown as [string])[0]);
+    expect(urls[0]).toContain('/api/wiki/spaces/W1/share');
+    expect(urls[1]).toContain('/api/wiki/spaces/W1/share');
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(String(init.body))).toEqual({ include: { footnotes: true } });
   });
 });
 
@@ -258,6 +299,36 @@ describe('a completion-criterion shape advisory answered by the server', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).code).toBe(body.code);
     expect((error as ApiError).body).toEqual(body);
+  });
+});
+
+describe('resendSessionRetryMessage', () => {
+  // WHY THIS IS A WIRE-BYTES TEST. The failure card's Retry is the only caller that hands `api` a
+  // body it built by hand, and `api` serializes whatever it is given — so `JSON.stringify` at the
+  // call site put a JSON STRING on the wire, and express's strict body parser answered 400
+  // (`Unexpected token '"'`) before the request reached a guard, let alone a handler. Every press of
+  // Retry on the web failed that way (orbitd.io, 2026-10-07) while native clients — which encode a
+  // struct — worked. Nothing above this layer can see it: a spec stubbing the api module asserts the
+  // object it was passed, and only the bytes out of `api` say whether it reached the server.
+  it('puts the identity on the wire as a JSON object, not a string of JSON', async () => {
+    const fetchMock = vi.fn(async () => okJson({ turnId: 'turn-1' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resendSessionRetryMessage('session-1', { provider: 'claude-pool', account: 'a2' });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/sessions/session-1/retry-message');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe('{"provider":"claude-pool","account":"a2"}');
+  });
+
+  it('sends `{}` when the composer had nothing picked', async () => {
+    const fetchMock = vi.fn(async () => okJson({ turnId: 'turn-1' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resendSessionRetryMessage('session-1');
+
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).body).toBe('{}');
   });
 });
 

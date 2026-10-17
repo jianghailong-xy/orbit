@@ -1,0 +1,893 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control-standard.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "scroll-negative-control-standard.browser.mjs",
+   "file": "scroll-negative-control-standard.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 497,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:27.834Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-674151f6f86a7bb07a3b",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 345,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:28.527Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-3ab37c718c6db0925fa8",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 443,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:29.175Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-fddf424a142e855b2e64",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 248,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:29.691Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-5c1850f005da5a7dd89c",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 501,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:30.156Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-11858df19d5f6357bdd4",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 344,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:30.714Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-51df1e61b6454379cd65",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 597,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:31.604Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-6d2e402d68f94ad4b195",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 308,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:32.342Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-3bc0457fa25c05d893fa",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1003,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:33.165Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-db7333640c061b5fb766",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 673,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:34.406Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-bfe86a5ab2b6eef7f5be",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 805,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:35.807Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-3bd0f1fa5b3fbd10fc81",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 608,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:36.834Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-3eea4c573e076dca2885",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1273,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:38.017Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-64ebb28fc1e936c6adcd",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 614,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:39.436Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-2d4faf32ac9bf0435631",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 643,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:40.547Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "blocked-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-3f5d1d4911730ebf2d83",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 335,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:41.287Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4c47633a191d615bfb7a-b204971f8cd25c538e2e",
+     "file": "scroll-negative-control-standard.browser.mjs",
+     "line": 6,
+     "column": 42
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:54:26.365Z",
+  "duration": 15357.756,
+  "expected": 16,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

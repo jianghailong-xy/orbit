@@ -1,0 +1,75 @@
+{
+  "browser": "153.0.8010.12",
+  "geometry": {
+    "viewport": {
+      "width": 1280,
+      "height": 900,
+      "dpr": 1
+    },
+    "theme": "dark",
+    "documentWidth": 1280,
+    "popup": {
+      "x": 280,
+      "y": 24,
+      "width": 720,
+      "height": 760,
+      "top": 24,
+      "right": 1000,
+      "bottom": 784,
+      "left": 280
+    },
+    "body": {
+      "x": 304,
+      "y": 76,
+      "width": 672,
+      "height": 631,
+      "top": 76,
+      "right": 976,
+      "bottom": 707,
+      "left": 304,
+      "scrollTop": 4823,
+      "scrollHeight": 5454,
+      "clientHeight": 631,
+      "overflow": "auto"
+    },
+    "actions": {
+      "x": 304,
+      "y": 707,
+      "width": 672,
+      "height": 57,
+      "top": 707,
+      "right": 976,
+      "bottom": 764,
+      "left": 304
+    },
+    "buttons": [
+      {
+        "text": "Approve & runEnter",
+        "x": 318,
+        "y": 718,
+        "width": 151.40625,
+        "height": 36,
+        "top": 718,
+        "right": 469.40625,
+        "bottom": 754,
+        "left": 318
+      },
+      {
+        "text": "Keep planning",
+        "x": 479.40625,
+        "y": 718,
+        "width": 117.140625,
+        "height": 36,
+        "top": 718,
+        "right": 596.546875,
+        "bottom": 754,
+        "left": 479.40625
+      }
+    ]
+  },
+  "behavior": {
+    "tabBothDirections": true,
+    "contentScrolled": true,
+    "actionsStayedVisible": true
+  }
+}

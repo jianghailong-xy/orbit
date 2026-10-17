@@ -1,0 +1,13 @@
+P0.2 originals recorded: 252
+P0.2 originals whose file hash differs from record: 0
+groups: {'A1': 28, 'A2': 28, 'A3': 28, 'A4': 64, 'A5': 1, 'B1': 10}
+4088d37e6d on origin/main=True promotion=False contains57f792135=False :: Merge refs/heads/project/34Z2CCqHygFxrbqBlPljx into refs/heads/main
+93d3ec5804 on origin/main=True promotion=False contains57f792135=False :: fix: clarify landing activity and manual-start readiness
+918034e729 on origin/main=True promotion=False contains57f792135=False :: fix(web): reveal session menu on hover and focus
+f5bdd7fd39 on origin/main=True promotion=False contains57f792135=False :: fix(web): float session menu over full-width text
+e64d0c72a8 on origin/main=True promotion=False contains57f792135=False :: feat(web): let the desktop Wiki home fill the main region
+registered: 121  A-union: 121  registered==A-union: True
+B1 screenshots: ['chromium-dark-desktop/profile-validation.png', 'chromium-dark-desktop/settings-saved.png', 'chromium-dark-phone/profile-validation.png', 'chromium-dark-phone/settings-saved.png', 'chromium-light-desktop/profile-validation.png', 'chromium-light-desktop/settings-saved.png', 'chromium-light-phone/profile-validation.png', 'chromium-light-phone/settings-saved.png', 'webkit-dark-phone/profile-validation.png', 'webkit-light-phone/profile-validation.png']
+B1 ∩ registered: ['chromium-dark-desktop/settings-saved.png', 'chromium-dark-phone/settings-saved.png', 'chromium-light-desktop/settings-saved.png', 'chromium-light-phone/settings-saved.png']
+stray reference pngs: []
+PROBLEMS: none

@@ -22,6 +22,8 @@ public enum ControlEventType: String, Codable, Sendable {
     case agentChanged = "agent.changed"
     /// Owner-level libraries. These are USER-scoped: `sessionId` is empty (see ControlEvent).
     case taskListChanged = "task.list.changed"
+    /// A project changed: refresh the project's index and sidebar summaries.
+    case projectChanged = "project.changed"
     case tagChanged = "tag.changed"
     /// One of the owner's session folders was created, renamed or deleted: a nudge to re-read
     /// `GET /session-folders`. A session moved between folders is a `session.updated` instead,
@@ -106,6 +108,8 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// explicit null means this Session stopped coordinating a Project (clear the badge/link).
     public let projectId: String??
     public let projectTitle: String??
+    /// Absent preserves membership from the list; explicit null removes it.
+    public let projectMembership: SessionProjectMembership??
     public let pendingApprovals: Int
     /// What `pendingApprovals` is counting, when one word says it better than "approval" — see
     /// `SessionWaitingKind`. The server overwrites it together with the count, so the row reads it
@@ -129,6 +133,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let awaitingReplyFrom: [SessionRequestPeer]??
     public let owesReplyTo: [SessionRequestPeer]??
     public let lastTurnAt: String?
+    /// The rolling recap and when it was written. Doubly optional like `retryAt`: `nil` is an older
+    /// control plane that never sends the key (keep the row's), `.some(nil)` is this server saying
+    /// the session has none — how a manual refresh that dropped the recap reaches the other clients
+    /// — and `.some(value)` is the one just written, which the row's line then prefers.
+    public let recapText: String??
+    public let recapAt: String??
     /// When the server will re-send the message this run's failure killed — part of the summary
     /// because it is part of what `runState == .failed` means (see `Session.retryPending`).
     ///
@@ -176,6 +186,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         projectTitle = values.contains(.projectTitle)
             ? .some(try values.decodeIfPresent(String.self, forKey: .projectTitle))
             : nil
+        projectMembership = values.contains(.projectMembership)
+            ? .some(try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership))
+            : nil
         pendingApprovals = try values.decode(Int.self, forKey: .pendingApprovals)
         // Absent and null are the same fact here — no named kind — unlike `retryAt`, where the
         // absence of the key is an older control plane rather than a statement, so this one needs
@@ -197,6 +210,14 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)) ?? [])
             : nil
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        // `contains` rather than `decodeIfPresent` alone, for `retryAt`'s reason: null is this
+        // server saying the session has no recap, a missing key is an older one saying nothing.
+        recapText = values.contains(.recapText)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .recapText))
+            : nil
+        recapAt = values.contains(.recapAt)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .recapAt))
+            : nil
         retryAt = values.contains(.retryAt)
             ? .some(try values.decodeIfPresent(String.self, forKey: .retryAt))
             : nil

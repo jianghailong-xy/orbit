@@ -544,8 +544,8 @@ func TestWikiMaintainCatchUpRewritesWhatChangedMeanwhileOnceCaughtUp(t *testing.
 		t.Errorf("withdrawals = %s, want docs/old.md once, at %s", gone, head)
 	}
 	for _, prompt := range model.Prompts() {
-		taken := strings.Contains(prompt, "# 任务：写文档") || strings.Contains(prompt, "做「归并」")
-		if taken && (strings.Contains(prompt, "「传输」（") || strings.Contains(prompt, "「派发」（")) {
+		taken := strings.Contains(prompt, "# Task: write the document") || strings.Contains(prompt, `# Task: the "merge" for the document`)
+		if taken && (strings.Contains(prompt, "«传输» (") || strings.Contains(prompt, "«派发» (")) {
 			t.Errorf("a section whose material did not change was taken up: %.120s", prompt)
 		}
 	}

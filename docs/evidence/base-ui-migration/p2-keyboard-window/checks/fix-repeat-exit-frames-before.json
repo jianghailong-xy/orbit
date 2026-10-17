@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/before && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"no-preference Dialog Popover Select exits\" --project webkit-light-desktop --repeat-each 10'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_db329f6b7d62",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T06:38:33.536138+00:00",
+ "exitCode": 0,
+ "outputSha256": "1d8ec0476c7c1bab984fc1ac71d00719096ea2322a23067d0acb77ae79d8e58e",
+ "outputBytes": 2285,
+ "note": "The second full run's only failure, repeated alone 10 times on webkit-light-desktop on the before-fix tree (case, timeouts and retries unchanged), at the same time as fix-repeat-exit-frames-after: 10 passed."
+}

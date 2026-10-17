@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import type { CriteriaChangesSinceConfirmed } from '@orbit/shared';
 import { api } from '../api';
 import {
@@ -37,6 +37,8 @@ import {
 } from './AcceptanceConfirmationCard';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
@@ -207,8 +209,7 @@ export function CriteriaChangeCard({
           <Alert
             className="settlement-card-error"
             type="error"
-            showIcon
-            message={CONFIRMATION_NOT_RECORDED}
+            title={CONFIRMATION_NOT_RECORDED}
             description={error.message}
           />
         ) : null}
@@ -242,6 +243,8 @@ export function SessionCriteriaChangeCard({
   onOpen?: (open: boolean) => void;
   onChatAbout?: (plan: SettlementPlanChat) => void;
 }): JSX.Element | null {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
@@ -288,6 +291,7 @@ export function SessionCriteriaChangeCard({
   };
   const talkAbout = (): void => {
     if (!standing) return;
+    setReviewOpen(false);
     onChatAbout?.({
       projectId: project,
       criteriaDigest: standing.currentVersion.digest,
@@ -298,13 +302,16 @@ export function SessionCriteriaChangeCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: onScreen && !confirm.isPending,
+    confirmEnabled: (!narrow || reviewOpen) && onScreen && !confirm.isPending,
     onConfirm: press,
     anchor,
   });
 
   if (!onScreen || !standing?.changesSinceConfirmed) return null;
   return (
+    <ReviewCard id="settlement-preview" title={CRITERIA_CHANGE_TITLE} summary={title}
+      meta={criteriaChangeCounts(standing.changesSinceConfirmed)}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <CriteriaChangeCard
       ref={anchor}
       projectTitle={title}
@@ -317,5 +324,6 @@ export function SessionCriteriaChangeCard({
       onConfirm={press}
       onChatAbout={talkAbout}
     />
+    </ReviewCard>
   );
 }

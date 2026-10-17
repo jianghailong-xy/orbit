@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -47,10 +48,16 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 		return nil, errors.New("line must be PROJECT_BRANCH (tasks land on the project's own branch " +
 			"first) or MAIN (directly into main)")
 	}
-	automatic, ok := args["automatic"].(bool)
-	if !ok {
-		return nil, errors.New("automatic is required: true to have the coordinator run the project " +
-			"for the owner, false to bring those decisions to them")
+	// Left out is on — the owner's card opens with Automatic on whatever is sent — but a value that is
+	// not a boolean is a mistake, not a suggestion.
+	automatic := true
+	if raw, present := args["automatic"]; present && raw != nil {
+		value, ok := raw.(bool)
+		if !ok {
+			return nil, errors.New("automatic must be true (the coordinator runs the project for the " +
+				"owner) or false (those decisions go to them); leave it out for true")
+		}
+		automatic = value
 	}
 	maxConcurrent, err := getBoundedOptionalNumber(args, "maxConcurrentTasks", maxProjectConcurrentTasks)
 	if err != nil {
@@ -78,10 +85,52 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 		}
 		body["projectBranchName"] = branch
 	}
+	// The main branch is a suggestion with either line, sent as given: whether it names a branch is
+	// the server's to say.
+	if upstream := strings.TrimSpace(getString(args, "upstreamRef")); upstream != "" {
+		body["upstreamRef"] = upstream
+	}
 	if check := strings.TrimSpace(getString(args, "mergeCheckCommand")); check != "" {
 		body["mergeCheckCommand"] = check
 	}
+	// The check's budget travels with the command and is named on its own when it is: the owner's
+	// card opens on what is sent and may change either before pressing Start. Left out it is not
+	// named, and the start then leaves the project's own budget as it stands.
+	if raw, present := args["mergeCheckTimeoutSeconds"]; present && raw != nil {
+		seconds, err := positiveSeconds(raw, "mergeCheckTimeoutSeconds")
+		if err != nil {
+			return nil, err
+		}
+		body["mergeCheckTimeoutSeconds"] = seconds
+	}
 	return body, nil
+}
+
+// positiveSeconds reads a whole number of seconds a caller named: 1 or more, however many. A
+// value whose shape the server would only refuse is refused here, so a typo costs no round trip.
+func positiveSeconds(raw interface{}, key string) (int, error) {
+	bad := fmt.Errorf("%s must be a positive whole number of seconds (how long the check may run "+
+		"before the landing is stopped); leave it out for the one-hour default", key)
+	switch value := raw.(type) {
+	case float64:
+		if value < 1 || value != float64(int(value)) {
+			return 0, bad
+		}
+		return int(value), nil
+	case int:
+		if value < 1 {
+			return 0, bad
+		}
+		return value, nil
+	case string:
+		// Models routinely send numbers quoted, so a numeric string counts too.
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 1 {
+			return 0, bad
+		}
+		return parsed, nil
+	}
+	return 0, bad
 }
 
 // formatStartFindings renders findings one per line: the code and what it found, what it is about,
@@ -137,7 +186,8 @@ func projectStartRequestFiled(raw json.RawMessage) string {
 		"task_start is refused for its tasks. Changing the plan — its tasks, their dependencies or the " +
 		"criteria — voids this request: ask again once the plan is ready again.\n")
 	if len(filed.Warnings) > 0 {
-		b.WriteString("The owner reads these beside it:\n")
+		b.WriteString("Check these before the owner presses Start — they are for you, and the owner's " +
+			"card does not show them:\n")
 		b.WriteString(formatStartFindings(filed.Warnings))
 	}
 	return b.String() + prettyJSON(raw)
@@ -162,7 +212,8 @@ func projectStartRequestRefusal(err error) string {
 		"Fix each of these, then call project_request_start again:\n")
 	b.WriteString(formatStartFindings(refusals))
 	if len(warnings) > 0 {
-		b.WriteString("And these would not refuse it, but the owner will read them beside it:\n")
+		b.WriteString("And these would not refuse it; they are for you, and the owner's card does not " +
+			"show them:\n")
 		b.WriteString(formatStartFindings(warnings))
 	}
 	return strings.TrimRight(b.String(), "\n")

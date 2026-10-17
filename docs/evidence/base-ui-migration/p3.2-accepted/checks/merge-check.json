@@ -1,0 +1,21 @@
+{
+ "commit": "2f382e17c",
+ "commitFull": "2f382e17c79e914bbb52b12b0b8fa30db733443a",
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "job": "bgj_9d441eee3c8b",
+ "exit": 0,
+ "started": "2026-10-07T10:45:14Z",
+ "build": "tsc -b && vite build succeeded (existing >500 kB chunk notice)",
+ "vitest": {
+  "testFiles": "341 passed (341)",
+  "tests": "4353 passed (4353)",
+  "duration": "240.98s",
+  "maxWorkers": 2
+ },
+ "fullOutput": {
+  "path": "/var/tmp/p32acc/merge-check.txt",
+  "lines": 12972,
+  "sha256": "a5427be7ad80e05c43e690c3f97c8891512b476ebf46579032aec567920672a9",
+  "note": "kept on this host; checks/merge-check.txt is filter-merge-check.py of it (build output, every test file line, summary)"
+ }
+}

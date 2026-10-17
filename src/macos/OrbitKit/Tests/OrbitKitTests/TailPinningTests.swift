@@ -143,4 +143,187 @@ final class TailPinningTests: XCTestCase {
 
         XCTAssertTrue(pinned(justInsideTheSlack, readerDriven: true))
     }
+
+    // MARK: - The reported bug, third time round: the viewport changes size under a pinned reader
+
+    /// A phone's composer focused on a transcript at the tail: the keyboard rises and the viewport
+    /// shrinks by ~200pt (measured on an iPhone: 643 → 445, in steps, as the chrome folds and the
+    /// keyboard lands) — and typing a third line takes another ~70 off it. The offset does not move
+    /// and nothing removed content, so the `pinned` rule above keeps the pin, which is right: the
+    /// reader *is* still at the tail. What is not right is where the tail ended up — below the fold,
+    /// with the last line cut in half.
+    private let beforeKeyboard: Double = 643
+    private let underKeyboard: Double = 445
+
+    func testAShrinkingViewportUnderAPinnedTranscriptAsksForItsTail() {
+        XCTAssertTrue(TailPinning.followsResize(wasPinned: true, from: beforeKeyboard, to: underKeyboard))
+        // …and the pin rule itself keeps saying pinned through it, which is why this rule has to
+        // exist beside it: nothing about the scroll reading says the tail moved.
+        let before = TailScrollSample(offset: 9084, contentHeight: 9727, bottomGap: 0)
+        let under = TailScrollSample(offset: 9084, contentHeight: 9727, bottomGap: 160)
+
+        XCTAssertTrue(pinned(under, from: before))
+    }
+
+    func testAGrowingViewportAsksForTheTailToo() {
+        // The keyboard going away: the viewport grows back and the tail is left sitting mid-screen
+        // with a keyboard's worth of nothing under it.
+        XCTAssertTrue(TailPinning.followsResize(wasPinned: true, from: underKeyboard, to: beforeKeyboard))
+    }
+
+    func testAReaderAwayFromTheTailIsNotCarriedBackByAResize() {
+        // Rotating the phone, or focusing the composer, while the reader is reading history: the
+        // viewport moved, their place did not move with it, and the jump-to-latest disc is the way
+        // back — never a resize.
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: false, from: beforeKeyboard, to: underKeyboard))
+    }
+
+    func testAnUnchangedViewportIsNotAResize() {
+        // Every other sample the transcript reports — a scroll, a publish that grew the rows — comes
+        // with the viewport it already had, and must not be read as one.
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: true, from: underKeyboard, to: underKeyboard))
+    }
+
+    func testAViewportThatWasNeverMeasuredIsNotAResize() {
+        // 0 is the first reading, before a layout has happened: an unknown is not a resize, or the
+        // transcript would ask for its tail on the frame it appears.
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: true, from: 0, to: underKeyboard))
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: true, from: beforeKeyboard, to: 0))
+    }
+
+    // MARK: - The reported bug, fourth time round: the geometry moves the tail under a pinned reader
+
+    /// An iPhone opening a long conversation, as measured: 1463pt of content in a 739pt list under a
+    /// 116pt bar, pinned at offset 724. Then the sticky "↑ Your question" header arrives and the top
+    /// inset grows to 148 — and the rows are pushed down with it, to 692, every time.
+    private let opened = TailScrollSample(offset: 724, contentHeight: 1463, bottomGap: 0, topInset: 116)
+    private let pushed = TailScrollSample(offset: 692, contentHeight: 1463, bottomGap: 32, topInset: 148)
+
+    private func follows(_ current: TailScrollSample, from previous: TailScrollSample,
+                         pinned: Bool = true, moving: Bool = false) -> Bool {
+        TailPinning.followsGeometry(pinned: pinned, from: previous, to: current, moving: moving)
+    }
+
+    func testTheStickyHeaderPushingAPinnedTranscriptOffItsTailIsFollowed() {
+        XCTAssertTrue(follows(pushed, from: opened))
+        // …which nothing else answers: the 32pt left below is inside the pin's slack, so the pin
+        // holds and the jump-to-latest disc never shows. The last line just sits in the fade.
+        XCTAssertTrue(pinned(pushed, from: opened, evidence: .reported))
+        XCTAssertTrue(pinned(pushed, from: opened, evidence: .inferred))
+    }
+
+    func testEveryFrameOfTheHeaderAnimatingInIsFollowed() {
+        // The header animates in, and the push lands a frame at a time (measured mid-flight: inset
+        // 126.9 with the offset at 713). Asked once, the tail is reached and then pushed off again.
+        let firstFrame = TailScrollSample(offset: 713, contentHeight: 1463, bottomGap: 11, topInset: 126.9)
+        XCTAssertTrue(follows(firstFrame, from: opened))
+
+        // The re-pin lands in the same reading as the next frame: back at 724, then pushed 20.7 down.
+        // The offset moved by more than the push this time — it was ours — and what is left below is
+        // that frame's push alone.
+        let nextFrame = TailScrollSample(offset: 703.3, contentHeight: 1463, bottomGap: 20.7, topInset: 147.6)
+        XCTAssertTrue(follows(nextFrame, from: firstFrame))
+    }
+
+    func testRowsMeasuredTallerUnderAPinnedTranscriptAreFollowed() {
+        // A Mac's List, as measured: the pin lands on rows of estimated height (offset 638 over 1174pt
+        // of content), the rows on screen are measured, and the content is 44pt taller under an
+        // offset that did not move.
+        let estimated = TailScrollSample(offset: 638, contentHeight: 1174, bottomGap: 0, topInset: 77)
+        let measured = TailScrollSample(offset: 638, contentHeight: 1218, bottomGap: 44, topInset: 77)
+
+        XCTAssertTrue(follows(measured, from: estimated))
+    }
+
+    func testAPushThatIsNotExactlyItsInsetIsStillThePush() {
+        // The same Mac, the header arriving: a 30pt inset moved the offset 29 once both were rounded
+        // to the screen's pixels.
+        let atTail = TailScrollSample(offset: 276, contentHeight: 832, bottomGap: 0, topInset: 77)
+        let underHeader = TailScrollSample(offset: 247, contentHeight: 832, bottomGap: 29, topInset: 107)
+
+        XCTAssertTrue(follows(underHeader, from: atTail))
+    }
+
+    func testTheLastFramesOfThePushAreFollowedToThePoint() {
+        // A Mac, measured frame by frame: the header's push ended with an inset of 105 → 107 that
+        // moved the offset 2pt. Left there, the transcript opened 2pt short of its tail.
+        let almostIn = TailScrollSample(offset: 276, contentHeight: 832, bottomGap: 0, topInset: 105)
+        let lastFrame = TailScrollSample(offset: 274, contentHeight: 832, bottomGap: 2, topInset: 107)
+
+        XCTAssertTrue(follows(lastFrame, from: almostIn))
+    }
+
+    func testAGeometryChangeThatLeftTheTailInPlaceAsksForNothing() {
+        // A streamed reply grew the rows and the follow on its publish landed in the same reading:
+        // nothing is out of view, so nothing is asked — a reply streams with no second scroll.
+        let followed = TailScrollSample(offset: 812, contentHeight: 1551, bottomGap: 0, topInset: 148)
+
+        XCTAssertFalse(follows(followed, from: TailScrollSample(offset: 724, contentHeight: 1463,
+                                                                bottomGap: 0, topInset: 148)))
+    }
+
+    // MARK: - …and what following the geometry must never do: pull a reader back
+
+    func testAReaderWhoScrolledUpIsNotCarriedBackByTheGeometry() {
+        // Reading history, un-pinned: rows measured or a header arriving leave them where they are.
+        let reading = TailScrollSample(offset: 400, contentHeight: 1463, bottomGap: 324, topInset: 116)
+        let measured = TailScrollSample(offset: 400, contentHeight: 1507, bottomGap: 368, topInset: 116)
+        let underHeader = TailScrollSample(offset: 368, contentHeight: 1463, bottomGap: 356, topInset: 148)
+
+        XCTAssertFalse(follows(measured, from: reading, pinned: false))
+        XCTAssertFalse(follows(underHeader, from: reading, pinned: false))
+    }
+
+    func testNothingIsFollowedWhileTheListIsMoving() {
+        // A finger on the list, its coast, or a scroll the platform says SwiftUI is animating:
+        // whatever the geometry did meanwhile, the movement decides where the list ends up.
+        XCTAssertFalse(follows(pushed, from: opened, moving: true))
+        let measured = TailScrollSample(offset: 724, contentHeight: 1507, bottomGap: 44, topInset: 116)
+        XCTAssertFalse(follows(measured, from: opened, moving: true))
+    }
+
+    func testAScrollUpIsNeverFollowed() {
+        // Inside the pin's slack, a reader 40pt up still counts as pinned — but nothing about the
+        // geometry changed, so there is nothing to follow.
+        let peeked = TailScrollSample(offset: 684, contentHeight: 1463, bottomGap: 40, topInset: 116)
+
+        XCTAssertTrue(pinned(peeked, from: opened, readerDriven: false))
+        XCTAssertFalse(follows(peeked, from: opened))
+    }
+
+    func testAScrollUpThatUncoveredARowMeasuredInTheSameReadingIsNotFollowed() {
+        // Where the scroll goes unreported — a Mac infers its reader from geometry — the row a scroll
+        // up uncovers can be measured in that same reading: 76pt taller than estimated, with the list
+        // holding the reader's place, so a 40pt scroll up leaves the offset 36pt HIGHER and the
+        // content taller. Geometry changed and the pin held (40pt is inside its slack) — but the
+        // offset moved past anything the geometry carried, and that is a scroll.
+        let scrolledAndMeasured = TailScrollSample(offset: 760, contentHeight: 1539, bottomGap: 40, topInset: 116)
+
+        XCTAssertTrue(pinned(scrolledAndMeasured, from: opened))
+        XCTAssertFalse(follows(scrolledAndMeasured, from: opened))
+    }
+
+    func testAScrollUpAsTheHeaderArrivesIsNotFollowed() {
+        // The push and a 50pt scroll up in one reading: more is out of view than the push accounts for.
+        let scrolledAndPushed = TailScrollSample(offset: 642, contentHeight: 1463, bottomGap: 82, topInset: 148)
+
+        XCTAssertFalse(follows(scrolledAndPushed, from: opened))
+    }
+
+    func testAJumpAwayWhosePinSurvivedIsNotFollowed() {
+        // The sticky header's jump to a question un-pins the tail on its tap, but the List animates
+        // the jump with no phase of its own and starts it slowly (1.6pt in its first frame), so that
+        // first reading is inside the slack and pins the transcript again — and nothing later in the
+        // jump un-pins it where drags are reported.
+        let atTail = TailScrollSample(offset: 724, contentHeight: 1463, bottomGap: 0, topInset: 148)
+        let firstFrame = TailScrollSample(offset: 722.4, contentHeight: 1463, bottomGap: 1.6, topInset: 148)
+        let atQuestion = TailScrollSample(offset: 300, contentHeight: 1463, bottomGap: 424, topInset: 148)
+        XCTAssertTrue(pinned(firstFrame, from: atTail, wasPinned: false, evidence: .reported))
+        XCTAssertTrue(pinned(atQuestion, from: firstFrame, evidence: .reported))
+
+        // So a pinned reading that far from the tail says nothing about where the reader is: a row
+        // measured under the question leaves them at it.
+        let measured = TailScrollSample(offset: 300, contentHeight: 1507, bottomGap: 468, topInset: 148)
+        XCTAssertFalse(follows(measured, from: atQuestion))
+    }
 }

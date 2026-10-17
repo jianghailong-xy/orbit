@@ -1,0 +1,338 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/toasts.config.mjs",
+   "toasts-lifecycle.browser.mjs",
+   "--grep",
+   "pixels stay intact through Confirmation",
+   "--project",
+   "chromium-light-desktop",
+   "--project",
+   "webkit-light-phone"
+  ],
+  "configFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-lifecycle.browser.mjs",
+   "file": "toasts-lifecycle.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2170,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:53:37.254Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ba33b421bc3627175f86",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1478,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:53:39.773Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-3750a94e4e5442435100",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T07:53:36.372Z",
+  "duration": 5058.853,
+  "expected": 2,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

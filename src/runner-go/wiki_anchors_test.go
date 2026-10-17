@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // `orbit wiki anchors verify` against real git repositories and a fake runner door (contract
@@ -539,6 +540,60 @@ func TestWikiAnchorsReportsEveryPageAndExitsNonZeroOnARefusal(t *testing.T) {
 	}
 	if lists != 2 || !strings.Contains(out.String(), "2 entries") {
 		t.Errorf("the run read the list %d times and printed %q: want two reads, and what it checked reported", lists, out.String())
+	}
+}
+
+// What git leaves running does not hold the run. On 10-04 a merge check's `go test` spent its last
+// minute in wikiAnchorGit's Wait on a fetch that had already exited: a process the fetch started still
+// held its output. Two things a fetch can leave: git's own detached auto-maintenance, which the run does
+// not ask for, and whatever the checkout's configuration runs — here an upload-pack that leaves a
+// process holding the fetch's stderr long after the fetch is done.
+func TestWikiAnchorsVerifyIsNotHeldByWhatGitLeavesRunning(t *testing.T) {
+	f := newWikiAnchorsFixture(t)
+	requests := wikiAnchorsDoor(t, func(string) (int, string) {
+		return http.StatusOK, anchorsListReply(f.checkout, "", `{"entryId":"e1","revision":1,"anchors":[{"index":0,"type":"path","path":"docs/a.md"}]}`)
+	}, recordEveryEntry)
+	holder := filepath.Join(f.home, "holder.pid")
+	mustGit(t, f.checkout, "config", "remote.origin.uploadpack", "(sleep 300 </dev/null >&2 & echo $! >'"+holder+"'); git-upload-pack")
+	t.Cleanup(func() {
+		raw, err := os.ReadFile(holder)
+		if err != nil {
+			return
+		}
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil {
+			if p, err := os.FindProcess(pid); err == nil {
+				_ = p.Kill()
+			}
+		}
+	})
+	trace := filepath.Join(f.home, "git.trace")
+	t.Setenv("GIT_TRACE", trace)
+
+	var out strings.Builder
+	done := make(chan error, 1)
+	go func() {
+		done <- cmdWikiCLI([]string{"anchors", "verify", "--space", "space-1"}, strings.NewReader(""), &out)
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("orbit wiki anchors verify: %v\n%s", err, out.String())
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("orbit wiki anchors verify was still running after a minute: its fetch had exited, and it waited on the process the fetch left holding its stderr")
+	}
+	if _, err := os.Stat(holder); err != nil {
+		t.Fatalf("the upload-pack left nothing running, so this checked nothing: %v", err)
+	}
+	if reports := reportsOf(requests()); len(reports) != 1 || !strings.Contains(out.String(), "1 verified") {
+		t.Errorf("reports = %v, summary %q: want the entry checked and reported as it would be without the holder", reports, out.String())
+	}
+	traced, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(traced), "git maintenance run") {
+		t.Errorf("the run started git maintenance in the checkout:\n%s", traced)
 	}
 }
 

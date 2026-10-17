@@ -1,0 +1,45 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-motion.browser.mjs --project=chromium-light-desktop --max-failures=1
+
+[WebServer] (node:3020545) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:3020666) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal bottom entrance and exit motion matches attachment (2.8s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal top entrance and exit motion matches attachment (2.6s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal bottom entrance and exit motion matches expiry (2.5s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal top entrance and exit motion matches expiry (2.6s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal flipped entrance and exit motion matches expiry (2.6s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal bottom entrance and exit motion matches search (2.4s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal top entrance and exit motion matches search (2.7s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal flipped entrance and exit motion matches search (2.7s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal bottom entrance and exit motion matches multiple (2.6s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal top entrance and exit motion matches multiple (2.7s)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal flipped entrance and exit motion matches multiple (2.6s)
+  ✓  13 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal bottom entrance and exit motion matches popover (2.4s)
+  ✓  14 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal top entrance and exit motion matches popover (2.5s)
+  ✓  15 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal flipped entrance and exit motion matches popover (2.6s)
+  ✓  16 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal bottom entrance and exit motion matches tooltip (2.8s)
+  ✓  17 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal top entrance and exit motion matches tooltip (2.6s)
+  ✓  18 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:74:3 › normal flipped entrance and exit motion matches tooltip (2.6s)
+  ✓  19 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:106:83 › popover center zoom origin matches (2.6s)
+  ✓  20 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:106:83 › popover end zoom origin matches (2.6s)
+  ✓  21 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:106:83 › tooltip center zoom origin matches (2.7s)
+  ✓  22 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:106:83 › tooltip end zoom origin matches (2.6s)
+  ✓  23 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:124:41 › submenu left edge zoom matches and stays in view (3.7s)
+  ✓  24 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:124:41 › submenu right edge zoom matches and stays in view (3.7s)
+
+  24 passed (1.1m)

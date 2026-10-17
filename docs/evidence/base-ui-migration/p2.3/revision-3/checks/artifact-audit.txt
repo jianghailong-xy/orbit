@@ -1,0 +1,243 @@
+{
+  "baselineImagesUnchanged": 252,
+  "attachments": {
+    "toasts-run": {
+      "stats": {
+        "startTime": "2026-10-04T09:15:02.402Z",
+        "duration": 547316.9299999999,
+        "expected": 232,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 584
+    },
+    "overlays-regression": {
+      "stats": {
+        "startTime": "2026-10-04T09:18:46.277Z",
+        "duration": 263900.19899999996,
+        "expected": 96,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 256
+    },
+    "production-run": {
+      "stats": {
+        "startTime": "2026-10-04T09:17:51.711Z",
+        "duration": 26163.251999999997,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 24
+    },
+    "original-hover-run": {
+      "stats": {
+        "startTime": "2026-10-04T09:19:14.396Z",
+        "duration": 129801.447,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 32
+    },
+    "hover-diagnostic": {
+      "stats": {
+        "startTime": "2026-10-04T09:10:34.961Z",
+        "duration": 52892.351,
+        "expected": 9,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 15
+    },
+    "../revision-2/reference-motion-run": {
+      "stats": {
+        "startTime": "2026-10-04T08:22:14.330Z",
+        "duration": 57447.882000000005,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 224
+    }
+  },
+  "settledPairs": 24,
+  "midpointImagePairs": 160,
+  "production": [
+    {
+      "project": "chromium-dark-desktop",
+      "box": [
+        892,
+        4,
+        1276,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 638
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "box": [
+        892,
+        4,
+        1276,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 633
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "box": [
+        884,
+        4,
+        1268,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 642
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "box": [
+        884,
+        4,
+        1268,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 648
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+chromium-light-desktop pilot-delete-confirm.png       all=    14 gt2=     5 max= 20 clusters=  1 [5px x1240-1247 y24-39 m20]

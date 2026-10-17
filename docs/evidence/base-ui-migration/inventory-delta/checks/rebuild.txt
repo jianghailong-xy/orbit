@@ -1,0 +1,2 @@
+build-record.py rebuilds 2026-10-07.json byte for byte
+build-decision.py rebuilds 2026-10-07b.json byte for byte

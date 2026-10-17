@@ -1,0 +1,3071 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-promotion-toast/first-matrix-diagnostic/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3740,
+   "sha256": "a1c851f19c8aed946b338a5c97dcf5074935d111f8f4b3fefff54fa195a10d7e"
+  },
+  {
+   "name": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2940,
+   "sha256": "9e777c7b1b803286a68a17bc6624b72a81c72977e799fbca255dc746784a3a07"
+  },
+  {
+   "name": "chromium-dark-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "mouse"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 18914,
+   "sha256": "6ab3b6b5eaccaf34c3c815a2aba36ea5a68aafb833b9331581ab7a173fc3c490",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18758,
+   "sha256": "5defd12c82a97b669e71a0be436063730a9225671125119dbf8f2b78f7915acc",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18771,
+   "sha256": "74d471478588e7a205b8f5ec34505f5aec74a13d128847ff4020ccb4aa35dfca",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11257,
+   "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84"
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11257,
+   "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84"
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11257,
+   "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84"
+  },
+  {
+   "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 14116,
+   "sha256": "44bac8dc96cdcf67be26dd5b96b20424bc0fc805846f3fe44aac0e8df34cf759",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 13249,
+   "sha256": "8d910682eebb0676669367f72cee6b142e44187d3cca6656c1509300032838fa",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "chromium-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "85a11048de334ea5de397c493511c0b960c2069872be4e6b28a038ebdb504a38"
+  },
+  {
+   "name": "chromium-dark-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "89381798b650f9ebca6cf467dc4bab64e4baf5057d0f0afac1a46937a2be84b2",
+   "fields": {
+    "elapsedMs": 6298,
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "1aecf7af34f340dff308e6df9d83ef9437bea61a9ae4d8e93706d639de621ee5",
+   "fields": {
+    "elapsedMs": 6504,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "20bd59bd19d7d8de80f375e903b25e931cea4b3abc12442d83b975bab71ad1b5",
+   "fields": {
+    "elapsedMs": 6301,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 71853,
+   "sha256": "8d66a50d90372fba903379ef158558f9bdab86da90fb3c5db4291caadf94372c",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 63776,
+   "sha256": "1101445c1f41484f1fb200069d38e310d49cc10cfee608c30d3ee41c0401bd05",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 73276,
+   "sha256": "2c5523f545d1549730775ccd59c257ab7be2b6294c9aa87e2b64e27f6b44fd31",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23852,
+   "sha256": "fc33cc11a997a1277844116a761e211fe13d5579b5728cff1c3e21fe99b7ba3f"
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 84,
+   "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 84,
+   "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 80,
+   "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 80,
+   "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 157,
+   "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": false
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3724,
+   "sha256": "70bcd22c45d0ce5b06fea6b1d6b5dbdc06253719e8eebe7ec793913f3a0eeb00"
+  },
+  {
+   "name": "chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "chromium-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2904,
+   "sha256": "ae58c83edd39b0faa31560cd16b6606ae9092593d2cc47adbcca0826c683cd86"
+  },
+  {
+   "name": "chromium-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "touch"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 18685,
+   "sha256": "0f5b135b2c80920e07bf36b33e7906043dc8448d10e9e98b51c2e6db2d529192",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18591,
+   "sha256": "847d556616d8ac46b94b6c83814c2b3122a461e3f0e9c19f7e6c7a77dcdb7333",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18617,
+   "sha256": "075fc735e67bca9e022da6e0a42ec0d507fd797fbe03b759516a27c12ea28ec7",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11243,
+   "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569"
+  },
+  {
+   "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11243,
+   "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569"
+  },
+  {
+   "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11243,
+   "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569"
+  },
+  {
+   "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 13885,
+   "sha256": "04b89e4d1c3c074183e9d05b8f3711ee16822c05d8ba84787b663cfa8902274f",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 13286,
+   "sha256": "82c085669bf24cceb51398d865991311a9c965839981e9cf944629f6fed5322d",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "chromium-dark-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "chromium-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+  },
+  {
+   "name": "chromium-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "9e0fb3d5d6287ce1f5ac79ee06c85c23ca4d2937d689d8e0132c91047cb9c8ff",
+   "fields": {
+    "elapsedMs": 6304,
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "42b0fa80c6fec577a1648c0dbc59ed6520acbd41cc6ab8d5d060ccb993d6fc44",
+   "fields": {
+    "elapsedMs": 6504,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "d6cf625f06efab979cf3eb9b0788a5bbfeeaafe98c3fb781152f671ecd2551e4",
+   "fields": {
+    "elapsedMs": 6306,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 72090,
+   "sha256": "9fec475b3751d71fcd9df201b4aa2fb22e24397036adc15093a5e6681e0a5616",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 64994,
+   "sha256": "a831d487d2d8dfd6493dbc5e035b07920c535056eb7ba1b0c9427ee44ed48a26",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 71346,
+   "sha256": "7445136ff87a496fe784bf8c319088d91bbe07da14715575fc7706bb21914fad",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23852,
+   "sha256": "f8e7d5c19dd844bb6f6e31fca8d65fc95a634a20603d3887a6258dcd69f89c00"
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 84,
+   "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 84,
+   "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 80,
+   "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 80,
+   "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 156,
+   "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-desktop--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3730,
+   "sha256": "bc2e8d50a01cb5c4118146b36da3e8f7e10d427159b82e38a9ccc0c32bda7adf"
+  },
+  {
+   "name": "chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2929,
+   "sha256": "0fee514a30771b7eab9f1cf5353eb03b3ece8e3bb410d8e5eab933c7ac2788ca"
+  },
+  {
+   "name": "chromium-light-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "mouse"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 18857,
+   "sha256": "8a65a368bff32e23ae590ec0586b8a33b042e72e67eef2a7f7e91aa6f00a597b",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18775,
+   "sha256": "ec05dca995752963e36198169685f57cc16002f07ad031ff7b8f8695b82b8fe8",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18751,
+   "sha256": "d531ce15afdf5cbeccafc6e247500aa685d28f1a83519b0f6e807202e4a643a6",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11217,
+   "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779"
+  },
+  {
+   "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11217,
+   "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779"
+  },
+  {
+   "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11217,
+   "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779"
+  },
+  {
+   "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 14019,
+   "sha256": "96ca906694fbd2757dcb47a20a60d3f76f65ad909aca0083fc32cfb4d4a9d11f",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 13336,
+   "sha256": "b14e5fa1fb85d2737f57ecc49ab1eec7367b19d33d51cf0a31bc67ac76fdcc72",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "chromium-light-desktop--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "85a11048de334ea5de397c493511c0b960c2069872be4e6b28a038ebdb504a38"
+  },
+  {
+   "name": "chromium-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "be92caf8578cf9064a74544b23f84debc53ea062017e52f6e9d1f7d79761abee",
+   "fields": {
+    "elapsedMs": 6306,
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "4ad3d77fad4cebc6950f85b6a220aa43ff5fc99fb447145d45b1b7e02a79a9ce",
+   "fields": {
+    "elapsedMs": 6503,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "5b6766657595f8db67a9af2cd24329aa9ab201d2afbfd1ee53d4616b7ca2b4b4",
+   "fields": {
+    "elapsedMs": 6304,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 72706,
+   "sha256": "480cea67bce82af79502e68edb7d8bb64924129439cc256434f9a98ad3dfe962",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 64637,
+   "sha256": "31383edd2a545831d45af0ad4e1306b7ed5d181d313c6f4d0dec3b4a134edf02",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 72471,
+   "sha256": "d5b043ac16d882631596deb7449c19e82257fe21acec7e30075869ade17d56b1",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23772,
+   "sha256": "804dc8d06a3a164161a240dbafee0130d7b06bbfdd975f84fdb69d01841d1e94"
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 84,
+   "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 84,
+   "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 80,
+   "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 80,
+   "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 157,
+   "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": false
+   }
+  },
+  {
+   "name": "chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3723,
+   "sha256": "5dd221e582d306d1f57fa7fa7348eb502052e05cfa55443d3ccc107529e974e7"
+  },
+  {
+   "name": "chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "chromium-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2943,
+   "sha256": "ae127a757c133c3547aa911cac5be6734e6dca484a310192d3127f3005a351a6"
+  },
+  {
+   "name": "chromium-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "touch"
+   }
+  },
+  {
+   "name": "chromium-light-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 18681,
+   "sha256": "fb5b8fd0c19ee965eea78cb8e50beeb2f6b5ef23831862cc709a8e5e0094800d",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18489,
+   "sha256": "70d32de926e5ec9839df6dc0a98a5791308522f1111be68899c9dfa952f8c7a8",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18547,
+   "sha256": "34fbd9ead1aa226822dfe2d5d0e9a1fae0a5fed4de2013cc2d66843e72d56660",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11203,
+   "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc"
+  },
+  {
+   "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11203,
+   "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc"
+  },
+  {
+   "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11203,
+   "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc"
+  },
+  {
+   "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 13900,
+   "sha256": "5e6e1ce7a4fc50193d916e1ca1d37ec9da96d56fb198b284a3724b8c428b8dab",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 13263,
+   "sha256": "818822fd3fa0230615e94de47934ce49c13ff1e409a71cd6c309bf23dd423487",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "chromium-light-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "chromium-light-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "chromium-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+  },
+  {
+   "name": "chromium-light-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "89381798b650f9ebca6cf467dc4bab64e4baf5057d0f0afac1a46937a2be84b2",
+   "fields": {
+    "elapsedMs": 6298,
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "3f92af25d7eb50ca5d34ebca8646780076402e9f09ba76af811f37d3b267a046",
+   "fields": {
+    "elapsedMs": 6502,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "e7d2a510327437c49f1dcc7ac164999f98da817fec7c6d4f7a4446ad90ee209c",
+   "fields": {
+    "elapsedMs": 6302,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 72301,
+   "sha256": "a6654d848ba7c9c9c367b1e32c5f7bb7c69a26b921c474f2e965c3ebd1adfdae",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 66589,
+   "sha256": "9d38a204fe220c0cadf31c0e4d4266fbe34e39f756735df188151e3e040c9423",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 71201,
+   "sha256": "a999b88a159aab1d80e26976114150caa95134b0502d9f510b6e8c7b5a0191e3",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23772,
+   "sha256": "ab7337a511aed262fd54f4877cbe4598100619ec723300a74f2de09f53a0710c"
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 84,
+   "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 84,
+   "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 80,
+   "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.2403%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 80,
+   "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.7597%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "chromium-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 156,
+   "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3385,
+   "sha256": "83d1109d86e6ece65813ac874f21e64a7d6b5e003a0e421796ee7f71e34f5bca"
+  },
+  {
+   "name": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2244,
+   "sha256": "ac5c4549507c3ae3857c80884fb0f77f2b3ffa18a9def5fb754477c46b28aa1e"
+  },
+  {
+   "name": "webkit-dark-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "mouse"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 19038,
+   "sha256": "4d829cba4f09e3ea5393c8c51bd2a92ae59abacf0bfc24f485a9192bd1e09294",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18046,
+   "sha256": "9dcc924316131a53d47b61c7a0ea131b8db3f2ef4c4fce3af4d0e6baa37ab592",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18584,
+   "sha256": "1e30d82b255008c546d4055e23a5880b373ede4c1ad72264b9650784d8bec1b1",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11065,
+   "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074"
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11065,
+   "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074"
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11065,
+   "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074"
+  },
+  {
+   "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 14213,
+   "sha256": "278c279344b101782a6bfcc8e7a692e0bd2254385b51db82a800a7fc5b9a12d1",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 13481,
+   "sha256": "8e018538eb3b7db8a107001e73c8a755817480391b08fd921a1bf434cdb5a79e",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "webkit-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "5e7ec847209c51f0c15fda381fe2451a68cf58ca6a0a06246b8a2c711ed538d1"
+  },
+  {
+   "name": "webkit-dark-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "ce7c03428ed449e03d1056fdfce54f338d81f7f3b19be5b4d71a45177dca0d3b",
+   "fields": {
+    "elapsedMs": 6308,
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "7a6208db70b9ffa9b1b5a2ac2df5e54f6a3a4b5399fc93911b8db9df9635093c",
+   "fields": {
+    "elapsedMs": 6505,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "f05115dfc0d1be4539969eccdaac79fb109bfb11076e92367b832c70d717fca7",
+   "fields": {
+    "elapsedMs": 6369,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 75727,
+   "sha256": "5e31eac83df18f1af4ef493193922cf6f5432817e675b534543d7446c3412b37",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 68525,
+   "sha256": "8e2e4a3afa7210d614cb12e634cbcd1f1f005e5cb1ab06a972969f8137a3a512",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 73305,
+   "sha256": "e2967e8935e6cdabf89179d3d0fa1e8cc5132a4520251dfa273a70a339877012",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23456,
+   "sha256": "748274efbbeadbb4696e97b2428a859bf672c010930b001dfe94a47998cca013"
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 82,
+   "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 82,
+   "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 157,
+   "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": false
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3296,
+   "sha256": "4f0645b376e74d416be08e84f4bdec0d9a2fedb8a6e0a1cbb3447153cc21c4d4"
+  },
+  {
+   "name": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 1910,
+   "sha256": "9c809f5066c027687417f2ad24493bf8d848075891ac288393e219da8df752f4"
+  },
+  {
+   "name": "webkit-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "touch"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 18530,
+   "sha256": "8436cb831c397d7f4f48639c95f472f79cefb585833b7748b6fa284b2fa6c18c",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18009,
+   "sha256": "c458f90165937e0bb0c2afe9a7c103a64d665c0a0dc1046a09d5285988c9fc54",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18752,
+   "sha256": "d2f8cdbb342d40bf0520af72f0ce97c90370000a41cd1714ea75b22e33dc969d",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11051,
+   "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+  },
+  {
+   "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11051,
+   "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+  },
+  {
+   "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11051,
+   "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+  },
+  {
+   "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 12843,
+   "sha256": "33027ccced394bbd075806e98f3dfbf474396ab2e3e987de55968649c4dbe324",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 12858,
+   "sha256": "7126229677525d6815b4d1dcf9d57dd3b9e725bd53d7a8cf37ccec9590e60e71",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "webkit-dark-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+  },
+  {
+   "name": "webkit-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "6e9065a463573de2b41ca8bd1273bf3840daaf9a5353f527b24d20d9a491bf26",
+   "fields": {
+    "elapsedMs": 6307,
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "8462e41dfaec9d90bbded6d1ba4804bb1b11197b8c625c384db576b685be97af",
+   "fields": {
+    "elapsedMs": 6505,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "1cb05ad79f4a53b85ee006c34a5ca311512c70f1de551eb873251551870e75a7",
+   "fields": {
+    "elapsedMs": 6318,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 71875,
+   "sha256": "650b5da5c3a5d2f9fbe631a4a624625ac7afb38110088ff58c2e388adfb98f61",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 63814,
+   "sha256": "17c311b91ca2f1bd9c8b3c95b21044feec75ced8cdc500e84c977516fbf81114",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 70684,
+   "sha256": "b0cc758509b4aa5efec6b5d961cfb5cf5b5fc58bf55e650c0b7eb41a8966604b",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23468,
+   "sha256": "26c582e69141fa4af9c99506e12048f6a81c0adac113417b77dbdee8c6fa8119"
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 82,
+   "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 82,
+   "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 156,
+   "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3417,
+   "sha256": "316996ff86f20a32c507091843f46b5bf239dbee894403f03d6ca6acc9889194"
+  },
+  {
+   "name": "webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2245,
+   "sha256": "902291b06211da94e79dab8eb0ff6f658989b8ca5ff3123399ee35fc7d829f8b"
+  },
+  {
+   "name": "webkit-light-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "mouse"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 19041,
+   "sha256": "3ebfef025b7d60f90331d116b082d7b4293e35c9ae0fdf71d45d342771861b71",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18584,
+   "sha256": "16084b5e065fbaccec0586df5ab91902ff52ebfbfccbb7b4a34a50540d340449",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18265,
+   "sha256": "44d3f437883754ad179a90e48aa9526113c00708266820cd28c38d01390ff9cc",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11025,
+   "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c"
+  },
+  {
+   "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11025,
+   "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c"
+  },
+  {
+   "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11025,
+   "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c"
+  },
+  {
+   "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 14275,
+   "sha256": "c1789efec3b6879a78fd7a17d65c81d8d296f58ce44a301a62214aca59dc2958",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 12902,
+   "sha256": "880a76914fb489a3b423e8dcec7e20fe65378aa648ddec1463888c3841c87da3",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "webkit-light-desktop--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "5e7ec847209c51f0c15fda381fe2451a68cf58ca6a0a06246b8a2c711ed538d1"
+  },
+  {
+   "name": "webkit-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "07356a742ea6a8917289751abe62bb6c19c1cdd0c21061cf7cb2a94ffa9223a5",
+   "fields": {
+    "elapsedMs": 6343,
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "6047ed11626a8c17e45c673b911b230242f39ed6a0189caf168fbccf591bc6bb",
+   "fields": {
+    "elapsedMs": 6510,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "1391f2e839fb74b90b2f282e84baf65f68b8140f7e5351f500497e9677594656",
+   "fields": {
+    "elapsedMs": 6340,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 74018,
+   "sha256": "74893de698c0059f6b0bb280e7d5cbbd811577fbc56106391325fee2cd37120c",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 69958,
+   "sha256": "63cf137ed5cbab302cf3b369bce01c778e38c7ca8cb08e0c3f5e333eb7183406",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 74852,
+   "sha256": "316a6cacf2234d432c4ac1cb546e13485002c86994872b59179c00b3130d281b",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23376,
+   "sha256": "2f44829d4212efb94e4678f23e6df07f3ffe5193b38ee332402e3de0eea1ae6c"
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 82,
+   "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 82,
+   "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 157,
+   "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": false
+   }
+  },
+  {
+   "name": "webkit-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+   "bytes": 3329,
+   "sha256": "992b6299a69fd6d850b14d849dfccfa69bf0e59a4b1b69e1b33821cb28cb1ed9"
+  },
+  {
+   "name": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+   "bytes": 198,
+   "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+   "fields": {
+    "requests": 2,
+    "pendingCancelDisabled": true,
+    "pendingEscapeIgnored": true,
+    "failureRetained": true,
+    "toastDismissDidNotCancel": true,
+    "retrySucceeded": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+   "bytes": 197,
+   "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5",
+   "fields": {
+    "inert": true,
+    "hidden": "true",
+    "focused": false,
+    "shape": "toast toast--card toast--live",
+    "retainedUntilMs": 249,
+    "removedAtMs": 250,
+    "successorDwellMs": 3000,
+    "undoCalls": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+   "bytes": 242,
+   "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9",
+   "fields": {
+    "assertiveErrorAndDetail": true,
+    "liveRegionNotHidden": true,
+    "politeSuccess": true,
+    "copyText": "revision 12 is stale",
+    "selectedDiagnostic": true,
+    "notificationSurvivesEachOverlayClose": true,
+    "themeChangedWhileOpen": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 2076,
+   "sha256": "4b9189f6d6d17fd1b030b9e6117928811dd00aca7d5ce6787848a62c10b1aab5"
+  },
+  {
+   "name": "webkit-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+   "bytes": 166,
+   "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594",
+   "fields": {
+    "duplicateSuppressed": true,
+    "eventFailureReplacedBySuccess": true,
+    "undoCount": 1,
+    "sessionPath": "/sessions/2zr7BFsBKPRa35MeIQQwz",
+    "pointer": "touch"
+   }
+  },
+  {
+   "name": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+   "bytes": 18469,
+   "sha256": "a97a68643c9c5b96e3db08ef445778c6aa2586c181bdfd56e7ce51536f139d64",
+   "fields": {
+    "kind": "Bottom drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+   "bytes": 18323,
+   "sha256": "dd2130853e3fcf8d5a52e19a83077d49c2b963e027e435411c6d28dc5088ff51",
+   "fields": {
+    "kind": "Dialog",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+   "bytes": 18384,
+   "sha256": "cecd9a878345fc15c7a19935973bbc5961d540195ef665371fff09f6af3b91d5",
+   "fields": {
+    "kind": "Drawer",
+    "shifted": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11011,
+   "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+  },
+  {
+   "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+   "bytes": 11011,
+   "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+  },
+  {
+   "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+   "bytes": 11011,
+   "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+  },
+  {
+   "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+   "bytes": 131,
+   "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+   "fields": {
+    "dismissReachedByTab": true,
+    "enterDismissedOnlyNotification": true,
+    "escapeClosedOverlay": true,
+    "focusReturned": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+   "bytes": 13481,
+   "sha256": "7cc250891a89c09d7a3e4f7567ff454faf1798ed3214f5060203317b18011148",
+   "fields": {
+    "motion": "no-preference"
+   }
+  },
+  {
+   "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 12851,
+   "sha256": "6ba71f9c56f84c15d595ba36034fc7398e2a6fc87fd3d406900836db5c4df8df",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "webkit-light-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+   "bytes": 34,
+   "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1",
+   "fields": {
+    "after": 0,
+    "releasedAfterMs": 6001
+   }
+  },
+  {
+   "name": "webkit-light-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+   "bytes": 391,
+   "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+  },
+  {
+   "name": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a",
+   "fields": {
+    "releaseAt": 1791072007850,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+  },
+  {
+   "name": "webkit-light-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "c2e879ba2959067bf57c49469dadbba244ef3964b35e83925ddf1eaab04b41e1",
+   "fields": {
+    "elapsedMs": 6302,
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "9757dbab2d7a969df158613187cae3f4785e35fb20844d65215ece4bc18c597f",
+   "fields": {
+    "elapsedMs": 6511,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "da7946175b198ddc2d27a7744ab4f03756e2c0e3fe622006906affafc4bfaa4b",
+   "fields": {
+    "elapsedMs": 6330,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 72837,
+   "sha256": "15d1ed43cf0941874469bdb66a81159aaac0d4a5055ad690e755ac4f52215479",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 63100,
+   "sha256": "bcba6ea2b442965d454635c7baca253cb216088f9ce5a9bad38d22c7dc5ebab1",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 72367,
+   "sha256": "83ed7cc12dcb0235b6e95f79fb1f57582926cd506ffab854340eb15cb90dbdf8",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+   "bytes": 23388,
+   "sha256": "f85383d02c0843652b630189a1ea9bd6ade059d1b0ec98a5b5d4be4a43cd354a"
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "0px 19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+   "bytes": 16,
+   "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082",
+   "fields": {
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+   "bytes": 76,
+   "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42",
+   "fields": {
+    "count": 0,
+    "scale": "none",
+    "translate": "none",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+   "bytes": 86,
+   "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5",
+   "fields": {
+    "count": 2,
+    "scale": "0.91976",
+    "translate": "none",
+    "opacity": "0.197597"
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+   "bytes": 82,
+   "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "80.240341%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+   "bytes": 82,
+   "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7",
+   "fields": {
+    "count": 1,
+    "scale": "none",
+    "translate": "19.759661%",
+    "opacity": "1"
+   }
+  },
+  {
+   "name": "webkit-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+   "bytes": 105,
+   "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269",
+   "fields": {
+    "visibleAfterClose": true,
+    "sameSettledGeometry": true,
+    "reopenedAcceptsNewNotifications": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+   "bytes": 156,
+   "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653",
+   "fields": {
+    "shortMs": 3000,
+    "actionMs": 6000,
+    "hoverHeldMs": 10000,
+    "fullDwellRestarted": true,
+    "warningStillPresentAfterMs": 66000,
+    "phoneFolds": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+   "bytes": 144,
+   "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "pausedBeforeTransfersMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+   "bytes": 58,
+   "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91",
+   "fields": {
+    "visibleAtTotalMs": 5999,
+    "expiredAtTotalMs": 6000
+   }
+  }
+ ]
+}

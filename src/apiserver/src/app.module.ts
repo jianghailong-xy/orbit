@@ -26,12 +26,15 @@ import { SharedModule } from './shared/shared.module';
 import { ShareLinksModule } from './share-links/share-links.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
+import { ProviderEngineMigrationModule } from './providers/provider-engine-migration.module';
 import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
 import { WatchDeliveryModule } from './watches/watch-delivery.module';
 import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
 import { SessionRequestWorkerModule } from './sessions/session-request-worker.module';
 import { WikiModule } from './wiki/wiki.module';
+import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
+import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 
 @Module({
   imports: [
@@ -60,12 +63,16 @@ import { WikiModule } from './wiki/wiki.module';
     ShareLinksModule,
     PushModule,
     ProvidersModule,
+    // The provider/engine data migration, once per start, before the server listens (API server only).
+    ProviderEngineMigrationModule,
     OutcomeReconcilerHttpModule,
     WatchEvaluatorModule,
     WatchDeliveryModule,
     ScheduledWakeupModule,
     SessionRequestWorkerModule,
     WikiModule,
+    ManagedRunnerGateModule,
+    ManagedRunnerModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

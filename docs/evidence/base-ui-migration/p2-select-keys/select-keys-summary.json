@@ -1,0 +1,5305 @@
+{
+ "before-repeat": {
+  "scope": "unfixed 8ef6b60d1, r8 select-keys-repeat probe unchanged, --repeat-each 5: 200 samples per target",
+  "playwright": {
+   "expected": 598,
+   "unexpected": 2,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 200,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 127,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 200,
+    "valueUnchanged": 7,
+    "secondArrowAtTriggerWithListboxShown": 7,
+    "handedOver": 0,
+    "lost": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-14--repeat-2--select-keys.json",
+      "run": 14,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 16.4,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 31.4,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 36.4,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-14--repeat-4--select-keys.json",
+      "run": 14,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 15.5,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 30.3,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 35.5,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-17--repeat-4--select-keys.json",
+      "run": 17,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 15.3,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 30,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 34.7,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-29--repeat-1--select-keys.json",
+      "run": 29,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 15.1,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 30.1,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 35.1,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-31--repeat-4--select-keys.json",
+      "run": 31,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 14.4,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 28.6,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 31.5,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-38--repeat-3--select-keys.json",
+      "run": 38,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 14.3,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 27.9,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 29.2,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-sample-8--repeat-3--select-keys.json",
+      "run": 8,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 14.5,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 28.9,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 30.2,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-sample@1x": {
+    "samples": 198,
+    "valueUnchanged": 4,
+    "secondArrowAtTriggerWithListboxShown": 4,
+    "handedOver": 0,
+    "lost": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-sample-11--repeat-4--select-keys.json",
+      "run": 11,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 17.7,
+        "target": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 32.9,
+        "target": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 37.1,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-sample-12--repeat-4--select-keys.json",
+      "run": 12,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 16.5,
+        "target": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 30.3,
+        "target": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 32.3,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-sample-23--repeat-2--select-keys.json",
+      "run": 23,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 16.7,
+        "target": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 31.9,
+        "target": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 36.1,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-sample-3--repeat-2--select-keys.json",
+      "run": 3,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 16.3,
+        "target": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 30.9,
+        "target": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 33.4,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "before-throttle": {
+  "scope": "unfixed 8ef6b60d1, r8 select-keys probe unchanged: CPU throttling 1x/6x/20x, 5 samples per test",
+  "playwright": {
+   "expected": 9,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 5,
+    "handedOver": 0,
+    "lost": []
+   },
+   "antd-sample@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 2,
+    "handedOver": 0,
+    "lost": []
+   },
+   "antd-sample@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 5,
+    "valueUnchanged": 2,
+    "secondArrowAtTriggerWithListboxShown": 2,
+    "handedOver": 0,
+    "lost": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+      "run": 2,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 10.9,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 21,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 22.3,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+      "run": 4,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 12.9,
+        "target": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 22.6,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 23.8,
+        "target": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-sample@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-sample@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-sample@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   }
+  }
+ },
+ "before-burst": {
+  "scope": "unfixed 8ef6b60d1, select-keys-burst probe: keys queued without waiting (burst) or 300ms apart (paced)",
+  "playwright": {
+   "expected": 276,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-multiple down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-multiple down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-search down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-search down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-combobox down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-combobox down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-field down-down-enter burst": {
+    "samples": 20,
+    "reference": "7",
+    "results": {
+     "never": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-0--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 39.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 52.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 52.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-1--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 43.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 55.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 56,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-10--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 46.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 64.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 64.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-11--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 41.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 59.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-12--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 50.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 67.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 67.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-13--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 63.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-14--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 42.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 59.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-15--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 61.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 61.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-16--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 48.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 65.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 65.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-17--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 46.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 63.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-18--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-19--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 45.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-2--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 48.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 48.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-3--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 42.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 55,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 55.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-4--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 47.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 64.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 64.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-5--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 40.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 57.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 57.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-6--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 50.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 67.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-7--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 46.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 64.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 64.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-8--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 61.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-down-enter-burst-sample-9--select-keys.json",
+      "after": "never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field down-down-enter paced": {
+    "samples": 3,
+    "reference": "7",
+    "results": {
+     "7": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-field down-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "null": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-0--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 52.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-1--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 39.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-10--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 47.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-11--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 37.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 48.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-12--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 47.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-13--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 34.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 45.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-14--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 52.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-15--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 47.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-16--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 41.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 58.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-17--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 53.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-18--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 41.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-19--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 39.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-2--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 40.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-3--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 39.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-4--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 39.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-5--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 39.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-6--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 39.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-7--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 40.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-8--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 40.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-enter-burst-sample-9--select-keys.json",
+      "after": "null",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 47.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field down-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-field down-up-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "7": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-0--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 7.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 19.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.1,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-1--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 10.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 24.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.7,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-10--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 18.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 31.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-11--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 7.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 19.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.9,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-12--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 33,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 34.2,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-13--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 19.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 31.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.6,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-14--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 8.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 20,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.5,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-15--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 9.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 20.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-16--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 8.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 19.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.9,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-17--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 14.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 25.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-18--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 20.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 32.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 34.2,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-19--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 8.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 20.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-2--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 32.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.6,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-3--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 33.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 34.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-4--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 32.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-5--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 17.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 30.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-6--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 12.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 24.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.5,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-7--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 13.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 26.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 27.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-8--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 18.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 29.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.5,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-down-up-enter-burst-sample-9--select-keys.json",
+      "after": "7",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 19.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 31.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field down-up-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-menu down-down-enter burst": {
+    "samples": 20,
+    "reference": "image",
+    "results": {
+     "none": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-0--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 34.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 58.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 59.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-1--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 40.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 66.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 66.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-10--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 30.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-11--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 34.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-12--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 63.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 63.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-13--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 33.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 58,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 58.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-14--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 34.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 61.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 61.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-15--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 33.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 52.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 53.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-16--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 66.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 66.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-17--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 23.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 48.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 49.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-18--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 42.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 71.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 71.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-19--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 32.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 63.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 64.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-2--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 31.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 56.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 57,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-3--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 34.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 60.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-4--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 35.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 62.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-5--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 51.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 51.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-6--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 62.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-7--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 29.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 54.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 54.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-8--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 52.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 52.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-9--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 33.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-menu down-down-enter paced": {
+    "samples": 3,
+    "reference": "image",
+    "results": {
+     "image": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-multiselect down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-multiselect down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "Never": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-0--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 55.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 73.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-1--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 37.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 50.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 50.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-10--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 49.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 68.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-11--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 53.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 71.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 71.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-12--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 50.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 68.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-13--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 52.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 71.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 71.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-14--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-15--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 55.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 73.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-16--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 43.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-17--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 41.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 59.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-18--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 50.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 68.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-19--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 42.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 60.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 61,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-2--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 41.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 59.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-3--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 40.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 57.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 57.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-4--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-5--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 40.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 58.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 58.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-6--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 43.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 60.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 60.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-7--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 53.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 70.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 70.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-8--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 53.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 71.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 71.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-down-enter-burst-sample-9--select-keys.json",
+      "after": "Never",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 53.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 72.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 72.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-0--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 10.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 21.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 22.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-1--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 4.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 16.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 18.2,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-10--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 14.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 25.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-11--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 28.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 43.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 45.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-12--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 17.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 29.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.4,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-13--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 17.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 29.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.4,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-14--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 37.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 38.9,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-15--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 13.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 26.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 27.6,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-16--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 14.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 27.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 29.6,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-17--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 16.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 27.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 29.7,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-18--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 16.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 27.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 28.6,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-19--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 8.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 19.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-2--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 20.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 32.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 35.1,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-3--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 11.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 21.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 23.1,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-4--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 15.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 26.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 28.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-5--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 32.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.9,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-6--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 18.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.8,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-7--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 34.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 36.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-8--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 32.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.7,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-down-up-enter-burst-sample-9--select-keys.json",
+      "after": "7 days",
+      "listboxOpen": true,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 19.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowUp",
+        "t": 30.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.3,
+        "target": "option:30 days",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "30 days"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   }
+  }
+ },
+ "after-repeat": {
+  "scope": "fixed tree, r8 select-keys-repeat probe unchanged, --repeat-each 5: 200 samples per target",
+  "playwright": {
+   "expected": 718,
+   "unexpected": 2,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 240,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 104,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 240,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-sample@1x": {
+    "samples": 238,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 1,
+    "handedOver": 1,
+    "lost": []
+   }
+  }
+ },
+ "after-throttle": {
+  "scope": "fixed tree, r8 select-keys probe unchanged: CPU throttling 1x/6x/20x, 5 samples per test",
+  "playwright": {
+   "expected": 9,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 4,
+    "handedOver": 0,
+    "lost": []
+   },
+   "antd-sample@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "antd-sample@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-field@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-sample@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 1,
+    "handedOver": 1,
+    "lost": []
+   },
+   "orbit-sample@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   },
+   "orbit-sample@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "handedOver": 0,
+    "lost": []
+   }
+  }
+ },
+ "after-burst": {
+  "scope": "fixed tree, select-keys-burst probe: keys queued without waiting (burst) or 300ms apart (paced)",
+  "playwright": {
+   "expected": 275,
+   "unexpected": 1,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-multiple down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-multiple down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-search down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "antd-search down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-combobox down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-combobox down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-field down-down-enter burst": {
+    "samples": 20,
+    "reference": "7",
+    "results": {
+     "7": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 20,
+    "differing": []
+   },
+   "orbit-field down-down-enter paced": {
+    "samples": 3,
+    "reference": "7",
+    "results": {
+     "7": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-field down-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 20,
+    "differing": []
+   },
+   "orbit-field down-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-field down-up-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 20,
+    "differing": []
+   },
+   "orbit-field down-up-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-menu down-down-enter burst": {
+    "samples": 20,
+    "reference": "image",
+    "results": {
+     "none": 20
+    },
+    "differ": 20,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": [
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-0--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 28.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 54.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 55.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-1--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 63.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 63.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-10--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 25.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 52.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 52.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-11--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 33.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 58.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 59.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-12--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 54.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 141.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 142.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-13--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 29.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 54.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 54.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-14--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 32.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 59.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 59.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-15--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 35.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 60.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-16--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 66.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 66.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-17--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 35.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 55.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 56,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-18--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 42.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 68.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 68.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-19--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 49.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 49.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-2--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 40.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 66.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 66.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-3--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 39.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 64.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 65,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-4--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 34.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 60.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-5--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 32.9,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 62,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 62.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-6--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 41.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 70.2,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 70.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-7--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 64.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 64.5,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-8--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 64.6,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 65,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-9--select-keys.json",
+      "after": "none",
+      "listboxOpen": false,
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 31.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 60.4,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 60.8,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-menu down-down-enter paced": {
+    "samples": 3,
+    "reference": "image",
+    "results": {
+     "image": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-multiselect down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-multiselect down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 3,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 20,
+    "handedOver": 20,
+    "differing": []
+   },
+   "orbit-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   },
+   "orbit-sample down-up-enter burst": {
+    "samples": 19,
+    "reference": "Never",
+    "results": {
+     "Never": 19
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 19,
+    "handedOver": 19,
+    "differing": []
+   },
+   "orbit-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never": 3
+    },
+    "differ": 0,
+    "laterKeyAtTriggerWithListShown": 0,
+    "handedOver": 0,
+    "differing": []
+   }
+  }
+ }
+}

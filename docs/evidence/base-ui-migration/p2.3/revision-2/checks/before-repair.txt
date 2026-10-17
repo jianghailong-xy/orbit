@@ -1,0 +1,316 @@
+[WebServer] (node:2148616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 10 tests using 1 worker
+
+(node:2148690) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (2.5s)
+(node:2148838) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   2 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (2.0s)
+(node:2148982) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   3 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (2.0s)
+(node:2149164) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (917ms)
+  ✘   5 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes (8.9s)
+(node:2151262) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   6 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (4.2s)
+(node:2153463) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   7 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (2.8s)
+(node:2154499) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.9s)
+(node:2154856) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   9 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (933ms)
+(node:2154987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  10 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes (8.4s)
+
+
+  1) [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry 
+
+    Error: an existing notification should not move with the newly opening modal
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 14
+    Received array:  [{"card": {"bottom": 241.89999389648438, "height": 115.19998931884766, "left": 1234, "right": 1558, "top": 126.70000457763672, "width": 324, "x": 1234, "y": 126.70000457763672}, "height": 115.19998931884766, "insideViewport": false, "scale": "0.9", "t": 58.19999998807907, "translate": "none", "width": 324, "x": 1219.5999755859375, "y": 126.70000457763672}, {"card": {"bottom": 241.89999389648438, "height": 115.19998931884766, "left": 1228.658935546875, "right": 1552.658935546875, "top": 126.70000457763672, "width": 324, "x": 1228.658935546875, "y": 126.70000457763672}, "height": 115.19998931884766, "insideViewport": false, "scale": "0.9", "t": 65.90000000596046, "translate": "none", "width": 324, "x": 1219.5999755859375, "y": 126.70000457763672}, {"card": {"bottom": 242.04885864257812, "height": 116.10729217529297, "left": 1229.2420654296875, "right": 1555.7938232421875, "top": 125.94156646728516, "width": 326.5517578125, "x": 1229.2420654296875, "y": 125.94156646728516}, "height": 116.10729217529297, "insideViewport": false, "scale": "0.907088", "t": 82.40000000596046, "translate": "none", "width": 326.5517578125, "x": 1224.164794921875, "y": 125.94156646728516}, {"card": {"bottom": 242.36215209960938, "height": 118.0169448852539, "left": 1236.679931640625, "right": 1568.6026611328125, "top": 124.34520721435547, "width": 331.9227294921875, "x": 1236.679931640625, "y": 124.34520721435547}, "height": 118.0169448852539, "insideViewport": false, "scale": "0.922007", "t": 98.90000000596046, "translate": "none", "width": 331.922607421875, "x": 1233.7728271484375, "y": 124.34520721435547}, {"card": {"bottom": 242.75735473632812, "height": 120.42581939697266, "left": 1247.6181640625, "right": 1586.3157958984375, "top": 122.33153533935547, "width": 338.6976318359375, "x": 1247.6181640625, "y": 122.33153533935547}, "height": 120.42581939697266, "insideViewport": false, "scale": "0.940827", "t": 115.69999998807907, "translate": "none", "width": 338.6976318359375, "x": 1245.8924560546875, "y": 122.33153533935547}, {"card": {"bottom": 243.10952758789062, "height": 122.57234191894531, "left": 1257.7203369140625, "right": 1602.455078125, "top": 120.53718566894531, "width": 344.7347412109375, "x": 1257.7203369140625, "y": 120.53718566894531}, "height": 122.57234191894531, "insideViewport": false, "scale": "0.957596", "t": 132.59999999403954, "translate": "none", "width": 344.734619140625, "x": 1256.692138671875, "y": 120.53718566894531}, {"card": {"bottom": 243.38241577148438, "height": 124.23566436767578, "left": 1265.655029296875, "right": 1615.06787109375, "top": 119.1467514038086, "width": 349.412841796875, "x": 1265.655029296875, "y": 119.1467514038086}, "height": 124.23566436767578, "insideViewport": false, "scale": "0.970591", "t": 149.19999998807907, "translate": "none", "width": 349.4127197265625, "x": 1265.0606689453125, "y": 119.1467514038086}, {"card": {"bottom": 243.58480834960938, "height": 125.46935272216797, "left": 1271.58984375, "right": 1624.472412109375, "top": 118.1154556274414, "width": 352.882568359375, "x": 1271.58984375, "y": 118.1154556274414}, "height": 125.46935272216797, "insideViewport": false, "scale": "0.980229", "t": 165.7999999821186, "translate": "none", "width": 352.8824462890625, "x": 1271.267822265625, "y": 118.1154556274414}, {"card": {"bottom": 243.73451232910156, "height": 126.38182067871094, "left": 1276.0115966796875, "right": 1631.46044921875, "top": 117.35269165039062, "width": 355.4488525390625, "x": 1276.0115966796875, "y": 117.35269165039062}, "height": 126.38182067871094, "insideViewport": false, "scale": "0.987358", "t": 182.40000000596046, "translate": "none", "width": 355.44873046875, "x": 1275.858642578125, "y": 117.35269165039062}, {"card": {"bottom": 243.84182739257812, "height": 127.03591918945312, "left": 1279.205810546875, "right": 1636.494384765625, "top": 116.805908203125, "width": 357.28857421875, "x": 1279.205810546875, "y": 116.805908203125}, "height": 127.03591918945312, "insideViewport": false, "scale": "0.992468", "t": 199.09999999403954, "translate": "none", "width": 357.2884521484375, "x": 1279.1495361328125, "y": 116.805908203125}, …]
+
+      40 |     const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
+      41 |     await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
+    > 42 |     expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
+         |                                                                                              ^
+      43 |   });
+      44 | }
+      45 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:42:94
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4328f--origin-during-Dialog-entry-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4328f--origin-during-Dialog-entry-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4328f--origin-during-Dialog-entry-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry 
+
+    Error: an existing notification should not move with the newly opening modal
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 19
+    Received array:  [{"card": {"bottom": 144, "height": 128, "left": 2200, "right": 2560, "top": 16, "width": 360, "x": 2200, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 58.29999998211861, "translate": "100%", "width": 360, "x": 2184, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2194.115478515625, "right": 2554.115478515625, "top": 16, "width": 360, "x": 2194.115478515625, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 68.2999999821186, "translate": "100%", "width": 360, "x": 2184, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2175.02001953125, "right": 2535.02001953125, "top": 16, "width": 360, "x": 2175.02001953125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 81.5, "translate": "96.1462%", "width": 360, "x": 2169.4326171875, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2144.584716796875, "right": 2504.5849609375, "top": 16, "width": 360.000244140625, "x": 2144.584716796875, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 98.19999998807907, "translate": "88.74%", "width": 360, "x": 2141.43701171875, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2102.34033203125, "right": 2462.34033203125, "top": 16, "width": 360, "x": 2102.34033203125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 114.69999998807907, "translate": "77.9124%", "width": 360, "x": 2100.5087890625, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2054.385009765625, "right": 2414.38525390625, "top": 16, "width": 360.000244140625, "x": 2054.385009765625, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 131.2999999821186, "translate": "65.4258%", "width": 360, "x": 2053.3095703125, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2007.6348876953125, "right": 2367.634765625, "top": 16, "width": 359.9998779296875, "x": 2007.6348876953125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 148.2999999821186, "translate": "53.1803%", "width": 360, "x": 2007.021484375, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1966.589111328125, "right": 2326.589111328125, "top": 16, "width": 360, "x": 1966.589111328125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 164.89999997615814, "translate": "42.3971%", "width": 360, "x": 1966.26123046875, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1932.1427001953125, "right": 2292.142578125, "top": 16, "width": 359.9998779296875, "x": 1932.1427001953125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 181.5, "translate": "33.3302%", "width": 360.0001220703125, "x": 1931.9881591796875, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1903.90673828125, "right": 2263.90673828125, "top": 16, "width": 360, "x": 1903.90673828125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 198.19999998807907, "translate": "25.8863%", "width": 360, "x": 1903.850341796875, "y": 16}, …]
+
+      40 |     const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
+      41 |     await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
+    > 42 |     expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
+         |                                                                                              ^
+      43 |   });
+      44 | }
+      45 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:42:94
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4ac7a--origin-during-Drawer-entry-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4ac7a--origin-during-Drawer-entry-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4ac7a--origin-during-Drawer-entry-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry 
+
+    Error: an existing notification should not move with the newly opening modal
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 19
+    Received array:  [{"card": {"bottom": 1044, "height": 128, "left": 920, "right": 1280, "top": 916, "width": 360, "x": 920, "y": 916}, "height": 128, "insideViewport": false, "scale": "none", "t": 60, "translate": "0px 100%", "width": 360, "x": 904, "y": 916}, {"card": {"bottom": 1044, "height": 128, "left": 914.0778198242188, "right": 1274.077880859375, "top": 916, "width": 360.00006103515625, "x": 914.0778198242188, "y": 916}, "height": 128, "insideViewport": false, "scale": "none", "t": 69.09999999403954, "translate": "0px 100%", "width": 360, "x": 904, "y": 916}, {"card": {"bottom": 1036.61474609375, "height": 128.00006103515625, "left": 909.604736328125, "right": 1269.604736328125, "top": 908.6146850585938, "width": 360, "x": 909.604736328125, "y": 908.6146850585938}, "height": 128.00006103515625, "insideViewport": false, "scale": "none", "t": 83, "translate": "0px 96.1753%", "width": 360, "x": 904, "y": 908.6146850585938}, {"card": {"bottom": 1022.2435913085938, "height": 128, "left": 907.1464233398438, "right": 1267.146484375, "top": 894.2435913085938, "width": 360.00006103515625, "x": 907.1464233398438, "y": 894.2435913085938}, "height": 128, "insideViewport": false, "scale": "none", "t": 99.59999999403954, "translate": "0px 88.7327%", "width": 360, "x": 904, "y": 894.2435913085938}, {"card": {"bottom": 1001.3320922851562, "height": 128, "left": 905.83056640625, "right": 1265.83056640625, "top": 873.3320922851562, "width": 360, "x": 905.83056640625, "y": 873.3320922851562}, "height": 128, "insideViewport": false, "scale": "none", "t": 116.30000001192093, "translate": "0px 77.903%", "width": 360, "x": 904, "y": 873.3320922851562}, {"card": {"bottom": 977.2203369140625, "height": 128, "left": 905.0750732421875, "right": 1265.0750732421875, "top": 849.2203369140625, "width": 360, "x": 905.0750732421875, "y": 849.2203369140625}, "height": 128, "insideViewport": false, "scale": "none", "t": 133, "translate": "0px 65.4159%", "width": 360, "x": 904, "y": 849.2203369140625}, {"card": {"bottom": 953.5765991210938, "height": 128, "left": 904.6130981445312, "right": 1264.613037109375, "top": 825.5765991210938, "width": 359.99993896484375, "x": 904.6130981445312, "y": 825.5765991210938}, "height": 128, "insideViewport": false, "scale": "none", "t": 149.69999998807907, "translate": "0px 53.1712%", "width": 360, "x": 904, "y": 825.5765991210938}, {"card": {"bottom": 932.872314453125, "height": 128, "left": 904.3291015625, "right": 1264.3291015625, "top": 804.872314453125, "width": 360, "x": 904.3291015625, "y": 804.872314453125}, "height": 128, "insideViewport": false, "scale": "none", "t": 166.40000000596046, "translate": "0px 42.4488%", "width": 360, "x": 904, "y": 804.872314453125}, {"card": {"bottom": 915.25244140625, "height": 128, "left": 904.1544189453125, "right": 1264.1544189453125, "top": 787.25244140625, "width": 360, "x": 904.1544189453125, "y": 787.25244140625}, "height": 128, "insideViewport": false, "scale": "none", "t": 183, "translate": "0px 33.3238%", "width": 360, "x": 904, "y": 787.25244140625}, {"card": {"bottom": 900.8809204101562, "height": 128, "left": 904.0564575195312, "right": 1264.0565185546875, "top": 772.8809204101562, "width": 360.00006103515625, "x": 904.0564575195312, "y": 772.8809204101562}, "height": 128, "insideViewport": false, "scale": "none", "t": 199.59999999403954, "translate": "0px 25.881%", "width": 360, "x": 904, "y": 772.8809204101562}, …]
+
+      40 |     const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
+      41 |     await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
+    > 42 |     expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
+         |                                                                                              ^
+      43 |   });
+      44 | }
+      45 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:42:94
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-d219a--during-Bottom-drawer-entry-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-d219a--during-Bottom-drawer-entry-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-d219a--during-Bottom-drawer-entry-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('.toast-viewport')
+    Expected: 0
+    Received: 1
+    Timeout:  7500ms
+
+    Call log:
+      - Expect "toHaveCount" locator('.toast-viewport') with timeout 7500ms
+      - waiting for locator('.toast-viewport')
+        19 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      78 |   await page.mouse.move(0, 0);
+      79 |   const releasedAt = Date.now();
+    > 80 |   try { await expect(region).toHaveCount(0, { timeout: 7500 }); }
+         |                              ^
+      81 |   finally {
+      82 |     await info.attach('native-timer', {body: JSON.stringify({ elapsedMs:Date.now()-releasedAt, count:await region.count() }), contentType:'application/json'});
+      83 |   }
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:80:30
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry 
+
+    Error: an existing notification should not move with the newly opening modal
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 3
+    Received array:  [{"card": {"bottom": 242.1999969482422, "height": 115.19999694824219, "left": 1226.800048828125, "right": 1550.800048828125, "top": 127, "width": 324, "x": 1226.800048828125, "y": 127}, "height": 115.19999694824219, "insideViewport": false, "scale": "0.9", "t": 163, "translate": "none", "width": 324, "x": 1212.4000244140625, "y": 127}, {"card": {"bottom": 242.1999969482422, "height": 115.19999694824219, "left": 1219.450927734375, "right": 1543.450927734375, "top": 127, "width": 324, "x": 1219.450927734375, "y": 127}, "height": 115.19999694824219, "insideViewport": false, "scale": "0.9", "t": 186, "translate": "none", "width": 324, "x": 1212.4000244140625, "y": 127}, {"card": {"bottom": 243.98236083984375, "height": 127.87454986572266, "left": 1275.3765869140625, "right": 1635.0238037109375, "top": 116.1078109741211, "width": 359.647216796875, "x": 1275.3765869140625, "y": 116.1078109741211}, "height": 127.87454986572266, "insideViewport": false, "scale": "0.999171", "t": 361, "translate": "none", "width": 359.647216796875, "x": 1275.3765869140625, "y": 116.1078109741211}]
+
+      40 |     const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
+      41 |     await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
+    > 42 |     expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
+         |                                                                                              ^
+      43 |   });
+      44 | }
+      45 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:42:94
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4328f--origin-during-Dialog-entry-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4328f--origin-during-Dialog-entry-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4328f--origin-during-Dialog-entry-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry 
+
+    Error: an existing notification should not move with the newly opening modal
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 17
+    Received array:  [{"card": {"bottom": 144, "height": 128, "left": 2192, "right": 2552, "top": 16, "width": 360, "x": 2192, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 73, "translate": "100%", "width": 360, "x": 2176, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2180.271728515625, "right": 2540.271728515625, "top": 16, "width": 360, "x": 2180.271728515625, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 113, "translate": "100%", "width": 360, "x": 2176, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2085.07470703125, "right": 2445.07470703125, "top": 16, "width": 360, "x": 2085.07470703125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 165, "translate": "75.739273%", "width": 360, "x": 2084.29443359375, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2062.112060546875, "right": 2422.112060546875, "top": 16, "width": 360, "x": 2062.112060546875, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 173, "translate": "69.714279%", "width": 360, "x": 2061.52001953125, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 2019.1461181640625, "right": 2379.14599609375, "top": 16, "width": 359.9998779296875, "x": 2019.1461181640625, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 188, "translate": "58.415047%", "width": 360, "x": 2018.808837890625, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1977.2161865234375, "right": 2337.21630859375, "top": 16, "width": 360.0001220703125, "x": 1977.2161865234375, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 204, "translate": "47.367836%", "width": 359.9998779296875, "x": 1977.0504150390625, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1929.1981201171875, "right": 2289.1982421875, "top": 16, "width": 360.0001220703125, "x": 1929.1981201171875, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 226, "translate": "34.697594%", "width": 359.9998779296875, "x": 1929.1568603515625, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1907.6065673828125, "right": 2267.6064453125, "top": 16, "width": 359.9998779296875, "x": 1907.6065673828125, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 238, "translate": "28.993528%", "width": 360.0001220703125, "x": 1907.5955810546875, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1883.22021484375, "right": 2243.22021484375, "top": 16, "width": 360, "x": 1883.22021484375, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 254, "translate": "22.54504%", "width": 360, "x": 1883.22021484375, "y": 16}, {"card": {"bottom": 144, "height": 128, "left": 1838.869140625, "right": 2198.869140625, "top": 16, "width": 360, "x": 1838.869140625, "y": 16}, "height": 128, "insideViewport": false, "scale": "none", "t": 295, "translate": "10.811934%", "width": 360, "x": 1838.869140625, "y": 16}, …]
+
+      40 |     const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
+      41 |     await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
+    > 42 |     expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
+         |                                                                                              ^
+      43 |   });
+      44 | }
+      45 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:42:94
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4ac7a--origin-during-Drawer-entry-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4ac7a--origin-during-Drawer-entry-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4ac7a--origin-during-Drawer-entry-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry 
+
+    Error: an existing notification should not move with the newly opening modal
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 21
+    Received array:  [{"card": {"bottom": 1043.859375, "height": 128, "left": 912, "right": 1272, "top": 915.859375, "width": 360, "x": 912, "y": 915.859375}, "height": 128, "insideViewport": false, "scale": "none", "t": 78, "translate": "0px 100%", "width": 360, "x": 896, "y": 915.859375}, {"card": {"bottom": 1043.859375, "height": 128, "left": 904.1179809570312, "right": 1264.117919921875, "top": 915.859375, "width": 359.99993896484375, "x": 904.1179809570312, "y": 915.859375}, "height": 128, "insideViewport": false, "scale": "none", "t": 101, "translate": "0px 100%", "width": 360, "x": 896, "y": 915.859375}, {"card": {"bottom": 1037.40087890625, "height": 128, "left": 900.9141235351562, "right": 1260.9140625, "top": 909.40087890625, "width": 359.99993896484375, "x": 900.9141235351562, "y": 909.40087890625}, "height": 128, "insideViewport": false, "scale": "none", "t": 115, "translate": "0px 96.704849%", "width": 360, "x": 896, "y": 909.40087890625}, {"card": {"bottom": 1027.2391357421875, "height": 128, "left": 899.1471557617188, "right": 1259.147216796875, "top": 899.2391357421875, "width": 360.00006103515625, "x": 899.1471557617188, "y": 899.2391357421875}, "height": 128, "insideViewport": false, "scale": "none", "t": 128, "translate": "0px 91.520294%", "width": 360, "x": 896, "y": 899.2391357421875}, {"card": {"bottom": 1021.05126953125, "height": 128, "left": 898.58349609375, "right": 1258.58349609375, "top": 893.05126953125, "width": 360, "x": 898.58349609375, "y": 893.05126953125}, "height": 128, "insideViewport": false, "scale": "none", "t": 134, "translate": "0px 88.36322%", "width": 360, "x": 896, "y": 893.05126953125}, {"card": {"bottom": 1002.0166625976562, "height": 128, "left": 897.5963134765625, "right": 1257.5963134765625, "top": 874.0166625976562, "width": 360, "x": 897.5963134765625, "y": 874.0166625976562}, "height": 128, "insideViewport": false, "scale": "none", "t": 149, "translate": "0px 78.65168%", "width": 360, "x": 896, "y": 874.0166625976562}, {"card": {"bottom": 978.5221557617188, "height": 128, "left": 896.9527587890625, "right": 1256.9527587890625, "top": 850.5221557617188, "width": 360, "x": 896.9527587890625, "y": 850.5221557617188}, "height": 128, "insideViewport": false, "scale": "none", "t": 165, "translate": "0px 66.664688%", "width": 360, "x": 896, "y": 850.5221557617188}, {"card": {"bottom": 953.9122314453125, "height": 128, "left": 896.5318603515625, "right": 1256.5318603515625, "top": 825.9122314453125, "width": 360, "x": 896.5318603515625, "y": 825.9122314453125}, "height": 128, "insideViewport": false, "scale": "none", "t": 182, "translate": "0px 54.108604%", "width": 360, "x": 896, "y": 825.9122314453125}, {"card": {"bottom": 933.3442993164062, "height": 128, "left": 896.2861328125, "right": 1256.2861328125, "top": 805.3442993164062, "width": 360, "x": 896.2861328125, "y": 805.3442993164062}, "height": 128, "insideViewport": false, "scale": "none", "t": 198, "translate": "0px 43.614746%", "width": 360, "x": 896, "y": 805.3442993164062}, {"card": {"bottom": 915.8666381835938, "height": 128, "left": 896.1349487304688, "right": 1256.135009765625, "top": 787.8666381835938, "width": 360.00006103515625, "x": 896.1349487304688, "y": 787.8666381835938}, "height": 128, "insideViewport": false, "scale": "none", "t": 214, "translate": "0px 34.697594%", "width": 360, "x": 896, "y": 787.8666381835938}, …]
+
+      40 |     const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
+      41 |     await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
+    > 42 |     expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
+         |                                                                                              ^
+      43 |   });
+      44 | }
+      45 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:42:94
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-d219a--during-Bottom-drawer-entry-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-d219a--during-Bottom-drawer-entry-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-d219a--during-Bottom-drawer-entry-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      63 |   const after = await region.count();
+      64 |   await info.attach('timer-after-portal', { body: JSON.stringify({ after, releasedAfterMs: 6001 }), contentType: 'application/json' });
+    > 65 |   expect(after).toBe(0);
+         |                 ^
+      66 | });
+      67 |
+      68 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:65:17
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-ced25-osed-overlay-changes-portal-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-ced25-osed-overlay-changes-portal-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-ced25-osed-overlay-changes-portal-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('.toast-viewport')
+    Expected: 0
+    Received: 1
+    Timeout:  7500ms
+
+    Call log:
+      - Expect "toHaveCount" locator('.toast-viewport') with timeout 7500ms
+      - waiting for locator('.toast-viewport')
+        19 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      78 |   await page.mouse.move(0, 0);
+      79 |   const releasedAt = Date.now();
+    > 80 |   try { await expect(region).toHaveCount(0, { timeout: 7500 }); }
+         |                              ^
+      81 |   finally {
+      82 |     await info.attach('native-timer', {body: JSON.stringify({ elapsedMs:Date.now()-releasedAt, count:await region.count() }), contentType:'application/json'});
+      83 |   }
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:80:30
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9 failed
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes 
+  1 passed (40.1s)

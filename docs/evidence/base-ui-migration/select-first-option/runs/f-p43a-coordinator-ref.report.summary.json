@@ -1,0 +1,1201 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p43a.config.mjs",
+   "--update-snapshots=all",
+   "--grep",
+   "the coordinator: its menu"
+  ],
+  "configFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/p43a.config.mjs",
+  "rootDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p43a*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4541 --strictPort",
+   "cwd": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/",
+   "url": "http://127.0.0.1:4541",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "p43a.browser.mjs",
+   "file": "p43a.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "P4.3a a project page",
+     "file": "p43a.browser.mjs",
+     "line": 250,
+     "column": 6,
+     "specs": [
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 6627,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:41:46.838Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-desktop/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-desktop/attachments/computed-styles-and-timings-20d17b809f24a45760d533f01cafbb951df2702f.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-45a72b73617e7c8919cc",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5390,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:41:54.879Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-light-phone/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-light-phone/attachments/computed-styles-and-timings-617ef6473151935168019cd65dd59fa0d2dd7efc.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-d6675456e16913499ae5",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4981,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:42:01.136Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-desktop/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-desktop/attachments/computed-styles-and-timings-148fd55054b289e571efbf0c42fc51ff6502956e.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-8593c30b5b150d3cf69e",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5788,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:42:06.552Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/chromium-dark-phone/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-chromium-dark-phone/attachments/computed-styles-and-timings-c0c228a0e23b047d41318573c187f6c5fdaab2ca.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-d9cb9a6d5b3561c39a82",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8796,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:42:21.341Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-desktop/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-desktop/attachments/computed-styles-and-timings-828c276eef08da92241c4b186bf5b9c6c3e4367c.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-284239d01ef9f5832b17",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5782,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:42:44.759Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-light-phone/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-light-phone/attachments/computed-styles-and-timings-699b96bd8ba6cd8b32e17636ca7cd404dfe632e6.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-7009e8cf88e959e1d85a",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5015,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:42:51.346Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-desktop/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-desktop/attachments/computed-styles-and-timings-0f147c350dd33569c93ca6056eae8ae56c93d760.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-b9fd4ecdc812fafd6aa3",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      },
+      {
+       "title": "the coordinator: its menu and replace question, rebinding, choosing where it opens",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4395,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-replace.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-unavailable.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-rebind.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-landing.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T01:42:56.689Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p43a-coordinator-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator.png"
+            },
+            {
+             "name": "p43a-coordinator-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/p43a-coordinator-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-menu.png"
+            },
+            {
+             "name": "p43a-coordinator-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/p43a-coordinator-menu-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-replace.png"
+            },
+            {
+             "name": "p43a-coordinator-replace-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/p43a-coordinator-replace-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-unavailable.png"
+            },
+            {
+             "name": "p43a-coordinator-unavailable-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/p43a-coordinator-unavailable-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-rebind.png"
+            },
+            {
+             "name": "p43a-coordinator-rebind-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/p43a-coordinator-rebind-actual.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots/webkit-dark-phone/p43a-coordinator-landing.png"
+            },
+            {
+             "name": "p43a-coordinator-landing-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/p43a-coordinator-landing-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out/p43a.browser.mjs-P4-3a-a-p-64ff3-ing-choosing-where-it-opens-webkit-dark-phone/attachments/computed-styles-and-timings-06824f3fb60d639ad5387fc33f7b665c0c703a8c.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "37808846bfc9f8767b79-1b364138095b09cf32fa",
+       "file": "p43a.browser.mjs",
+       "line": 355,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T01:41:21.187Z",
+  "duration": 100062.684,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

@@ -5,7 +5,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiEntry } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
@@ -233,18 +232,16 @@ async function open(path: string): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-              <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
-              <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
-              <Route path="/wiki/:space/t/:topic" element={<WikiPage route="topic" />} />
-              <Route path="/wiki/:space/t/:topic/:part" element={<WikiPage route="topic" />} />
-              <Route path="/wiki/:space/e/:entry" element={<WikiPage route="entry" />} />
-              <Route path="/wiki/review" element={<span>review</span>} />
-            </Routes>
-            <Where />
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+            <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
+            <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
+            <Route path="/wiki/:space/t/:topic" element={<WikiPage route="topic" />} />
+            <Route path="/wiki/:space/t/:topic/:part" element={<WikiPage route="topic" />} />
+            <Route path="/wiki/:space/e/:entry" element={<WikiPage route="entry" />} />
+            <Route path="/wiki/review" element={<span>review</span>} />
+          </Routes>
+          <Where />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -324,7 +321,7 @@ describe("a topic's article", () => {
     const marker = [...page().querySelectorAll<HTMLButtonElement>('.wk-fn-n')].find((node) => node.textContent === '[2]')!;
     await act(async () => marker.click());
     await settle();
-    const card = document.querySelector<HTMLElement>('.ant-popover .wk-fncard')!;
+    const card = document.querySelector<HTMLElement>('.orbit-popover .wk-fncard')!;
     expect(card).toBeTruthy();
     expect(words('.k', card)).toEqual(['[2] Recipe Auto']);
     expect(text('.t', card)).toEqual([CHROMIUM.title]);
@@ -349,7 +346,7 @@ describe("a topic's article", () => {
     const marker = [...page().querySelectorAll<HTMLButtonElement>('.wk-fn-n')].find((node) => node.textContent === '[1]')!;
     await act(async () => marker.click());
     await settle();
-    expect(document.querySelector('.ant-popover')).toBeNull();
+    expect(document.querySelector('.orbit-popover')).toBeNull();
     const sheet = document.querySelector<HTMLElement>('.wk-fnsheet .wk-fncard.sheet')!;
     expect(sheet).toBeTruthy();
     expect(words('.k', sheet)).toEqual(['[1] Convention Confirmed']);
@@ -432,14 +429,20 @@ describe('the A–Z index', () => {
   });
 });
 
-describe('the Wiki home', () => {
-  it('has the directory where the Topics grid was, and a Review bar for a phone', async () => {
+describe('the Wiki home, before a plan is confirmed', () => {
+  it('lists the topic articles the directory lists, a title a row, and nothing of what waits', async () => {
     await open('/wiki/orbit');
-    await vi.waitFor(() => expect(container.querySelector('.wk-dir-col .wk-toc-cat')).toBeTruthy());
+    await vi.waitFor(() => expect(container.querySelector('.wk-home .wk-pl-doc.topic')).toBeTruthy());
     expect(container.textContent).not.toContain('Topics');
     expect(text('.wk-toc-item.active')).toEqual(['Home']);
-    const bar = container.querySelector('.wk-banner')!;
-    await vi.waitFor(() => expect(text('.wk-banner .t')).toEqual(['2 proposals to review']));
-    expect(bar.getAttribute('href')).toBe('/wiki/review');
+    // The directory's categories and topics, in its order — each row a title alone, into the topic's article.
+    const topics = text('.wk-dir-col .wk-toc-group .wk-toc-item .lb');
+    expect(text('.wk-home .wk-pl-cat-h b')).toEqual(text('.wk-dir-col .wk-toc-cat'));
+    expect(text('.wk-home .wk-pl-doc.topic .tt')).toEqual(topics);
+    expect(container.querySelectorAll('.wk-home .wk-pl-doc.topic .q, .wk-home .wk-pl-doc.topic .no')).toHaveLength(0);
+    expect(container.querySelector('.wk-home .wk-pl-doc.topic')?.getAttribute('href')).toMatch(/^\/wiki\/orbit\/t\//);
+    expect(text('.wk-home-state')).toEqual([`${topics.length} articles`]);
+    // The proposals waiting are Activity's now: no Review bar on the home.
+    expect(container.querySelector('.wk-banner')).toBeNull();
   });
 });

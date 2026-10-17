@@ -16,6 +16,10 @@ final class RunnerControl {
     var enrolling = false
     var enrollUserCode: String?
     var message: String?
+    /// An install (download → verify → unpack → LaunchAgent) is under way.
+    private(set) var installing = false
+    /// Why the last install put nothing in place, said for the runner manager's Try Again row.
+    private(set) var installError: String?
 
     private let paths: RunnerPaths
     private let uid: Int
@@ -40,15 +44,6 @@ final class RunnerControl {
     /// stopped service still counts as installed (so the UI shows Start, not "Install service").
     var serviceInstalled: Bool { FileManager.default.fileExists(atPath: paths.plistFile.path) }
 
-    /// The `orbit` runner binary bundled inside the .app (Contents/Resources/orbit). Nil under
-    /// `swift run` (no bundle) — install only works from a real .app. Falls back to the explicit
-    /// Resources path in case `url(forResource:)` misses for a hand-assembled (non-Xcode) bundle.
-    private var bundledRunnerURL: URL? {
-        if let u = Bundle.main.url(forResource: "orbit", withExtension: nil) { return u }
-        let fallback = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/orbit")
-        return FileManager.default.fileExists(atPath: fallback.path) ? fallback : nil
-    }
-
     /// Re-read config + log, query the service state, and (if enrolled) the server-side record.
     func refresh() async {
         config = RunnerEnvironment.readConfig(at: paths)
@@ -61,7 +56,7 @@ final class RunnerControl {
     }
 
     /// Start the runner. First run on this Mac: the service isn't installed yet, so install it
-    /// (copy the bundled binary + write the LaunchAgent) — which also starts it. There's no separate
+    /// (download the runner + write the LaunchAgent) — which also starts it. There's no separate
     /// "Install" step in the UI; Start just does the right thing.
     func start() async {
         if !serviceInstalled {
@@ -82,30 +77,40 @@ final class RunnerControl {
         await refresh()
     }
 
-    /// Install + start the background runner service entirely from the app — no Terminal. Copies the
-    /// bundled `orbit` binary to a stable, user-writable `~/.orbit/bin/orbit` (so the runner can
-    /// self-update it without touching the signed .app), writes the LaunchAgent plist (the Swift
-    /// port of `orbit register`'s `installLaunchd`), then bootstraps it (RunAtLoad starts it).
+    /// Install + start the background runner service entirely from the app — no Terminal. Downloads
+    /// the runner from this server's /dl (`APIClient.downloadRunner`: version.json, then this Mac's
+    /// `orbit-darwin-<arch>.gz`, checked against the manifest's sha256), unpacks it to the
+    /// user-writable `~/.orbit/bin/orbit` that the runner then updates itself, writes the LaunchAgent
+    /// plist (the Swift port of `orbit register`'s `installLaunchd`), then bootstraps it (RunAtLoad
+    /// starts it). A failed download or check installs nothing and leaves `installError`, which the
+    /// runner manager shows beside Try Again — this, once more.
     func installService() async {
-        guard let src = bundledRunnerURL else {
-            message = "Runner binary missing from the app bundle — reinstall Orbit."
-            return
-        }
-        let fm = FileManager.default
+        guard !installing else { return }
+        installing = true
+        installError = nil
+        message = nil
+        defer { installing = false }
         do {
-            try fm.createDirectory(at: paths.binFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if fm.fileExists(atPath: paths.binFile.path) { try fm.removeItem(at: paths.binFile) }
-            try fm.copyItem(at: src, to: paths.binFile)
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.binFile.path)
+            let machine = Self.machineArchitecture()
+            guard let platformKey = RunnerDownload.platformKey(machine: machine) else {
+                throw RunnerDownloadError.unsupportedMachine(machine)
+            }
+            let gzip = try await api.downloadRunner(platformKey: platformKey)
+            let binFile = paths.binFile
+            try await Task.detached { try RunnerDownload.unpack(gzip, to: binFile) }.value
 
             let path = LoginPath.assemble(loginPath: await Self.loginShellPath(), home: NSHomeDirectory())
             let plist = LaunchdPlist.make(label: RunnerPaths.launchdLabel, programPath: paths.binFile.path,
                                           orbitHome: paths.home.path, home: NSHomeDirectory(),
                                           path: path, logPath: paths.logFile.path)
-            try fm.createDirectory(at: paths.plistFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: paths.plistFile.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
             try Data(plist.utf8).write(to: paths.plistFile)
+        } catch let error as RunnerDownloadError {
+            installError = error.errorDescription
+            return
         } catch {
-            message = "Install failed — \(error.localizedDescription)"
+            installError = "Install failed — \(error.localizedDescription)"
             return
         }
         // bootout any stale instance first so a reinstall replaces it cleanly; bootstrap loads +
@@ -121,24 +126,32 @@ final class RunnerControl {
         }
     }
 
-    /// Frozen-runner upkeep. The LaunchAgent disables the runner's network self-update
-    /// (ORBIT_NO_SELFUPDATE), so its version tracks the app, not the control plane. Sparkle replaces
-    /// the `.app` but not the already-installed `~/.orbit/bin/orbit`, so on launch we compare the
-    /// bundled runner's version against the installed copy and, when the app carries a different one
-    /// (i.e. it was just updated), re-copy the binary + reload the service via `installService()`.
-    /// No-op until this Mac has enrolled (no service installed) or when the versions already match —
-    /// so a normal launch costs two quick `version` probes and nothing else.
-    func syncBundledRunner() async {
-        guard serviceInstalled, let src = bundledRunnerURL else { return }
-        guard let bundledVer = await Self.runnerVersion(at: src) else { return }
-        let installedVer = await Self.runnerVersion(at: paths.binFile)
-        guard installedVer != bundledVer else { return }
-        await installService()   // re-copies the bundled binary, rewrites the plist, reloads launchd
-        if status.running { message = "Runner updated to \(bundledVer) with the app." }
+    /// Launch-time upkeep for a Mac an older app enrolled. That app bundled the runner, so its
+    /// LaunchAgent set ORBIT_NO_SELFUPDATE and the app put its own runner back whenever the
+    /// versions differed. This rewrites the plist from today's template, keeping its binary,
+    /// ORBIT_HOME, HOME, PATH and log (`LaunchdPlist.migrated`), and reloads the service if it's
+    /// loaded. The binary isn't replaced: the runner updates it at its next check. No-op when no
+    /// service is installed, once rewritten, and for the CLI's plist. A stopped service picks the
+    /// new plist up at its next start.
+    func migrateLaunchAgent() async {
+        let installed = try? String(contentsOf: paths.plistFile, encoding: .utf8)   // nil: no service
+        guard let plist = LaunchdPlist.migrated(from: installed) else { return }
+        do { try Data(plist.utf8).write(to: paths.plistFile) } catch { return }
+        let list = await Self.launchctl(Launchctl.list())
+        guard Launchctl.parseList(list.output).loaded else { return }
+        let plistPath = paths.plistFile.path
+        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: plistPath))
+        // bootout can return while the runner is still draining, and bootstrap fails until it has
+        // exited (launchd SIGKILLs it after 20s by default), so keep trying a little longer.
+        for _ in 0..<30 {
+            if await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: plistPath)).status == 0 { break }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        await refresh()
     }
 
     /// One-app enrollment: start the device flow, self-approve (we're the signed-in user), poll
-    /// for the credential, write config.json, then install + start the bundled runner service —
+    /// for the credential, write config.json, then download, install + start the runner service —
     /// the whole "set up a runner on this Mac" with no Terminal.
     func enroll(name: String) async {
         enrolling = true
@@ -162,7 +175,7 @@ final class RunnerControl {
                                            labels: nil, maxConcurrent: 4, workDir: nil)
                     try writeConfig(cfg)
                     config = cfg
-                    await installService()   // copy the bundled runner, write + load the LaunchAgent
+                    await installService()   // download + verify the runner, write + load the LaunchAgent
                     return
                 case .expired:
                     message = "Enrollment expired — try again."
@@ -202,23 +215,13 @@ final class RunnerControl {
         }.value
     }
 
-    /// `<binary> version` → the runner's baked version string (e.g. "0.1.52"), or nil if it can't
-    /// be run. Lets `syncBundledRunner` tell whether the installed runner matches this .app's copy.
-    nonisolated private static func runnerVersion(at url: URL) async -> String? {
-        await Task.detached {
-            let process = Process()
-            process.executableURL = url
-            process.arguments = ["version"]
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = Pipe()
-            do { try process.run() } catch { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (s?.isEmpty ?? true) ? nil : s
-        }.value
+    /// This Mac's CPU as `uname -m` names it, asked of the hardware (`hw.optional.arm64`) rather
+    /// than of this process, which under Rosetta says x86_64 on an Apple-silicon Mac.
+    nonisolated private static func machineArchitecture() -> String {
+        var arm64: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("hw.optional.arm64", &arm64, &size, nil, 0) == 0, arm64 == 1 else { return "x86_64" }
+        return "arm64"
     }
 
     /// Run `/bin/launchctl` off the main actor; returns (exit code, combined output).

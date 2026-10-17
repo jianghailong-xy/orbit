@@ -4,8 +4,11 @@ import {
   isAsyncAgentLaunchAck,
   isAuthErrorText,
   isBenignEngineStderr,
+  isRateLimitApiErrorText,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
+  RATE_LIMIT_ENGINE_ERROR_PREFIX,
+  RETRYABLE_ENGINE_ERROR_PREFIXES,
   toolResultText,
   workflowLaunchReceipt,
 } from './events';
@@ -171,6 +174,39 @@ describe('isRetryableApiErrorText', () => {
         'The run died on "Selected model is at capacity. Please try a different model." — retrying.',
       ),
     ).toBe(false);
+  });
+
+  it('flags Codex exhausting its request retries on a 429', () => {
+    const error = 'exceeded retry limit, last status: 429 Too Many Requests';
+    expect(
+      isRetryableApiErrorText(`${error}, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2`),
+    ).toBe(true);
+    expect(isRetryableApiErrorText(error)).toBe(true);
+    expect(isRetryableApiErrorText(`  ${error}`)).toBe(true);
+    expect(isRetryableApiErrorText(`The run failed with "${error}".`)).toBe(false);
+    expect(isRetryableApiErrorText('exceeded retry limit')).toBe(false);
+    expect(isRetryableApiErrorText('exceeded retry limit, last status: 400 Bad Request')).toBe(false);
+    expect(isRetryableApiErrorText('exceeded retry limit, last status: 401 Unauthorized')).toBe(false);
+  });
+
+  it('tells a rate limit apart from the rest of the transient list — the one a pool can answer', () => {
+    const error = 'exceeded retry limit, last status: 429 Too Many Requests';
+    expect(isRateLimitApiErrorText(`${error}, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2`)).toBe(true);
+    expect(isRateLimitApiErrorText(`  ${error}`)).toBe(true);
+    // Still retryable: the pool's answer is preferred where there is one, not the classification replaced.
+    expect(isRetryableApiErrorText(error)).toBe(true);
+    // An overloaded model is transient too, and says nothing about the credential a session runs on — and
+    // an unplaced 429 is not one codex worded this way.
+    expect(isRateLimitApiErrorText('selected model is at capacity')).toBe(false);
+    expect(isRateLimitApiErrorText('API Error: 529 overloaded_error')).toBe(false);
+    expect(isRateLimitApiErrorText('exceeded retry limit')).toBe(false);
+    expect(isRateLimitApiErrorText(null)).toBe(false);
+    // The prefix is spelled twice on purpose: the list holds the literal so that macos/OrbitKit's
+    // EngineErrorsParityTests, which parses that list's own source text, can see it — an entry that is a
+    // reference, or one that arrives through a spread, is invisible to it. This is what keeps the two
+    // spellings equal; without it, editing one and not the other is a silent drift between what Orbit
+    // retries on and what it treats as a rate limit.
+    expect(RETRYABLE_ENGINE_ERROR_PREFIXES).toContain(RATE_LIMIT_ENGINE_ERROR_PREFIX);
   });
 
   it('does not retry what it cannot place', () => {

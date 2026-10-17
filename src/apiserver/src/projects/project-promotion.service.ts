@@ -10,18 +10,21 @@ import { randomUUID } from 'crypto';
 import type { IntegrationJobPhase, PromotionTask } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
   LandingRetryRequest,
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
+  endTimedOutLanding,
   integrationSerialKey,
   queuePromotionJob,
   queueTaskBranchCandidate,
   shortBranchName,
   workBranchEndedOn,
 } from './project-integration-job';
+import { readInFlightJobs } from './project-integration-line';
 import { openItemOwed } from './project-open-item';
 import {
   LIVE_PROMOTION_STATES,
@@ -29,10 +32,13 @@ import {
   PROMOTION_NOT_READY,
   PROMOTION_OWNER_ONLY,
   ProjectPromotionView,
+  PromotionBlockedReason,
   PromotionRow,
+  PromotionSourceKind,
   PromotionState,
   automaticConfirmationRefusal,
   medianMs,
+  promotionBlockedReasonFor,
   promotionConfirmRefusal,
   promotionDedupeKey,
   promotionItemTitle,
@@ -296,6 +302,16 @@ export class ProjectPromotionService {
   }
 
   /**
+   * The two reads answer only the caller's own project: another account's — or none — is not found,
+   * as every other read of a project answers it, rather than the empty answer that means "your
+   * project has nothing on offer".
+   */
+  private async assertOwnProject(userId: string, projectId: string): Promise<void> {
+    const own = await this.prisma.project.findFirst({ where: { id: projectId, ownerId: userId }, select: { id: true } });
+    if (!own) throw new NotFoundException('project not found');
+  }
+
+  /**
    * The shape every owner door has: refuse anyone who is not the account owner before a row is read,
    * then do the decision under a retry, then answer with the row as it now stands.
    */
@@ -326,6 +342,7 @@ export class ProjectPromotionService {
 
   /** The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6). */
   async readCurrent(userId: string, projectId: string): Promise<ProjectPromotionView | null> {
+    await this.assertOwnProject(userId, projectId);
     const row = await this.prisma.projectPromotion.findFirst({
       where: { projectId, ownerId: userId },
       orderBy: { createdAt: 'desc' },
@@ -352,6 +369,7 @@ export class ProjectPromotionService {
    * twenty is the recent history of any conversation somebody is still reading.
    */
   async readMerged(userId: string, projectId: string): Promise<ProjectPromotionView[]> {
+    await this.assertOwnProject(userId, projectId);
     const rows = await this.prisma.projectPromotion.findMany({
       where: {
         projectId,
@@ -926,6 +944,136 @@ export async function refileCandidateBehindTheWork(
   });
 }
 
+/** The receipt columns `retireCandidatesLandedByReceipt` reads: whose work, from which branch, into
+ *  which branch, what happened, and when it was recorded. */
+export interface RecordedMergeFacts {
+  projectId: string | null;
+  taskId: string | null;
+  result: string;
+  sourceBranch: string;
+  targetBranch: string;
+  createdAt: Date;
+}
+
+/** The states a candidate can be retired from by a merge made somewhere else: the ones still asking
+ *  or blocked. A confirmed merge is the platform's own and ends on its own landing (M-T8). */
+const RETIRABLE_BY_RECEIPT: ReadonlyArray<PromotionState> = ['CHECKING', 'READY', 'BLOCKED'];
+
+/**
+ * M-T13: a merge recorded onto the upstream ends the candidate that was offering the same branch,
+ * in the transaction that records it.
+ *
+ * WHAT WAS WRONG (2026-10-09, project 34b78EQPNkVF8kM3ki7Ch)
+ * ----------------------------------------------------------
+ * A MAIN-line task went DONE and its branch became a `TASK_BRANCH` candidate (M-F2). The branch was
+ * never pushed: its session committed in the runner's worktree, and the coordinator fast-forwarded
+ * main to that commit by hand and recorded the merge receipt. The check ran after that, could not
+ * fetch the branch (`SOURCE_BRANCH_MISSING`) and blocked the candidate. The coordinator closed the
+ * exception it opened ("the work is already on main") and the project went DONE, but nothing ends a
+ * blocked candidate except a newer one, a decline or a merge — so the project's sessions page kept
+ * saying "Can't merge into main yet", with "Coordinator is resolving it" under it, about work that was
+ * already on main. All five BLOCKED task-branch candidates in production had this shape (migration
+ * 0411 retires them).
+ *
+ * THE RULE
+ * --------
+ * A receipt that says a task's branch landed on the upstream (`MERGED` or `ALREADY_MERGED`) answers
+ * the question a candidate for that same branch was asking. The candidate goes `SUPERSEDED`, as when
+ * a newer candidate takes its place (M-T6): a merge somewhere else took it. Its check job is stopped
+ * as J-T8 asks (a queued one is cancelled, a running one is asked to stop) — except a running one
+ * already silent past its limit, which is ended on the spot as `ERROR · RUNNER_LOST` (the J-T9
+ * read and compare-and-set): asking a dead runner to stop would leave the job holding its serial
+ * key with no one able to end it, and the project's checks would be blocked for good. The owner's
+ * card and the exceptions about it are closed by the platform (`PROMOTION_MOVED_ON`, §4.2) — so a
+ * check that reports afterwards finds the candidate gone and opens nothing (`applyPromotionJobResult`).
+ *
+ * WHAT IT LEAVES ALONE
+ * --------------------
+ *  - another branch of the same task: that one can still carry work main does not have;
+ *  - a receipt onto anything but the candidate's upstream, and one that did not land;
+ *  - a `PROJECT_BRANCH` candidate: one task's receipt says nothing about the whole branch;
+ *  - a candidate the owner already confirmed: its landing job is in flight, and it answers
+ *    `ALREADY_LANDED` itself if the work is there (M-T8);
+ *  - a candidate made after the receipt was recorded. That is new work offered again, and only a
+ *    receipt written after it can answer it — which is what keeps a replayed receipt from ending a
+ *    question it never saw.
+ *
+ * Called by the receipt writers that record a merge somebody made outside a promotion — the agent's
+ * and the user's door (`MergeReceiptService.record`, also for the replay of a receipt already
+ * recorded) and the runner's own merge (`fromRunnerMergeResult`). The receipts a promotion writes for
+ * its own landing (M9) are written beside a candidate that is already being merged. Answers the ids
+ * it retired.
+ */
+export async function retireCandidatesLandedByReceipt(
+  tx: Prisma.TransactionClient,
+  receipt: RecordedMergeFacts,
+): Promise<string[]> {
+  if (!receipt.projectId || !receipt.taskId) return [];
+  if (!resultLanded(receipt.result as MergeReceiptResult)) return [];
+  // A receipt names branches as a person does and a candidate names refs; either spelling is the
+  // same branch.
+  const spellings = (branch: string): string[] => {
+    const short = shortBranchName(branch);
+    return [short, `refs/heads/${short}`];
+  };
+  const answered = await tx.projectPromotion.findMany({
+    where: {
+      projectId: receipt.projectId,
+      taskId: receipt.taskId,
+      sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+      sourceRef: { in: spellings(receipt.sourceBranch) },
+      upstreamRef: { in: spellings(receipt.targetBranch) },
+      state: { in: [...RETIRABLE_BY_RECEIPT] },
+      createdAt: { lte: receipt.createdAt },
+    },
+    select: { id: true, projectId: true, state: true, checkJobId: true, openItemId: true },
+  });
+  const now = new Date();
+  const retired: string[] = [];
+  for (const row of answered) {
+    // A CAS on the state it was read in: a landing or an owner's press that moved it first wins.
+    const moved = await tx.projectPromotion.updateMany({
+      where: { id: row.id, state: row.state },
+      data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: now },
+    });
+    if (moved.count === 0) continue;
+    if (row.checkJobId) {
+      await tx.projectIntegrationJob.updateMany({
+        where: { id: row.checkJobId, state: 'QUEUED' },
+        data: { state: 'CANCELLED', finishedAt: now },
+      });
+      // A RUNNING check is asked to stop — unless it already stopped reporting past its limit, in
+      // which case asking is how a job holds its serial key forever: `claimOne` never re-hands a
+      // cancel-requested row, so nobody would ever end it and no later check of the project could be
+      // claimed (2026-10-09: a candidate superseded this way kept `#check:<project>` and blocked the
+      // whole project). A job the read already judges timed out is ended here, in this transaction,
+      // as the ERROR it is — the same J-T9 compare-and-set the retry door uses.
+      const [silent] = await readInFlightJobs(tx, row.projectId, row.checkJobId);
+      if (silent?.state === 'RUNNING' && silent.timedOut === true) {
+        const ended = await endTimedOutLanding(tx, silent);
+        if (ended) continue;
+        // The compare-and-set lost: the job reported again between the read and the write, so it is
+        // talking after all — it gets the ordinary ask-to-stop below.
+      }
+      await tx.projectIntegrationJob.updateMany({
+        where: { id: row.checkJobId, state: 'RUNNING', cancelRequestedAt: null },
+        data: { cancelRequestedAt: now },
+      });
+    }
+    // The owner's card, when the check had already put one in front of them: the merge it asked
+    // about has been made, so there is nothing left to approve.
+    if (row.openItemId) {
+      await tx.projectOpenItem.updateMany({
+        where: { id: row.openItemId, state: 'OPEN' },
+        data: { state: 'RESOLVED', resolution: 'PROMOTION_MOVED_ON', resolvedBy: 'PLATFORM', resolvedAt: now },
+      });
+    }
+    await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
+    retired.push(row.id);
+  }
+  return retired;
+}
+
 /**
  * Apply one finished promotion job to its promotion, inside the job-result transaction
  * (M-T2, M-T3, M-T8, M-T9).
@@ -1025,7 +1173,8 @@ export async function applyPromotionJobResult(
         },
       };
     }
-    return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
+    return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
+      promotionBlockedReasonFor(input.state));
   }
 
   // LAND_PROMOTION.
@@ -1062,7 +1211,8 @@ export async function applyPromotionJobResult(
     await closePromotionItems(tx, promotion.projectId, promotion.id, 'RESOLVED');
     return { promotionId: promotion.id, state: 'MERGED', receiptIds, openApproval: null };
   }
-  return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
+  return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
+    promotionBlockedReasonFor(input.state));
 }
 
 /**
@@ -1130,6 +1280,9 @@ async function blockPromotion(
   conflicts: string[],
   now: Date,
   sourceSha: string | null,
+  /** What the job answered (0409). The card says it; `checks` and `conflicts` cannot, since both
+   *  are empty when there was nothing to merge and when the job errored before any check ran. */
+  reason: PromotionBlockedReason | null,
 ): Promise<PromotionJobOutcome> {
   await tx.projectPromotion.update({
     where: { id: promotionId },
@@ -1140,6 +1293,7 @@ async function blockPromotion(
       ...(sourceSha ? { sourceSha } : {}),
       checks,
       conflicts: conflicts.slice(0, 200),
+      blockedReason: reason,
       decidedAt: now,
     },
   });
@@ -1158,7 +1312,19 @@ async function blockPromotion(
  * own rule (M-T11), exactly as its first check would have. `decided_at` is cleared because the
  * candidate is asking again; a check that fails again blocks it at a new moment.
  *
- * Null when nothing can be queued: the candidate is no longer BLOCKED, or its repository is gone.
+ * The candidate's confirmation is cleared with the re-check, because the re-check asks the merge
+ * question anew: a `confirmed_by_user_id` / `confirmed_at` recorded against an earlier check result
+ * answered a different question (the tree a re-check runs on can differ — the upstream moves), and
+ * left standing it would collide with `project_promotion_automatic_chk` the moment a clean result is
+ * confirmed by the Automatic setting (`confirmed_automatically = true` forbids a named confirmer).
+ * Whoever decides the fresh result decides it fresh: the Automatic setting, or the account owner on a
+ * card the clean check opens as it always did. For a project without Automatic this changes nothing
+ * about the door's reach — it only means the row no longer carries a confirmation the new check has
+ * not earned, and the owner's earlier press is not treated as covering a merge nobody asked them
+ * about again.
+ *
+ * Null when nothing can be queued: the candidate is no longer asking (not BLOCKED, and not CHECKING
+ * for the timed-out re-check this door admits), or its repository is gone.
  */
 export async function requeuePromotionCheck(
   tx: Prisma.TransactionClient,
@@ -1168,7 +1334,10 @@ export async function requeuePromotionCheck(
     where: { id: input.promotionId },
     select: PROMOTION_COLUMNS,
   });
-  if (!promotion || promotion.state !== 'BLOCKED') return null;
+  // CHECKING is the timed-out re-check's state (J-T9): the door has already decided the authority,
+  // and a candidate asking again is exactly what this queueing is for. Anything past asking
+  // (READY and beyond) is refused upstream of here.
+  if (!promotion || (promotion.state !== 'BLOCKED' && promotion.state !== 'CHECKING')) return null;
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
     select: { canonicalRepoUrl: true },
@@ -1182,7 +1351,18 @@ export async function requeuePromotionCheck(
   });
   await tx.projectPromotion.update({
     where: { id: promotion.id },
-    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null },
+    // Asking again, so nothing blocks it any more: a check that fails again records its own reason.
+    // The confirmation columns go back to NULL with it: the re-check asks the merge question anew,
+    // and the Automatic setting or the owner decides the fresh result (see the comment above).
+    data: {
+      state: 'CHECKING' satisfies PromotionState,
+      checkJobId: jobId,
+      decidedAt: null,
+      blockedReason: null,
+      confirmedByUserId: null,
+      confirmedAt: null,
+      confirmedAutomatically: false,
+    },
   });
   const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
     where: { id: jobId },
@@ -1233,21 +1413,38 @@ async function writeUpstreamReceipts(
     select: { taskId: true, sessionId: true, landedSha: true },
   });
   const byTask = new Map(landings.map((row) => [row.taskId, row]));
+  const sessionFor = (taskId: string) =>
+    byTask.get(taskId)?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+  // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
+  // keys on the receipt: a task deleted, or a session purged from Trash, while its work waited for
+  // this merge leaves its id on the landing and on the promotion. So each is looked up first, one
+  // `IN` apiece, and a gone one is written as the NULL its key used to leave — no receipt for a
+  // session that is gone, as when the landing's `session_id` read NULL, and a receipt naming no task
+  // for a task that is gone, as SET NULL leaves one written a moment before the delete.
+  const sessionIds = [...new Set(input.promotion.includedTaskIds.flatMap((taskId) => sessionFor(taskId) ?? []))];
+  const liveSessions = new Set(sessionIds.length === 0 ? [] : (await tx.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true },
+  })).map((row) => row.id));
+  const liveTasks = new Set(input.promotion.includedTaskIds.length === 0 ? [] : (await tx.task.findMany({
+    where: { id: { in: input.promotion.includedTaskIds } },
+    select: { id: true },
+  })).map((row) => row.id));
   const receiptIds: string[] = [];
   for (const taskId of input.promotion.includedTaskIds) {
     const landing = byTask.get(taskId);
-    const sessionId = landing?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+    const sessionId = sessionFor(taskId);
     // The job's tested commit, or — when there is none because the landing answered ALREADY_LANDED
     // — the candidate's own source, which is the commit that turned out to be on the upstream
     // already. Without the second half that answer would leave the task with no receipt and the
     // criterion reading unlanded while its work sits on main.
     const sourceSha = landing?.landedSha
       ?? (onItsOwnBranch ? input.testedSha ?? input.promotion.sourceSha : null);
-    if (!sessionId || !sourceSha) continue;
+    if (!sessionId || !liveSessions.has(sessionId) || !sourceSha) continue;
     const written = await MergeReceiptService.fromIntegrationJob(tx, {
       ownerId: input.promotion.ownerId,
       sessionId,
-      taskId,
+      taskId: liveTasks.has(taskId) ? taskId : null,
       projectId: input.promotion.projectId,
       jobId: input.jobId,
       state: input.state,

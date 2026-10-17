@@ -1,0 +1,82 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:00:04.501Z",
+    "duration": 8293.177000000001,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 3359
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "705e355c7010b9b69e0a952edbaeec08b2dfb77f4d1c7d6a3343fdc7e2bd28af"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "c403397c3b592bce43ab1ea2d4d5cf35db1670e159dd35424bddf4ea1d63f4ac"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "cefed06b9c164e8a7f4d15444bcd3d8ef1aaebd57e72301e28379409ff0ee75f"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "b571d485acfef3c7138a78c5cd5afa639ba25ee89b4c5fe143f850573a8cf48f"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--error-context.md",
+          "sha256": "8c9690a57da37e1ec20dd47b947c6725838da0c427e7bed3aef5d929c8c8418c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 3323
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+          "sha256": "3a3a8d1633ff4c04fb56b400cd9efd96ec288bb268984cbe6cccd7aa49cfe58a"
+        },
+        {
+          "file": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+          "sha256": "e8e44c6bc8e9aa419dd87c05767c329ccadf82b87ad4dd3e581c5902a32e160a"
+        },
+        {
+          "file": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+          "sha256": "3a3a8d1633ff4c04fb56b400cd9efd96ec288bb268984cbe6cccd7aa49cfe58a"
+        },
+        {
+          "file": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+          "sha256": "f9e382b5b440a6673a345b21e8f2d6eb365484b758337f0b8a4b90a1f330c083"
+        },
+        {
+          "file": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "3e4ac7fc08a1ae8d457f2476aa1b82402281435eebaeee4f8ea6971c588f851f"
+        },
+        {
+          "file": "chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--error-context.md",
+          "sha256": "5ae95ecc6246971f3275b427ddf43cffb6527fc41da335d83a15a5825fd18f6e"
+        }
+      ]
+    }
+  ]
+}

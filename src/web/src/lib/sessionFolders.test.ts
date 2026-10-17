@@ -221,9 +221,12 @@ describe('the confirmation', () => {
     expect(moveConfirmAction(merged)).toBe('Move');
   });
 
-  it('shows a refusal as the server says it', () => {
+  it('shows only the reason, preserving the server’s words and punctuation', () => {
     expect(moveFailureText(new ApiError('Stop the session first.', 409))).toBe('Stop the session first.');
-    expect(moveFailureText(new ApiError('Bad Gateway', 502))).toBe('The session couldn’t be moved: Bad Gateway.');
+    expect(moveFailureText(new ApiError('Bad Gateway', 502))).toBe('Bad Gateway');
+    expect(moveFailureText(new ApiError('Permission denied.', 403))).toBe('Permission denied.');
+    expect(moveFailureText(new Error('The connection dropped.'))).toBe('The connection dropped.');
+    expect(moveFailureText(null)).toBe('something went wrong');
   });
 });
 

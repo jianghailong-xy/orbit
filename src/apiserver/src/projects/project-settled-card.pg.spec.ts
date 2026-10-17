@@ -35,7 +35,9 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criteriaFromDefinitions, criterionKeyOf } from './project-acceptance';
-import { LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor } from './project-criterion-landing';
+import {
+  LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor, readLandingJobsByTask,
+} from './project-criterion-landing';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import {
   ProjectTasksSettledProducer,
@@ -500,8 +502,20 @@ async function expectedTurnId(db: PrismaClient, projectId: string): Promise<stri
     },
     orderBy: { ordinal: 'asc' },
   });
+  // The line's answers about these branches, beside the tasks rather than below them (0423 made
+  // `task_id` a history reference, so there is no relation to nest) — attached here so this mirror
+  // is folded from the same facts the product's own reader carries.
+  const jobs = await readLandingJobsByTask(
+    db, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
+  );
+  const served = definitions.map((definition) => ({
+    ...definition,
+    servingTasks: definition.servingTasks.map((task) => ({
+      ...task, integrationJobs: jobs.get(task.id) ?? [],
+    })),
+  }));
   const landed = new Map(
-    criterionLanding(definitions, landingBranchesFor(await db.projectCodebase.findFirst({
+    criterionLanding(served, landingBranchesFor(await db.projectCodebase.findFirst({
       where: { projectId, slot: 'primary' },
       select: { upstreamRef: true, integrationRef: true },
     }))).map((answer) => [answer.definitionId, answer.landing]),
@@ -587,7 +601,7 @@ test('every task settled and every criterion landed puts one card on the standin
       const card = said[0]!.content ?? '';
       assert.match(card, /CONFIRM_ACCEPTANCE_CRITERIA/,
         'the card does not name the one act this project is now waiting on');
-      assert.match(card, /表达的是你.*要的.*目标|表达了你.*要的.*目标/u,
+      assert.match(card, /express the goal you want/,
         'the card asks whether the criteria are met rather than whether they express the goal');
       // Every stated criterion is IN the card, with both dimensions and the work that served it:
       // a question about "these two conditions" that does not carry them is a question its reader
@@ -598,9 +612,9 @@ test('every task settled and every criterion landed puts one card on the standin
       assert.ok(card.includes('把路由改对并合进 main'), 'the card omits the work serving a criterion');
       assert.ok(card.includes('把全量服务测试跑绿并合进 main'));
       assert.match(card, /LANDED/, 'the card does not report each criterion’s landing');
-      assert.match(card, /这是一条通知，不是打断/, 'the card claims to interrupt the reader');
+      assert.match(card, /This is a notification, not an interruption/, 'the card claims to interrupt the reader');
       // The card is not the merge instruction its sibling fact carries.
-      assert.equal(card.includes('有干完但还没落 main 的成果'), false);
+      assert.equal(card.includes('has finished work that has not landed on main'), false);
     } finally {
       await stack.db.$disconnect();
     }

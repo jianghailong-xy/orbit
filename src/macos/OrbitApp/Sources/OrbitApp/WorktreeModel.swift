@@ -163,6 +163,12 @@ final class WorktreeModel {
         generation == diffLoadGeneration && !Task.isCancelled
     }
 
+    /// File bytes are intentionally never retained by the worktree model: reopening a preview or
+    /// retrying it must read the current file, even when its relative path has not changed.
+    func readFile(path: String) async throws -> Data {
+        try await api.sessionWorktreeFile(sessionID: sessionID, path: path)
+    }
+
     func commit() async {
         busy = true
         defer { busy = false }
@@ -302,10 +308,14 @@ final class WorktreeModel {
             case "merged":
                 return ToastRequest(message: "Merged into \(target)", key: "merge")
             case "conflict":
+                let target = WorktreeBarLogic.conflictTarget(
+                    mergeTarget: detail.mergeTarget, targets: detail.mergeTargets ?? [],
+                    agentDefaultTarget: detail.agent?.defaultMergeTarget)
                 return ToastRequest(
-                    message: "Merge conflict in \(target)",
-                    detail: "Merge aborted; your branch is unchanged. Resolve it from the worktree bar.",
-                    tone: .warning, key: "merge")
+                    message: "Couldn't merge into \(target)",
+                    detail: Self.trimmed(detail.mergeError),
+                    tone: .error, key: "merge",
+                    mergeConflict: detail.branch.map { ToastMergeConflict(branch: $0, target: target) })
             case "error":
                 return ToastRequest(message: "Couldn't merge into \(target)",
                                     detail: Self.trimmed(detail.mergeError), tone: .error, key: "merge")

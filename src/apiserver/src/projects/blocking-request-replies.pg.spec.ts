@@ -90,7 +90,11 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { CompletionEvidenceProducer } from './completion-evidence.producer';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
+import { CoordinatorDeliveryService } from './coordinator-delivery.service';
+import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
+import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
@@ -166,6 +170,16 @@ interface Held {
  * service to reply through. Resolved by type, a constructor that needs a collaborator this file
  * does not provide is a failure here rather than an argument silently left out.
  */
+/** What hands a coordinator the evidence that waited for it — the production wiring of the one door
+ *  `ProjectsService.coordinator` calls it through, which nothing in this file reaches. */
+function evidenceQueueOver(prisma: PrismaService, sessions: SessionsService): CoordinatorEvidenceQueueService {
+  const deliveries = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions);
+  return new CoordinatorEvidenceQueueService(
+    prisma,
+    new CompletionEvidenceProducer(prisma, new CoordinatorConvergenceService(prisma), deliveries),
+  );
+}
+
 function builtByDeclaredTypes(provided: ReadonlyMap<unknown, unknown>): ProjectsService {
   const declared = Reflect.getMetadata('design:paramtypes', ProjectsService) as unknown[] | undefined;
   assert.ok(declared, 'ProjectsService carries no constructor metadata to be resolved by');
@@ -216,6 +230,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
       [RealtimeService, realtime],
       [ProjectOpenItemService, new ProjectOpenItemService(prisma, sessions)],
       [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
+      [CoordinatorEvidenceQueueService, evidenceQueueOver(prisma, sessions)],
     ])),
   };
 
@@ -646,6 +661,7 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
       [RealtimeService, realtime],
       [ProjectOpenItemService, items],
       [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
+      [CoordinatorEvidenceQueueService, evidenceQueueOver(prisma, sessions)],
     ])),
   };
   const owner = await accountOwner(stack);

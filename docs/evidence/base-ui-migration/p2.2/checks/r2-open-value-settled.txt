@@ -1,0 +1,59 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-open-value.browser.mjs
+
+[WebServer] (node:3699298) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:3699407) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (2.3s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.1s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (2.2s)
+(node:3699893) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (2.6s)
+  ✓   5 [chromium-light-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.4s)
+  ✓   6 [chromium-light-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (2.6s)
+(node:3700974) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (2.1s)
+  ✓   8 [chromium-dark-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.2s)
+  ✓   9 [chromium-dark-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (2.1s)
+(node:3701724) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-dark-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (2.2s)
+  ✓  11 [chromium-dark-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.1s)
+  ✓  12 [chromium-dark-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (2.1s)
+(node:3702088) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (2.1s)
+  ✓  14 [webkit-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.0s)
+  ✓  15 [webkit-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (1.9s)
+(node:3702621) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-light-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (1.8s)
+  ✓  17 [webkit-light-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.2s)
+  ✓  18 [webkit-light-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (1.7s)
+(node:3703391) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-dark-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (1.9s)
+  ✓  20 [webkit-dark-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (1.8s)
+  ✓  21 [webkit-dark-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (1.8s)
+(node:3704263) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [webkit-dark-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (1.8s)
+  ✓  23 [webkit-dark-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (1.8s)
+  ✓  24 [webkit-dark-phone] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (1.7s)
+
+  24 passed (52.6s)

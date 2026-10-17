@@ -12,8 +12,9 @@ import { AgentProvider, type PlanUsageSnapshot, type PlanUsageWindow } from '@or
 
 /** Anthropic's own endpoint. Only it serves the subscription usage API, so a row pointed at a
  *  proxy or a compatible vendor is never probed — the request would leak the key to a third
- *  party that has no such endpoint. */
-const ANTHROPIC_HOST = 'api.anthropic.com';
+ *  party that has no such endpoint. It is also the only host that serves the inline
+ *  tool-definition shape, which custom-provider's injected env decides by. */
+export const ANTHROPIC_HOST = 'api.anthropic.com';
 
 /** The usage endpoint Claude Code itself calls (same as the runner's planUsageURL). */
 export const OAUTH_USAGE_URL = `https://${ANTHROPIC_HOST}/api/oauth/usage`;
@@ -61,7 +62,8 @@ export function subscriptionUsageRefusal(row: UsageProbeRow, apiKey: string): Su
   if (
     row.runtime === AgentProvider.CODEX ||
     row.runtime === AgentProvider.KIMI ||
-    row.runtime === AgentProvider.ANTIGRAVITY
+    row.runtime === AgentProvider.ANTIGRAVITY ||
+    row.runtime === AgentProvider.DSH
   ) {
     return 'NOT_CLAUDE_RUNTIME';
   }

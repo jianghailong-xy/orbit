@@ -30,13 +30,10 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
         Destination.SESSION -> listOf("sessions", route.id!!)
         Destination.TASK -> listOf("tasks", route.id!!)
         Destination.PROJECT -> listOf("projects", route.id!!)
-        Destination.WIKI_ENTRY -> listOf("wiki", "entries", route.id!!)
-        Destination.WATCH -> listOf("watches", route.id!!)
         Destination.RUNNER -> listOf("runners", route.id!!)
         Destination.PROJECTS -> listOf("projects")
         Destination.TASKS -> listOf("tasks")
         Destination.LIST -> listOf("task-lists", route.id!!)
-        Destination.WIKI -> if (route.id == null) listOf("wiki", "spaces") else listOf("wiki", "spaces", route.id, "entries")
         else -> emptyList()
     }
     LaunchedEffect(route, revision, retry) {
@@ -77,7 +74,6 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
                 val id = field(obj, "id")
                 val destination = when (route.destination) {
                     Destination.PROJECTS -> Destination.PROJECT
-                    Destination.WIKI -> if (route.id == null) Destination.WIKI else Destination.WIKI_ENTRY
                     else -> Destination.TASK
                 }
                 ListItem(headlineContent = { Text(field(obj, "title") ?: field(obj, "name") ?: "Untitled") },

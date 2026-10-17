@@ -1,0 +1,132 @@
+{
+  "approvalCards": [],
+  "controlPlane": null,
+  "facts": {
+    "approvalRequests": 0,
+    "sideEffect": true
+  },
+  "modelRequests": 2,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-77gLzH/TestDshRealThirdPartyMCPRunsUnasked2516712793/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-77gLzH/TestDshRealThirdPartyMCPRunsUnasked2516712793/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "acd746e4c242a363ee2365e4a47173db691e91e5efb7fddebc732b9253211427",
+        "dshHome": "/tmp/orbit-dsh-p4-77gLzH/TestDshRealThirdPartyMCPRunsUnasked2516712793/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-77gLzH/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "sessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "text": "Call the third-party MCP tool."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 45981,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "value": "p4-third-party-effect"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "thirdparty",
+        "mcpTool": "record",
+        "name": "mcp__thirdparty__record",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "recorded:p4-third-party-effect",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "status": "completed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "85c8c046-e4ee-4c28-8446-f3d3a6081247",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "text": "P4 third-party answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46011,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46011,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "e49c3502-02dd-4169-87f5-d815b7863585",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "auto",
+  "scenario": "TestDshRealThirdPartyMCPRunsUnasked"
+}

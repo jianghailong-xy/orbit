@@ -198,7 +198,14 @@ final class SessionMoveWiringTests: XCTestCase {
         let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
         XCTAssertEqual(row.components(separatedBy: "onMove: { movingSession = s }").count - 1, 2,
                        "both of the iOS list's row shapes hand their session over")
-        XCTAssertEqual(agents.components(separatedBy: "onMove:").count - 1, 2, "and nothing else does")
+        let projectRow = try slice(agents, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
+        XCTAssertEqual(projectRow.components(separatedBy: "onMove:").count - 1, 1,
+                       "the project row has one Move callback, acting on its coordinator")
+        let projectMove = "onMove: { if let coordinator = row.coordinator { movingSession = coordinator } }"
+        XCTAssertTrue(projectRow.contains(projectMove))
+        XCTAssertEqual(try branches(of: projectMove, in: agents), ["os(iOS)"])
+        XCTAssertEqual(agents.components(separatedBy: "onMove:").count - 1, 3,
+                       "two ordinary row shapes and one project coordinator hand a session over")
         let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
         XCTAssertEqual(try branches(of: "ForEach(agents.agentSessions) { s in", in: agents), ["!os(iOS)"])
         XCTAssertTrue(mac.contains(".sessionRowActions(s, scope: view, onTag: { taggingSession = s })"),
@@ -264,10 +271,13 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertTrue(create.contains("if let refused { failure = refused } else { dismiss() }"))
         XCTAssertTrue(sheet.contains(".alert(SessionMoveCopy.couldNotCreate, isPresented: failed) {"))
 
-        // The list holds the panel's one sheet, for the row it was handed, over the list it is in.
+        // The list holds one sheet. A project's coordinator may be in another workspace, so the
+        // panel resolves the handed session's workspace and counts its folders over the full list.
         let agents = code(try appSource("Views/AgentsView.swift"))
         let presented = try slice(agents, from: ".sheet(item: $movingSession) { s in",
-                                  to: "SessionMoveSheet(session: s, workspace: agent, listed: agents.agentSessions)")
+                                  to: "SessionMoveSheet(session: s, workspace: workspace, listed: agents.allSessions)")
+        XCTAssertTrue(presented.contains("if let workspace = agents.agent(s.agent?.id ?? s.agentId ?? agent.id)"),
+                      "the moved session owns the workspace, with the current workspace as a legacy fallback")
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the list's own")
         XCTAssertEqual(agents.components(separatedBy: "SessionMoveSheet(").count - 1, 1)
     }

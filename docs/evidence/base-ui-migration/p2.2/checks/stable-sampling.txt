@@ -1,0 +1,194 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone
+
+[WebServer] (node:2016194) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 30 tests using 1 worker
+
+(node:2016336) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › attachment matches the current surface, density and option states (4.0s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › access matches the current surface, density and option states (3.0s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › expiry matches the current surface, density and option states (3.1s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › account matches the current surface, density and option states (3.1s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › search matches the current surface, density and option states (2.9s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › popover matches the current surface, density and option states (2.9s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › tooltip matches the current surface, density and option states (2.9s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices.browser.mjs:86:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.1s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices.browser.mjs:117:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.4s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices.browser.mjs:148:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.3s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices.browser.mjs:177:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices.browser.mjs:207:1 › remote search accepts server labels and resets an action picker without local filtering (918ms)
+  ✓  13 [chromium-light-desktop] › ui-migration/choices.browser.mjs:227:37 › Dialog owns choices, top-layer Escape, Tab and theme (1.9s)
+  ✘  14 [chromium-light-desktop] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (16.9s)
+(node:2020879) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  15 [chromium-light-desktop] › ui-migration/choices.browser.mjs:265:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (16.2s)
+(node:2022196) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › attachment matches the current surface, density and option states (2.1s)
+  ✓  17 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › access matches the current surface, density and option states (2.1s)
+  ✓  18 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › expiry matches the current surface, density and option states (2.3s)
+  ✓  19 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › account matches the current surface, density and option states (2.3s)
+  ✓  20 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › search matches the current surface, density and option states (2.3s)
+  ✓  21 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › popover matches the current surface, density and option states (2.1s)
+  ✓  22 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › tooltip matches the current surface, density and option states (2.1s)
+  ✓  23 [webkit-dark-phone] › ui-migration/choices.browser.mjs:86:1 › menu arrows, disabled items, submenu, checkbox and focus return work (998ms)
+  ✓  24 [webkit-dark-phone] › ui-migration/choices.browser.mjs:117:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.2s)
+  ✓  25 [webkit-dark-phone] › ui-migration/choices.browser.mjs:148:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.6s)
+  ✓  26 [webkit-dark-phone] › ui-migration/choices.browser.mjs:177:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.3s)
+  ✓  27 [webkit-dark-phone] › ui-migration/choices.browser.mjs:207:1 › remote search accepts server labels and resets an action picker without local filtering (841ms)
+  ✓  28 [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:37 › Dialog owns choices, top-layer Escape, Tab and theme (1.9s)
+  ✘  29 [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (17.0s)
+(node:2027081) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  30 [webkit-dark-phone] › ui-migration/choices.browser.mjs:265:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (16.1s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      253 |     await page.keyboard.press(key);
+      254 |     const focusOwner = legacy ? page.locator('.legacy-choices-owner') : dialog;
+    > 255 |     await expect.poll(() => focusOwner.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+          |                                                                                               ^
+      256 |   }
+      257 |   expect(await page.evaluate(() => [document.body, document.documentElement].some((el) => /hidden|clip/.test(getComputedStyle(el).overflowY)))).toBe(true);
+      258 |   await shot(info, 'choices-in-dialog', dialog);
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:255:95
+
+    Error Context: .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices.browser.mjs:265:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('tooltip')
+    Expected: "Usage from this account"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('tooltip') with timeout 15000ms
+      - waiting for getByRole('tooltip')
+
+
+      282 |   await usage.focus();
+      283 |   const tooltip = page.getByRole('tooltip');
+    > 284 |   await expect(tooltip).toHaveText('Usage from this account');
+          |                         ^
+      285 |   await expect(usage).toHaveAttribute('aria-describedby', /.+/);
+      286 |   await page.keyboard.press('Escape');
+      287 |   await expect(tooltip).not.toBeVisible();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:284:25
+
+    Error Context: .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      253 |     await page.keyboard.press(key);
+      254 |     const focusOwner = legacy ? page.locator('.legacy-choices-owner') : dialog;
+    > 255 |     await expect.poll(() => focusOwner.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+          |                                                                                               ^
+      256 |   }
+      257 |   expect(await page.evaluate(() => [document.body, document.documentElement].some((el) => /hidden|clip/.test(getComputedStyle(el).overflowY)))).toBe(true);
+      258 |   await shot(info, 'choices-in-dialog', dialog);
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:255:95
+
+    Error Context: .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › ui-migration/choices.browser.mjs:265:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('tooltip')
+    Expected: "Usage from this account"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('tooltip') with timeout 15000ms
+      - waiting for getByRole('tooltip')
+
+
+      282 |   await usage.focus();
+      283 |   const tooltip = page.getByRole('tooltip');
+    > 284 |   await expect(tooltip).toHaveText('Usage from this account');
+          |                         ^
+      285 |   await expect(usage).toHaveAttribute('aria-describedby', /.+/);
+      286 |   await page.keyboard.press('Escape');
+      287 |   await expect(tooltip).not.toBeVisible();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:284:25
+
+    Error Context: .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:265:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:265:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+  26 passed (2.0m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone

@@ -1,0 +1,11 @@
+argv: env P43A_SNAPSHOTS=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-shots P43A_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-ref-out P43A_PORT=4541 npx playwright test --config ui-migration/p43a.config.mjs --update-snapshots=all --grep the coordinator: its menu
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref HEAD f492dbb30fa24718061f69ca93ef1df5a05f4fa0
+uncommitted: 
+start: 2026-10-09T22:33:09Z load: 22.67 27.68 33.07
+mem: 3086M available, swap 5317M free
+disk: / 5684M available
+cgroup: 0::/system.slice/run-p57536-i58742047.scope
+Error: Timed out waiting 30000ms from config.webServer.
+
+end: 2026-10-09T22:33:51Z load: 25.26 27.80 32.86
+exit=1

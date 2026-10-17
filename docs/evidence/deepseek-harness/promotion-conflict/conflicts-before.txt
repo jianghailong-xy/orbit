@@ -1,0 +1,34 @@
+4e4d28381e53787588a5be489c6bb3448d10d704
+100644 555a4d507921de8d943bf6421c2c71c73d97e545 1	src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts
+100644 b8332402845e958a1dcdd4463b362249de296fc3 2	src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts
+100644 bfeb011772bd7daf6dd0670ae969519fd799bed5 3	src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts
+100644 09f27232b59e7af32ccebbd147f9b0c1f1eae060 1	src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx
+100644 a9b6e10aa2f3a11ef34462da03602ea0b2b0eb6e 2	src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx
+100644 963a7b618fc90867e9aa3722dd1e5e502e3392ee 3	src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx
+100644 4b0af86d5d28e329650bc0e696d8167923b95ec8 1	src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx
+100644 e8d550428ff5730ba7bdfa1e18d9df2cb66effd8 2	src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx
+100644 462c1fb53c4c3b244769441d0f8dc4e058dd9038 3	src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx
+100644 77063eac5cc149c83ba54f1b84bc9aed747a081d 1	src/web/src/components/WorkspaceView.promotionPlacement.test.tsx
+100644 44ea9f8450736b328b63c5129afedf35b7fd9454 2	src/web/src/components/WorkspaceView.promotionPlacement.test.tsx
+100644 103e4501a029058ae12071bf99e4e45bbe6bdaef 3	src/web/src/components/WorkspaceView.promotionPlacement.test.tsx
+100644 2ab9afa8aa25defc769023206ece17a6f65e4ee9 1	src/web/src/components/WorkspaceView.settlementPointer.test.tsx
+100644 543f526917136775f393ce2738528a5d2bde1e40 2	src/web/src/components/WorkspaceView.settlementPointer.test.tsx
+100644 dc9108a34ac147f65be2a63598960eb39a26a13e 3	src/web/src/components/WorkspaceView.settlementPointer.test.tsx
+
+Auto-merging src/apiserver/src/common/db-write-inventory.ts
+Auto-merging src/apiserver/src/queue/queue.service.ts
+Auto-merging src/apiserver/src/runner-api/runner-api.controller.ts
+Auto-merging src/apiserver/src/sessions/sessions.service.ts
+Auto-merging src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts
+CONFLICT (content): Merge conflict in src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts
+Auto-merging src/apiserver/src/tasks/tasks.service.ts
+Auto-merging src/web/src/components/CriteriaDecisionCard.receipt.test.tsx
+Auto-merging src/web/src/components/CriteriaDecisionCard.sessionSwitch.test.tsx
+Auto-merging src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx
+CONFLICT (content): Merge conflict in src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx
+Auto-merging src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx
+CONFLICT (content): Merge conflict in src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx
+Auto-merging src/web/src/components/WorkspaceView.promotionPlacement.test.tsx
+CONFLICT (content): Merge conflict in src/web/src/components/WorkspaceView.promotionPlacement.test.tsx
+Auto-merging src/web/src/components/WorkspaceView.settlementPointer.test.tsx
+CONFLICT (content): Merge conflict in src/web/src/components/WorkspaceView.settlementPointer.test.tsx

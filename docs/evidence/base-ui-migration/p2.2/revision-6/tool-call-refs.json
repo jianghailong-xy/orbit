@@ -1,0 +1,152 @@
+[
+  {
+    "ref": "exec-9bf5210e-1247-4b06-b043-3d2e12119d2e",
+    "command": "git merge --ff-only d71afc686760eb4a37c84822bf1ea478dbe8fcf1 > /tmp/p22-r6-restore.txt && git log -1 --format='%H %T %P'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-9919f446-83a7-481b-a117-2a0aa400acf6",
+    "command": "git merge --no-ff 59c439e47515f15f581a76318df0ecad6b23e53e -m 'merge(web): integrate accepted P2.2 with upstream toast compatibility' > /tmp/p22-r6-merge.txt && git log -1 --format='%H %T %P' && git status --short && git merge-base --is-ancestor d22b276cccbac66b672e25944be0317d6df420eb HEAD && git merge-base --is-ancestor 18e75cfe14d0a0858c9a46e514535439c9cdf9d8 HEAD && git merge-base --is-ancestor d71afc686760eb4a37c84822bf1ea478dbe8fcf1 HEAD",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-6ac1bfa6-8084-469f-ac18-04da1142af4d",
+    "command": "XDG_CACHE_HOME=/tmp/p22-r6-cache npm_config_logs_dir=/tmp/p22-r6-npm-logs python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-prepare-dependencies bash scripts/worktree-overlay.sh",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-d00bed10-f830-4e97-9965-cc8583eadd96",
+    "command": "git ls-remote origin refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7 > docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-start.txt && cat docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-start.txt",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-f11310d9-7cb6-4bdb-9bfa-5e528dc5e767",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-final-build-test bash -lc 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-bb268558-2262-4a41-8def-c685e8ff120c",
+    "command": "git merge --no-ff 1970483d2da30c17372c681958a44d1b3da77694 -m 'merge: retain latest upstream project session navigation for P2.2 delivery' > docs/evidence/base-ui-migration/p2.2/revision-6/upstream-merge.txt && git log -1 --format='%H %T %P'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-9ebef112-fc32-4ad9-ad97-b5bd9e81ac64",
+    "command": "XDG_CACHE_HOME=/tmp/p22-r6-cache npm_config_logs_dir=/tmp/p22-r6-npm-logs python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-upstream-prepare bash scripts/worktree-overlay.sh",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-bb46d69b-4d97-4927-97f1-66f17e7f4514",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-list-choices node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/choices.config.mjs --list --reporter=list",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-04ce1fea-5099-4c65-b3aa-18dcacf65d49",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-list-toasts node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs --list --reporter=list",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-10356bf4-792a-419c-b41a-d6ca04e17dd8",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-list-p0 node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs --list --reporter=list",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-1553be37-d1aa-4444-94ee-bc4c607ef478",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-upstream-build-test bash -lc 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-21bfdb2a-25f8-4a0b-86c8-3729652727ea",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-fixture-types bash -lc 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-636311d2-c073-40e7-b360-66740a3cfaac",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-choices-entry npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-272693eb-b5ea-4779-bcf2-7afc2e06d795",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-notification-combinations npm run test:ui-toasts -w @orbit/web -- --grep 'exit keeps its own native progress|clear retains the last shape|keyed transient and pinned|entrance progress survives|existing notifications remain accessible|copyable diagnostics|async confirmation|legacy AntApp'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-3c8e082c-d06e-4c4c-9b96-8560e13d1256",
+    "command": "git ls-remote origin refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7 > docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-final.txt && cat docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-final.txt",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-d4902d57-d51b-4513-8225-5c909dc93038",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-production-notifications node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs feedback-production.browser.mjs",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-50c4bcab-b642-4cf0-a33b-e8299d29cfeb",
+    "command": "node src/web/ui-migration/collect-choice-evidence.mjs docs/evidence/base-ui-migration/p2.2/revision-6/production-notifications --from=src/web/.ui-migration-results && python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-final-audit python3 docs/evidence/base-ui-migration/p2.2/revision-6/audit-artifacts.py",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-e26f9a2c-31be-4a78-af36-ffe991bbd0e5",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-provenance-audit bash -lc 'python3 docs/evidence/base-ui-migration/p2.2/revision-6/audit-integration.py && python3 docs/evidence/base-ui-migration/p2.2/revision-6/audit-upstream.py'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-e0192fb0-283c-4d60-bb4b-2c0b2899ef80",
+    "command": "git ls-remote origin refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7 > docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-before-commit.txt && python3 - <<'PY'\nfrom pathlib import Path\nimport subprocess\np=Path('docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-before-commit.txt')\nfor line in p.read_text().splitlines():\n sha,ref=line.split()\n subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'],check=True)\n print(ref,sha,'is an ancestor of final tested HEAD')\nPY",
+    "exitCode": 1,
+    "status": "failed"
+  },
+  {
+    "ref": "exec-f0af6590-b326-48cd-af48-ebd7218f6eb5",
+    "command": "git merge --no-ff 235787f548d1f49c410f69fdea8c9d27091369b6 -m 'merge: retain upstream approval and scroll fixes in P2.2 delivery' > docs/evidence/base-ui-migration/p2.2/revision-6/final-upstream-merge.txt && git log -1 --format='%H %T %P'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-07172429-387e-4d98-93fc-07cbd3b22d7b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-delivery-build-test bash -lc 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-124a303a-fa06-4377-8c2a-775aadae9a84",
+    "command": "git ls-remote origin refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7 > docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-delivery.txt && python3 - <<'PY'\nimport subprocess\nfrom pathlib import Path\nfor line in Path('docs/evidence/base-ui-migration/p2.2/revision-6/remote-refs-delivery.txt').read_text().splitlines():\n sha,ref=line.split(); subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'],check=True); print(ref,sha,'contained')\nPY",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-3a891cd3-952f-48c0-9229-d6f0d1aabfc2",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-delivery-production-notifications node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs feedback-production.browser.mjs",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-eaf0d025-da6a-4427-9ef7-fb228c87e772",
+    "command": "node src/web/ui-migration/collect-choice-evidence.mjs docs/evidence/base-ui-migration/p2.2/revision-6/delivery-production-notifications --from=src/web/.ui-migration-results && python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-delivery-audit python3 docs/evidence/base-ui-migration/p2.2/revision-6/audit-delivery.py",
+    "exitCode": 0,
+    "status": "completed"
+  },
+  {
+    "ref": "exec-689a9af4-225c-46f6-8e47-b64a57cf2f2b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r6-delivery-final-audit python3 docs/evidence/base-ui-migration/p2.2/revision-6/audit-delivery.py",
+    "exitCode": 0,
+    "status": "completed"
+  }
+]

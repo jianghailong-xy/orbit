@@ -58,13 +58,18 @@ type selfUpdateChecker func(context.Context, string) (string, bool)
 // waitForRunLoopStop owns the two reasons a healthy runner deliberately leaves
 // its claim loop. It is kept independent of the rest of runLoop so update timing
 // and signal precedence can be exercised without starting sessions or heartbeats.
-func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server string, interval time.Duration, check selfUpdateChecker) (runLoopStopReason, string) {
+// A receive on checkNow runs the update check at once, between ticks: the
+// owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate).
+func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server string, interval time.Duration, check selfUpdateChecker, checkNow <-chan struct{}) (runLoopStopReason, string) {
 	var ticker *time.Ticker
 	var ticks <-chan time.Time
 	if check != nil {
 		ticker = time.NewTicker(interval)
 		ticks = ticker.C
 		defer ticker.Stop()
+	} else {
+		// No updater to run: a request for a check is left unread, as a tick would be.
+		checkNow = nil
 	}
 	for {
 		select {
@@ -73,17 +78,18 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 		case <-signals:
 			return runLoopStopSignal, ""
 		case <-ticks:
-			if remote, ok := check(ctx, server); ok {
-				// The manifest request may have overlapped an operator/service stop.
-				// Prefer that explicit signal to an automatic restart when both are
-				// ready, rather than turning SIGTERM into an update by select lottery.
-				select {
-				case <-signals:
-					return runLoopStopSignal, ""
-				default:
-				}
-				return runLoopStopUpdate, remote
+		case <-checkNow:
+		}
+		if remote, ok := check(ctx, server); ok {
+			// The manifest request may have overlapped an operator/service stop.
+			// Prefer that explicit signal to an automatic restart when both are
+			// ready, rather than turning SIGTERM into an update by select lottery.
+			select {
+			case <-signals:
+				return runLoopStopSignal, ""
+			default:
 			}
+			return runLoopStopUpdate, remote
 		}
 	}
 }
@@ -92,7 +98,8 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // which it does only while no turn is in flight (closeForUpdate). While any turn runs, the check
 // reports nothing and logs one line, and the next tick asks again: the release stays published, so
 // waiting loses nothing. There is no deadline after which the update stops waiting — a runner busy
-// at every check stays on its release until a check finds it idle.
+// at every check stays on its release until a check finds it idle. The heartbeat reports the wait
+// as waitingForIdle.
 func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, interval time.Duration) selfUpdateChecker {
 	return func(ctx context.Context, server string) (string, bool) {
 		remote, ok := check(ctx, server)
@@ -102,6 +109,7 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, interv
 		if n := pool.closeForUpdate(); n > 0 {
 			logln(fmt.Sprintf("orbit %s update available; deferred — %d turn(s) in flight, checking again in %s",
 				remote, n, interval))
+			noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
 			return "", false
 		}
 		return remote, true
@@ -192,6 +200,7 @@ var catalogRuntimes = []catalogRuntime{
 	{providerOpenCode, openCodeCLIAvailable, fetchGlobalOpenCodeModelCatalog},
 	// agy lists the models built into its binary: the same on every machine and for every key.
 	{providerAntigravity, antigravityCLIAvailable, fetchAntigravityModelCatalog},
+	{providerDsh, dshCLIAvailable, fetchDshModelCatalog},
 }
 
 // models is where c keeps engine's list.
@@ -207,6 +216,8 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 		return &c.OpenCode
 	case providerAntigravity:
 		return &c.Antigravity
+	case providerDsh:
+		return &c.Dsh
 	}
 	return nil
 }
@@ -255,7 +266,7 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 // carrying over must not keep. A first round that read nothing reports nothing, as before.
 func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *ModelCatalog {
 	if prev == nil && len(next.Codex) == 0 && len(next.Claude) == 0 && len(next.Kimi) == 0 &&
-		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 {
+		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 {
 		return nil
 	}
 	merged := carryOverModelCatalog(prev, next)
@@ -290,6 +301,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	}
 	if len(next.Antigravity) == 0 {
 		next.Antigravity = prev.Antigravity
+	}
+	if len(next.Dsh) == 0 {
+		next.Dsh = prev.Dsh
 	}
 	return next
 }
@@ -785,7 +799,8 @@ type worktreeCommandRelease manualWorktreeOperationKey
 
 // runnerAgentList is this machine's agents as `GET /runner/me` last listed them. The slash-asset
 // and repo-health scans cover their workDirs, and a plan-usage probe keeps polling its provider
-// while idle only if one of them runs that provider.
+// while idle if one of them runs that provider, as it does while that engine is signed in here
+// (idleUsage).
 type runnerAgentList struct {
 	mu     sync.Mutex
 	agents []RunnerAgent
@@ -808,6 +823,26 @@ func (l *runnerAgentList) snapshot() []RunnerAgent {
 	return append([]RunnerAgent(nil), l.agents...)
 }
 
+// assetRoots is what the slash-asset scan reads: each agent's workDir, tagged with the agent. Never
+// the runner's own workDir (see RunnerConfig.WorkDir): this scan repeats every five minutes.
+func (l *runnerAgentList) assetRoots() []assetRoot {
+	var roots []assetRoot
+	for _, a := range l.snapshot() {
+		roots = append(roots, assetRoot{base: a.WorkDir, agentID: a.ID})
+	}
+	return roots
+}
+
+// repoDirs is what the shared-checkout health scan reads: each agent's workDir, and for the reason
+// assetRoots gives, never the runner's own. This scan repeats every minute.
+func (l *runnerAgentList) repoDirs() []agentWorkDir {
+	var dirs []agentWorkDir
+	for _, a := range l.snapshot() {
+		dirs = append(dirs, agentWorkDir{AgentID: a.ID, Dir: a.WorkDir})
+	}
+	return dirs
+}
+
 // providerConfigured reports whether any listed agent runs provider; one that names none runs Claude.
 func (l *runnerAgentList) providerConfigured(provider string) bool {
 	for _, a := range l.snapshot() {
@@ -820,6 +855,16 @@ func (l *runnerAgentList) providerConfigured(provider string) bool {
 		}
 	}
 	return false
+}
+
+// idleUsage is whether an idle runner keeps reading provider's usage: while one of its workspaces runs
+// provider (configured), or while the engine probe finds that engine signed in here at all. A
+// workspace's provider is only the one its last session ran on, so the first alone left a machine
+// whose workspaces last ran something else reading an engine only while one of its sessions ran
+// there — and since the reading lives in this process, every restart took it, leaving the runner
+// page to say "No quota reported" over a signed-in login (Codex on HPC, 2026-10-09).
+func idleUsage(provider string, configured func(string) bool, engines *engineHealthProbe) func() bool {
+	return func() bool { return configured(provider) || engines.signedIn(provider) }
 }
 
 // runLoop returns true only when it drained because a newer runner release was
@@ -874,13 +919,32 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())
 	monitorDone := make(chan struct{})
 	var updateRequested atomic.Bool
+	// One beat right away, between ticks (runHeartbeatTicks). Buffered by one and never waited on:
+	// asking while a beat is already owed leaves exactly that one owed.
+	hbNow := make(chan struct{}, 1)
+	beatNow := func() {
+		select {
+		case hbNow <- struct{}{}:
+		default:
+		}
+	}
+	// The owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate) runs the release check
+	// below without waiting for its next tick. Buffered by one, like hbNow.
+	checkSelfUpdateNow := make(chan struct{}, 1)
 	var check selfUpdateChecker
 	if selfUpdateEnabled() {
-		check = updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)
+		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)
+		check = func(ctx context.Context, server string) (string, bool) {
+			remote, ok := gated(ctx, server)
+			// What the check found rides a beat now rather than up to half a minute from now: after
+			// an Update Runner Now, somebody is watching for it.
+			beatNow()
+			return remote, ok
+		}
 	}
 	go func() {
 		defer close(monitorDone)
-		reason, remote := waitForRunLoopStop(monitorCtx, sig, cfg.ServerURL, selfUpdateCheckInterval, check)
+		reason, remote := waitForRunLoopStop(monitorCtx, sig, cfg.ServerURL, selfUpdateCheckInterval, check, checkSelfUpdateNow)
 		if reason == runLoopStopNone {
 			return
 		}
@@ -904,35 +968,21 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Slash assets (commands/skills) discovered on this machine, surfaced to the web
 	// composer's `/` autocomplete. A background scan refreshes the cache every ~5 min;
 	// filesystem or control-plane latency must never delay runner liveness. Roots = the
-	// runner's default dir (host-level) plus
-	// each agent's workDir, tagged with the agent's id so the composer can scope the
-	// `/` menu to the session's agent (host-level assets show for every agent).
+	// user's ~/.claude (host-level) plus each agent's workDir, tagged with the agent's id
+	// so the composer can scope the `/` menu to the session's agent (host-level assets
+	// show for every agent).
 	var runnerAgents runnerAgentList
 	refreshRunnerAgents := func() { runnerAgents.refresh(t) }
-	agentSnapshot := runnerAgents.snapshot
 	providerConfigured := runnerAgents.providerConfigured
-	assetRoots := func() []assetRoot {
-		roots := []assetRoot{{base: cfg.WorkDir}}
-		for _, a := range agentSnapshot() {
-			roots = append(roots, assetRoot{base: a.WorkDir, agentID: a.ID})
-		}
-		return roots
-	}
-	// The same dirs, for the shared-checkout health scan the heartbeat carries. Read fresh each
-	// scan so an agent added after startup is covered without a restart.
-	repoHealth := &repoHealthProbe{dirs: func() []agentWorkDir {
-		dirs := []agentWorkDir{{Dir: cfg.WorkDir}}
-		for _, a := range agentSnapshot() {
-			dirs = append(dirs, agentWorkDir{AgentID: a.ID, Dir: a.WorkDir})
-		}
-		return dirs
-	}}
+	// The agents' workDirs again, for the shared-checkout health scan the heartbeat carries. Read
+	// fresh each scan so an agent added after startup is covered without a restart.
+	repoHealth := &repoHealthProbe{dirs: runnerAgents.repoDirs}
 	go repoHealth.run(loopCtx)
 	var assetMu sync.Mutex
 	var hbCommands, hbSkills []SlashCommandInfo
 	refreshHeartbeatAssets := func() {
 		refreshRunnerAgents()
-		commands, skills := slashAssetsForHeartbeat(assetRoots())
+		commands, skills := slashAssetsForHeartbeat(runnerAgents.assetRoots())
 		assetMu.Lock()
 		hbCommands, hbSkills = commands, skills
 		assetMu.Unlock()
@@ -944,7 +994,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// is learned right after, then re-published; retried on each tick while it stays empty,
 		// since engines install on demand and `claude` may not be on PATH yet.
 		refreshHeartbeatAssets()
-		if ensureClaudeSlashRegistry(loopCtx, cfg.WorkDir) {
+		if ensureClaudeSlashRegistry(loopCtx) {
 			refreshHeartbeatAssets()
 		}
 		ticker := time.NewTicker(5 * time.Minute)
@@ -954,16 +1004,21 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			case <-loopCtx.Done():
 				return
 			case <-ticker.C:
-				ensureClaudeSlashRegistry(loopCtx, cfg.WorkDir)
+				ensureClaudeSlashRegistry(loopCtx)
 				refreshHeartbeatAssets()
 			}
 		}
 	}()
 
+	// Which engines are installed and signed in here (started below). Made before the quota probes,
+	// since they read by it while idle.
+	engineHealth := &engineHealthProbe{}
+
 	// Provider quota for this machine's logins, refreshed in the background so the
 	// heartbeat attaches the latest snapshot without ever blocking on external calls.
 	// Each probe refreshes quickly while active and slowly while an agent for that
-	// provider exists, so idle reset windows do not leave stale UI gauges behind.
+	// provider exists or the engine is signed in here (idleUsage), so idle reset
+	// windows do not leave stale UI gauges behind.
 	activeProviderCount := func(provider string) int {
 		return pool.providerCount(provider, true)
 	}
@@ -972,15 +1027,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// environment selects — and every added account's own.
 	claudeUsage := newClaudeAccountUsage()
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
-	claudeIdle := func() bool { return providerConfigured(providerClaude) }
+	claudeIdle := idleUsage(providerClaude, providerConfigured, engineHealth)
 	go claudeUsage.run(loopCtx, claudeActive, claudeIdle)
 	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
 	// read through too — and every added slot's own.
 	codexUsage := newCodexAccountUsage(t.leaseOwner)
 	codexUsageProbe := codexUsage.def
 	codexActive := func() int { return activeProviderCount(providerCodex) }
-	codexIdle := func() bool { return providerConfigured(providerCodex) }
+	codexIdle := idleUsage(providerCodex, providerConfigured, engineHealth)
 	go codexUsage.run(loopCtx, codexActive, codexIdle)
+	// Kimi Code keeps one snapshot per account as Claude does: Default's and every added account's own.
+	kimiUsage := newKimiAccountUsage()
+	kimiActive := func() int { return activeProviderCount(providerKimi) }
+	kimiIdle := idleUsage(providerKimi, providerConfigured, engineHealth)
+	go kimiUsage.run(loopCtx, kimiActive, kimiIdle)
 
 	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
 	// change rarely and are expensive to discover; defaults are cheap config reads that users may
@@ -1001,7 +1061,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// engine's new models are in the list seconds later rather than at the next hourly tick.
 	//
 	// The engine probe (started below) is what tells a signed-out engine's empty list from a failure.
-	engineHealth := &engineHealthProbe{}
 	refreshModelCatalog := coalescingRefresh(func() {
 		catalog, signedOut := readModelCatalog(loopCtx, catalogRuntimes, engineHealth.signedOut, logln)
 		modelSnapshotMu.Lock()
@@ -1101,18 +1160,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
 
+	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
+	// and could not deliver is offered to the control plane first, so a job this machine is holding a
+	// finished answer for is settled rather than claimed and run again (integration_result_spool.go).
+	replaySpooledIntegrationResults(loopCtx, t)
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
-	// One beat right away, between ticks (runHeartbeatTicks). Buffered by one and never waited on:
-	// asking while a beat is already owed leaves exactly that one owed.
-	hbNow := make(chan struct{}, 1)
-	beatNow := func() {
-		select {
-		case hbNow <- struct{}{}:
-		default:
-		}
-	}
 	// A session that finds its engine signed out as it starts it says so (noteEngineSignedOut): the
 	// probe confirms it and the next beat carries it at once. Coalesced, since every session started on
 	// the same refused sign-in says the same thing.
@@ -1121,12 +1176,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		beatNow()
 	})
 	engineSignedOut := func() { go reprobeAfterSignOut() }
+	// The control plane wakes this runner when a sign-in it is driving needs the next heartbeat now.
+	go runWakeLoop(loopCtx, t.waitForWake, beatNow)
 	engineSignedOutSeen.Store(&engineSignedOut)
 	defer engineSignedOutSeen.Store(nil)
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
 	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
 	// already running before a self-update replaces this process image.
-	var heartbeatOps sync.WaitGroup
+	// Counted as well as joined: a managed instance reports how much of it is running (managed_sleep.go).
+	var heartbeatOps countedOps
 	// The sign-in relay reclaims the slot an add-account attempt leaves empty; a slot one of this
 	// runner's live sessions is stuck to is not one it may take away.
 	login := &loginRelay{liveSessionIDs: pool.sessionIDs}
@@ -1138,6 +1196,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	resetConsumer := newCodexResetConsumer(codexUsageProbe)
 	resetConsumer.wakeHeartbeat = beatNow
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
+	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
+	sleeper := newManagedSleep()
+	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
@@ -1155,6 +1216,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// plane, but the heartbeat that carries it is at-least-once: without this, a redelivery
 		// after a slow claim would stage a second worktree for the same job.
 		integratingNow := map[string]bool{}
+		// Repository operations this process has in flight, for the same reason: the claim is exclusive
+		// in the control plane, but a redelivered heartbeat must not start the same snapshot twice.
+		repoOpsNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		runHeartbeatTicks(hbStop, ticker.C, hbNow, func() {
@@ -1167,11 +1231,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			runtimeDefaultModels := hbRuntimeDefaultModels
 			modelSnapshotMu.Unlock()
 			sent := time.Now()
+			var workload *ManagedWorkload
+			if currentManagedInstance() != nil {
+				report := sleeper.report(managedWorkload())
+				workload = &report
+			}
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
-				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot()),
+				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot(), kimiUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
@@ -1179,10 +1248,32 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,
+				SelfUpdate:           selfUpdateReport(),
+				ManagedWorkload:      workload,
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
+				// A managed instance the control plane will never accept again (superseded, fenced,
+				// its credential replaced) stops claiming and drains rather than beat on forever.
+				if isManagedInstanceRevoked(err) {
+					managedInstanceRevokedSeen.Store(true)
+					logln("this managed runner instance is no longer authorized; stopping claims and draining sessions")
+					loopCancel()
+				}
 				return
+			}
+			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
+			// once the control plane confirms that acceptance — never on the request alone, which the
+			// manager may still withdraw. A process already draining for another reason accepts nothing.
+			if currentManagedInstance() != nil {
+				stop, beat := sleeper.answer(resp.ManagedSleep, managedWorkload().idle() && loopCtx.Err() == nil)
+				if beat {
+					beatNow()
+				}
+				if stop {
+					logln("the control plane confirmed this managed runner's sleep; stopping claims and draining before exit")
+					loopCancel()
+				}
 			}
 			// The Codex rate-limit reset step a claim holds for this process, if any. Its freshness
 			// counts from when this heartbeat was sent, which is no later than the renewal of the
@@ -1287,8 +1378,37 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(integratingNow, job.JobID)
 						mergeMu.Unlock()
 					}()
-					runIntegrationJobAndReport(t, job)
+					runIntegrationJobAndReport(loopCtx, t, job)
 				}(job)
+			}
+			// The wiki's repository operations (contracts/wiki.contract.json `repoOps`, design §7):
+			// reading a checkout for a pipeline that runs on the server. Its own goroutine and the same
+			// join as the integration jobs above, because a snapshot of a large repository is minutes of
+			// git — and because none of this takes a session slot.
+			for _, op := range resp.WikiRepoOps {
+				if op.LeaseOwner != "" && t.leaseOwner != "" && op.LeaseOwner != t.leaseOwner {
+					logln("ignoring repository operation claimed for another process:", op.ID)
+					continue
+				}
+				mergeMu.Lock()
+				busy := repoOpsNow[op.ID]
+				if !busy {
+					repoOpsNow[op.ID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(op WikiRepoOpCommand) {
+					defer heartbeatOps.Done()
+					defer func() {
+						mergeMu.Lock()
+						delete(repoOpsNow, op.ID)
+						mergeMu.Unlock()
+					}()
+					runWikiRepoOpAndReport(loopCtx, t, op)
+				}(op)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on
 			// our local repo and report the outcome. Each runs once (guarded against the
@@ -1454,10 +1574,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					// the Providers page shouldn't keep calling this engine signed out for the
 					// rest of the refresh interval — nor for the half minute until the next
 					// heartbeat, under a card that already says this runner is ready. So
-					// re-probe, and send what it found at once.
+					// re-probe, and send what it found at once. Only this engine: it is the one
+					// that changed, and asking every other CLI first kept the answer back for
+					// seconds, longer on a loaded machine.
 					if res.Status == loginDone {
 						go func() {
-							engineHealth.refresh()
+							engineHealth.refreshEngine(loginFlowFor(lr.Engine).engine)
 							beatNow()
 						}()
 					}
@@ -1496,6 +1618,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			if resp.RefreshModelCatalog {
 				logln("model catalog refresh requested by the control plane")
 				go refreshModelCatalog()
+			}
+			// Check for a runner release now: the owner pressed Update Runner Now. Handed to the
+			// monitor, which runs the periodic check through the same turn gate — a turn in flight
+			// still defers the update, and the next beat reports waitingForIdle.
+			if resp.CheckSelfUpdate {
+				if check == nil {
+					logln("runner update check requested by the control plane; self-update is off:", selfUpdateDisabledReason())
+				} else {
+					logln("runner update check requested by the control plane")
+					select {
+					case checkSelfUpdateNow <- struct{}{}:
+					default:
+					}
+				}
 			}
 			// Repair a shared checkout the user saw reported as wedged. Runs here, on the
 			// heartbeat's own goroutine, because it's short and must not overlap the next one:
@@ -1537,12 +1673,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
 						res.Status, res.Message = "failed", firstLine(err.Error())
 					} else {
-						// Re-probe the engines as well, so the account leaves the page's list on the
-						// next beat rather than in five minutes.
-						go engineHealth.refresh()
+						// Re-probe this engine and beat at once, so the account leaves the page's list
+						// now rather than a heartbeat — or five minutes — later.
+						go func() {
+							engineHealth.refreshEngine(kind.engine)
+							beatNow()
+						}()
 					}
 					if err := t.accountRemoveResult(res); err != nil {
 						logln("account-remove-result POST failed:", err)
@@ -1550,10 +1689,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
-					go engineHealth.refresh()
+					go func() {
+						engineHealth.refreshEngine(providerCodex)
+						beatNow()
+					}()
 				}
 				if err := t.codexAccountRemoveResult(res); err != nil {
 					logln("codex-account-remove-result POST failed:", err)
@@ -1837,6 +1979,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				break
 			}
 			logln("claim failed:", err)
+			if isManagedInstanceRevoked(err) {
+				managedInstanceRevokedSeen.Store(true)
+			}
 			if !isRetryableTransportError(err) {
 				logln("claim failure is permanent; stopping runner")
 				loopCancel()
@@ -1989,6 +2134,14 @@ func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand
 		out.Message = "invalid artifact request"
 		return out
 	}
+	if req.Source == "worktree" {
+		return uploadWorktreeArtifact(ctx, t, req)
+	}
+	if req.Source != "" {
+		out.Status = "error"
+		out.Message = "unsupported artifact source"
+		return out
+	}
 	clean := filepath.Clean(req.Path)
 	if !pathWithinRoots(clean, artifactRequestRoots(req.SessionID)) {
 		out.Status = "missing"
@@ -2025,7 +2178,7 @@ func artifactRequestRoots(sessionID string) []string {
 			continue
 		}
 		seen[id] = true
-		roots = append(roots, filepath.Join(worktreesDir(), id))
+		roots = append(roots, filepath.Join(machineHome(), "worktrees", id))
 	}
 	return roots
 }

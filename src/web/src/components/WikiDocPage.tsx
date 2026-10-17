@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Drawer, Popover, Tooltip } from 'antd';
 import {
   ClockCircleOutlined,
   CodeOutlined,
@@ -18,6 +17,10 @@ import {
 import { WikiEmpty } from './WikiCards';
 import { WIKI_DOC_SECTION_EVENT, WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
+import { Button, LinkButton } from './ui/Button';
+import { Drawer } from './ui/Drawer';
+import { Popover } from './ui/Popover';
+import { Tooltip } from './ui/Tooltip';
 import { wikiDocQuery, wikiDocsQuery, wikiEntriesQuery, wikiSpaceQuery } from '../lib/queries';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -54,6 +57,7 @@ import {
   WIKI_NEXT_MARKED,
   WIKI_NO_QUOTE_GIVEN,
   WIKI_OPEN_THE_ENTRY,
+  WIKI_OWNER_COMMENT,
   WIKI_REWRITE_PENDING,
   WIKI_VERDICT_CARD,
   WIKI_VERDICT_LIST,
@@ -262,10 +266,10 @@ export function WikiDocPage({
           placement="bottom"
           open={open !== null}
           onClose={() => setOpen(null)}
-          size="auto"
+          height="auto"
           closable={false}
-          rootClassName="wk-fnsheet"
-          styles={{ body: { padding: 0 } }}
+          title={null}
+          className="wk-fnsheet"
         >
           {open && notes.get(open.n) && (
             <WikiDocFootnoteCard note={notes.get(open.n)!} via={via} github={github} spaceSlug={spaceSlug} docSlug={doc.slug} sheet />
@@ -526,7 +530,7 @@ function WikiDocSentence({
     </div>
   ) : null;
   const text = mark ? (
-    <Tooltip title={explained} trigger={phone ? ['click'] : ['hover', 'click']} placement="bottomLeft" color="rgba(0, 0, 0, .85)">
+    <Tooltip content={explained} toggleOnClick side="bottom" align="start" popupClassName="wk-dc-tip-pop">
       <span className={MARK_CLASS[mark]} data-mark={mark} tabIndex={0}>
         {words}
       </span>
@@ -559,15 +563,16 @@ function WikiDocSentence({
               <Popover
                 key={n}
                 open={on}
-                trigger="click"
-                placement="bottomLeft"
-                arrow={{ pointAtCenter: true }}
+                side="bottom"
+                align="start"
+                pointAtCenter
+                title={null}
                 onOpenChange={(visible) => {
                   if (!visible && on) setOpen(null);
                 }}
-                content={<WikiDocFootnoteCard note={footnote} via={via} github={github} spaceSlug={spaceSlug} docSlug={doc.slug} />}
+                trigger={marker}
               >
-                {marker}
+                <WikiDocFootnoteCard note={footnote} via={via} github={github} spaceSlug={spaceSlug} docSlug={doc.slug} />
               </Popover>
             );
           })}
@@ -615,6 +620,10 @@ function OpenLink({ open, className, children }: { open: WikiFootnoteOpen; class
  * the quote checked; the words, or the lines with the quoted one lit; what went wrong, if something did;
  * where the original is, and the way to it; and the entry it came through. On a phone it is the sheet,
  * and its one button opens the original.
+ *
+ * A VISITOR's card (a public wiki link, share-links §10) has no way to the original and no entry — the
+ * note it is handed names none — so it says no more than the verdict about a quote that did not check
+ * (the owner's line says to open the original), and a person's comment is the Owner's, never "yours".
  */
 export function WikiDocFootnoteCard({
   note,
@@ -623,6 +632,7 @@ export function WikiDocFootnoteCard({
   spaceSlug,
   docSlug,
   sheet = false,
+  visitor = false,
 }: {
   note: WikiDocFootnoteView;
   via: Map<string, WikiDocViaEntry>;
@@ -631,11 +641,12 @@ export function WikiDocFootnoteCard({
   /** The document it is a footnote of: its entry's drawer opens over it. */
   docSlug: string;
   sheet?: boolean;
+  visitor?: boolean;
 }) {
   const navigate = useNavigate();
-  const sub = wikiFootnoteSubLabel(note);
+  const sub = visitor && note.kind === 'task_comment' && note.label === 'USER' ? WIKI_OWNER_COMMENT : wikiFootnoteSubLabel(note);
   const open = wikiFootnoteOpen(note, github);
-  const problem = wikiFootnoteProblem(note);
+  const problem = visitor ? null : wikiFootnoteProblem(note);
   const entry = note.viaEntryId ? (via.get(note.viaEntryId) ?? null) : null;
   const code = note.kind !== 'design_doc' && wikiFootnoteIsRepo(note) && note.excerpt ? wikiExcerptLines(note, sheet ? WIKI_EXCERPT_LINES_PHONE : WIKI_EXCERPT_LINES) : null;
   const ok = note.verdict === 'verified';
@@ -692,31 +703,27 @@ export function WikiDocFootnoteCard({
           <WikiTrustBadge trust={entry.trust as WikiTrust} />
         </div>
       )}
-      {sheet && open && (
-        <Button
-          type="primary"
-          block
-          size="large"
-          className="wk-fncard-open"
-          href={open.external ? open.href : undefined}
-          target={open.external ? '_blank' : undefined}
-          onClick={open.external ? undefined : () => navigate(open.href)}
-        >
+      {sheet && open && (open.external ? (
+        <LinkButton variant="primary" size="large" className="wk-fncard-open" href={open.href} target="_blank">
+          {open.label}
+        </LinkButton>
+      ) : (
+        <Button variant="primary" size="large" className="wk-fncard-open" onClick={() => navigate(open.href)}>
           {open.label}
         </Button>
-      )}
+      ))}
     </div>
   );
 }
 
 /** The footnotes under the text (mock 23 ⑦): number, kind, where, the check; the words; what they came through. */
-function WikiDocFootnoteList({
+export function WikiDocFootnoteList({
   doc,
   via,
   lit,
   onOpen,
 }: {
-  doc: WikiDocView;
+  doc: Pick<WikiDocView, 'footnotes'>;
   via: Map<string, WikiDocViaEntry>;
   lit: number | null;
   onOpen: (n: number) => void;

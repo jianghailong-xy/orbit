@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "python3",
+    "docs/evidence/base-ui-migration/p2-promotion-toast/audit.py"
+  ],
+  "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0",
+  "sourceCommitAtStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+  "sourceCommitAtEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+  "finishedAt": "2026-10-04T12:04:45.509931+00:00",
+  "seconds": 11.155659971002024,
+  "exitCode": 1
+}

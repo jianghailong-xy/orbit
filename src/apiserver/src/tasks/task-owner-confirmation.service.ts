@@ -300,7 +300,7 @@ export class TaskOwnerConfirmationService {
       // Same fact, a different door: the owner pressing Confirm done is a DONE write, and a code
       // task's DONE is what queues its landing (§2.3 J-T1a).
       if (settled && completed === TaskStatus.DONE) {
-        await enqueueForDoneTask(tx, ownerId, taskId);
+        await enqueueForDoneTask(tx, ownerId, taskId, { userId: ownerId });
       }
       return {
         receipt: receiptOf(written, {

@@ -1,0 +1,3059 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/overlays.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4176 --strictPort",
+   "cwd": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/",
+   "url": "http://127.0.0.1:4176",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "overlays.browser.mjs",
+   "file": "overlays.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6306,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:53:46.362Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-e8c0a547f9905469be9c",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1505,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:53:52.718Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-d70e9280e60632665987",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1496,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:53:54.227Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-fd89602ad60847650fcb",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 18040,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 192
+          },
+          "snippet": "  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 192
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:53:55.727Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 192
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9ff68921b966815c68e8",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2450,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:14.115Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-5941111e52460f098ef4",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1031,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:16.623Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-ebb78927932006923cfa",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1538,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:17.659Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-be5f405022d9d0a882e8",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 16110,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 334
+          },
+          "snippet": "  332 |   await input.fill('Composition finished');\n  333 |   await page.keyboard.press('Escape');\n> 334 |   await expect(nested).not.toBeVisible();\n      |                            ^\n  335 |   await expect(dialog).toBeVisible();\n  336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });\n  337 | });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 334
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  332 |   await input.fill('Composition finished');\n  333 |   await page.keyboard.press('Escape');\n> 334 |   await expect(nested).not.toBeVisible();\n      |                            ^\n  335 |   await expect(dialog).toBeVisible();\n  336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });\n  337 | });\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:19.202Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 334
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a89fea026269fe91d3d3",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 6426,
+         "error": {
+          "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -38,7 +38,7 @@\u001b[39m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 374,\u001b[22m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -38,7 +38,7 @@\u001b[39m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 374,\u001b[22m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 90,
+           "line": 86
+          },
+          "snippet": "  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 90,
+            "line": 86
+           },
+           "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -38,7 +38,7 @@\u001b[39m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 374,\u001b[22m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m\n\n  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:35.602Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 90,
+          "line": 86
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-c836c67119ff96f83cdd",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1678,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:42.439Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-fd355a3b52163ab70a83",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1455,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:44.166Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3c9b90ba6e9f4a5ed202",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 18120,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 192
+          },
+          "snippet": "  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 192
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:54:45.627Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 192
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-8a2ab33bb7cac862db70",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2614,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:04.081Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-fe962f7ec30159ad357f",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1094,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:06.743Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-90a076e9f17ea83af5a1",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1473,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:07.842Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-dd12fd4e624e7fc5154c",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1013,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:09.320Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-775c84f69a1cdb1ac65c",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6194,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:10.588Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a92a1c03e6bdc46b062d",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1373,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:16.831Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-494bc4832b30f14dbab4",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1509,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:18.209Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-556ae24c79e3dec18f4d",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 17578,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 192
+          },
+          "snippet": "  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 192
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:19.723Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 192
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a807d76254d6c6006135",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2412,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:37.623Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9461bcadfd993f84f226",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1015,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:40.084Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-8781b864c21405858a85",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1407,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:41.104Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-cf6ba7b4536fe46eb572",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 16088,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 334
+          },
+          "snippet": "  332 |   await input.fill('Composition finished');\n  333 |   await page.keyboard.press('Escape');\n> 334 |   await expect(nested).not.toBeVisible();\n      |                            ^\n  335 |   await expect(dialog).toBeVisible();\n  336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });\n  337 | });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 334
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  332 |   await input.fill('Composition finished');\n  333 |   await page.keyboard.press('Escape');\n> 334 |   await expect(nested).not.toBeVisible();\n      |                            ^\n  335 |   await expect(dialog).toBeVisible();\n  336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });\n  337 | });\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:42.515Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 334
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-498b9ddacfaac5b215d3",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 6328,
+         "error": {
+          "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -38,7 +38,7 @@\u001b[39m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 374,\u001b[22m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -38,7 +38,7 @@\u001b[39m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 374,\u001b[22m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 90,
+           "line": 86
+          },
+          "snippet": "  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 90,
+            "line": 86
+           },
+           "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -38,7 +38,7 @@\u001b[39m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 374,\u001b[22m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m\n\n  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:55:58.926Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 90,
+          "line": 86
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-847b918e59f029382057",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1614,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:05.661Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-c2b29f645e1e81aa4895",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1576,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:07.325Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-b99d3165310636b1a47f",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 18166,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 192
+          },
+          "snippet": "  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 192
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_9_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_i_\" aria-describedby=\"base-ui-_r_j_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  190 |   await expect(parent).toBeVisible();\n  191 |   await page.keyboard.press('Escape');\n> 192 |   await expect(parent).not.toBeVisible();\n      |                            ^\n  193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });\n  194 | });\n  195 |\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:08.905Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 192
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-326e65dcefc0afc91078",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2082,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:27.411Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6e63a1644d1d403f863a",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1084,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:29.548Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-609b4a741c6a85495553",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1372,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:30.636Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-cf3691677bdbd2babc22",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 16331,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 28,
+           "line": 334
+          },
+          "snippet": "  332 |   await input.fill('Composition finished');\n  333 |   await page.keyboard.press('Escape');\n> 334 |   await expect(nested).not.toBeVisible();\n      |                            ^\n  335 |   await expect(dialog).toBeVisible();\n  336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });\n  337 | });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 28,
+            "line": 334
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Nested dialog', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })\u001b[22m\n\u001b[2m    34 × locator resolved to <div id=\"_r_k_\" data-open=\"\" role=\"dialog\" tabindex=\"-1\" data-nested=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_q_\" aria-describedby=\"base-ui-_r_r_\" class=\"orbit-overlay orbit-dialog\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n\n  332 |   await input.fill('Composition finished');\n  333 |   await page.keyboard.press('Escape');\n> 334 |   await expect(nested).not.toBeVisible();\n      |                            ^\n  335 |   await expect(dialog).toBeVisible();\n  336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });\n  337 | });\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:32.013Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 28,
+          "line": 334
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-e6700ba08248105b29bc",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 10,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 9338,
+         "error": {
+          "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -37,8 +37,8 @@\u001b[39m\n\u001b[2m    \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m    \"height\": 170,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 520,\u001b[22m\n\u001b[32m-   \"x\": 380,\u001b[39m\n\u001b[31m+   \"x\": 376,\u001b[39m\n\u001b[2m    \"y\": 100,\u001b[22m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -37,8 +37,8 @@\u001b[39m\n\u001b[2m    \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m    \"height\": 170,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 520,\u001b[22m\n\u001b[32m-   \"x\": 380,\u001b[39m\n\u001b[31m+   \"x\": 376,\u001b[39m\n\u001b[2m    \"y\": 100,\u001b[22m\n\u001b[2m  }\u001b[22m\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 90,
+           "line": 86
+          },
+          "snippet": "  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 90,
+            "line": 86
+           },
+           "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -37,8 +37,8 @@\u001b[39m\n\u001b[2m    \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m    \"height\": 170,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[2m    \"width\": 520,\u001b[22m\n\u001b[32m-   \"x\": 380,\u001b[39m\n\u001b[31m+   \"x\": 376,\u001b[39m\n\u001b[2m    \"y\": 100,\u001b[22m\n\u001b[2m  }\u001b[22m\n\n  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:49.229Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 90,
+          "line": 86
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9c17be3fed54907bfce6",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1488,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:56:59.213Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6778252fccdc3dac940a",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1646,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:00.769Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6a090828aca42c25c0d8",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2700,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:02.419Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-bce262941ebdd4c8e16d",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1976,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:05.123Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a2133afc03b353696898",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 977,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:07.103Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-ac1757b852b1b7baccb2",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1269,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:08.084Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-5507b323b27d263f948f",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 987,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:09.358Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-bcb655ba68bce411266f",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 12,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 5801,
+         "error": {
+          "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 6\u001b[39m\n\u001b[31m+ Received  + 6\u001b[39m\n\n\u001b[33m@@ -6,39 +6,39 @@\u001b[39m\n\u001b[2m    \"controls\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Close\",\u001b[22m\n\u001b[2m        \"width\": 32,\u001b[22m\n\u001b[32m-       \"x\": 330,\u001b[39m\n\u001b[31m+       \"x\": 322,\u001b[39m\n\u001b[2m        \"y\": 12,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 35.140625,\u001b[22m\n\u001b[2m        \"name\": \"\",\u001b[22m\n\u001b[32m-       \"width\": 326,\u001b[39m\n\u001b[31m+       \"width\": 318,\u001b[39m\n\u001b[2m        \"x\": 24,\u001b[22m\n\u001b[2m        \"y\": 74,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Cancel\",\u001b[22m\n\u001b[2m        \"width\": 75.59375,\u001b[22m\n\u001b[32m-       \"x\": 202.484375,\u001b[39m\n\u001b[31m+       \"x\": 194.484375,\u001b[39m\n\u001b[2m        \"y\": 121.140625,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Save\",\u001b[22m\n\u001b[2m        \"width\": 63.921875,\u001b[22m\n\u001b[32m-       \"x\": 286.078125,\u001b[39m\n\u001b[31m+       \"x\": 278.078125,\u001b[39m\n\u001b[2m        \"y\": 121.140625,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[2m    \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[32m-   \"width\": 374,\u001b[39m\n\u001b[31m+   \"width\": 366,\u001b[39m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 6\u001b[39m\n\u001b[31m+ Received  + 6\u001b[39m\n\n\u001b[33m@@ -6,39 +6,39 @@\u001b[39m\n\u001b[2m    \"controls\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Close\",\u001b[22m\n\u001b[2m        \"width\": 32,\u001b[22m\n\u001b[32m-       \"x\": 330,\u001b[39m\n\u001b[31m+       \"x\": 322,\u001b[39m\n\u001b[2m        \"y\": 12,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 35.140625,\u001b[22m\n\u001b[2m        \"name\": \"\",\u001b[22m\n\u001b[32m-       \"width\": 326,\u001b[39m\n\u001b[31m+       \"width\": 318,\u001b[39m\n\u001b[2m        \"x\": 24,\u001b[22m\n\u001b[2m        \"y\": 74,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Cancel\",\u001b[22m\n\u001b[2m        \"width\": 75.59375,\u001b[22m\n\u001b[32m-       \"x\": 202.484375,\u001b[39m\n\u001b[31m+       \"x\": 194.484375,\u001b[39m\n\u001b[2m        \"y\": 121.140625,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Save\",\u001b[22m\n\u001b[2m        \"width\": 63.921875,\u001b[22m\n\u001b[32m-       \"x\": 286.078125,\u001b[39m\n\u001b[31m+       \"x\": 278.078125,\u001b[39m\n\u001b[2m        \"y\": 121.140625,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[2m    \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[32m-   \"width\": 374,\u001b[39m\n\u001b[31m+   \"width\": 366,\u001b[39m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 90,
+           "line": 86
+          },
+          "snippet": "  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 90,
+            "line": 86
+           },
+           "message": "Error: dialog\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 6\u001b[39m\n\u001b[31m+ Received  + 6\u001b[39m\n\n\u001b[33m@@ -6,39 +6,39 @@\u001b[39m\n\u001b[2m    \"controls\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Close\",\u001b[22m\n\u001b[2m        \"width\": 32,\u001b[22m\n\u001b[32m-       \"x\": 330,\u001b[39m\n\u001b[31m+       \"x\": 322,\u001b[39m\n\u001b[2m        \"y\": 12,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 35.140625,\u001b[22m\n\u001b[2m        \"name\": \"\",\u001b[22m\n\u001b[32m-       \"width\": 326,\u001b[39m\n\u001b[31m+       \"width\": 318,\u001b[39m\n\u001b[2m        \"x\": 24,\u001b[22m\n\u001b[2m        \"y\": 74,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Cancel\",\u001b[22m\n\u001b[2m        \"width\": 75.59375,\u001b[22m\n\u001b[32m-       \"x\": 202.484375,\u001b[39m\n\u001b[31m+       \"x\": 194.484375,\u001b[39m\n\u001b[2m        \"y\": 121.140625,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"height\": 32,\u001b[22m\n\u001b[2m        \"name\": \"Save\",\u001b[22m\n\u001b[2m        \"width\": 63.921875,\u001b[22m\n\u001b[32m-       \"x\": 286.078125,\u001b[39m\n\u001b[31m+       \"x\": 278.078125,\u001b[39m\n\u001b[2m        \"y\": 121.140625,\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[2m    \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m    \"height\": 173.140625,\u001b[22m\n\u001b[2m    \"lineHeight\": \"22px\",\u001b[22m\n\u001b[2m    \"padding\": \"20px 24px\",\u001b[22m\n\u001b[32m-   \"width\": 374,\u001b[39m\n\u001b[31m+   \"width\": 366,\u001b[39m\n\u001b[2m    \"x\": 8,\u001b[22m\n\u001b[32m-   \"y\": 108,\u001b[39m\n\u001b[31m+   \"y\": 100,\u001b[39m\n\u001b[2m  }\u001b[22m\n\n  84 |   }\n  85 |   await attach(info, 'appearance', measurements);\n> 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);\n     |                                                                                          ^\n  87 | });\n  88 |\n  89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:10.654Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 90,
+          "line": 86
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-dfdf5ce5c97d0d23697b",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1354,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:16.949Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-120e28567fe8c907524f",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1403,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:18.372Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a585d3719ec676170772",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2632,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:19.780Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-bdb7eaa651ca3ee47a53",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2298,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:22.417Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-630ee090693d939e9cff",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "interrupted",
+         "duration": 227,
+         "error": {
+          "message": "Error: page.goto: Test ended.\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4176/ui-migration/overlays.html\", waiting until \"load\"\u001b[22m\n",
+          "stack": "Error: page.goto: Test ended.\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4176/ui-migration/overlays.html\", waiting until \"load\"\u001b[22m\n\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:8:14",
+          "location": {
+           "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+           "column": 14,
+           "line": 8
+          },
+          "snippet": "   6 |   errors.set(page, []);\n   7 |   page.on('pageerror', (error) => errors.get(page).push(error.message));\n>  8 |   await page.goto(fixture);\n     |              ^\n   9 |   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 |   expect(await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio, scale: visualViewport.scale })))"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+            "column": 14,
+            "line": 8
+           },
+           "message": "Error: page.goto: Test ended.\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4176/ui-migration/overlays.html\", waiting until \"load\"\u001b[22m\n\n\n   6 |   errors.set(page, []);\n   7 |   page.on('pageerror', (error) => errors.get(page).push(error.message));\n>  8 |   await page.goto(fixture);\n     |              ^\n   9 |   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 |   expect(await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio, scale: visualViewport.scale })))\n    at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:8:14"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T03:57:24.719Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-async-ae35b-rmits-retry-or-cancellation-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/.overlays-results/overlays.browser.mjs-async-ae35b-rmits-retry-or-cancellation-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs",
+          "column": 14,
+          "line": 8
+         }
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-d96c0f7390ed631c0b9b",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-1134d1aa8225e3856045",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-0b1f62dc4d134c8ebbb3",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9a8ec550fa9aeb122623",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3b55f8a96fb5434ccca9",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-79620d10e4197614b974",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a02cd98211060cc277b8",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-70edf7fd7f0dbe7972fd",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-baa0ea0a53fbbc899409",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9dfd241e393eae7bae39",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-7b69f2d9157d06400a2a",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-8c2bf664166c7d794881",
+     "file": "overlays.browser.mjs",
+     "line": 56,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a5ab7b67d0b90a4008e2",
+     "file": "overlays.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6f488523bde02cfeaaed",
+     "file": "overlays.browser.mjs",
+     "line": 121,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-28b18bf65fc62cea6821",
+     "file": "overlays.browser.mjs",
+     "line": 157,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-1f0488ec986be7de4820",
+     "file": "overlays.browser.mjs",
+     "line": 196,
+     "column": 1
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3cf53c8f407ee3a2e0b3",
+     "file": "overlays.browser.mjs",
+     "line": 229,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-060a201c986253fd8d04",
+     "file": "overlays.browser.mjs",
+     "line": 274,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [],
+       "status": "skipped"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-f73a253006583e4f9779",
+     "file": "overlays.browser.mjs",
+     "line": 312,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T03:53:45.599Z",
+  "duration": 219464.459,
+  "expected": 34,
+  "skipped": 19,
+  "unexpected": 11,
+  "flaky": 0
+ }
+}

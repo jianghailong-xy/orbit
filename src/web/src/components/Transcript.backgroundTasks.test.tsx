@@ -3,9 +3,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTaskProgress } from '@orbit/shared';
-import { type RunEvent, TaskActivityCtx, Transcript } from './Transcript';
+import { type RunEvent, EventFullCtx, TaskActivityCtx, Transcript } from './Transcript';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 
 /**
@@ -132,6 +132,77 @@ describe('background agent and workflow cards', () => {
     expect(text).not.toContain('Async agent launched');
     // The sub-agent's own transcript is nested under its call.
     expect(container.querySelector('.chat-subagent')?.textContent).toContain('Now the enqueue side.');
+  });
+
+  it('opens each workflow agent to its own durable calls and results, with the source folded separately', async () => {
+    const key = 'toolu_wf:workflow-agent:reader-a';
+    const otherKey = 'toolu_wf:workflow-agent:reader-b';
+    const progress = {
+      ...PROGRESS,
+      agents: [
+        { ...PROGRESS.agents[0], transcriptKey: key },
+        { ...PROGRESS.agents[1], transcriptKey: otherKey },
+      ],
+    };
+    const workflowEvents = [
+      ev(1, 'tool_use', { id: 'toolu_wf', name: 'Workflow', input: { script: 'export const meta = { name: "Read project" };' } }),
+      ev(2, 'tool_result', { toolUseId: 'toolu_wf', content: WORKFLOW_RECEIPT }),
+      ev(3, 'tool_use', { id: key, name: 'Agent', input: { description: 'design:page-wiki' }, parentToolUseId: 'toolu_wf' }),
+      ev(4, 'tool_use', { id: 'read-a', name: 'Bash', input: { command: 'cat src/project.ts' }, parentToolUseId: key }),
+      { ...ev(5, 'tool_result', { toolUseId: 'read-a', content: 'clipped result', parentToolUseId: key }), truncated: true },
+      ev(6, 'assistant', { text: 'Reader A finding', parentToolUseId: key }),
+      ev(7, 'tool_result', { toolUseId: key, content: 'Reader A complete', parentToolUseId: 'toolu_wf' }),
+      ev(8, 'tool_use', { id: otherKey, name: 'Agent', input: { description: 'design:entity-graph' }, parentToolUseId: 'toolu_wf' }),
+      ev(9, 'assistant', { text: 'Reader B finding', parentToolUseId: otherKey }),
+      // Reloads have no live progress; the final durable snapshot keeps the same linkage.
+      ev(10, 'background_task', { toolUseId: 'toolu_wf', status: 'completed', progress }),
+    ];
+    const fetchFull = vi.fn(async () => ({ payload: { content: 'Full project file contents' } }));
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <EventFullCtx.Provider value={fetchFull}>
+            <Transcript events={workflowEvents} />
+          </EventFullCtx.Provider>
+        </MemoryRouter>,
+      );
+    });
+    await act(async () => container.querySelector<HTMLElement>('.chat-tool-row')!.click());
+    const rows = [...container.querySelectorAll<HTMLButtonElement>('button.agent-progress-agent')];
+    expect(rows).toHaveLength(2);
+    expect(rows[0].getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector<HTMLDetailsElement>('.chat-workflow-source')?.open).toBe(false);
+    expect(container.querySelectorAll('.chat-tool-task')).toHaveLength(0); // no duplicate Agent cards
+    expect(container.textContent).not.toContain('Reader A finding');
+    await act(async () => rows[0].click());
+    expect(rows[0].getAttribute('aria-expanded')).toBe('true');
+    expect(container.textContent).toContain('Reader A finding');
+    expect(container.textContent).toContain('Reader A complete');
+    expect(container.textContent).not.toContain('Reader B finding');
+    expect(fetchFull).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLElement>('.agent-progress-transcript .chat-tool-row')!.click());
+    expect(fetchFull).toHaveBeenCalledWith(5);
+    expect(container.textContent).toContain('cat src/project.ts');
+    expect(container.textContent).toContain('Full project file contents');
+    await act(async () => rows[1].click());
+    expect(container.textContent).toContain('Reader B finding');
+  });
+
+  it('keeps child Agent transcripts accessible before workflow progress arrives', async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <Transcript events={[
+            ev(1, 'tool_use', { id: 'wf', name: 'Workflow', input: {} }),
+            ev(2, 'tool_use', { id: 'wf:workflow-agent:a', name: 'Agent', input: { description: 'Reader' }, parentToolUseId: 'wf' }),
+            ev(3, 'assistant', { text: 'Available without progress', parentToolUseId: 'wf:workflow-agent:a' }),
+          ]} live />
+        </MemoryRouter>,
+      );
+    });
+    await act(async () => container.querySelector<HTMLElement>('.chat-tool-row')!.click());
+    await act(async () => container.querySelector<HTMLElement>('.chat-tool-task .chat-tool-row')!.click());
+    expect(container.textContent).toContain('Available without progress');
   });
 });
 

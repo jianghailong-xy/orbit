@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { OutcomeSurfaceService } from './outcome-surface.service';
 
@@ -12,6 +13,7 @@ import { OutcomeSurfaceService } from './outcome-surface.service';
  * `project_obligations`, the Web failure card), so the only reachable answer is 404.
  */
 @UseGuards(JwtAuthGuard)
+@PatForbidden('NO_SCOPE')
 @Controller('outcomes')
 export class OutcomeSurfacesController {
   constructor(private readonly surfaces: OutcomeSurfaceService) {}

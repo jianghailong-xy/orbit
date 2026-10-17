@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { CreateSessionTagDto, UpdateSessionTagDto } from './dto';
 import { SessionTagsService } from './session-tags.service';
@@ -11,23 +12,27 @@ export class SessionTagsController {
   constructor(private readonly tags: SessionTagsService) {}
 
   /** The caller's tag library (system tags seeded + always included). */
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.tags.list(user.userId);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSessionTagDto) {
     return this.tags.create(user.userId, dto);
   }
 
   /** Rename or recolor a custom tag (system tags are rejected). */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateSessionTagDto) {
     return this.tags.update(user.userId, id, dto);
   }
 
   /** Delete a custom tag (system tags are rejected); its links cascade away. */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tags.remove(user.userId, id);

@@ -1,8 +1,8 @@
 import Foundation
 
 /// One reading of the transcript scroll view's geometry. SwiftUI's `ScrollGeometry` is Apple-only
-/// and these three numbers are all the tail-pinning rule needs, so the decision itself lives here —
-/// in the package that builds and tests on Linux.
+/// and these four numbers are all the tail-pinning rules need, so the decisions themselves live
+/// here — in the package that builds and tests on Linux.
 public struct TailScrollSample: Equatable, Sendable {
     /// Vertical content offset.
     public let offset: Double
@@ -10,11 +10,16 @@ public struct TailScrollSample: Equatable, Sendable {
     public let contentHeight: Double
     /// How much content sits below the viewport's bottom edge. Zero at the live tail.
     public let bottomGap: Double
+    /// How far the content is inset from the viewport's top edge: the bars laid over the list, the
+    /// sticky "↑ Your question" header among them. A bar that arrives pushes the rows down by what
+    /// it adds here, and the tail with them, without anybody scrolling.
+    public let topInset: Double
 
-    public init(offset: Double, contentHeight: Double, bottomGap: Double) {
+    public init(offset: Double, contentHeight: Double, bottomGap: Double, topInset: Double = 0) {
         self.offset = offset
         self.contentHeight = contentHeight
         self.bottomGap = bottomGap
+        self.topInset = topInset
     }
 }
 
@@ -81,5 +86,86 @@ public enum TailPinning {
         case .inferred:
             return (readerDriven || current.contentHeight == previous.contentHeight) ? false : wasPinned
         }
+    }
+
+    /// Whether a pinned transcript should be carried back to its tail because the VIEWPORT changed
+    /// size under it — the keyboard rising and covering the last line, the composer growing a line,
+    /// a phone's chrome folding away.
+    ///
+    /// `pinned` answers "did the reader leave the tail?" and says nothing about the other direction:
+    /// the tail leaving the reader. A pinned transcript whose container shrinks keeps its content
+    /// offset — nothing in a `List` re-anchors the bottom on a resize — so the last line ends up
+    /// below the fold and stays there until the next publish happens to re-pin it, which in a quiet
+    /// session is never. The owner's report: focus the composer and the conversation is no longer at
+    /// the bottom.
+    ///
+    /// Web decides this with a `ResizeObserver` on the scroller (`WorkspaceView.tsx`: "Re-pin to the
+    /// tail on any such resize while the user is still at the bottom"), off the same pin. Kept here
+    /// beside it so a client whose platform reports the viewport's height asks the same question —
+    /// and so what "the viewport moved" means has one definition. 0 is "not measured yet", which no
+    /// real viewport is: an unknown is never a resize.
+    public static func followsResize(wasPinned: Bool,
+                                     from previousHeight: Double,
+                                     to currentHeight: Double) -> Bool {
+        guard wasPinned, previousHeight > 0, currentHeight > 0 else { return false }
+        return currentHeight != previousHeight
+    }
+
+    /// Points of play in where the offset ends up: this far from where the geometry carried it is
+    /// still the geometry's doing. A push is not exactly the inset it answers to once both are
+    /// rounded to the screen's pixels (measured on a Mac: a 30pt header moved the offset 29).
+    static let slop: Double = 2
+
+    /// Under a pixel at any scale the clients draw at (a third of a point on a 3x phone): a tail this
+    /// close is in place, and no rounding error reads as a gap. Anything more is followed to the
+    /// point — the last frame of the header's push moved a Mac's offset 2pt (274 against a tail at
+    /// 276), and a tail left that short stays short.
+    static let subpixel: Double = 0.25
+
+    /// Whether a pinned transcript should be carried back to its tail because the scroll GEOMETRY
+    /// changed under it while nothing was moving it: the content measured to a new height, or a bar
+    /// arriving over the list — the sticky "↑ Your question" header — and pushing its rows down.
+    ///
+    /// Neither is the viewport resizing (`followsResize`) or the reader leaving the tail (`pinned`),
+    /// and together they left a long conversation opened at its tail short of it, its last line in
+    /// the composer's fade. On an iPhone the header arrives after the first pin and pushes the rows
+    /// down by its height (measured: offset 692 against a tail at 724, every time); on a Mac the
+    /// rows start at estimated heights, the pin lands on the estimate, the content grows as the rows
+    /// on screen are measured (44pt), and then the header pushes it 30 more. Each of those gaps is
+    /// inside `nearBottom`, so the transcript still counted as pinned and the jump-to-latest disc
+    /// never showed. Re-pinning when the header appears is too early: the push lands after the
+    /// re-scroll, and over several frames, as the header animates in. So the answer is asked of
+    /// every reading instead, and the push is followed frame by frame.
+    ///
+    /// `pinned` is the pin as `pinned(...)` decided it for `current`. `moving` is whether anything
+    /// was moving the list that the platform reported: a finger or its coast, or a scroll SwiftUI
+    /// says it is animating.
+    ///
+    /// The offset may move only as far as the geometry carried it: not at all while rows grow under
+    /// the viewport, and down by what a bar added while it pushes. A movement past that is a scroll,
+    /// and a scroll is never followed — whoever made it — so a reader who scrolled up stays where
+    /// they are even where the platform does not report the scroll and the rows it uncovered were
+    /// measured in the same breath. The one other movement allowed is this rule's own re-pin landing
+    /// in the same reading as the next frame of a push: what is left out of view then is no more
+    /// than that frame pushed.
+    ///
+    /// And only a tail within the pin's own slack is followed. Further than that, the transcript was
+    /// carried off by a scroll or a jump, and the pin is no evidence otherwise: a List animating a
+    /// jump reports no phase of its own (measured on iOS 26: the jump-to-latest disc's glide read
+    /// `idle` from its first frame to its last, and its steps began at 1.6, 4.7, 7.7pt), so a jump up
+    /// from the tail lands its first reading inside the slack and pins the transcript again — and
+    /// nothing later in the jump has to un-pin it. A pinned transcript left out of view that way is
+    /// `stranded`, and the jump-to-latest disc is the way back.
+    public static func followsGeometry(pinned: Bool,
+                                       from previous: TailScrollSample,
+                                       to current: TailScrollSample,
+                                       moving: Bool) -> Bool {
+        guard pinned, !moving, current.bottomGap > subpixel, current.bottomGap <= nearBottom else { return false }
+        let resized = current.contentHeight != previous.contentHeight
+        let pushed = current.topInset - previous.topInset
+        guard resized || pushed != 0 else { return false }
+        // The offset's movement that the push does not explain: zero when the geometry alone moved.
+        let carried = current.offset - previous.offset + pushed
+        return abs(carried) <= slop || current.bottomGap <= pushed + slop
     }
 }

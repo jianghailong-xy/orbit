@@ -19,6 +19,9 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
         listOf("q" to query, "limit" to "100"))
     suspend fun moveTargets(id: String): MoveTargets = read(listOf("sessions", id, "move-targets"), MoveTargets.serializer())
     suspend fun objectRead(path: List<String>): JsonObject = read(path, JsonObject.serializer())
+    /** A file's bytes, bounded by the server's 25 MiB upload limit. */
+    suspend fun bytes(path: List<String>, query: List<Pair<String, String>> = emptyList()): ByteArray =
+        api.request(handle, ApiRequest(path, query = query, maxResponseBytes = 25L * 1024 * 1024)).body
 
     suspend fun mutate(path: List<String>, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null): ByteArray =
         api.request(handle, ApiRequest(path, method, body = body?.toString()?.encodeToByteArray())).body
@@ -46,13 +49,6 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     }
     suspend fun createTag(name: String) {
         mutate(listOf("session-tags"), body = buildJsonObject { put("name", name.trim()); put("color", "#3B82F6") })
-    }
-    suspend fun share(id: String, enabled: Boolean, toolOutput: Boolean = false, expiresAt: String? = null): JsonObject? {
-        if (!enabled) { mutate(listOf("sessions", id, "share"), HttpMethod.DELETE); return null }
-        return Wire.decode(mutate(listOf("sessions", id, "share"), HttpMethod.PUT, buildJsonObject {
-            putJsonObject("include") { put("toolOutput", toolOutput) }
-            put("expiresAt", expiresAt?.let(::JsonPrimitive) ?: JsonNull)
-        }), JsonObject.serializer())
     }
 }
 

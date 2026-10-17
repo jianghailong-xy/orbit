@@ -34,8 +34,9 @@ import (
 // three minutes — so the first one ends the run.
 
 // wikiPlanSystemPrompt is the whole system prompt every drafting call carries: what the model is for.
-const wikiPlanSystemPrompt = "你是这个仓库的文档主编。你根据给你的材料规划产品与技术文档。只使用材料里出现的文件路径、" +
-	"章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。"
+const wikiPlanSystemPrompt = "You are the chief editor of this repository's documentation. You plan its product and technical documents from the " +
+	"materials you are given. Use only the file paths, section headings, symbols and project names that appear in the materials, " +
+	"and invent none. Write in English; keep code names, paths and commands as they are. Output only what is asked for."
 
 // wikiPlanMaxOutputTokens is what one call may write: a catalogue of forty documents is some fifteen
 // thousand tokens in the compact line format, and Claude Code's own default for a model it does not know

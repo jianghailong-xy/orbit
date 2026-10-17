@@ -1,0 +1,2221 @@
+46a418fba Merge orbit/p2-menu-select-antd-288742: keyboard-window probe, baselines and delivered-tree checks from the previous session
+?? docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs
+?? docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.config.mjs
+?? src/web/src/components/ui/Menu.test.tsx
+[WebServer] (node:38372) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 80 tests using 1 worker
+
+(node:38521) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (16.7s)
+(node:40353) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (22.9s)
+(node:42790) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (1.6s)
+  ✘   4 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (16.7s)
+(node:44283) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (1.2s)
+  ✘   6 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (16.0s)
+(node:47155) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   7 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.1s)
+(node:50100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.3s)
+(node:51776) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (976ms)
+  ✘  10 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.0s)
+(node:53260) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  11 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (16.1s)
+(node:54534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  12 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (16.3s)
+(node:56012) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (1.1s)
+  ✘  14 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (16.1s)
+(node:58156) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (1.2s)
+  ✘  16 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (16.0s)
+(node:59514) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  17 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.0s)
+(node:61312) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  18 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.5s)
+(node:63104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.2s)
+  ✘  20 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.1s)
+(node:64923) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  21 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (16.2s)
+(node:66400) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  22 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (16.2s)
+(node:67667) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  23 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (1.1s)
+  ✘  24 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (16.1s)
+(node:69023) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (1.1s)
+  ✘  26 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (16.0s)
+(node:70310) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  27 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.0s)
+(node:71344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  28 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.2s)
+(node:72673) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  29 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.1s)
+  ✘  30 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.1s)
+(node:74533) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  31 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (16.1s)
+(node:75714) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  32 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (16.2s)
+(node:77457) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  33 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (1.3s)
+  ✘  34 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (16.2s)
+(node:79242) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  35 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (1.2s)
+  ✘  36 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (16.2s)
+(node:80887) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  37 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.1s)
+(node:82360) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  38 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.3s)
+(node:84267) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  39 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.3s)
+  ✘  40 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.4s)
+(node:85651) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  41 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (17.2s)
+(node:86591) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  42 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (17.4s)
+(node:87955) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  43 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (1.4s)
+  ✘  44 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (16.4s)
+(node:89686) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  45 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (2.2s)
+  ✘  46 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (16.0s)
+(node:90733) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  47 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.2s)
+(node:91665) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  48 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.4s)
+(node:93072) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  49 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.1s)
+  ✘  50 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.0s)
+(node:94154) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  51 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (16.1s)
+(node:95486) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  52 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (16.3s)
+(node:96603) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  53 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (1.2s)
+  ✘  54 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (16.0s)
+(node:98212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  55 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (1.2s)
+  ✘  56 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (16.0s)
+(node:99785) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  57 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.0s)
+(node:101211) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  58 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.1s)
+(node:105033) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  59 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.0s)
+  ✘  60 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.1s)
+(node:106405) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  61 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (15.9s)
+(node:108079) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  62 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (16.0s)
+(node:109261) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  63 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (990ms)
+  ✘  64 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (15.9s)
+(node:111297) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  65 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (860ms)
+  ✘  66 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (15.8s)
+(node:112475) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  67 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.0s)
+(node:113567) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  68 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (15.8s)
+(node:115237) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  69 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.0s)
+  ✘  70 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (15.9s)
+(node:116822) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  71 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (16.2s)
+(node:118534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  72 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (16.2s)
+(node:119548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  73 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (843ms)
+  ✘  74 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (15.9s)
+(node:120751) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  75 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (1.5s)
+  ✘  76 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (15.9s)
+(node:121693) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  77 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (16.0s)
+(node:122788) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  78 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (16.0s)
+(node:124368) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  79 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (925ms)
+  ✘  80 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (16.1s)
+
+
+  1) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  22) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  23) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  24) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  25) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  26) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  27) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  28) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  29) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  30) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  31) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  32) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  33) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  34) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  35) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  36) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  37) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  38) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  39) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  40) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  41) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  42) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  43) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  44) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  45) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  46) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  47) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  48) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  49) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  50) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c4036-with-frames-held-runs-image-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  51) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-c8716--with-frames-held-runs-file-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  52) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "image"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-bafaa-with-frames-held-runs-image-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  53) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "file"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-21dd7--with-frames-held-runs-file-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  54) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "command"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-58c10-th-frames-held-runs-command-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  55) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Action', exact: true })
+    Expected: "shell"
+    Received: "none"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Action', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Action', exact: true })
+        34 × locator resolved to <output aria-label="Action">none</output>
+           - unexpected value "none"
+
+
+      69 |     const record = await play(page, info, page.getByRole('button', { name: 'Add attachment', exact: true }).first(), keys);
+      70 |     await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 71 |     await expect(action).toHaveText(runs);
+         |                          ^
+      72 |     await expect(page.getByRole('menu')).toHaveCount(0);
+      73 |   });
+      74 | }
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:71:26
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-568ac-with-frames-held-runs-shell-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  56) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "1"
+    Received: "0"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">0</output>
+           - unexpected value "0"
+
+
+      78 |   const record = await play(page, info, page.getByRole('button', { name: 'Row actions', exact: true }), ['ArrowDown', 'Enter']);
+      79 |   await info.attach('menu-held-frames', { body: JSON.stringify(record, null, 2), contentType: 'application/json' });
+    > 80 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('1');
+         |                                                                                ^
+      81 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      82 |   await expect(page.getByRole('menu')).toHaveCount(0);
+      83 | });
+        at /var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:80:80
+
+    Error Context: src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-menu-held-frames/menu-held-frames.browser.m-83c70--its-action-and-not-the-row-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  56 failed
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row 
+  24 passed (16.2m)

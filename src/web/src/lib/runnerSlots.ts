@@ -2,6 +2,7 @@ import {
   sessionIsStarting,
   sessionRunStateOf,
   sessionRunStatusOf,
+  sessionSourceRefused,
   type SessionStateSource,
 } from './sessionState';
 
@@ -149,6 +150,11 @@ export interface WaitingNotice {
  */
 export function waitingNoticeFor(session?: WaitingSource | null): WaitingNotice | null {
   if (!session) return null;
+  // A refused SOURCE is not a wait: the run never became one and never will (SR34), so a session
+  // carrying it gets no notice however its run status reads — the card that says why (see
+  // RunNeverStartedCard) is what stands in this slot. Without this, a row that still says RUNNING
+  // under a refusal drew "Starting … usually seconds" over a session nobody will start.
+  if (sessionSourceRefused(session)) return null;
   if (sessionRunStateOf(session) === 'RUNNING' && isCompacting(session))
     return {
       kind: 'compacting',

@@ -594,7 +594,10 @@ test('(s) no compose service, daemon or replacement acceptance executor is intro
   const servicesBlock = compose.slice(compose.indexOf('\nservices:') + 1).split(/\n(?=\S)/)[0]!;
   const services = (servicesBlock.match(/^ {2}[a-z][a-z0-9-]*:$/gm) ?? [])
     .map((line) => line.trim().replace(':', ''));
-  assert.deepEqual(services, ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway']);
+  // wiki-worker is the wiki's server-side executor, which the account owner added on 2026-10-07
+  // (docs/wiki-server-execution-design.md §4.1), not this removal; test/compose-topology.test.mjs (l)
+  // pins its whole definition.
+  assert.deepEqual(services, ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway']);
   for (const word of ['admission', 'acceptance', 'dead-man', 'watchdog', 'coordinator']) {
     assert.equal(compose.toLowerCase().includes(word), false,
       `docker-compose.yml names ${word}: this removal adds no service`);

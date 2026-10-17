@@ -1,0 +1,1939 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-search-multiple/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-0--select-keys.json",
+   "bytes": 827,
+   "sha256": "560db7e333317b4981327a996276edc8b42e0508be761884f34ea18ad241d0f0",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-1--select-keys.json",
+   "bytes": 825,
+   "sha256": "a1cfd0f39ee9c58a392126afbe0033c179a5348375ab3b05e7f92b51e7af6d3a",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-10--select-keys.json",
+   "bytes": 826,
+   "sha256": "122949bd0877ab2805c3a36b53bce0cb8dc74bb7205c0d86d9e01b949648e70d",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 10,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-11--select-keys.json",
+   "bytes": 826,
+   "sha256": "257a606000ab928fc0ffbe32a83e487e05f46d4142451fbf576cdf48e2956b2a",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 11,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-12--select-keys.json",
+   "bytes": 826,
+   "sha256": "ea5560a230b977ea35cc837b2fdd636ef26de750fbd933ce91d830af78a51105",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 12,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-13--select-keys.json",
+   "bytes": 828,
+   "sha256": "00291815eeb386df64b79e7f99ce9756c436f47ebc612110451f4a4255ffe927",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 13,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-14--select-keys.json",
+   "bytes": 828,
+   "sha256": "cbd995951d4292fdb52063f08eeda20d577651f0a486358d34f0a95accee2ff6",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 14,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-15--select-keys.json",
+   "bytes": 828,
+   "sha256": "5a0d715170a6c238c42c9dde6d0173905f188fba459eb61ae69c0583e4fc6f10",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 15,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-16--select-keys.json",
+   "bytes": 826,
+   "sha256": "7bbe6c1caaf3ce6aa54f63e6461978133d4a9502000060ec7f294eae51b7939a",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 16,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-17--select-keys.json",
+   "bytes": 826,
+   "sha256": "23b1d6937ca777025ea1de1c60131060d5fd0cc4a1c4432d6872cad80896080a",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 17,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-18--select-keys.json",
+   "bytes": 828,
+   "sha256": "55b97e545599c727ac170b43bf0d6a2d4eb30a1c453def0838b26e31253ea73f",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 18,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-19--select-keys.json",
+   "bytes": 828,
+   "sha256": "a2bda5b992f9ed1031a785c55b4627c843ddb9b06c4aaac9378cdee87d72aeda",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 19,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-2--select-keys.json",
+   "bytes": 825,
+   "sha256": "0677a90781db0c57e347ba214dbfd26eedbc23175f22788b40e883fb4862c0a8",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-3--select-keys.json",
+   "bytes": 825,
+   "sha256": "0040ddb0d017a9aba25ad7fd08c942bfdabd6ff4cdb99e6717ce3060165ff765",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 3,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-4--select-keys.json",
+   "bytes": 825,
+   "sha256": "9c5c5e29367163e5558819752bfebc4beeef29370305e8e7a85b3173d36746ff",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 4,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-5--select-keys.json",
+   "bytes": 827,
+   "sha256": "af7f876623500fb5185bf4ce79480f828acb5fedd07eedf192b39ccee45f62a7",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 5,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-6--select-keys.json",
+   "bytes": 827,
+   "sha256": "ebbbe35a616d00b36467c55b7eddbacdd030b06a8e332acf833667031f5521c8",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 6,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-7--select-keys.json",
+   "bytes": 828,
+   "sha256": "35fa53cf7946ca0c7d3df7e409630c13302e53a26e5a6df4f6b014d802405ba4",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 7,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-8--select-keys.json",
+   "bytes": 825,
+   "sha256": "26dfdb663c549e4e56d6aeff4ae28aef37cf1beb2394416e260673759570760b",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 8,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-burst-sample-9--select-keys.json",
+   "bytes": 826,
+   "sha256": "5c6e2084d5f923de961e72978ed3858570ddbaa1a8ea11363d1108b12350a105",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 9,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-paced-sample-0--select-keys.json",
+   "bytes": 829,
+   "sha256": "e1bb3e07d9dd0ef66bd87406ce720cb3f43c28e97621906b9e2d26c35a99c0f8",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-paced-sample-1--select-keys.json",
+   "bytes": 829,
+   "sha256": "942db8dd8441c6d34f3001989e9c68f455d7ff43daa8e430e09ab2992307ad4b",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-multiple-down-down-enter-paced-sample-2--select-keys.json",
+   "bytes": 827,
+   "sha256": "f999221a608781e468ac86d3e82fc90a198b7043e1e01afe2977597e2b4805bf",
+   "fields": {
+    "target": "antd-multiple",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-0--select-keys.json",
+   "bytes": 821,
+   "sha256": "ad8f35fd63102b0e76e2570bbb8e64204933dc014d378876cb956379a431a89e",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-1--select-keys.json",
+   "bytes": 822,
+   "sha256": "5384ee0d8d5d6821c98eb5bb86e56438b08bffc86a623f19073eadcec0fe786b",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-10--select-keys.json",
+   "bytes": 820,
+   "sha256": "73f4eacf8eca984645d1a27e4f2f3597f4e6dda579650803711e401533224654",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 10,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-11--select-keys.json",
+   "bytes": 824,
+   "sha256": "ac8facdc00437710279108bef9d69dd493569fd3db5e16c4b480624a0bb1c8a8",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 11,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-12--select-keys.json",
+   "bytes": 822,
+   "sha256": "50b96ffdf629c8003215951fa15306be7432d732fcaffe6fbf7c13ad2021d49d",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 12,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-13--select-keys.json",
+   "bytes": 821,
+   "sha256": "f755ec5b4f05db0837e57b52247839bf7697576402bdf47fc07eb75b45e4a99e",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 13,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-14--select-keys.json",
+   "bytes": 824,
+   "sha256": "52d1f25c2bbe47e60fab56c77ac50f17dd21e7ed779d3fc1ade94b62fc312d9c",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 14,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-15--select-keys.json",
+   "bytes": 820,
+   "sha256": "8c12e58303eee152f8b9a3f46e8858b867f7961778c54b1c73b44a7e97ca71d3",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 15,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-16--select-keys.json",
+   "bytes": 822,
+   "sha256": "650a165e2c8a7f030de172b5930698b9390ff703e6545e0a32cdf4c0284cc1ec",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 16,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-17--select-keys.json",
+   "bytes": 822,
+   "sha256": "4a34078183bb20e343dac665e7afadbb37d8a3eda8c36d50afa4a8aad4bb870d",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 17,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-18--select-keys.json",
+   "bytes": 822,
+   "sha256": "e80a29d4cfbc182a09efb2e4c6b3a88d9b09bf07e729690efc9011e098b930f2",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 18,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-19--select-keys.json",
+   "bytes": 823,
+   "sha256": "67ed25124e6be50ba37427020fd8cbb04179a0eaabdebe85a72ad24155922178",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 19,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-2--select-keys.json",
+   "bytes": 822,
+   "sha256": "e10446f749cef170d5f22aa41f2b42db087c56035d29f6c4c495e7a07f95e281",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-3--select-keys.json",
+   "bytes": 819,
+   "sha256": "d517c648f4422df77d3d48cade2dd2b32a74f5b26fc8b6bcfc5c2612083bb1ff",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 3,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-4--select-keys.json",
+   "bytes": 821,
+   "sha256": "b38731b4899007aa57bbb7e29cae8c08e5c96491f844274648950f2764cc0ae7",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 4,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-5--select-keys.json",
+   "bytes": 821,
+   "sha256": "ff251d49199965cb2584014771910d750c39f70d432a7fab1904995deb07f1d2",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 5,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-6--select-keys.json",
+   "bytes": 824,
+   "sha256": "a51b7f456e00dd8dd978517d31324e2dd17b1b8956245c4260628e2379460050",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 6,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-7--select-keys.json",
+   "bytes": 823,
+   "sha256": "81733146c46215335510c9c5ebabf877eec6b4f025e0305da3c4461588dd7165",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 7,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-8--select-keys.json",
+   "bytes": 822,
+   "sha256": "4694e86208c8581efdf798d567cc62470670b54ebb2fb5d2422790bbb5d0c0e6",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 8,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-burst-sample-9--select-keys.json",
+   "bytes": 819,
+   "sha256": "4d57db12945b885673bce360b5d029629e902ba25e17a321fe79b48f4703af96",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 9,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-paced-sample-0--select-keys.json",
+   "bytes": 823,
+   "sha256": "cd108f021cbb726baf5830ac9c03c0e6302b3b8c47f1bd14a2f5410cfcff563c",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-paced-sample-1--select-keys.json",
+   "bytes": 823,
+   "sha256": "e7a9084ce5265cb98052cf78a3399b46db276225a6cdb0ac051b40de25bb1a53",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-search-down-down-enter-paced-sample-2--select-keys.json",
+   "bytes": 823,
+   "sha256": "4ce0697d94a15b1df3c02626b96fd24547cfa28c32cf580f18e9cd1bf35b0c81",
+   "fields": {
+    "target": "antd-search",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days | 7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-0--select-keys.json",
+   "bytes": 815,
+   "sha256": "27b2efc16734f637d619622ade2e3ae8a41d3fad4ecc6bd39a54ef49c187b7c8",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-1--select-keys.json",
+   "bytes": 817,
+   "sha256": "a1972f2cdcf3189cdfb2c7d82e685d56cf37103a960827add37ea41b975e9b46",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-10--select-keys.json",
+   "bytes": 816,
+   "sha256": "c9ff5d6fcb8f915aecde6be7200c6cacb0879d3301c968a0783d9cb9dd8ea9c5",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 10,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-11--select-keys.json",
+   "bytes": 818,
+   "sha256": "4a5d72cb751d16883eb71b21c12fbd397713e0067cb292dc09035fb8de7f5e3f",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 11,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-12--select-keys.json",
+   "bytes": 814,
+   "sha256": "bea5247adabf72703d46f68f3a25b7b562ca97219b8291cd7c682c0a5781ddf1",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 12,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-13--select-keys.json",
+   "bytes": 814,
+   "sha256": "e216c6b75efb6bbd4673e6a4d384e5535b1d27d4522f70d28c7a056fd3d21422",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 13,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-14--select-keys.json",
+   "bytes": 814,
+   "sha256": "20d76aaf207e608cb386820ff2401649d2b35aaf5ea2d158ef29028af2fe1510",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 14,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-15--select-keys.json",
+   "bytes": 816,
+   "sha256": "35d689a0e83ce4bc0de0e61568e5d42617b6cf2d7abd1082552142b74347da8b",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 15,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-16--select-keys.json",
+   "bytes": 818,
+   "sha256": "04e8171e7a6bac9ecbf07f7676a54e2b71b11158a7097247fe07775d27a7faad",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 16,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-17--select-keys.json",
+   "bytes": 818,
+   "sha256": "3caca83f62932de445dc322932af11c181fe9d51bd7eaff859f16376b0fe6217",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 17,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-18--select-keys.json",
+   "bytes": 818,
+   "sha256": "2db07820ab9af4a1e4ae67a55a0f9a98816b1f3ce58ae6fa3a2d4a5f9b29f40f",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 18,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-19--select-keys.json",
+   "bytes": 818,
+   "sha256": "94b0301062d9fd7dd11db64e1b1f1e5e2cdf9011fe6c9b451b5a620fe9dc49e1",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 19,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-2--select-keys.json",
+   "bytes": 815,
+   "sha256": "261b117afc73984c558dfa19cc98c9206dc0ec0aab54058b59bc0f0043fb92e4",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-3--select-keys.json",
+   "bytes": 816,
+   "sha256": "268315d1588b4748d45c03284674832e8fde7186cd136bff674013cd4674f312",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 3,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-4--select-keys.json",
+   "bytes": 818,
+   "sha256": "b09bce427a099028214ffbd220179e476cc947db836eb04b9b445b69bc44b8b2",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 4,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-5--select-keys.json",
+   "bytes": 815,
+   "sha256": "8130d784b2373c0414079eb7f197620d22be511b3de1ac2ed377af6501777040",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 5,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-6--select-keys.json",
+   "bytes": 817,
+   "sha256": "95e5bbb48fb9ee2cfe9d85d45b71f4a8658c342b493b105d09aedc3eb4ad5408",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 6,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-7--select-keys.json",
+   "bytes": 816,
+   "sha256": "821f92ca5459cb57f47833209f1e0634d1b768b1b687279c7b8c288975a1065f",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 7,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-8--select-keys.json",
+   "bytes": 815,
+   "sha256": "fea19496722deab30454ee7ef62fad61ec8366c444d7a3a41a62d99248a6041b",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 8,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-burst-sample-9--select-keys.json",
+   "bytes": 815,
+   "sha256": "9057ca8f8a6dd3c42e5e8713a56e41bce6f6d8757860323324b37f1fc24aa9bf",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 9,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-paced-sample-0--select-keys.json",
+   "bytes": 815,
+   "sha256": "b2ae332aa30c0d62678a834c94344055c0694602084a90801a437886d168be17",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-paced-sample-1--select-keys.json",
+   "bytes": 817,
+   "sha256": "f83c58997d174e1661822fbaaa9985b757869068b4ab25796fd85dcf98cfda7e",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-combobox-down-down-enter-paced-sample-2--select-keys.json",
+   "bytes": 817,
+   "sha256": "dc7861f8ddcf3213b46627373da19ef0adab1e7f62949c418e6818829c84d300",
+   "fields": {
+    "target": "orbit-combobox",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Never",
+    "after": "7 days",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-0--select-keys.json",
+   "bytes": 833,
+   "sha256": "21836becbb053f7d6ecf8e53f4467ba604084008f196bac81bc28b6f23da94fe",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-1--select-keys.json",
+   "bytes": 832,
+   "sha256": "af7640fbe10d2ef30f06ef81575075a8ee271f359a11d8ca7ef4ac1e0a343433",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-10--select-keys.json",
+   "bytes": 832,
+   "sha256": "eee27e02ccdc46ae7c033e1733f5066ddd1c3b45b62d9887f34ece9c2ba455b5",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 10,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-11--select-keys.json",
+   "bytes": 832,
+   "sha256": "5b59e0bcea0ed14bf1b4f1538808db9bf4c90a325e0533f3cf8292da99c88f70",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 11,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-12--select-keys.json",
+   "bytes": 833,
+   "sha256": "e247372be796139ebc952dd26ff17ac05962d8fb709823b01b9c329ab4c56862",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 12,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-13--select-keys.json",
+   "bytes": 832,
+   "sha256": "571e7a2c381ce6676cb7cba7b57353b50f12511d7b397ff88b1acee6654739f0",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 13,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-14--select-keys.json",
+   "bytes": 834,
+   "sha256": "1fe0e8de83478436be6a261dd0b536aa742fa71ec2a3c0312faa7c68c0c7756d",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 14,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-15--select-keys.json",
+   "bytes": 832,
+   "sha256": "9ef44548849035becbce851438a30b3c9b3d5df3fac333d8bad22f72fadc40b4",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 15,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-16--select-keys.json",
+   "bytes": 832,
+   "sha256": "7821570b6e2a6a09845e9d1d979d3ecf6e5b5577754cd7c88a308d1d29328210",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 16,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-17--select-keys.json",
+   "bytes": 831,
+   "sha256": "5c0e08757aa31a8b9938b84494a52e30efff4757cefdcdae19c272dfb6cb77ce",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 17,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-18--select-keys.json",
+   "bytes": 833,
+   "sha256": "9adbaf5057f4158de7147d2f8f3c0e89431e6529d0d7d8cd22516fbf7a982d6e",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 18,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-19--select-keys.json",
+   "bytes": 832,
+   "sha256": "bd21bac3efff10c6dbefe8ff40f95711e765bcc4692f0ea57c24f335152023f8",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 19,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-2--select-keys.json",
+   "bytes": 833,
+   "sha256": "ae8e29f81b0e4da71951b9ec80783333d5099cd4545ab27569a0bb3e4fd474e4",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-3--select-keys.json",
+   "bytes": 831,
+   "sha256": "7f0611f601bcdfa671704c9b602c1cc23e1a9416ce64c8c5b806497222a15247",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 3,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-4--select-keys.json",
+   "bytes": 831,
+   "sha256": "63f498ef52afa30b625cc103a8d7c7b85c6120b327f4fa3a2966e820477281b3",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 4,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-5--select-keys.json",
+   "bytes": 831,
+   "sha256": "08035a65bf09f479cbff19fefa324eeea894f7dd1c237000379f182529662718",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 5,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-6--select-keys.json",
+   "bytes": 831,
+   "sha256": "14ee7e04c612953196c546ee27476085cf3a553c4ef61cd9261dfa839ad88173",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 6,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-7--select-keys.json",
+   "bytes": 833,
+   "sha256": "b6a53c09aa16f3854a18d30a07dbeabc928640db0f733a779e0a330a0678474d",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 7,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-8--select-keys.json",
+   "bytes": 831,
+   "sha256": "30aec29c13e50312525329d42ed498fdb21b9c493db1b0b7326b507ec7629208",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 8,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-burst-sample-9--select-keys.json",
+   "bytes": 833,
+   "sha256": "8e218a508a096623afe1ab890919aac5e002137180746f2d3762fc9ccece08d3",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 9,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-paced-sample-0--select-keys.json",
+   "bytes": 833,
+   "sha256": "173e55e0241a654e4dc9365a7e0593957234197333b42b72436be2e4adcd1635",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-paced-sample-1--select-keys.json",
+   "bytes": 833,
+   "sha256": "6ce0f068fe2c89ff74a87bea0c0d78ee7e1adba01c3a870a2896ac8dd576488f",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-multiselect-down-down-enter-paced-sample-2--select-keys.json",
+   "bytes": 833,
+   "sha256": "3c61b28fe2234401523d5a3ce0f737bdd6ff7f6fb4efa758fb97676239a3646c",
+   "fields": {
+    "target": "orbit-multiselect",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "Bug | Docs | + 1 ...",
+    "after": "Bug | Ops",
+    "expected": null,
+    "listboxOpen": true,
+    "active": "combobox:Sample choice"
+   }
+  }
+ ]
+}

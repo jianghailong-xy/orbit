@@ -1,0 +1,1556 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T06:31:11.723Z",
+    "duration": 121736.58499999999,
+    "expected": 88,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "aca954e6aa50ca3c33e35fe382554fb0f105124729b7d08e40346314e3512268"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "16882c43ab4605194faf38cfd67bbe203ec71ee269291fc1f169f78717e800d2"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "0616c1c8eb4480312d8ef05a4cc6e3d90b77b1d8b1e188cae7e62bfaf75aaa9a"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "39e8bc91ff923aa097bb9b462c571010d01ae44c579e90a325e4db44583c187c"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "f83930f164265a2de10bcb7b40d2754e0dcc5067d8f1840000420199b9078763"
+        },
+        {
+          "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "676ee2450bd6f34652550a7547e849eb75993f61062041fd6357c93fbb3e8a1a"
+        },
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "53da26c7ef985373975f9e161428a993f2c652443dc92cbd8829625dea1d78f5"
+        },
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "bef95fbaef1fcdd687b94cc6dbec6bfbf19a9a654371aa25187b4796fd54e894"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "3fa8e31f4ce37a834ae54aae87fb9268dde61fed7bc2476c168a3cb39e0026f0"
+        },
+        {
+          "file": "chromium-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "c6f5d24206da9f4b87b61640e2568a94db29e177d63ab9385101a8487587dd93"
+        },
+        {
+          "file": "chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "cff24f611328f59c40c4694d44fa5606a6e3cd211f2c3413e738609f0bc69d66"
+        },
+        {
+          "file": "chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "157d2a8b2ba73c58a2481c83aed3efa72661712f3d209a812bb79b175dd7d805"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "20b840cfcb90642e719c0229b42c042397f6d1b07e89ecd147573a29d0ebe4db"
+        },
+        {
+          "file": "chromium-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "804dc8d06a3a164161a240dbafee0130d7b06bbfdd975f84fdb69d01841d1e94"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "b2d154c34a7457e92b09eb4c80bd5d766050f842c687704dc8cf777703042b46"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "e0e5d604337812cc48f3a5d5850ed0e34e7cff5d481b4d5ec28fd9c05800040e"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "667e6a6c20b91d24d615666461af8d5af6febc04d14843f70d6da1ee7055cfca"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "38605dabf8f07be869ce4b8d63a1f8be8c2d9588c73760e6d9a383faf0e73227"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "24aa525aef2ec1e89f83dbe69ce9df13f20d2a166d27430eea136df2d31c9c76"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "3de5b5a4c0f7c45497b020f727316f15e1414c41714b30bad0fcb31ca01aa2c7"
+        },
+        {
+          "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "1f6b86585895c02a2f19e4c04380f73c704b1424a1038472d4675e5968fa7c96"
+        },
+        {
+          "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+          "sha256": "f3d156fcafc29bb606df7a68eec1264f601652e7460844e8abf1c8ab6515948a"
+        },
+        {
+          "file": "chromium-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "846023df4c0791df842ad87f210d21184821dcfe4ef0df4e79a74cd57ac2119c"
+        },
+        {
+          "file": "chromium-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "4824903768dab1402c58880d093c8e7efb62801beb7a50fb671952e7f3f8c427"
+        },
+        {
+          "file": "chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "022161f077fb25a7b43afa95384c4a286139ac87d816d2970297656826b52120"
+        },
+        {
+          "file": "chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "8c306d21ca49b3a95484b0523ec42c411b1da6895f3999ab2320e420bd726ac0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "22a9c3360aa8602721665b8be1c4ebc2cee0b8149e5aea0e38d936e90df2bc5b"
+        },
+        {
+          "file": "chromium-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "ab7337a511aed262fd54f4877cbe4598100619ec723300a74f2de09f53a0710c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "4da7466a09258dcbea2708b962ef4efb6561ea968a33a3726735555474d7f2cd"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "4b11c868b8d846965d5c85af60f427b5ea3090f76318cf0e21fb372210e7a354"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "b098e83f80d1c1dce7bab23722c85c5e88a83431a7d7362e1a5c4d18bcc90ea9"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "316e93554ffeeba0731cea39b3f9a0058b5b839d7f9d83eff8de28df000d85f8"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "4da7466a09258dcbea2708b962ef4efb6561ea968a33a3726735555474d7f2cd"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "a5578132835d593516019e206537c1aabcfd1213bc44d67968aa69926ad47b57"
+        },
+        {
+          "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "105ae055b692a4cd3d7d3a33d1912e6775c35daf0519873206395ee42e5fda69"
+        },
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "53da26c7ef985373975f9e161428a993f2c652443dc92cbd8829625dea1d78f5"
+        },
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "7df3b81818d6aeeb08da2d2fbdd73830cf0b1c3c79bc4d1d3151e7e0d3c52cdb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "ea4046aa4c8926c87f1bf036fb51313395c1bc2c69b4475d26ad1c7fefc37765"
+        },
+        {
+          "file": "chromium-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "95c9438703cb53ba486e68bd0bcf7d71212dc6c93cb3f1fbed268f25a87a3307"
+        },
+        {
+          "file": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "63c86d3d9e486da6a3b650193865d14a8d2014077913d1ee3b81b836c7e1de38"
+        },
+        {
+          "file": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "3a57256dbd19d7fb8f9b2bc8180f84060121652688157b07193a1648670dd0e5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "0669d29ab778be01299243bb773261d01d2179653e03409818c0183281227ffd"
+        },
+        {
+          "file": "chromium-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "fc33cc11a997a1277844116a761e211fe13d5579b5728cff1c3e21fe99b7ba3f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "b8ef29e559719fff8d97697ca5a84aead0114595f5a6ec776891cc714e34c45a"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "e24be83c1b444eb70f5b473a922c60264405970bab967b6dea46c84ad009c142"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "9b1645c7cb2aaac894a32e2e7435afa7412ec344a19d0d1ddd6e83ee7035c29c"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "dc8f97128ca6d7ba594b88d0120b61c501da3f03707eef122055f8dcb10e08da"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "5bc61d1c91c784b7eb07a3e3f05e24459c5d98949620b0945cd5f33024df18f2"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "cf091ac9dbac3f5cef7e6097cec0f0e3608be18478bb9e56ee68023cc2433792"
+        },
+        {
+          "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "ac09cfb8d341ef2395c37b958f017bf7a1d6449fd1106b9a0716fbddfa9da2cc"
+        },
+        {
+          "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+          "sha256": "488ff3b9029dd518a89d2b6f744399bf99284c2b2912f65eff0db71768e398e6"
+        },
+        {
+          "file": "chromium-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "17fb24770c270316aea203ef243209c65ebc9a7d8b06dcac045161d5fadf5991"
+        },
+        {
+          "file": "chromium-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "810146b4591de9867a6c4c59e86708727454bdc90901739e6d67f2b44d3d516f"
+        },
+        {
+          "file": "chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "0a36ef264ad1b0634066e679c728e02d3cff9a6fd565d7b74ebf081be6f007e3"
+        },
+        {
+          "file": "chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "f5096b33be5f64a2c70430a819da79fed3e9ad0f957038425ef13cae0e1154df"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "cc47ac0102dca9423aefe149833ac63d5a10506321a0e61456932c7c0244c917"
+        },
+        {
+          "file": "chromium-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "f8e7d5c19dd844bb6f6e31fca8d65fc95a634a20603d3887a6258dcd69f89c00"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "03db1ff4ec72c2ed924b644d3d404fbdabd3e35a4eb581739ff68b47189dbd88"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "04bd2981d6906c675cd8566d70ccc79252ad1d01746117e2fa0d504fa91f46d9"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "e78b66e4e87abe77361ff9b83bc2c534bfc9d9a21ceaf373df235edf168db4a4"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "27110063f367e8762875f540fe98b26ecdf28ab262c96fecdb134c9966905aa9"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "29ab23214a50c8baab6246e3b7e39c7e02c06a38d77ecc484fa7a28eeffaff34"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "d87fa97d4dbf62ab0fd24cf01b6d992c12185c7f65df89e48177360aac277dc0"
+        },
+        {
+          "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "46a0b6aa59f7053f83642b8f94c37c8dd0534d143ceb36d835c5d9b155419089"
+        },
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "1005d29ac033f18e406f2b9880537a6d364cd3ade86f3e11931a1ed4a972e6fc"
+        },
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "b69e39cecde42396a644a74cd934f8f3d97363f10ee06d9a22f6debf176c2e03"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "a7aa3a2e5aee75b4c0fd85b80753b7a71a94db5ea6465b3521c18f409ed2db34"
+        },
+        {
+          "file": "webkit-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "c78a3f86f1ff467884ef3af5a593e0aef22ae5a03992295a0b8c9d4e260acbe3"
+        },
+        {
+          "file": "webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "8fca5888eec3675aea5c267a029ddf5c1b2fdf525ee95a112dee28c649054115"
+        },
+        {
+          "file": "webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "765c773187de59e1632fa40003a7cdb1a55ef017dc2ae1f108c73eb81cdac850"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "de846f5f6679cd1607df3f88b8078bf2bf0491a5cb03d1cf857d93b8408f594d"
+        },
+        {
+          "file": "webkit-light-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "2f44829d4212efb94e4678f23e6df07f3ffe5193b38ee332402e3de0eea1ae6c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "8c2cb3bfff10d9e9fce5c927cda77e6c5953af065d16d48587b66aeb50feb4c1"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "cf7c537714ec43bf270badfcbcaf863ab932486584997da6298674341f5a89ea"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "db2cb34836fbf538dbe3298f018ccd1fcfb752b750a55b69204de66ed82d3b6c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "36ec6fed71a8bfc4831df4fa273101bc57522438ac2c14baf2e3982883051583"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "4ea7f580134d7b75abba64b8091267a3fdbb62b718a770473c4a7704ea6484e3"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "4e5caeb413ec7f8489ecfbbe4624fc04e11e6753e630cca79a78881d7728aa00"
+        },
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+          "sha256": "950c52624d650b3e82f59f8f4ed7d422bf1c910cf1186d14091b578e1bf25683"
+        },
+        {
+          "file": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "78704c8b355ba4e06419ee7eee92935d1a0fc3af5374be96de8f5ea7809d4ff3"
+        },
+        {
+          "file": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "a84c58e4591d44f992fe2553a9ff9a790090fc07941e732b667f7b9e7a06bd82"
+        },
+        {
+          "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "2c762aca611c5bc4a16b6de04a0756727c4b5ad41ee6b2ea84a1ec7eea5a7d84"
+        },
+        {
+          "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "ac39c0165e48a3c2f30c82c70f59d424a6dfc41ff26faffa74abf73ae8d90203"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "a4ba3c09a8d86eed78df38c8896dbe422744261c16b3c2352010eb4842793abc"
+        },
+        {
+          "file": "webkit-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "f85383d02c0843652b630189a1ea9bd6ade059d1b0ec98a5b5d4be4a43cd354a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "aa51db22e93bcd4a705748643fa895bcef071ea6e8e1732998a4dd80cd655976"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "29a1e3704d139ee1efd85aa749e1f9b5e99bffa1752cb5aa56f105403fd76ed2"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "3b6367233a9cb6add49fedb09d3a9e93dd5a78374214dd5c1da5ced110779928"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "295b78261f3c43f4438a0dfb7f0cb3752b6128376364306e20a2079deabc0b49"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "05a63a3b52dd13f43cc804a6e8744d81d8703506f51831fbca151e9a3d4c0223"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "0a6820871a0b9005ca5018e97336ecaf5e44e29469642f55aa2bed9c0878ba01"
+        },
+        {
+          "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "171489f5d7598f4ad20b57d86ff4c7f88e1f9b189d98a9e9ca8fc9111bd0420f"
+        },
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "1005d29ac033f18e406f2b9880537a6d364cd3ade86f3e11931a1ed4a972e6fc"
+        },
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "065810acfc3801e897c4cdd226479889a5631dcb27e71b0fdeb0e0eb05f524ea"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "6eb1e42f20eb7aa13500b3d74509bde589b0249eb63e12d535e8a978d7848f94"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "84664ab2759badbb20cfad27fda32ba1b583a23e63d923be9fe38d2017e025db"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "74675dad4aa57c77429614305dae7d3bdb46f95cd3df2cfaecf0755a13ef6b08"
+        },
+        {
+          "file": "webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "ccfa7958cfddf8b558e41e9095b27761593b25ced51d8fb7495f9995d7055e1b"
+        },
+        {
+          "file": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "81685153c2c73bd80718271f33f44164708fbfde8290c87fbe465981bef3de0a"
+        },
+        {
+          "file": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "03d3cbdac39b775728f6db82114523b8e73a64fdff27c59ac990473f1492349c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "f973e198b04d9990a2416e77b73ad704ba77b6b3f46cbea2c8152e81459b46e8"
+        },
+        {
+          "file": "webkit-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "748274efbbeadbb4696e97b2428a859bf672c010930b001dfe94a47998cca013"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "704a4fe3378d7faade9983dff7a044b5b9d5e1e41dfa3e4242868489b29b3131"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "f6522b468b965d083581d1f3c5e244f6c4cb754abefe422932e74fb7b5e1d092"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "64b7677876d6017647f1fb1464991211c366d69980d91dcff616cc2500cc648e"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "09736a52fde73638615631113dfc2b10908b3c4e4c8ad691b5c090723a4576f4"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "b2ab4ff35730f3330a7fbf227c7f68a94313323b133f0f476bfe8bca14d32363"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "a938c9d41de37b0880b72bc2547d62343e6a5c2714b979a54b59aa468dc56b36"
+        },
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+          "sha256": "d8617bb7e3f2a7bd0478aee400d9fc10c18e30a6fed48c1926c04acd5c34645d"
+        },
+        {
+          "file": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "56a4bdea571eaffa25a19043aa936f51bb5f5f48f90068d08f915a73f35cbcb1"
+        },
+        {
+          "file": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "d1cc2d4e6555213bf32a61e944ef94422d61b349fcd4b85a342bc2ac48f800f0"
+        },
+        {
+          "file": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "5e123b5f6e9507f17eaabfbadaa9383e10ce96225c962a4620d100baae04b588"
+        },
+        {
+          "file": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "e90e74db0c548a011c23419d287bcbd015df38ef519a8429106840d85bc59d50"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "feff6e5a625690985a257303111c2a8b57312a89db9b2f9d922b8ecbf6528d48"
+        },
+        {
+          "file": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "26c582e69141fa4af9c99506e12048f6a81c0adac113417b77dbdee8c6fa8119"
+        }
+      ]
+    }
+  ]
+}

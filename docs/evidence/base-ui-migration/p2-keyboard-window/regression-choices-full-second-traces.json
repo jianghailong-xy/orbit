@@ -1,0 +1,97 @@
+[
+ {
+  "trace": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+  "moduleRequests": 135,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 97.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 78.4
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 77.3
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 73.3
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 73.2
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "waitForSelector",
+    "title": "Evaluate",
+    "start": 715972.157,
+    "error": null
+   },
+   {
+    "api": "screenshot",
+    "title": null,
+    "start": 716008.61,
+    "error": null
+   },
+   {
+    "api": "waitForSelector",
+    "title": "Evaluate",
+    "start": 716455.189,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 716539.032,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"not toBeVisible\"",
+    "start": 716601.044,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 717153.6,
+    "error": null
+   }
+  ],
+  "selectExitFrames": [
+   {
+    "connected": true,
+    "opacity": 1,
+    "pointerEvents": "none",
+    "visible": true
+   },
+   {
+    "connected": true,
+    "opacity": 1,
+    "pointerEvents": "none",
+    "visible": false
+   }
+  ],
+  "note": "The frames choices-lifecycle.browser.mjs:82 sampled (closed(), line 45) while the Select popup had data-closed: read from the trace result of the evaluate that returns window.choiceExit.frames."
+ }
+]

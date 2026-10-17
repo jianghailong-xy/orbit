@@ -19,7 +19,6 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Modal, Popconfirm, Tooltip } from 'antd';
 import {
   useCallback,
   useEffect,
@@ -45,6 +44,9 @@ import {
 } from '../lib/taskDependencyGraph';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
+import { Dialog } from './ui/Dialog';
+import { Popconfirm } from './ui/Popconfirm';
+import { Tooltip } from './ui/Tooltip';
 
 const NODE_WIDTH = 204;
 const NODE_HEIGHT = 76;
@@ -202,20 +204,22 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
         <Popconfirm
           title="Remove prerequisite?"
           description="This task will no longer wait for this prerequisite."
-          okText="Remove"
-          okButtonProps={{ danger: true }}
+          confirmText="Remove"
+          danger
+          disabled={data.removing}
           onConfirm={() => data.onRemoveDependency?.(data.task.id)}
-        >
-          <button
-            type="button"
-            className="tdg-node-remove nodrag nopan"
-            disabled={data.removing}
-            aria-label={`Remove ${data.task.title} as a prerequisite`}
-            title="Remove direct prerequisite"
-          >
-            <CloseOutlined />
-          </button>
-        </Popconfirm>
+          trigger={
+            <button
+              type="button"
+              className="tdg-node-remove nodrag nopan"
+              disabled={data.removing}
+              aria-label={`Remove ${data.task.title} as a prerequisite`}
+              title="Remove direct prerequisite"
+            >
+              <CloseOutlined />
+            </button>
+          }
+        />
       )}
       {data.hasOutgoing && (
         <Handle type="source" position={data.vertical ? Position.Bottom : Position.Right} isConnectable={false} />
@@ -809,7 +813,7 @@ export function TaskDependencyGraph({
         className={`tdg-canvas${inlineVertical ? ' is-vertical' : ''}`}
         aria-label={`Dependency graph for ${title}`}
       >
-        <Tooltip title="Open full-screen graph">
+        <Tooltip content="Open full-screen graph">
           <button
             type="button"
             className="tdg-maximize"
@@ -836,14 +840,12 @@ export function TaskDependencyGraph({
         )}
         <div className="tdg-direction">Prerequisite → dependent</div>
       </div>
-      <Modal
+      <Dialog
         className="tdg-modal"
         open={fullScreen}
-        onCancel={() => setFullScreen(false)}
-        footer={null}
+        onClose={() => setFullScreen(false)}
         width={phoneGraph ? '100vw' : 'calc(100vw - 48px)'}
         title={`Dependency graph · ${title}`}
-        destroyOnClose
       >
         <div className="tdg-full-canvas">
           <ReactFlowProvider>
@@ -860,7 +862,7 @@ export function TaskDependencyGraph({
             />
           </ReactFlowProvider>
         </div>
-      </Modal>
+      </Dialog>
     </>
   );
 }

@@ -144,7 +144,7 @@ func TestCodexResetReadKeepsTopLevelCreditsLossless(t *testing.T) {
 				t.Fatalf("account/rateLimits/read params %v, want null", params)
 			}
 
-			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, read.usage)})
+			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, read.usage, nil)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -329,7 +329,7 @@ func TestCodexResetOverrideAccountsNeverOpenReset(t *testing.T) {
 			if strings.Contains(err.Error(), secret) || strings.Contains(logs, secret) {
 				t.Fatalf("the %s value leaked: %v / %q", variable, err, logs)
 			}
-			wire, _ := json.Marshal(HeartbeatRequest{LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot())})
+			wire, _ := json.Marshal(HeartbeatRequest{LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)})
 			if bytes.Contains(wire, []byte("rateLimitReset")) || bytes.Contains(wire, []byte(secret)) {
 				t.Fatalf("the heartbeat offers reset under %s: %s", variable, wire)
 			}
@@ -430,7 +430,7 @@ func TestCodexUsageProbeReadsResetThroughAFakeAppServer(t *testing.T) {
 				t.Fatal(err)
 			}
 			probe.store(usage)
-			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot())})
+			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -588,6 +588,12 @@ func (f *fakeCodexBinary) answerSessionsWith(t *testing.T, frames ...map[string]
 // rule out. An answer file in the CODEX_HOME it runs in (fakeCodexHomeAnswer) wins over the one in dir,
 // so each account can answer for itself.
 func runFakeCodexAppServer(dir string) int {
+	// A `--version` is not a spawn — see runFakeClaude: the runner asks an engine it is about to
+	// use whether it can run at all, and this file's record is of app-servers.
+	if argv := os.Args[1:]; len(argv) == 1 && argv[0] == "--version" {
+		_, _ = os.Stdout.WriteString("codex-cli 0.0.0-fake\n")
+		return 0
+	}
 	codexHome := os.Getenv("CODEX_HOME")
 	appendJSONL(filepath.Join(dir, "spawns.jsonl"), map[string]interface{}{"pid": os.Getpid(), "argv": os.Args[1:], "codexHome": codexHome})
 	answers := map[string]json.RawMessage{"initialize": json.RawMessage(`{"userAgent":"fake-codex/0.154.0"}`)}

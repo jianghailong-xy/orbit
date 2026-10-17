@@ -1,0 +1,29 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/baseline-menu-up-rerun/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--orbit-menu-menu-up-enter-burst-sample-10--keyboard-window.json",
+   "bytes": 730,
+   "sha256": "60cca6a5047fafd9808840034ea0eec79abc697851c35d08ff0dfb11a563a7f2",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "menu-up-enter",
+    "control": null,
+    "mode": "burst",
+    "run": 10,
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "from": null,
+    "before": "none",
+    "after": "none",
+    "result": "closed",
+    "listOpen": false,
+    "active": "button:Add attachment"
+   }
+  }
+ ]
+}

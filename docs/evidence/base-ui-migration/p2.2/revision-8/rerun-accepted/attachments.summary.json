@@ -1,0 +1,823 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-8/rerun-accepted/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+   "bytes": 23408,
+   "sha256": "05b2650937e8bdf9af301ccb80012a5e731773d03dd8c1276aea5dc55ac1c2e5"
+  },
+  {
+   "name": "chromium-dark-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+   "bytes": 23419,
+   "sha256": "cb1c9369b1bea7d6776b412c126dd60bb987b4e8e2a9ef8b3fdc278473d7bbde"
+  },
+  {
+   "name": "chromium-dark-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+   "bytes": 23391,
+   "sha256": "ddea2f02f4a54aed7a6de608fc4bd768b6b9b3b71d494a08fdea756bc181d46e"
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 858,
+   "sha256": "5977904c95b626e89ba16df02b89f8107489bc773a55c10f7faa6390c71de070",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 220,
+   "sha256": "d9b0e579311be2c2ce94aab6c4a941d772c5b61d6933ccf1d4721f5f169bb598",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 31.19999998807907
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+   "bytes": 746,
+   "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+   "bytes": 223,
+   "sha256": "e2cb2c90f1397923110fb63aba01ddb335e4843838ee6dc977b5b9ac4fff30d7",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 30.600000023841858
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+   "bytes": 2182,
+   "sha256": "3007b5a3d0f1009f470174241aa045aa5ce06cdffb342d82f7082d1b671bc4f7",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 62.5,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 66.30000001192093,
+    "unlockedAfterMs": 76,
+    "readyAfterCloseMs": 9.699999988079071
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+   "bytes": 858,
+   "sha256": "5977904c95b626e89ba16df02b89f8107489bc773a55c10f7faa6390c71de070",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+   "bytes": 222,
+   "sha256": "6f0abd03ea63200cff07727bd5829e3ad6c54cb95b70565f640ec12eb0881f52",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 31.5
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+   "bytes": 2175,
+   "sha256": "9b82156172785cc5c7813b7633c3f1aa978e8e4f381171dbd94e83d6eec7dd27",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 43.39999997615814,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 46.19999998807907,
+    "unlockedAfterMs": 59,
+    "readyAfterCloseMs": 12.800000011920929
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2238,
+   "sha256": "fbe66b43bf23b4fd59653a796dd03bd015d0ab2b885a5538e910f61a3ab61330",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 46.59999996423721,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 49.39999997615814,
+    "unlockedAfterMs": 58.19999998807907,
+    "readyAfterCloseMs": 8.800000011920929
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--tooltip-center-zoom-origin-matches--motion.json",
+   "bytes": 15765,
+   "sha256": "4f583ad43b6810a0e694a766a9bc86abc9f9b3fb00ed241c0f60d901735daeaa"
+  },
+  {
+   "name": "chromium-dark-desktop--tooltip-center-zoom-origin-matches--repeat-1--motion.json",
+   "bytes": 16504,
+   "sha256": "4eb572f9b60820df7b26919506e0f18db1247d061f71c1e007293ebbcf8c9fe7"
+  },
+  {
+   "name": "chromium-dark-desktop--tooltip-center-zoom-origin-matches--repeat-2--motion.json",
+   "bytes": 16455,
+   "sha256": "a9b6517d230488b9eda605e068490dfef63dd1577380e526a19c97afc61c59a2"
+  },
+  {
+   "name": "chromium-dark-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-1--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-2--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+   "bytes": 23348,
+   "sha256": "0dd6013f694bf686d9dc0651d652d535def174918723cfa7c6591c919df342a7"
+  },
+  {
+   "name": "chromium-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+   "bytes": 23111,
+   "sha256": "f299e258db48224d93f8fd63bfc6a91ba3cb69473a6beb46aa783969b6ffb0de"
+  },
+  {
+   "name": "chromium-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+   "bytes": 22712,
+   "sha256": "2b4e15ff6db2e420f9011f3fe1fc8a3e500eec633c8dfd0b8d4a98e038b6b256"
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 744,
+   "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 222,
+   "sha256": "913a20d98753dd674604c66f1629e3bc9aaaa82957728329f0f39d18850c2478",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 54,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 30
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+   "bytes": 744,
+   "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+   "bytes": 224,
+   "sha256": "391f4c97d08f1f146e01fcbe6249b4fb1bf8b5c4a454964cb43066604d887192",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 19,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 19.5
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+   "bytes": 2223,
+   "sha256": "90ec56f2f0bbe6bf464cb8b767ace9c6656a4d78761f6f8a227853f2180fa58d",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 45.39999997615814,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 48.60000002384186,
+    "unlockedAfterMs": 54.39999997615814,
+    "readyAfterCloseMs": 5.799999952316284
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+   "bytes": 856,
+   "sha256": "99f09f6adda26f7cc159e6679c08cdea4c81825a1c541540a2d1f37092bbfb7d",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+   "bytes": 238,
+   "sha256": "e7589d3c9f0b92e014498a17aa5ed8867c3ee83c075ffdc593993499db777db9",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 49,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 29.400000035762787
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+   "bytes": 2169,
+   "sha256": "231e0f2e38a192f2c86cf4c3263dd5327ab5f2aa725b434b460abf7a7fa56375",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 44.69999998807907,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 47.5,
+    "unlockedAfterMs": 59.60000002384186,
+    "readyAfterCloseMs": 12.100000023841858
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2166,
+   "sha256": "9560fa9d4b02e58ae819b844396c701da51d7ee89ce391ad621809ed07f56ef0",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.80000001192093,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 45.39999997615814,
+    "unlockedAfterMs": 57,
+    "readyAfterCloseMs": 11.600000023841858
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--tooltip-center-zoom-origin-matches--motion.json",
+   "bytes": 16619,
+   "sha256": "aaaf0e09180635f26155363e0d8f9f1933ccdcfa7cee6f815a95a21f7aab7bbc"
+  },
+  {
+   "name": "chromium-dark-phone--tooltip-center-zoom-origin-matches--repeat-1--motion.json",
+   "bytes": 16132,
+   "sha256": "8fc21c94d5c2b2ef3ec75baf39706728a72c5c5f18753c5a446a8185c5d4a91d"
+  },
+  {
+   "name": "chromium-dark-phone--tooltip-center-zoom-origin-matches--repeat-2--motion.json",
+   "bytes": 16560,
+   "sha256": "7a12c8d03cb9aa539ad1d209188dad9e8aa397f7c8bd057983400678e81bb0ce"
+  },
+  {
+   "name": "chromium-dark-phone--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--pointer-menu.json",
+   "bytes": 247,
+   "sha256": "b11f7a39d1ea5f31b5e5004dea8c11831ad002b6e0b7ac3ec523b87e41212a56",
+   "fields": {
+    "input": "touch",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-1--pointer-menu.json",
+   "bytes": 247,
+   "sha256": "b11f7a39d1ea5f31b5e5004dea8c11831ad002b6e0b7ac3ec523b87e41212a56",
+   "fields": {
+    "input": "touch",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-2--pointer-menu.json",
+   "bytes": 247,
+   "sha256": "b11f7a39d1ea5f31b5e5004dea8c11831ad002b6e0b7ac3ec523b87e41212a56",
+   "fields": {
+    "input": "touch",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+   "bytes": 23698,
+   "sha256": "da3e3e303817589693cfbecf9511edcb3f30d5d6513c1d1ef1d67d3f2073ea0a"
+  },
+  {
+   "name": "chromium-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+   "bytes": 23105,
+   "sha256": "9a96717f743b190da4a8d477793bfae493f1936acf0e424f2d417264395c0487"
+  },
+  {
+   "name": "chromium-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+   "bytes": 23285,
+   "sha256": "05222c4e3784310612c39fa35ac67392deb37d853c7c961179a0e462c6cc6329"
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 743,
+   "sha256": "5981598da1695ed15cc64d525418ded37569a7bef640ab0535442446aa07816c",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 222,
+   "sha256": "127f7391aace6438114a14947da6a67b824d777bdfc1be5d6039a02f0d62c790",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 31.69999998807907
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+   "bytes": 1194,
+   "sha256": "72f3b07e431898b750f4b8b256f2a398b853a3583d2e728a6c7ad4e4ff6d28d5",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+   "bytes": 237,
+   "sha256": "4196de35d570531d93de5a4b4a5f77d87df5f18239aeafb4814595e5e859b40d",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 30.100000023841858
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+   "bytes": 2205,
+   "sha256": "4e2f7a83632784e948ab8176ff67cd48c4a5ca892adb71979c9e010ae1a3f741",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 47,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 50.30000001192093,
+    "unlockedAfterMs": 65.69999998807907,
+    "readyAfterCloseMs": 15.399999976158142
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+   "bytes": 746,
+   "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+   "bytes": 222,
+   "sha256": "0240ab7c40c6c627944f73842394a1c3483fe55bd83c364b2d708553126c6549",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 42.5
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+   "bytes": 2182,
+   "sha256": "5fc07b3572496059be765ce4bfaafb1d761bdd564087e68616831cb694be28e6",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 48.80000001192093,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 52.5,
+    "unlockedAfterMs": 64.30000001192093,
+    "readyAfterCloseMs": 11.800000011920929
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2174,
+   "sha256": "45fd1cc004cc8bd5423d47a3acdfeaa4d2f192a74b76e5b016461bef099fee80",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 32,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 33.89999997615814,
+    "unlockedAfterMs": 34.89999997615814,
+    "readyAfterCloseMs": 1
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--tooltip-center-zoom-origin-matches--motion.json",
+   "bytes": 15683,
+   "sha256": "c94f2e910468aee5a5786b628a3efb13e5578816852fa62010045abbb284acf1"
+  },
+  {
+   "name": "chromium-light-desktop--tooltip-center-zoom-origin-matches--repeat-1--motion.json",
+   "bytes": 17373,
+   "sha256": "7bd51e2264673c8f7745092319d1c243e74a16881241f215d07b16bc813a96bc"
+  },
+  {
+   "name": "chromium-light-desktop--tooltip-center-zoom-origin-matches--repeat-2--motion.json",
+   "bytes": 15682,
+   "sha256": "0ab012a20bb099b2cb2fda10e1a654cc03bb51c2754b44c17d05373651c62cb9"
+  },
+  {
+   "name": "chromium-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-1--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-2--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+   "bytes": 23223,
+   "sha256": "265e441a9a72c72ac8a7af9bcd1f2ee4e2d3f75dc9789d0ce74408c03f4ebc48"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+   "bytes": 22937,
+   "sha256": "501ded47f43aee7c7c14d0ee3f8ec59da1bb759835c55491f3c35e9ab9285828"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+   "bytes": 23245,
+   "sha256": "b410e3403e4bfc5491780262903d1c0055e1ffb4d0200fb7fe8e19b05e9ab1c6"
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 634,
+   "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 204,
+   "sha256": "2f53d10d7bf94788f94cbc25ee973f1b893b310e9e7ae9049e2917d9d86abc91",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 28
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+   "bytes": 746,
+   "sha256": "242fce10c7d6d794080603e00895604d7de12ee51d310851065df3bc6f661541",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+   "bytes": 204,
+   "sha256": "68831c3aaeb32f046254a448538782ff1e05a9376ba85635c0d3b3c5c5985b68",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 14,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 26
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+   "bytes": 2035,
+   "sha256": "7623f1560ef1f7a7e74aad0810d7abda357014d9962783ad39500abe033df646",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 22,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 23,
+    "unlockedAfterMs": 26,
+    "readyAfterCloseMs": 3
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+   "bytes": 634,
+   "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+   "bytes": 204,
+   "sha256": "a91790b3581681b11f074c4c94dd4157688f1537e97e2a124f5c15a90896026b",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 14,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 29
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+   "bytes": 2035,
+   "sha256": "adb1dbb8b536f1606dbab369483576188e7530ffedb6a91be6dbd49849559fde",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 27,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 29,
+    "unlockedAfterMs": 33,
+    "readyAfterCloseMs": 4
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2035,
+   "sha256": "9b580730be3c00fc7319f66823ca21daf45178d8584ce112a4e6ce92069a1992",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 27,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 29,
+    "unlockedAfterMs": 33,
+    "readyAfterCloseMs": 4
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--tooltip-center-zoom-origin-matches--motion.json",
+   "bytes": 11230,
+   "sha256": "633c2443377a8ed19888e6cca63715cc4286773d547b9c5b7cd2edd48d4fe5b0"
+  },
+  {
+   "name": "webkit-light-desktop--tooltip-center-zoom-origin-matches--repeat-1--motion.json",
+   "bytes": 15538,
+   "sha256": "a451b441b20c5b8b4a1ae327afd02bee1aee78fe9dc4855b6a4753742a4ec4dc"
+  },
+  {
+   "name": "webkit-light-desktop--tooltip-center-zoom-origin-matches--repeat-2--motion.json",
+   "bytes": 13958,
+   "sha256": "d4586d292e99455ba12236e0b04f5ae9c13a6ed1c0ee66b4f84c6ce304e4841c"
+  },
+  {
+   "name": "webkit-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "ae5cf5c91c54ae7a370f803e1e0d5e9e36bc8b5b329571f20b5da7900d506f36",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-1--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "ae5cf5c91c54ae7a370f803e1e0d5e9e36bc8b5b329571f20b5da7900d506f36",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--repeat-2--pointer-menu.json",
+   "bytes": 246,
+   "sha256": "ae5cf5c91c54ae7a370f803e1e0d5e9e36bc8b5b329571f20b5da7900d506f36",
+   "fields": {
+    "input": "mouse",
+    "outside": true,
+    "dialogReturn": true
+   }
+  }
+ ]
+}

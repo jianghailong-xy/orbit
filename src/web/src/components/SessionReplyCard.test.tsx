@@ -70,6 +70,12 @@ async function until(done: () => boolean) {
   expect(done()).toBe(true);
 }
 
+async function click(el: Element) {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
 const stateDrawn = (state: string) => () =>
   container.querySelector('.smc-request')?.getAttribute('data-state') === state;
 
@@ -141,10 +147,21 @@ describe('the recipient’s card says the message is a request, and where it sta
     expect(status.textContent).toContain('due');
     expect(status.getAttribute('data-state')).toBe('OPEN');
     expect(status.textContent).toContain(SESSION_REQUEST_STATE_LABEL.OPEN);
-    // Read-only: nothing on the card lets the owner answer for the session — the one button is the
-    // fold of what delivery appended, which every card has.
+    // Read-only: nothing on the card lets the owner answer for the session. The only controls are
+    // the fold of what delivery appended, which every card has — its head, and, while it is shut,
+    // the action that opens it (the compact note card 0d23b89fc gave the fold). Neither answers.
     expect(container.querySelector('.smc input, .smc textarea, .smc-request button')).toBeNull();
-    expect([...container.querySelectorAll('.smc button')].map((b) => b.className)).toEqual(['chat-injected-head']);
+    const fold = container.querySelector('.smc .chat-injected')!;
+    expect([...fold.querySelectorAll('button')].map((b) => b.className))
+      .toEqual(['chat-injected-head', 'chat-injected-action']);
+    const action = fold.querySelector('.chat-injected-action')!;
+    expect(action.textContent).toContain('View full context');
+    await click(action);
+    // Pressing it opens the block delivery appended — the same move the head makes — and stands aside.
+    expect(fold.querySelector<HTMLButtonElement>('.chat-injected-head')?.getAttribute('aria-expanded'))
+      .toBe('true');
+    expect(fold.querySelector('.chat-injected-action')).toBeNull();
+    expect(fold.querySelector('.chat-injected-body')?.textContent).toContain('<orbit-session-message');
   });
 
   it('refreshes when the request moves: the state the next read returns is the one drawn', async () => {

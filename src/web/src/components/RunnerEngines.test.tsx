@@ -265,22 +265,22 @@ describe('the "On your runners" section', () => {
   it.each([
     [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: false }, 'Update runner'],
     [{ supported: true, installed: false, version: null, envKeyAvailable: false }, 'Not installed'],
-    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Ready'],
-  ] as const)('adds an Antigravity installation row without sign-in or quota: %s', (state, label) => {
+    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Unknown'],
+  ] as const)('shows Antigravity readiness and the upgrade required for older runners: %s', (state, label) => {
     const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
     const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });
     const row = html.slice(html.indexOf('data-engine="antigravity"'), html.indexOf('>Kimi Code<'));
-    expect(html.indexOf('>Antigravity<')).toBeLessThan(html.indexOf('>Kimi Code<'));
+    expect(html.indexOf('>Antigravity CLI<')).toBeLessThan(html.indexOf('>Kimi Code<'));
     expect(html.match(/re-row focused/g)).toHaveLength(1);
-    expect(row).toContain('>Antigravity<');
+    expect(row).toContain('>Antigravity CLI<');
     expect(row).toContain(label);
-    expect(row).toContain('No sign-in · runs on your Gemini key');
+    expect(row).toContain('Update this runner to sign in with Google.');
     expect(row).not.toContain('>Sign in<');
     expect(html).toContain('1 runner · 1 signed in');
     expect(summaryOf(box)).toBe('1 of 3 signed in');
-    expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('1 of 3 signed in');
+    expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('Installing…');
     if (!state.supported) {
-      expect(row).toContain('Needs Orbit runner 0.1.209+ — updates itself when idle');
+      expect(row).toContain('Update runner');
       expect(row).not.toContain('>Install<');
     } else if (!state.installed) {
       expect(row).toContain('Not installed — Orbit can install it here');
@@ -293,7 +293,7 @@ describe('the "On your runners" section', () => {
 
   it('shows the Antigravity row even before an older runner reports its engines', () => {
     const html = render([runner({ engines: null, antigravity: { supported: false, installed: null, version: null, envKeyAvailable: false } })]);
-    expect(html).toContain('>Antigravity<');
+    expect(html).toContain('>Antigravity CLI<');
     expect(html).toContain('Update runner');
   });
 
@@ -366,7 +366,7 @@ describe('the "On your runners" section', () => {
         install: install({ status: 'done', engine: 'codex', command: 'npm install -g @openai/codex' }),
       }),
     ]);
-    const codex = html.slice(html.indexOf('>Codex<'), html.indexOf('>Kimi Code<'));
+    const codex = html.slice(html.indexOf('>Codex<'), html.indexOf('data-engine="antigravity"'));
     expect(codex).toContain('>Installed<');
     expect(codex).toContain('>Sign in<');
     expect(codex).not.toContain('>Install<');
@@ -441,13 +441,22 @@ describe('the "On your runners" section', () => {
       'focused',
     );
     expect(render([box])).not.toContain('focused');
+    // OpenCode's row is one a link can name too: every row on the machine's own page points here,
+    // OpenCode's included (engineSignInHref).
+    const withCode = runner({
+      engines: [health({ engine: 'claude' }), health({ engine: 'opencode', auth: 'unknown' })],
+    });
+    const atCode = render([withCode], {
+      path: `/providers?runner=${encodeId(withCode.id)}&engine=opencode`,
+    });
+    expect(atCode.match(/re-row focused/g)).toHaveLength(1);
+    expect(atCode.slice(atCode.indexOf('re-row focused'))).toContain('OpenCode');
   });
 
-  it('says who keeps these current without offering to do it here', () => {
+  it('explains the subscription source and leaves machine upkeep on the runner page', () => {
     const box = runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] });
     const html = render([box]);
-    // The answer to "do I have to manage this?" — said once, at the top, not per row.
-    expect(html).toContain('Orbit keeps these CLIs updated every 30 min.');
+    expect(html).toContain('Use subscriptions signed in on your machines.');
     // But not the lever. `POST /runners/:id/engine-update` takes no engine: its object is the
     // machine, and every other control on this page is scoped to one (runner, engine) pair. It
     // lives on the machine's own page, which this card already links to.
@@ -456,9 +465,10 @@ describe('the "On your runners" section', () => {
   });
 
   it('does not report an update run it no longer owns', () => {
-    // The report names every CLI the pass touched, OpenCode included — and this page has no
-    // OpenCode row. A machine-scoped summary on a page that shows a subset of the machine was
-    // the mismatch that put this whole panel on the wrong page.
+    // The report names every CLI the pass touched, OpenCode included — and this runner reports no
+    // OpenCode of its own, so nothing here renders it. A machine-scoped summary on a page that is
+    // about one (runner, engine) pair at a time was the mismatch that put this whole panel on the
+    // wrong page.
     const html = render([
       runner({
         engines: [health({ engine: 'claude', version: '2.1.220' })],
@@ -477,10 +487,11 @@ describe('the "On your runners" section', () => {
     expect(html).not.toContain('Dismiss');
   });
 
-  it('shows only the engines it can offer a sign-in for', () => {
-    // A runner reports every CLI on the machine. This page is about identity, and OpenCode has
-    // no relayable sign-in — a row nobody could act on is worse than no row.
-    const html = render([
+  it('gives OpenCode a row on the machine that reports it, and none on one that does not', () => {
+    // A runner reports every CLI on the machine, OpenCode included, so its row is that report's
+    // doing rather than a fixed list of engines here — and a machine that never mentions it has
+    // nothing for a row to say.
+    const reported = render([
       runner({
         engines: [
           health({ engine: 'claude', version: '2.1.228' }),
@@ -488,13 +499,54 @@ describe('the "On your runners" section', () => {
         ],
       }),
     ]);
-    expect(html).toContain('Claude Code');
-    expect(html).not.toContain('OpenCode');
+    expect(reported).toContain('OpenCode');
+    expect(reported).toContain('1.18.16');
+
+    const silent = render([runner({ engines: [health({ engine: 'claude', version: '2.1.228' })] })]);
+    expect(silent).toContain('Claude Code');
+    expect(silent).not.toContain('OpenCode');
+  });
+
+  it('offers to install OpenCode on a machine that reports it missing', () => {
+    // The same relay every other row's Install is, and the whole reason this row exists: a machine
+    // that has not got the CLI is exactly where OpenCode used to vanish from this page.
+    const html = render([
+      runner({ engines: [health({ engine: 'opencode', installed: false, auth: 'unknown' })] }),
+    ]);
+    const row = html.slice(html.indexOf('data-engine="opencode"'));
+    expect(row).toContain('OpenCode');
+    expect(row).toContain('Not installed — Orbit can install it here');
+    expect(row).toContain('>Install<');
+    expect(row).not.toContain('>Sign in<');
+  });
+
+  it('points an installed OpenCode at the machine instead of a sign-in it cannot relay', () => {
+    // OpenCode authenticates per provider and the runner refuses a login relayed from here, so the
+    // row offers no sign-in at all. What it says instead is the command to run on that machine —
+    // beside the version and update state every row here carries.
+    const html = render([
+      runner({
+        engines: [
+          health({
+            engine: 'opencode',
+            version: '1.18.16',
+            auth: 'unknown',
+            update: { status: 'ok', at: new Date(Date.now() - 6 * 3600_000).toISOString(), okAt: new Date(Date.now() - 6 * 3600_000).toISOString() },
+          }),
+        ],
+      }),
+    ]);
+    const row = html.slice(html.indexOf('data-engine="opencode"'));
+    expect(row).toContain('1.18.16');
+    expect(row).toContain('updated 6h ago');
+    expect(row).not.toContain('>Sign in<');
+    expect(row).toContain('opencode auth login');
   });
 
   it('never summarizes a folded card with a problem the card cannot show', () => {
-    // Drift on OpenCode is real and worth saying — on the machine's page. Counting it here would
-    // put "1 engine not updating" on a card whose every row is fine, with nothing to unfold to.
+    // Drift on OpenCode is real and worth saying — on the machine's page, and on the row itself
+    // where a runner reports one. This line counts the engines a sign-in is possible for, and
+    // OpenCode is not one of them: it is in neither the N signed in nor the drift count.
     // summaryOf reads the real clock (it renders, it isn't a pure rule), so these are real offsets.
     const hAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
     const drifting = runner({
@@ -625,6 +677,7 @@ describe('the "On your runners" section', () => {
     const html = render([]);
 
     expect(html).toContain('Already pay for Claude, Codex or Kimi?');
-    expect(html).toContain('Add a runner');
+    // Straight to registering one: the list it used to send to is this page now.
+    expect(html).toMatch(/<a href="\/runners\/register"[^>]*><button[^>]*><span>Register a machine<\/span><\/button><\/a>/);
   });
 });

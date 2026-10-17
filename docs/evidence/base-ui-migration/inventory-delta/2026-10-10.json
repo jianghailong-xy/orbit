@@ -1,0 +1,87 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-10",
+ "task": "34Za39Mm04q5p66pqUTtj",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-10",
+  "questions": [
+   "WorkspaceView.recapRow.test"
+  ]
+ },
+ "scan": {
+  "commit": "08a8964da19f2682b27cf9d8a8a54abae901b0b7",
+  "scopeHash": "ec92ade284bc811d870d8f940e01e08921563f3271cbf9afa053fd76d61acca8",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 778,
+   "productionFiles": 387,
+   "testFiles": 389,
+   "antdProductionFiles": 18,
+   "antdTestFiles": 46,
+   "antSelectorTestFiles": 13,
+   "antClassTestFiles": 13,
+   "iconProductionFiles": 114,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 216,
+   "hitLines": {
+    "ant-class": 136,
+    "ant-design-support": 19,
+    "ant-selector": 131,
+    "antd-reference": 171,
+    "icon-class": 84,
+    "icon-reference": 125,
+    "imperative-confirm": 10,
+    "imperative-feedback": 220,
+    "internal-ref": 4,
+    "provider": 58,
+    "rc-support": 239,
+    "ref-focus": 29,
+    "theme": 2,
+    "use-app": 4,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 92
+  }
+ },
+ "files": {
+  "src/web/src/components/WorkspaceView.recapRow.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "2255a531361af9b6ad72401340ecc7a38021cda0",
+     "short": "2255a5313",
+     "date": "2026-10-10",
+     "subject": "feat(web): the session list's second line prefers the server's recap (0418)",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "WorkspaceView 的测试，只用 antd 的 App 包裹被测的会话工作区；会话工作区由 P5.3 迁移，与其余 WorkspaceView.*.test.tsx 一起去掉这个包裹。",
+   "basis": "协调者 2026-10-10 判定（P5.2 开工时在项目 tip d580e572d（已含 origin/main 46e28aaa3）上 --check-owners 报出：main 的会话列表 recap（2255a5313，0418）带进的测试文件，status 记 new，记入 2026-10-10.json；与 2026-10-09c.json 的 WorkspaceView.managedRunner.test.tsx 同形）。随 P5.3 去掉包裹而消失。"
+  }
+ },
+ "css": [],
+ "summary": {
+  "files": 1,
+  "cssLines": 0,
+  "owners": {
+   "P5.3": 1
+  }
+ }
+}

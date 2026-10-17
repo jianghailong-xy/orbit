@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -158,7 +160,7 @@ func TestWaitForRunLoopStopUpdate(t *testing.T) {
 				t.Errorf("server = %q", server)
 			}
 			return "0.1.81", true
-		})
+		}, nil)
 	if reason != runLoopStopUpdate || remote != "0.1.81" {
 		t.Fatalf("stop = %v, %q; want update, 0.1.81", reason, remote)
 	}
@@ -172,7 +174,7 @@ func TestWaitForRunLoopStopSignalDoesNotRequestUpdate(t *testing.T) {
 		func(context.Context, string) (string, bool) {
 			checks++
 			return "99.0.0", true
-		})
+		}, nil)
 	if reason != runLoopStopSignal || remote != "" {
 		t.Fatalf("stop = %v, %q; want signal", reason, remote)
 	}
@@ -192,7 +194,7 @@ func TestWaitForRunLoopStopSignalWinsDuringUpdateCheck(t *testing.T) {
 				close(checkStarted)
 				<-finishCheck
 				return "0.1.81", true
-			})
+			}, nil)
 		result <- reason
 	}()
 
@@ -216,7 +218,7 @@ func TestWaitForRunLoopStopSignalWinsDuringUpdateCheck(t *testing.T) {
 func TestWaitForRunLoopStopContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	reason, remote := waitForRunLoopStop(ctx, nil, "https://control.example", time.Hour, nil)
+	reason, remote := waitForRunLoopStop(ctx, nil, "https://control.example", time.Hour, nil, nil)
 	if reason != runLoopStopNone || remote != "" {
 		t.Fatalf("stop = %v, %q; want context cancellation", reason, remote)
 	}
@@ -1155,5 +1157,107 @@ func TestUnstartedWorktreeCommands(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unstartedWorktreeCommands = %+v, want %+v", got, want)
+	}
+}
+
+// TestBackgroundScansReadOnlyAgentWorkDirs: a runner registered from ~/Desktop keeps that directory
+// as its own workDir, but the scans it repeats in the background — repo health every minute, slash
+// assets every five — read only its agents' workDirs and the user's ~/.claude. On a Mac every read
+// in ~/Desktop, ~/Documents or ~/Downloads has macOS ask the user, in the runner's name, for access.
+func TestBackgroundScansReadOnlyAgentWorkDirs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	mkSkill(t, home, "user-skill")
+	// Where `orbit register` ran: a checkout with assets of its own, which no agent works in.
+	desktop := filepath.Join(home, "Desktop")
+	if err := os.MkdirAll(desktop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, desktop, "init")
+	mkSkill(t, desktop, "desktop-skill")
+	app := initRepo(t)
+	mkSkill(t, app, "app-skill")
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := filepath.Join(t.TempDir(), "git-calls")
+	t.Setenv("CAPTURE_GIT_CALLS", calls)
+	bin := t.TempDir()
+	writeFakeBin(t, bin, "git", `printf '%s\n' "$*" >> "$CAPTURE_GIT_CALLS"
+exec "`+realGit+`" "$@"`)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// A second agent names no directory: it adds nothing, rather than falling back to another one.
+	agents := &runnerAgentList{agents: []RunnerAgent{{ID: "app", WorkDir: app}, {ID: "bare"}}}
+
+	root, err := filepath.EvalSymlinks(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reports := scanRepoHealth(agents.repoDirs())
+	if len(reports) != 1 || reports[0].Root != root || !reflect.DeepEqual(reports[0].AgentIDs, []string{"app"}) {
+		t.Fatalf("repo health = %+v, want the app checkout %s alone", reports, root)
+	}
+	data, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if !strings.Contains(call, app) && !strings.Contains(call, root) {
+			t.Errorf("repo health ran git outside the agent's checkout: git %s", call)
+		}
+	}
+
+	_, skills := scanSlashAssets(agents.assetRoots())
+	got := map[string]string{}
+	for _, s := range skills {
+		got[s.Name] = s.AgentID
+	}
+	if want := map[string]string{"user-skill": "", "app-skill": "app"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("slash scan found %v, want %v", got, want)
+	}
+}
+
+// runLoop reads the runner's own workDir in one place: sessionExecDir, the directory a session
+// starts in when its agent names none. Everything it repeats in the background takes its
+// directories from the agent list (TestBackgroundScansReadOnlyAgentWorkDirs) or runs in the private
+// probe directory (TestSlashRegistryProbeRunsInPrivateProbeDirectory).
+func TestRunLoopReadsItsOwnWorkDirOnlyForSessionFallback(t *testing.T) {
+	data, err := os.ReadFile("runloop.go")
+	if err != nil {
+		t.Fatalf("read runloop.go: %v", err)
+	}
+	src := string(data)
+	start := strings.Index(src, "func runLoop(")
+	if start < 0 {
+		t.Fatal("runLoop was not found")
+	}
+	end := start + strings.Index(src[start:], "\n}\n")
+	fallback := strings.Index(src[start:end], "sessionExecDir := func(workDir string) string {")
+	if fallback < 0 {
+		t.Fatal("runLoop's sessionExecDir was not found")
+	}
+	fallback += start
+	fallbackEnd := fallback + strings.Index(src[fallback:end], "\n\t}\n")
+	for at := start; ; {
+		i := strings.Index(src[at:end], "cfg.WorkDir")
+		if i < 0 {
+			break
+		}
+		at += i
+		if at < fallback || at > fallbackEnd {
+			t.Errorf("runloop.go:%d reads the runner's own workDir outside sessionExecDir", strings.Count(src[:at], "\n")+1)
+		}
+		at += len("cfg.WorkDir")
+	}
+	for _, want := range []string{
+		"repoHealth := &repoHealthProbe{dirs: runnerAgents.repoDirs}",
+		"slashAssetsForHeartbeat(runnerAgents.assetRoots())",
+	} {
+		if !strings.Contains(src[start:end], want) {
+			t.Errorf("runLoop no longer has %q", want)
+		}
 	}
 }

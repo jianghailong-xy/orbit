@@ -1,0 +1,390 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs",
+   "--project",
+   "chromium-dark-desktop"
+  ],
+  "configFile": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "select-keys-repeat.browser.mjs",
+   "file": "select-keys-repeat.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter at 1x CPU throttling",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "timedOut",
+         "duration": 90749,
+         "error": {
+          "message": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m",
+          "stack": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+         },
+         "errors": [
+          {
+           "message": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+          },
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs",
+            "column": 18,
+            "line": 48
+           },
+           "message": "Error: page.waitForTimeout: Test timeout of 90000ms exceeded.\n\n  46 |       await page.keyboard.press('ArrowDown');\n  47 |       await page.keyboard.press('Enter');\n> 48 |       await page.waitForTimeout(1500);\n     |                  ^\n  49 |       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });\n  50 |       await page.waitForTimeout(300);\n  51 |       const listboxOpen = await page.evaluate(() => [...document.querySelectorAll('[role=\"listbox\"]')].some((el) => el.getBoundingClientRect().height > 0));\n    at /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:48:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:11:58.290Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-17ec9--Enter-at-1x-CPU-throttling-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-17ec9--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-9f75d6a90b0d38c6c43a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 33,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter at 1x CPU throttling",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "timedOut",
+         "duration": 90694,
+         "error": {
+          "message": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m",
+          "stack": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+         },
+         "errors": [
+          {
+           "message": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+          },
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs",
+            "column": 18,
+            "line": 48
+           },
+           "message": "Error: page.waitForTimeout: Test timeout of 90000ms exceeded.\n\n  46 |       await page.keyboard.press('ArrowDown');\n  47 |       await page.keyboard.press('Enter');\n> 48 |       await page.waitForTimeout(1500);\n     |                  ^\n  49 |       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });\n  50 |       await page.waitForTimeout(300);\n  51 |       const listboxOpen = await page.evaluate(() => [...document.querySelectorAll('[role=\"listbox\"]')].some((el) => el.getBoundingClientRect().height > 0));\n    at /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:48:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:13:30.258Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dc437--Enter-at-1x-CPU-throttling-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dc437--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-238715271231971dfb5d",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 33,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter at 1x CPU throttling",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "timedOut",
+         "duration": 92482,
+         "error": {
+          "message": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m",
+          "stack": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+         },
+         "errors": [
+          {
+           "message": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+          },
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs",
+            "column": 18,
+            "line": 48
+           },
+           "message": "Error: page.waitForTimeout: Test timeout of 90000ms exceeded.\n\n  46 |       await page.keyboard.press('ArrowDown');\n  47 |       await page.keyboard.press('Enter');\n> 48 |       await page.waitForTimeout(1500);\n     |                  ^\n  49 |       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });\n  50 |       await page.waitForTimeout(300);\n  51 |       const listboxOpen = await page.evaluate(() => [...document.querySelectorAll('[role=\"listbox\"]')].some((el) => el.getBoundingClientRect().height > 0));\n    at /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:48:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:15:01.996Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dcb49--Enter-at-1x-CPU-throttling-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dcb49--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d946252cedcf9dc3f9c7",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 33,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T06:11:57.547Z",
+  "duration": 278134.945,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 3,
+  "flaky": 0
+ }
+}

@@ -1,0 +1,552 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone
+
+[WebServer] (node:1975334) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 30 tests using 1 worker
+
+(node:1975432) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › attachment matches the current surface, density and option states (3.2s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › access matches the current surface, density and option states (2.7s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › expiry matches the current surface, density and option states (3.1s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › account matches the current surface, density and option states (3.0s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › search matches the current surface, density and option states (3.1s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › popover matches the current surface, density and option states (2.8s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices.browser.mjs:45:3 › tooltip matches the current surface, density and option states (2.7s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices.browser.mjs:72:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.1s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices.browser.mjs:103:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.4s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices.browser.mjs:134:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.1s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices.browser.mjs:163:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.4s)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices.browser.mjs:193:1 › remote search accepts server labels and resets an action picker without local filtering (999ms)
+  ✘  13 [chromium-light-desktop] › ui-migration/choices.browser.mjs:213:37 › Dialog owns choices, top-layer Escape, Tab and theme (16.1s)
+(node:1977141) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  14 [chromium-light-desktop] › ui-migration/choices.browser.mjs:213:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (1.5m)
+(node:1981932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  15 [chromium-light-desktop] › ui-migration/choices.browser.mjs:247:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (15.9s)
+(node:1983414) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  16 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › attachment matches the current surface, density and option states (2.5s)
+(node:1983593) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › access matches the current surface, density and option states (2.2s)
+  ✘  18 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › expiry matches the current surface, density and option states (2.2s)
+(node:1984069) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  19 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › account matches the current surface, density and option states (2.2s)
+(node:1984285) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  20 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › search matches the current surface, density and option states (2.4s)
+(node:1984559) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › popover matches the current surface, density and option states (2.4s)
+  ✓  22 [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › tooltip matches the current surface, density and option states (2.5s)
+  ✓  23 [webkit-dark-phone] › ui-migration/choices.browser.mjs:72:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.2s)
+  ✓  24 [webkit-dark-phone] › ui-migration/choices.browser.mjs:103:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.5s)
+  ✓  25 [webkit-dark-phone] › ui-migration/choices.browser.mjs:134:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.2s)
+  ✓  26 [webkit-dark-phone] › ui-migration/choices.browser.mjs:163:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓  27 [webkit-dark-phone] › ui-migration/choices.browser.mjs:193:1 › remote search accepts server labels and resets an action picker without local filtering (924ms)
+  ✓  28 [webkit-dark-phone] › ui-migration/choices.browser.mjs:213:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✘  29 [webkit-dark-phone] › ui-migration/choices.browser.mjs:213:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (17.2s)
+(node:1987470) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  30 [webkit-dark-phone] › ui-migration/choices.browser.mjs:247:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (16.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:213:37 › Dialog owns choices, top-layer Escape, Tab and theme 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: 'Share workspace', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: 'Share workspace', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Share workspace', exact: true })
+
+
+      227 |   await tap(page, info, dialog.getByRole('combobox', { name: 'Expires', exact: true }));
+      228 |   await page.keyboard.press('Escape');
+    > 229 |   await expect(dialog).toBeVisible();
+          |                        ^
+      230 |   const actions = dialog.getByRole('button', { name: 'Session actions', exact: true });
+      231 |   await tap(page, info, actions);
+      232 |   await page.keyboard.press('Escape');
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:229:24
+
+    Error Context: .choices-results/choices.browser.mjs-Dialog-0e3d1--layer-Escape-Tab-and-theme-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-Dialog-0e3d1--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-Dialog-0e3d1--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices.browser.mjs:213:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: locator.click: Test timeout of 90000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: 'Legacy share', exact: true }).getByRole('button', { name: 'Session actions', exact: true })
+        - locator resolved to <button tabindex="0" type="button" id="base-ui-_r_25_" aria-haspopup="menu" aria-expanded="false" class="orbit-button orbit-button-default orbit-button-middle">…</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+        - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+      - element was detached from the DOM, retrying
+
+
+      24 | async function tap(page, info, locator) {
+      25 |   if (info.project.use.hasTouch) await locator.tap();
+    > 26 |   else await locator.click();
+         |                      ^
+      27 | }
+      28 | async function outside(page, info) {
+      29 |   if (info.project.use.hasTouch) await page.touchscreen.tap(3, 60);
+        at tap (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:26:22)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:231:9
+
+    Error Context: .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/choices.browser.mjs:247:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: 'Context', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: 'Context', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Context', exact: true })
+
+
+      253 |   await select.click();
+      254 |   await page.keyboard.press('Escape');
+    > 255 |   await expect(popover).toBeVisible();
+          |                         ^
+      256 |   await expect(select).toBeFocused();
+      257 |   await page.keyboard.press('Escape');
+      258 |   await expect(popover).not.toBeVisible();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:255:25
+
+    Error Context: .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › attachment matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 24
+    + Received  + 24
+
+    @@ -2,101 +2,101 @@
+        "popup": Object {
+          "rows": Array [
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "4px",
+    +         "borderRadius": "0px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -         "fontSize": "14px",
+    +         "fontSize": "17px",
+              "fontWeight": "400",
+              "height": 42.390625,
+              "label": "File",
+    -         "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "lineHeight": "26.714285px",
+    +         "padding": "0px 0px 0px 31px",
+              "width": 250,
+              "x": 0,
+              "y": 10,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "4px",
+    +         "borderRadius": "0px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -         "fontSize": "14px",
+    +         "fontSize": "17px",
+              "fontWeight": "400",
+              "height": 42.390625,
+              "label": "Image",
+    -         "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "lineHeight": "26.714285px",
+    +         "padding": "0px 0px 0px 31px",
+              "width": 250,
+              "x": 0,
+              "y": 52.390625,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "4px",
+    +         "borderRadius": "0px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -         "fontSize": "14px",
+    +         "fontSize": "17px",
+              "fontWeight": "400",
+              "height": 42.390625,
+              "label": "Shell",
+    -         "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "lineHeight": "26.714285px",
+    +         "padding": "0px 0px 0px 31px",
+              "width": 250,
+              "x": 0,
+    -         "y": 103.78125,
+    +         "y": 114.78125,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgba(255, 255, 255, 0.25)",
+    -         "borderRadius": "4px",
+    +         "borderRadius": "0px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgba(255, 255, 255, 0.25)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -         "fontSize": "14px",
+    +         "fontSize": "17px",
+              "fontWeight": "400",
+              "height": 42.390625,
+              "label": "Skill",
+    -         "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "lineHeight": "26.714285px",
+    +         "padding": "0px 0px 0px 31px",
+              "width": 250,
+              "x": 0,
+    -         "y": 146.171875,
+    +         "y": 157.171875,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "4px",
+    +         "borderRadius": "0px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -         "fontSize": "14px",
+    +         "fontSize": "17px",
+              "fontWeight": "400",
+              "height": 42.390625,
+              "label": "/Command",
+    -         "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "lineHeight": "26.714285px",
+    +         "padding": "0px 0px 0px 31px",
+              "width": 250,
+              "x": 0,
+    -         "y": 188.5625,
+    +         "y": 199.5625,
+            },
+          ],
+          "surface": Object {
+            "backgroundColor": "rgb(52, 52, 55)",
+            "borderColor": "rgb(201, 206, 213)",
+    @@ -106,11 +106,11 @@
+            "boxShadow": "rgba(0, 0, 0, 0.17) 0px 18px 44px 0px, rgba(0, 0, 0, 0.06) 0px 2px 8px 0px",
+            "color": "rgb(201, 206, 213)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 240.953125,
+    +       "height": 251.953125,
+            "lineHeight": "22px",
+            "padding": "10px 0px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+
+      66 |     }
+      67 |     await attach(info, 'appearance', measurements);
+    > 68 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      69 |   });
+      70 | }
+      71 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:68:32
+
+    Error Context: .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-webkit-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › expiry matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,11 +1,11 @@
+      Object {
+        "control": Object {
+          "rows": Array [],
+          "surface": Object {
+            "backgroundColor": "rgb(43, 43, 46)",
+    -       "borderColor": "rgb(66, 66, 70)",
+    +       "borderColor": "rgb(105, 106, 110)",
+            "borderRadius": "4px",
+            "borderStyle": "solid",
+            "borderWidth": "1px",
+            "boxShadow": "none",
+            "color": "rgb(201, 206, 213)",
+
+      66 |     }
+      67 |     await attach(info, 'appearance', measurements);
+    > 68 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      69 |   });
+      70 | }
+      71 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:68:32
+
+    Error Context: .choices-results/choices.browser.mjs-expiry-6462a-e-density-and-option-states-webkit-dark-phone/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-expiry-6462a-e-density-and-option-states-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-expiry-6462a-e-density-and-option-states-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › account matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+    @@ -1,11 +1,11 @@
+      Object {
+        "control": Object {
+          "rows": Array [],
+          "surface": Object {
+            "backgroundColor": "rgb(43, 43, 46)",
+    -       "borderColor": "rgb(66, 66, 70)",
+    +       "borderColor": "rgb(82, 83, 86)",
+            "borderRadius": "6px",
+            "borderStyle": "solid",
+            "borderWidth": "1px",
+            "boxShadow": "none",
+            "color": "rgb(201, 206, 213)",
+    @@ -89,11 +89,11 @@
+            "boxShadow": "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px",
+            "color": "rgb(201, 206, 213)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 161.1875,
+    +       "height": 169.1875,
+            "lineHeight": "22px",
+            "padding": "4px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+
+      66 |     }
+      67 |     await attach(info, 'appearance', measurements);
+    > 68 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      69 |   });
+      70 | }
+      71 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:68:32
+
+    Error Context: .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-webkit-dark-phone/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › search matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,11 +1,11 @@
+      Object {
+        "control": Object {
+          "rows": Array [],
+          "surface": Object {
+            "backgroundColor": "rgb(43, 43, 46)",
+    -       "borderColor": "rgb(66, 66, 70)",
+    +       "borderColor": "rgb(78, 78, 82)",
+            "borderRadius": "6px",
+            "borderStyle": "solid",
+            "borderWidth": "1px",
+            "boxShadow": "none",
+            "color": "rgb(201, 206, 213)",
+
+      66 |     }
+      67 |     await attach(info, 'appearance', measurements);
+    > 68 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      69 |   });
+      70 | }
+      71 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:68:32
+
+    Error Context: .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-webkit-dark-phone/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-dark-phone] › ui-migration/choices.browser.mjs:213:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      235 |   for (const key of ['Tab', 'Shift+Tab']) for (let i = 0; i < 12; i++) {
+      236 |     await page.keyboard.press(key);
+    > 237 |     await expect.poll(() => dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+          |                                                                                           ^
+      238 |   }
+      239 |   expect(await page.evaluate(() => [document.body, document.documentElement].some((el) => /hidden|clip/.test(getComputedStyle(el).overflowY)))).toBe(true);
+      240 |   await shot(info, 'choices-in-dialog', dialog);
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:237:91
+
+    Error Context: .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-dark-phone] › ui-migration/choices.browser.mjs:247:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('tooltip')
+    Expected: "Usage from this account"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('tooltip') with timeout 15000ms
+      - waiting for getByRole('tooltip')
+
+
+      262 |   await usage.focus();
+      263 |   const tooltip = page.getByRole('tooltip');
+    > 264 |   await expect(tooltip).toHaveText('Usage from this account');
+          |                         ^
+      265 |   await expect(usage).toHaveAttribute('aria-describedby', /.+/);
+      266 |   await page.keyboard.press('Escape');
+      267 |   await expect(tooltip).not.toBeVisible();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:264:25
+
+    Error Context: .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:213:37 › Dialog owns choices, top-layer Escape, Tab and theme 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:213:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:247:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › attachment matches the current surface, density and option states 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › expiry matches the current surface, density and option states 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › account matches the current surface, density and option states 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:45:3 › search matches the current surface, density and option states 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:213:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:247:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+  21 passed (3.5m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone

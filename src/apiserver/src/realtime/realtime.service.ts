@@ -23,19 +23,27 @@ import {
   SessionFilingState,
   SessionLifecycleState,
   SessionRunState,
+  SessionSourceRefusalDetail,
   SessionState,
+  SourceRefusalCode,
+  SourceState,
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
+import { enqueueRecap } from '../sessions/recap';
 import { deriveSessionCapabilities } from '../sessions/session-state';
+import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
+import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
+import { RUNNER_WAKE_CHANNEL } from './runner-wake';
 import {
   ownerItemsForRow,
   readOwnerDecisionsBySession,
@@ -52,6 +60,8 @@ import {
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
+/** How long a wake nobody was parked for stays owed (see notifyRunnerWake). */
+const RUNNER_WAKE_HOLD_MS = 30_000;
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 
@@ -63,6 +73,17 @@ const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an ho
  * backfill exists to remove, so the honest degradation is back to handing over nothing.
  */
 const TURN_PREFIX_MAX_CHARS = 64_000;
+
+/**
+ * How much of a reply preview rides in a summary. The list row clips its own two previews to the
+ * same length in SQL (`SessionsService.PREVIEW_LEN`), and the summary is those same two fields on
+ * the same row: a client folds it in verbatim, so the two have to agree on the text or a row's
+ * preview would change length every time an update landed. Counted in code points, as `left()`
+ * counts them, so a clip never splits a surrogate pair.
+ */
+const PREVIEW_LEN = 200;
+const previewText = (text: string | null | undefined): string | null =>
+  text == null || text.length <= PREVIEW_LEN ? (text ?? null) : [...text].slice(0, PREVIEW_LEN).join('');
 
 /** One session's streamed-but-unpersisted text for the turn in flight. `null` is a kind that blew
  *  past TURN_PREFIX_MAX_CHARS and stays abandoned until the next boundary clears it. */
@@ -179,6 +200,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly inbox = new EventEmitter(); // event name = runId
+  private readonly runnerWake = new EventEmitter(); // event name = runnerId
+  /** runnerId → when a wake was asked for that no parked poll has taken yet. */
+  private readonly runnerWakeOwed = new Map<string, number>();
   private listener?: Client;
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -211,6 +235,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     private readonly push: PushService,
   ) {
     this.inbox.setMaxListeners(0);
+    this.runnerWake.setMaxListeners(0);
   }
 
   async onModuleInit(): Promise<void> {
@@ -242,6 +267,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       await client.connect();
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
       await client.query(`LISTEN ${INBOX_CHANNEL}`);
+      await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
     } catch (e) {
@@ -275,15 +301,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private onNotify(channel: string, payload?: string): void {
     if (!payload) return;
-    let m: { i: string; r: string; e?: NormalizedRunEvent; s?: number };
+    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number };
     try {
       m = JSON.parse(payload);
     } catch {
       return;
     }
-    if (m.i === this.instanceId) return; // our own write — already emitted locally
+    // Our own write — already emitted locally. A committed-transaction wake is the exception: it
+    // carries `c` because nothing emitted it locally, so this replica takes its own delivery too.
+    if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
     if (channel === INBOX_CHANNEL) {
       this.inbox.emit(m.r);
+      return;
+    }
+    if (channel === RUNNER_WAKE_CHANNEL) {
+      this.wakeRunnerLocally(m.r);
       return;
     }
     if (channel === EVENT_CHANNEL) {
@@ -343,6 +375,53 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  // ── runner wake (heartbeat-delivered work) ─────────────────────────────
+
+  /**
+   * Have this runner heartbeat now instead of at its next 30s tick: something its heartbeat carries
+   * — a sign-in to start, a pasted code — is waiting, and the person who asked is watching a
+   * spinner. The runner parks in GET /runner/wake (waitForRunnerWake) and beats when it returns.
+   *
+   * Only a nudge: the work itself stays in the row and is delivered by the heartbeat, so a wake that
+   * is lost costs the old half-minute and nothing else.
+   */
+  notifyRunnerWake(runnerId: string): void {
+    this.wakeRunnerLocally(runnerId);
+    this.notifyRaw(RUNNER_WAKE_CHANNEL, JSON.stringify({ i: this.instanceId, r: runnerId }));
+  }
+
+  /** A wake with nobody parked is held for the next poll, so one asked for in the moment between
+   *  two polls is not lost. Every replica holds it; the spare ones cost one extra heartbeat. */
+  private wakeRunnerLocally(runnerId: string): void {
+    if (this.runnerWake.listenerCount(runnerId) > 0) {
+      this.runnerWake.emit(runnerId);
+      return;
+    }
+    this.runnerWakeOwed.set(runnerId, Date.now());
+  }
+
+  /** Park until this runner is asked to wake (true), the timeout elapses or the poll hangs up (false). */
+  waitForRunnerWake(runnerId: string, timeoutMs: number, hungUp?: AbortSignal): Promise<boolean> {
+    const owed = this.runnerWakeOwed.get(runnerId);
+    if (owed !== undefined) {
+      this.runnerWakeOwed.delete(runnerId);
+      if (Date.now() - owed <= RUNNER_WAKE_HOLD_MS) return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      const done = (woke: boolean) => (): void => {
+        clearTimeout(timer);
+        this.runnerWake.off(runnerId, onWake);
+        hungUp?.removeEventListener('abort', onHangUp);
+        resolve(woke);
+      };
+      const onWake = done(true);
+      const onHangUp = done(false);
+      const timer = setTimeout(done(false), timeoutMs);
+      this.runnerWake.once(runnerId, onWake);
+      hungUp?.addEventListener('abort', onHangUp, { once: true });
+    });
+  }
+
   // ── run events (SSE) ────────────────────────────────────────────────────
 
   publish(runId: string, event: NormalizedRunEvent): void {
@@ -380,6 +459,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const status = event.payload as { final?: boolean; retryAt?: string | null };
     if (event.type === RunEventType.STATUS && status.final && !status.retryAt) {
       void this.push.notifySessionSettled(runId);
+      // The same settlement, one line later, asks for the session's last recap (sessions/recap.ts):
+      // this branch is the one event per finalization — /turn-complete's failure, the runner's
+      // /finalize, the reaper's forceFinalize, a spent retry — so hooking here covers every way a
+      // session ends rather than the doors that happen to end it. `finalize` is what a settle that
+      // arrives inside the two-minute window needs: the pass ignores the window, and the write is
+      // what the session list draws next. Fire and forget, like the push above it: the pass is
+      // queued and this call returns, and nothing the pass can meet may fail a settlement.
+      void enqueueRecap({ db: this.prisma, sessionId: runId, finalize: true }).catch(() => undefined);
     }
   }
 
@@ -887,7 +974,25 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         },
         workspaceId: true,
         folderId: true,
+        // The SOURCE snapshot, which the "this run never started" card reads: the state this run's
+        // baseline was left in, and — when a runner refused it — §10.1's code and the diagnosis
+        // (with the `fixAction` the control plane wrote beside it) that says what to do about it.
+        // `UNBOUND` + nulls on a Legacy session, which is every session that resolves no baseline.
+        sourceState: true,
+        sourceRefusalCode: true,
+        sourceRefusalDetail: true,
         lastTurnAt: true,
+        // What the row previews, and the recap the list prefers to it: an already-open list
+        // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
+        // them would leave every row on screen previewing the turn before the one just finished.
+        lastAssistantText: true,
+        lastUserText: true,
+        recapText: true,
+        recapAt: true,
+        // The engine it runs on, and what the old rules derive it from for a row that has none.
+        engine: true,
+        provider: true,
+        providerBuiltin: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
       },
@@ -926,6 +1031,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       lifecycleState,
       filingState,
       capabilities,
+      // The engine it runs on (docs/provider-engine-contract.md §6.1): recorded, else derived, null
+      // when nobody can tell.
+      engine: await sessionEngine(this.prisma, s),
       agentId: s.workspaceId ?? null,
       agent: s.workspace
         ? {
@@ -938,8 +1046,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Null is a value here: a session moved out of its folder reaches the owner's other clients
       // by this key going null.
       folderId: s.folderId ?? null,
+      // The same three keys the list row and the detail carry, so a client folding this summary
+      // into a row it holds cannot be handed a refused run that looks like one still queued. Sent
+      // on every summary — a session that resolves nothing is `UNBOUND` with nulls, which is what
+      // clears a row that was showing a refusal.
+      sourceState: s.sourceState as SourceState,
+      sourceRefusalCode: (s.sourceRefusalCode as SourceRefusalCode | null) ?? null,
+      sourceRefusalDetail: (s.sourceRefusalDetail as SessionSourceRefusalDetail | null) ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
+      projectMembership: await readSessionProjectMembership(this.prisma, sessionId),
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
       confirmationUnderReview: underReview
@@ -955,6 +1071,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The two previews, clipped the way the list's own query clips them, and the recap beside
+      // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
+      // row holding this summary, and a recap the session does not have is a null.
+      lastAssistantText: previewText(s.lastAssistantText),
+      lastUserText: previewText(s.lastUserText),
+      recapText: s.recapText ?? null,
+      recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
       retryAt: s.retryAt ? s.retryAt.toISOString() : null,
@@ -1272,6 +1395,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
     return turns
       .filter((t) => t.content)
-      .map((t) => ({ requestId: t.id, sessionId: t.sessionId, path: t.content! }));
+      .map((t) => {
+        const request = readWorktreeArtifactRequest(t.content);
+        return {
+          requestId: t.id, sessionId: t.sessionId,
+          path: request?.path ?? t.content!,
+          ...(request ? { source: 'worktree' as const } : {}),
+        };
+      });
   }
 }

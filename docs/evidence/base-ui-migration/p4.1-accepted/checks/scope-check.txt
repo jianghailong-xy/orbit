@@ -1,0 +1,22 @@
+registration 5630745035af26a97746291a2c6453c57e4e02b1, parent 3aa26fb97644f24551dc9c70149021f7f7f9453f, head 40e27140ed1ab8d68d9d71cb04bab62f4957a4b3
+## files the registration commit changes
+M	docs/evidence/base-ui-migration/p0-drift/README.md
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-phone/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-phone/profile-validation.png
+M	docs/evidence/base-ui-migration/p0-drift/accepted/registry.json
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-phone/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-phone/profile-validation.png
+outside p0-drift/accepted/ and p0-drift/README.md: []
+## p0-drift/README.md lines the registration changes
++| P4.1（[34Za39Do3N6tkmIMP0GBP](orbit-task:34Za39Do3N6tkmIMP0GBP)）第 1 版证据，`evidenceDigest` `9477611a…7d57`，CONFIRM，文档 [p4.1/README.md](.
++P4.1 的同提交对照里，其余 250 张截图 before → after 232 张逐字节相同、18 张是 Chromium 噪声，都通过 P0 比较器，逐张见 p4.1
+## protected paths, 3aa26fb97644f24551dc9c70149021f7f7f9453f..HEAD (empty = unchanged)
+docs/evidence/base-ui-migration/p0.2: []
+docs/evidence/base-ui-migration/p0-drift/reference: []
+src/web/ui-migration: []
+src/web/package.json: []
+## accepted layer: entries other than P4.1's unchanged
+other entries identical
+## commits after the registration (each touches only docs/evidence/base-ui-migration/p4.1-accepted/)
+40e27140e docs(web): P4.1 accepted-layer registration evidence for the WebKit phone profile-validation
+outside p4.1-accepted after the registration: []

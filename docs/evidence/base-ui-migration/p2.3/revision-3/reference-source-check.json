@@ -1,0 +1,9 @@
+{
+  "baseline": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "allOriginalSourceFilesMatch": 589,
+  "samePrivateFixture": "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx",
+  "fixtureSha256": "b9e336d0b39dda8b6c36991b275c712d7f658c10fb0a26b93125e491a8a3760f",
+  "hoverTestByteIdentical": true,
+  "hoverTestSha256": "5a219bf3554870c4f1582ac482ff229e395ebdf4f8fc721365db4f1a578380be",
+  "excludedReferenceCase": "Modal accessibility was absent in the original; only native arrival and layout entry/exit are compared here. Current-code full suite keeps the modal case."
+}

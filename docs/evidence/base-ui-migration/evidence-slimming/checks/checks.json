@@ -1,0 +1,101 @@
+{
+ "reportTests": 28344,
+ "reportBodies": 47417,
+ "added": {
+  "report": [
+   41885192,
+   303
+  ],
+  "case": [
+   9589204,
+   141
+  ]
+ },
+ "notesDelta": 31188,
+ "keptCategories": [
+  [
+   "被采用版本的截图和差异图（每个任务目录每张一份）",
+   [
+    4662,
+    160909284
+   ]
+  ],
+  [
+   "受保护目录与根目录清单（逐字节未改）",
+   [
+    1623,
+    94579522
+   ]
+  ],
+  [
+   "汇总、索引、审计 JSON（含 artifact-index、manifest 等 SHA256SUMS 类清单）",
+   [
+    1518,
+    49317730
+   ]
+  ],
+  [
+   "report.summary.json（Playwright 报告去掉附件正文）",
+   [
+    303,
+    41885192
+   ]
+  ],
+  [
+   "README、说明文档、检查结果文本（.md/.txt，含 22 份加了说明的 README）",
+   [
+    1193,
+    39495167
+   ]
+  ],
+  [
+   "attachments.summary.json（逐用例 JSON 汇总）",
+   [
+    141,
+    9589204
+   ]
+  ],
+  [
+   "脚本、补丁、日志、样式和 .sha256 清单",
+   [
+    240,
+    6715087
+   ]
+  ],
+  [
+   "压缩的依赖安装快照与合并检查日志（README 引用）",
+   [
+    4,
+    5190681
+   ]
+  ],
+  [
+   "被取代修订里文档单独链接的截图和 JSON",
+   [
+    27,
+    722869
+   ]
+  ],
+  [
+   "新增 .gitignore 和 p2-integration-cards/README.md",
+   [
+    2,
+    1651
+   ]
+  ]
+ ],
+ "commands": [
+  {
+   "name": "清单核对脚本",
+   "command": "node src/web/scripts/verify-antd-inventory.mjs",
+   "result": "退出 0：Inventory coverage passed: 149 source owners, 37 import contracts, 287 tests, 187 CSS hits on 182 lines; source reproduction not requested.",
+   "where": "提交 `9014a478d`，输出 [checks/inventory.txt](checks/inventory.txt)"
+  },
+  {
+   "name": "项目合并检查",
+   "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+   "result": "构建通过；Vitest 344/344 个测试文件、4379/4379 个用例全部通过",
+   "where": "提交 `9014a478d`，输出 [checks/build-test.txt](checks/build-test.txt)"
+  }
+ ]
+}

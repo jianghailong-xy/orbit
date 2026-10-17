@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -366,9 +367,192 @@ func TestIntegrationLandsASourceThatAlreadyAbsorbedUpstream(t *testing.T) {
 	}
 }
 
+// TestIntegrationNewSyncTaskResolvesPromotionMergeConflict is the companion to the MAIN_SYNC
+// task-reopen case above.  A promotion conflict has no task branch to send back, so the coordinator
+// files a fresh sync task from the project branch tip.  That task absorbs upstream and carries the
+// hand resolution; landing it must use J-S4 MERGE, preserve the resolution, and advance the line.
+func TestIntegrationNewSyncTaskResolvesPromotionMergeConflict(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	lineTip, mainTip := contestedLine(t, r)
+
+	// This is a new sync task: its source starts at the project line and contains no prior task work.
+	r.checkoutNew("task/sync", lineTip)
+	sourceSha := absorbMain(t, r)
+	r.push("task/sync")
+	r.checkout("main")
+	before := r.originRev("refs/heads/project/line")
+
+	check := IntegrationCheckSpec{
+		Name:             "MERGE_CHECK",
+		Command:          "grep -qx '0368 the line' ledger.txt && grep -qx '0370 main' ledger.txt",
+		ExpectedExitCode: 0,
+		TimeoutSeconds:   60,
+	}
+	command := r.command("task/sync", "project/line", check)
+	command.SessionBaseSha = lineTip
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s, conflicts %v), want LANDED", result.State, result.ErrorCode, result.Phase, result.Conflicts)
+	}
+	if result.MainSyncSha != "" || slices.Contains(phases, "MAIN_SYNC") {
+		t.Fatalf("the sync task was absorbed a second time (phases %v, mainSyncSha %q)", phases, result.MainSyncSha)
+	}
+	if !slices.Contains(phases, "MERGE") {
+		t.Fatalf("phases = %v, want MERGE mode", phases)
+	}
+	if result.TargetShaBefore != before || result.TargetShaBefore != lineTip {
+		t.Fatalf("target before = %q, want the project tip %q without a rewritten target", result.TargetShaBefore, lineTip)
+	}
+	if !isAncestor(r.work, lineTip, result.LandedSha) {
+		t.Fatal("the old project tip is not an ancestor of the landed commit: the line was force-rewritten")
+	}
+	if !isAncestor(r.work, mainTip, result.LandedSha) {
+		t.Fatal("upstream's tip is not an ancestor of the landed commit")
+	}
+	if got := r.originRev("refs/heads/project/line"); got != result.LandedSha {
+		t.Fatalf("origin holds %s, the result claims %s", got, result.LandedSha)
+	}
+	parents, _ := git(r.work, "rev-list", "--parents", "-n", "1", result.LandedSha)
+	if want := result.LandedSha + " " + lineTip + " " + sourceSha; parents != want {
+		t.Fatalf("landed commit and parents = %q, want %q", parents, want)
+	}
+	if body, _ := git(r.work, "show", result.LandedSha+":ledger.txt"); body+"\n" != resolvedLedger {
+		t.Fatalf("the sync task's resolution did not survive: %q", body)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+		t.Fatalf("checks = %+v, want the merge check to have passed on the resolved tree", result.Checks)
+	}
+}
+
+// TestIntegrationLandsASourceWhoseAbsorbedUpstreamMovedOn is the clean half of J-S2's source-absorb
+// branch. A source that absorbed main at an earlier tip and carries the resolution — the sync-task
+// shape, or the absorb of a reworked task — is the branch the CURRENT upstream must be merged into
+// when main has moved on: merging it into the line's tip would meet the conflicts the source already
+// resolved and stop at MAIN_SYNC. The absorb goes onto the source, J-S4 lands by MERGE, and the
+// tree is the source plus what main gained since, with the old line tip still an ancestor.
+func TestIntegrationLandsASourceWhoseAbsorbedUpstreamMovedOn(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	lineTip, _ := contestedLine(t, r)
+	r.checkoutNew("task/absorbed-moved", lineTip)
+	r.write("work.txt", "the task's own work\n")
+	r.commit("task work")
+	sourceSha := absorbMain(t, r)
+	r.push("task/absorbed-moved")
+	r.checkout("main")
+	r.write("upstream-moved.txt", "main moved on\n")
+	mainMoved := r.commit("main moved")
+	r.push("main")
+	before := r.originRev("refs/heads/project/line")
+
+	// The check runs on the tree that lands: the resolution, plus the commit main gained since.
+	check := IntegrationCheckSpec{
+		Name: "MERGE_CHECK",
+		Command: "grep -qx '0368 the line' ledger.txt && grep -qx '0370 main' ledger.txt && " +
+			"test -f upstream-moved.txt",
+		ExpectedExitCode: 0,
+		TimeoutSeconds:   60,
+	}
+	command := r.command("task/absorbed-moved", "project/line", check)
+	command.SessionBaseSha = lineTip
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s, conflicts %v), want LANDED", result.State, result.ErrorCode, result.Phase, result.Conflicts)
+	}
+	// The current upstream was absorbed, by this job, and the source landed by MERGE.
+	if result.MainSyncSha == "" || !slices.Contains(phases, "MAIN_SYNC") {
+		t.Fatalf("phases %v, mainSyncSha %q: the current upstream was not absorbed into the source", phases, result.MainSyncSha)
+	}
+	if !slices.Contains(phases, "MERGE") {
+		t.Fatalf("phases = %v, want the source landed by MERGE", phases)
+	}
+	if result.TargetShaBefore != lineTip || result.TargetShaBefore != before {
+		t.Fatalf("target before = %q, want the line tip %q", result.TargetShaBefore, lineTip)
+	}
+	// The old line tip is an ancestor — no force, no rewrite — and so is everything that mattered:
+	// the source with its resolution, and the upstream commit that moved on.
+	if !isAncestor(r.work, lineTip, result.LandedSha) {
+		t.Fatal("the old line tip is not an ancestor of the landed commit: the line was rewritten")
+	}
+	if !isAncestor(r.work, sourceSha, result.LandedSha) {
+		t.Fatal("the source is not an ancestor of the landed commit: it was not landed by MERGE")
+	}
+	if !isAncestor(r.work, mainMoved, result.LandedSha) {
+		t.Fatal("the upstream commit that moved on is not in the landed history")
+	}
+	if got := r.originRev("refs/heads/project/line"); got != result.LandedSha {
+		t.Fatalf("origin holds %s, the result claims %s", got, result.LandedSha)
+	}
+	// The resolution survived, and the landed tree carries the commit main gained since.
+	if body, _ := git(r.work, "show", result.LandedSha+":ledger.txt"); body+"\n" != resolvedLedger {
+		t.Fatalf("the resolution did not survive: %q", body)
+	}
+	if body, _ := git(r.work, "show", result.LandedSha+":upstream-moved.txt"); body != "main moved on" {
+		t.Fatalf("the landed tree does not carry the upstream commit that moved on: %q", body)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+		t.Fatalf("checks = %+v, want the merge check to have passed on the combined tree", result.Checks)
+	}
+}
+
+// TestIntegrationMainSyncConflictWhenUpstreamTouchesTheResolution is the conflict half of J-S2's
+// source-absorb branch: main moved on by editing the very place the source resolved. Merging the new
+// upstream into the source meets that conflict — U′..U really did touch the same place — and it is
+// reported as the MAIN_SYNC conflict it is, with the paths, and nothing lands.
+func TestIntegrationMainSyncConflictWhenUpstreamTouchesTheResolution(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	lineTip, _ := contestedLine(t, r)
+	r.checkoutNew("task/absorbed-conflict", lineTip)
+	r.write("work.txt", "the task's own work\n")
+	r.commit("task work")
+	absorbMain(t, r)
+	r.push("task/absorbed-conflict")
+	r.checkout("main")
+	// The new entry lands exactly where the source's resolution inserted 0368 — between 0367 and
+	// 0370 — so merging the new upstream into the source really does touch the same place.
+	r.write("ledger.txt", "0366 base\n0367 main\n0369 main\n0370 main\n")
+	r.commit("main edits the ledger again")
+	r.push("main")
+	before := r.originRev("refs/heads/project/line")
+
+	command := r.command("task/absorbed-conflict", "project/line")
+	command.SessionBaseSha = lineTip
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+	if result.State != "CONFLICT" || result.Phase != "MAIN_SYNC" {
+		t.Fatalf("state = %s / %s (%s), want CONFLICT / MAIN_SYNC", result.State, result.Phase, result.ErrorCode)
+	}
+	if !slices.Contains(phases, "MAIN_SYNC") {
+		t.Fatalf("phases = %v, want the absorb attempted", phases)
+	}
+	if len(result.Conflicts) != 1 || result.Conflicts[0] != "ledger.txt" {
+		t.Fatalf("conflicts = %v, want [ledger.txt]", result.Conflicts)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+	if result.LandedSha != "" || result.MainSyncSha != "" {
+		t.Fatalf("a conflict reported landed %q, main sync %q", result.LandedSha, result.MainSyncSha)
+	}
+}
+
 // TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip is the other side of M3: a source that
 // does not contain both tips this job fetched has not made this absorb, so J-S2 makes it on the
-// line's tip as before and reports the conflict it meets there. The line does not move.
+// line's tip as before and reports the conflict it meets there. The line does not move. (A source
+// that absorbed main and then saw the LINE move is in this list; one that saw MAIN move is the new
+// source-absorb branch, pinned by TestIntegrationLandsASourceWhoseAbsorbedUpstreamMovedOn and
+// TestIntegrationMainSyncConflictWhenUpstreamTouchesTheResolution.)
 func TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -383,18 +567,6 @@ func TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip(t *testing.T) {
 				r.write("work.txt", "the task's own work\n")
 				r.commit("task work")
 				r.push("task/source")
-			},
-		},
-		{
-			name: "main moved after it absorbed main",
-			build: func(t *testing.T, r *integrationRepo, lineTip string) {
-				r.checkoutNew("task/source", lineTip)
-				absorbMain(t, r)
-				r.push("task/source")
-				r.checkout("main")
-				r.write("elsewhere.txt", "main moved on\n")
-				r.commit("main moved")
-				r.push("main")
 			},
 		},
 		{
@@ -753,13 +925,169 @@ func TestIntegrationNothingToLandMeasuresWhereTheTipIs(t *testing.T) {
 	}
 }
 
+// TestIntegrationNothingToLandWhenEveryCommitIsAlreadyOnTheTarget is the 2026-10-09 incident (project
+// 34PBlWiEZytRLTcPufJht). Main had taken the project's work in by another route, the line was rebuilt
+// from main's tip, and every task's branch was handed to it again. Each branch carried commits of its
+// own, and the rebase dropped every one of them ("patch contents already upstream"). The replay came
+// back AT the base, the push moved nothing, and the job reported LANDED with a receipt for a landing
+// that put nothing anywhere.
+//
+// The answer is NOTHING_TO_LAND, and nothing is pushed. It reports what was measured. The branch was
+// not empty: every commit it carried was already in the base it was replayed onto
+// (`sourceFullyApplied`). Its tip is not on the upstream (`sourceOnUpstream`), because what is there
+// are copies of its commits, not the commits. Two lines give that answer: the incident's, AT main, and
+// one ahead of main whose own commits already carry the change. The control plane reads them
+// differently, so both shapes are pinned here.
+//
+// The control changes one fact: one more commit, which the target does not have. That commit is
+// replayed and lands, and nothing is said about the branch being applied.
+func TestIntegrationNothingToLandWhenEveryCommitIsAlreadyOnTheTarget(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		lineAheadOfMain bool
+	}{
+		{name: "the line at main", lineAheadOfMain: false},
+		{name: "a line ahead of main", lineAheadOfMain: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			fork := r.rev("main")
+			// The task's branch: a commit of its own, made before its change reached the target.
+			r.checkoutNew("task/applied", "main")
+			r.write("feature.txt", "the task's change\n")
+			r.commit("task: the change")
+			r.push("task/applied")
+			// The same change reaches the target by another route, as a commit of its own: on main, which
+			// the line is then rebuilt from, or on a line that is ahead of main.
+			if tc.lineAheadOfMain {
+				r.checkoutNew("project/line", "main")
+			} else {
+				r.checkout("main")
+			}
+			r.write("feature.txt", "the task's change\n")
+			r.commit("the same change, by another route")
+			if tc.lineAheadOfMain {
+				r.push("project/line")
+			} else {
+				r.push("main")
+				r.checkoutNew("project/line", "main")
+				r.push("project/line")
+			}
+			r.checkout("main")
+			before := r.originRev("refs/heads/project/line")
+
+			command := r.command("task/applied", "project/line")
+			command.SessionBaseSha = fork
+			var phases []string
+			result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+				phases = append(phases, phase)
+			})
+			if result.State != "NOTHING_TO_LAND" || result.Phase != "REBASE" {
+				t.Fatalf("state = %s / %s (%s), want NOTHING_TO_LAND / REBASE", result.State, result.Phase, result.ErrorCode)
+			}
+			if result.SourceFullyApplied == nil || !*result.SourceFullyApplied {
+				t.Fatalf("sourceFullyApplied = %v, want a measured true: the branch carried a commit, and the "+
+					"target already had its change", result.SourceFullyApplied)
+			}
+			if result.SourceOnUpstream == nil || *result.SourceOnUpstream {
+				t.Fatalf("sourceOnUpstream = %v, want a measured false: the upstream holds a copy of the "+
+					"task's commit, not the commit", result.SourceOnUpstream)
+			}
+			if slices.Contains(phases, "PUSH") || slices.Contains(phases, "VERIFY") {
+				t.Fatalf("phases = %v: nothing was there to push, so nothing was pushed or verified", phases)
+			}
+			if got := r.originRev("refs/heads/project/line"); got != before {
+				t.Fatalf("the target moved: %s -> %s", before, got)
+			}
+			if result.LandedSha != "" || result.TestedSha != "" {
+				t.Fatalf("landed %q, tested %q: an answer that landed nothing names nothing landed",
+					result.LandedSha, result.TestedSha)
+			}
+			if atMain := result.TargetShaBefore == result.UpstreamSha; atMain == tc.lineAheadOfMain {
+				t.Fatalf("target %s, upstream %s: the fixture is not the line it names", result.TargetShaBefore, result.UpstreamSha)
+			}
+
+			// The control: one more commit, which the target does not have.
+			r.checkout("task/applied")
+			r.write("more.txt", "work the target does not have\n")
+			r.commit("task: more")
+			r.push("task/applied")
+			r.checkout("main")
+			landed := runIntegrationJob(command, silent)
+			if landed.State != "LANDED" {
+				t.Fatalf("control state = %s (%s %s), want LANDED", landed.State, landed.ErrorCode, landed.Phase)
+			}
+			if landed.SourceFullyApplied != nil || landed.SourceOnUpstream != nil {
+				t.Fatalf("a landing reported measurements nobody asked it for: applied %v, on upstream %v",
+					landed.SourceFullyApplied, landed.SourceOnUpstream)
+			}
+			if commits, err := git(r.work, "rev-list", "--count", before+".."+landed.LandedSha); err != nil || commits != "1" {
+				t.Fatalf("commits added to the target = %q (%v), want the one it did not have", commits, err)
+			}
+			if body, _ := git(r.work, "show", landed.LandedSha+":more.txt"); body != "work the target does not have" {
+				t.Fatalf("the landed commit does not carry the new work: %q", body)
+			}
+		})
+	}
+}
+
+// TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks covers the other way a replay comes back AT
+// the base: there was nothing to replay. The session started on a commit the line does not have
+// (another branch's work) and committed nothing. J-S3's "already contained" does not fire for that
+// tip, and J-S4 replays an empty range. Before this, the result was pushed (a push that moved
+// nothing), verified, and reported LANDED, with a receipt for work the branch never carried. It is
+// NOTHING_TO_LAND, measured as NOT applied, so the control plane reads it exactly as it reads J-S3's
+// empty branch (0300, 0346).
+func TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+	r.checkoutNew("other/work", "main")
+	r.write("other.txt", "another branch's work\n")
+	sessionBase := r.commit("another branch's commit")
+	r.push("other/work")
+	r.checkoutNew("orbit/idle", sessionBase)
+	r.push("orbit/idle")
+	r.checkout("main")
+
+	command := r.command("orbit/idle", "project/line")
+	command.SessionBaseSha = sessionBase
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+	if result.State != "NOTHING_TO_LAND" || result.Phase != "REBASE" {
+		t.Fatalf("state = %s / %s (%s), want NOTHING_TO_LAND / REBASE", result.State, result.Phase, result.ErrorCode)
+	}
+	if result.SourceFullyApplied == nil || *result.SourceFullyApplied {
+		t.Fatalf("sourceFullyApplied = %v, want a measured false: the branch carried no commit of its own",
+			result.SourceFullyApplied)
+	}
+	if result.SourceOnUpstream == nil || *result.SourceOnUpstream {
+		t.Fatalf("sourceOnUpstream = %v, want a measured false: the tip is a commit main does not have",
+			result.SourceOnUpstream)
+	}
+	if slices.Contains(phases, "PUSH") || slices.Contains(phases, "VERIFY") {
+		t.Fatalf("phases = %v: nothing was there to push, so nothing was pushed or verified", phases)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
 // TestIntegrationJobReportsTheTipOnTheUpstream: the measurement is only a fact once the control
 // plane has it, so this follows it onto the wire — the result POSTed for the job carries
 // `sourceOnUpstream: true`. And only that answer does: a landing is not asked the question, and its
 // result says nothing about it rather than a false the control plane would have to tell apart from
-// a measured one.
+// a measured one. The same goes for `sourceFullyApplied`, which every NOTHING_TO_LAND carries: false
+// for the empty branch, true for a branch whose every commit the target already had.
 func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
-	t.Parallel()
+	// Not parallel: a reported result is spooled under the runner's home before it is sent
+	// (integration_result_spool.go), and the home is set to a directory of this test's own.
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	report := func(t *testing.T, job IntegrationJobCommand) map[string]interface{} {
 		t.Helper()
 		var result map[string]interface{}
@@ -774,7 +1102,7 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 			_, _ = w.Write([]byte(`{}`))
 		}))
 		defer srv.Close()
-		runIntegrationJobAndReport(NewTransport(srv.URL, "tok"), job)
+		runIntegrationJobAndReport(context.Background(), NewTransport(srv.URL, "tok"), job)
 		if result == nil {
 			t.Fatal("no result was reported")
 		}
@@ -793,14 +1121,27 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 	r.write("work.txt", "a commit of its own\n")
 	r.commit("task work")
 	r.push("task/work")
+	// A branch whose one commit the line already has, by another route.
+	r.checkoutNew("task/applied", "main")
+	r.write("line.txt", "landed on the line, not yet on main\n")
+	r.commit("the line's change, made again on the task's branch")
+	r.push("task/applied")
 	r.checkout("main")
 
 	empty := r.command("orbit/rollout", "project/line")
 	empty.JobID = "job-empty"
 	empty.SessionBaseSha = fork
 	sent := report(t, empty)
-	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceOnUpstream"] != true {
-		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceOnUpstream true", sent)
+	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceOnUpstream"] != true || sent["sourceFullyApplied"] != false {
+		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceOnUpstream true and sourceFullyApplied false", sent)
+	}
+
+	applied := r.command("task/applied", "project/line")
+	applied.JobID = "job-applied"
+	applied.SessionBaseSha = fork
+	sent = report(t, applied)
+	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceFullyApplied"] != true || sent["sourceOnUpstream"] != false {
+		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceFullyApplied true and sourceOnUpstream false", sent)
 	}
 
 	landing := r.command("task/work", "project/line")
@@ -810,8 +1151,10 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 	if sent["state"] != "LANDED" {
 		t.Fatalf("result = %#v, want LANDED", sent)
 	}
-	if _, present := sent["sourceOnUpstream"]; present {
-		t.Fatalf("a landing reported a measurement nobody asked it for: %#v", sent)
+	for _, field := range []string{"sourceOnUpstream", "sourceFullyApplied"} {
+		if _, present := sent[field]; present {
+			t.Fatalf("a landing reported a measurement nobody asked it for (%s): %#v", field, sent)
+		}
 	}
 }
 

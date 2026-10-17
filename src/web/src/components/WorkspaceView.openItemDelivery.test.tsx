@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenItemDeliveryCard as Delivery } from '@orbit/shared';
@@ -83,7 +82,9 @@ const CARD: Delivery = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 
@@ -260,9 +261,7 @@ async function mountSession(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -304,9 +303,8 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     const placeholder = cardFields(card()!);
     expect(placeholder.title).toBe(CARD.title);
     expect(placeholder.files).toEqual(CARD.files);
-    expect(placeholder.doors).toEqual([
-      'Retry the task', 'Cancel the task',
-    ]);
+    // The server lists no rerun for a conflict, so the card offers only the quiet door that stops it.
+    expect(placeholder.doors).toEqual(['Cancel the task']);
 
     // …and then the runner leases the turn and echoes it, carrying the same card the ingest path
     // recorded (withOpenItemDelivery). Nothing about the delivery may change shape at that moment.

@@ -1,0 +1,50 @@
+{"app": "/var/tmp/p23b1/trees/m-86c6d2d4d", "commit": "86c6d2d4df03f541a9ef6b5c57bf2ee0e365c181", "dirty": "", "runner": "77233e226b4e8a96d38517a4a68329052d5f04d6", "started": "2026-10-07T00:43:58Z", "args": "-g profile$"}
+[WebServer] (node:2870360) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 8 tests using 1 worker
+
+(node:2870485) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-light-desktop/profile-validation.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+(node:2870916) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+(node:2871281) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+(node:2871676) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓  4 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+(node:2871971) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓  5 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.0s)
+(node:2872232) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓  6 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.9s)
+(node:2872541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓  7 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.3s)
+(node:2872952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-profile-86c6d2d4d/snapshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (2.1s)
+
+  8 passed (18.5s)
+# exit 0

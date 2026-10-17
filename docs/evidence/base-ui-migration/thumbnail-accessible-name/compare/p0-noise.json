@@ -1,0 +1,517 @@
+{
+ "names": 252,
+ "onlyDel": [
+  "chromium-dark-desktop/settings-saved.png",
+  "chromium-light-desktop/breakpoint-641-graph.png",
+  "chromium-light-desktop/projects-search-empty.png",
+  "chromium-light-phone/profile-validation.png",
+  "chromium-light-phone/projects-list.png",
+  "chromium-light-phone/projects-search-empty.png"
+ ],
+ "onlyRef": [
+  "chromium-dark-desktop/breakpoint-639-projects.png",
+  "chromium-dark-desktop/projects-search-empty.png",
+  "chromium-dark-desktop/task-action-focus.png",
+  "chromium-dark-desktop/task-action-hover.png",
+  "chromium-dark-desktop/task-detail.png",
+  "chromium-light-desktop/breakpoint-641-projects.png",
+  "chromium-light-desktop/profile-validation.png",
+  "chromium-light-desktop/project-graph.png",
+  "chromium-light-phone/projects-search-empty.png"
+ ],
+ "pairs": {
+  "del|del2": {
+   "antialias": 9,
+   "beyond": 1,
+   "differing": {
+    "chromium-dark-desktop/settings-saved.png": {
+     "max": 1,
+     "pixels": 29
+    },
+    "chromium-light-desktop/breakpoint-639-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/breakpoint-641-graph.png": {
+     "max": 1,
+     "pixels": 12
+    },
+    "chromium-light-desktop/projects-search-empty.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-light-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "max": 2,
+     "pixels": 35
+    },
+    "chromium-light-phone/projects-list.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-phone/task-action-focus.png": {
+     "max": 3,
+     "pixels": 2
+    }
+   },
+   "identical": 242
+  },
+  "ref2|del": {
+   "antialias": 9,
+   "beyond": 1,
+   "differing": {
+    "chromium-dark-desktop/settings-saved.png": {
+     "max": 1,
+     "pixels": 29
+    },
+    "chromium-light-desktop/breakpoint-639-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/project-graph.png": {
+     "max": 1,
+     "pixels": 4
+    },
+    "chromium-light-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "max": 2,
+     "pixels": 35
+    },
+    "chromium-light-phone/projects-list.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-phone/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 12
+    },
+    "chromium-light-phone/task-action-focus.png": {
+     "max": 3,
+     "pixels": 2
+    }
+   },
+   "identical": 242
+  },
+  "ref2|del2": {
+   "antialias": 4,
+   "beyond": 0,
+   "differing": {
+    "chromium-light-desktop/breakpoint-641-graph.png": {
+     "max": 1,
+     "pixels": 12
+    },
+    "chromium-light-desktop/project-graph.png": {
+     "max": 1,
+     "pixels": 4
+    },
+    "chromium-light-desktop/projects-search-empty.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-light-phone/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 12
+    }
+   },
+   "identical": 248
+  },
+  "ref|del": {
+   "antialias": 10,
+   "beyond": 1,
+   "differing": {
+    "chromium-dark-desktop/breakpoint-639-projects.png": {
+     "max": 4,
+     "pixels": 7
+    },
+    "chromium-dark-desktop/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-dark-desktop/settings-saved.png": {
+     "max": 1,
+     "pixels": 29
+    },
+    "chromium-dark-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-dark-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-dark-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-light-desktop/breakpoint-641-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "max": 2,
+     "pixels": 56
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "max": 2,
+     "pixels": 35
+    },
+    "chromium-light-phone/projects-list.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-phone/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 12
+    }
+   },
+   "identical": 241
+  },
+  "ref|del2": {
+   "antialias": 13,
+   "beyond": 2,
+   "differing": {
+    "chromium-dark-desktop/breakpoint-639-projects.png": {
+     "max": 4,
+     "pixels": 7
+    },
+    "chromium-dark-desktop/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-dark-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-dark-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-dark-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-light-desktop/breakpoint-639-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/breakpoint-641-graph.png": {
+     "max": 1,
+     "pixels": 12
+    },
+    "chromium-light-desktop/breakpoint-641-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "max": 2,
+     "pixels": 56
+    },
+    "chromium-light-desktop/projects-search-empty.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-light-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-phone/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 12
+    },
+    "chromium-light-phone/task-action-focus.png": {
+     "max": 3,
+     "pixels": 2
+    }
+   },
+   "identical": 237
+  },
+  "ref|ref2": {
+   "antialias": 11,
+   "beyond": 2,
+   "differing": {
+    "chromium-dark-desktop/breakpoint-639-projects.png": {
+     "max": 4,
+     "pixels": 7
+    },
+    "chromium-dark-desktop/projects-search-empty.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-dark-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-dark-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-dark-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 3
+    },
+    "chromium-light-desktop/breakpoint-639-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/breakpoint-641-projects.png": {
+     "max": 2,
+     "pixels": 7
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "max": 2,
+     "pixels": 56
+    },
+    "chromium-light-desktop/project-graph.png": {
+     "max": 1,
+     "pixels": 4
+    },
+    "chromium-light-desktop/task-action-focus.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-action-hover.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-desktop/task-detail.png": {
+     "max": 1,
+     "pixels": 5
+    },
+    "chromium-light-phone/task-action-focus.png": {
+     "max": 3,
+     "pixels": 2
+    }
+   },
+   "identical": 239
+  }
+ },
+ "perRun": {
+  "del": 252,
+  "del2": 252,
+  "ref": 252,
+  "ref2": 252
+ },
+ "set": "p0",
+ "variants": {
+  "chromium-dark-desktop/breakpoint-639-projects.png": {
+   "del": [
+    "92671f312c24aa02",
+    "92671f312c24aa02"
+   ],
+   "ref": [
+    "128218565194f262",
+    "92671f312c24aa02"
+   ]
+  },
+  "chromium-dark-desktop/projects-search-empty.png": {
+   "del": [
+    "ebc2b941c87075a0",
+    "ebc2b941c87075a0"
+   ],
+   "ref": [
+    "23d5d9992dd57532",
+    "ebc2b941c87075a0"
+   ]
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "del": [
+    "964950aa63951da1",
+    "51a46e54600e8305"
+   ],
+   "ref": [
+    "51a46e54600e8305",
+    "51a46e54600e8305"
+   ]
+  },
+  "chromium-dark-desktop/task-action-focus.png": {
+   "del": [
+    "f3ee69be6842efac",
+    "f3ee69be6842efac"
+   ],
+   "ref": [
+    "bc9660d655788028",
+    "f3ee69be6842efac"
+   ]
+  },
+  "chromium-dark-desktop/task-action-hover.png": {
+   "del": [
+    "c882cf47b6495e7a",
+    "c882cf47b6495e7a"
+   ],
+   "ref": [
+    "9b292609908107a9",
+    "c882cf47b6495e7a"
+   ]
+  },
+  "chromium-dark-desktop/task-detail.png": {
+   "del": [
+    "8f3070d953ad53ef",
+    "8f3070d953ad53ef"
+   ],
+   "ref": [
+    "297f8ad5596d8ec0",
+    "8f3070d953ad53ef"
+   ]
+  },
+  "chromium-light-desktop/breakpoint-639-projects.png": {
+   "del": [
+    "ae90a2a736a1e9c8",
+    "330533cae964d4df"
+   ],
+   "ref": [
+    "ae90a2a736a1e9c8",
+    "330533cae964d4df"
+   ]
+  },
+  "chromium-light-desktop/breakpoint-641-graph.png": {
+   "del": [
+    "cc7502b07bebb675",
+    "fceedbfa088ae243"
+   ],
+   "ref": [
+    "cc7502b07bebb675",
+    "cc7502b07bebb675"
+   ]
+  },
+  "chromium-light-desktop/breakpoint-641-projects.png": {
+   "del": [
+    "250a5bb3d7790f97",
+    "250a5bb3d7790f97"
+   ],
+   "ref": [
+    "3280498edea4698f",
+    "250a5bb3d7790f97"
+   ]
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "del": [
+    "15e140cacae18475",
+    "15e140cacae18475"
+   ],
+   "ref": [
+    "2eaf7e7dd3ae6804",
+    "15e140cacae18475"
+   ]
+  },
+  "chromium-light-desktop/project-graph.png": {
+   "del": [
+    "200967342d72d2a9",
+    "200967342d72d2a9"
+   ],
+   "ref": [
+    "200967342d72d2a9",
+    "33ad756731cae1d6"
+   ]
+  },
+  "chromium-light-desktop/projects-search-empty.png": {
+   "del": [
+    "488ca122caf1d525",
+    "3e7b8a1884a9e9e4"
+   ],
+   "ref": [
+    "488ca122caf1d525",
+    "488ca122caf1d525"
+   ]
+  },
+  "chromium-light-desktop/task-action-focus.png": {
+   "del": [
+    "bf739d4d2f737bf9",
+    "66b34c30f2a82999"
+   ],
+   "ref": [
+    "bf739d4d2f737bf9",
+    "66b34c30f2a82999"
+   ]
+  },
+  "chromium-light-desktop/task-action-hover.png": {
+   "del": [
+    "3a368739e167984c",
+    "2893c16756fa2715"
+   ],
+   "ref": [
+    "3a368739e167984c",
+    "2893c16756fa2715"
+   ]
+  },
+  "chromium-light-desktop/task-detail.png": {
+   "del": [
+    "447bca1a358a26c2",
+    "ee950a04169002ef"
+   ],
+   "ref": [
+    "447bca1a358a26c2",
+    "ee950a04169002ef"
+   ]
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "del": [
+    "0564d0237849d9fa",
+    "a88fcd764681dca1"
+   ],
+   "ref": [
+    "a88fcd764681dca1",
+    "a88fcd764681dca1"
+   ]
+  },
+  "chromium-light-phone/projects-list.png": {
+   "del": [
+    "ddc36805e1a34467",
+    "93c9a517fbfe6039"
+   ],
+   "ref": [
+    "93c9a517fbfe6039",
+    "93c9a517fbfe6039"
+   ]
+  },
+  "chromium-light-phone/projects-search-empty.png": {
+   "del": [
+    "fb05e69f3c0d23ad",
+    "fb05e69f3c0d23ad"
+   ],
+   "ref": [
+    "64ab73ad7ea02e25",
+    "64ab73ad7ea02e25"
+   ]
+  },
+  "chromium-light-phone/task-action-focus.png": {
+   "del": [
+    "1a9617db1a8cf8a1",
+    "9ae217c2089a217a"
+   ],
+   "ref": [
+    "1a9617db1a8cf8a1",
+    "9ae217c2089a217a"
+   ]
+  }
+ }
+}

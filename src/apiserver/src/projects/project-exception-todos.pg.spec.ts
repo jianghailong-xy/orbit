@@ -1133,6 +1133,48 @@ test('settling one task answers its item and leaves another task\'s item OPEN',
     }
   });
 
+test('the owner’s own run-again press picks a FAILED task up, and answers its failure item RETRIED',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'run-again', 'PARKED');
+      const a = await attempt(stack, w, 'run-again', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.FAILED);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failed attempt');
+      assert.equal(item.state, 'OPEN', 'the failure is owed until something answers it');
+
+      // The press a FAILED task's Retry makes (`taskFailureDoors` names `/tasks/:id/execute`): the
+      // owner's own door — the very route Run now presses — and NOT the integration retry, which
+      // this task can never survive. `decideIntegrationRetry` refuses anything that is not DONE,
+      // deliberately: a landing delivers a finished task's work, and this is the task that failed.
+      const press = await stack.tasks.execute(w.ownerId, a.taskId, undefined, randomUUID());
+      assert.equal(press.ok, true, `the owner's run-again press was refused: ${JSON.stringify(press)}`);
+
+      // A run is away on the task again: the failure is cleared, and the live run holds the task.
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.IN_PROGRESS);
+      const started = press as { sessionId: string };
+      const run = await stack.db.session.findUniqueOrThrow({
+        where: { id: started.sessionId },
+        select: { taskId: true, startsTaskWork: true, status: true },
+      });
+      assert.equal(run.taskId, a.taskId);
+      assert.equal(run.startsTaskWork, true, 'the press starts run work, not a conversation');
+      assert.ok(['PENDING', 'RUNNING'].includes(run.status), `the run is live: ${run.status}`);
+      assert.notEqual(started.sessionId, a.sessionId, 'a fresh run, not the attempt that failed');
+
+      // And the failure item is answered by that fact (§4.2's fourth fact, `resolveByFact`): a run
+      // is away, so what the item was owed has happened. Nothing is left standing behind the press.
+      const answered = await onlyItemFor(stack.db, w, a.taskId, 'the run-again press');
+      assert.equal(answered.state, 'RESOLVED');
+      assert.equal(answered.resolution, 'RETRIED');
+      assert.equal(answered.resolvedBy, 'PLATFORM');
+      assert.ok(answered.resolvedAt, 'an answered item carries when it was answered');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('a merge conflict opens one item owned by the coordinator, and queues it on the coordinator',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1642,7 +1684,7 @@ test('the message an integration item is delivered as carries what its payload k
       const [reported] = await itemTurns(stack.db, checked.coordinatorSessionId!);
       assert.ok(reported, 'the item was not queued on the coordinator');
       assert.ok(
-        reported.content?.includes('MERGE_CHECK 的退出码是 2'),
+        reported.content?.includes('MERGE_CHECK exited with code 2'),
         `the message does not say which check failed and what it returned — ${reported.content}`,
       );
       assert.ok(
@@ -1865,10 +1907,16 @@ async function retryCoordinator(stack: Stack, w: World): Promise<void> {
   });
   // The runner's claim of a revived conversation, which `claimed` stands in for on a live one: it is
   // RUNNING, and owned by the process this fixture reports as — no lease owner — rather than by the
-  // hand-off the revive leaves on it for whichever process takes it next.
-  await stack.db.session.updateMany({
-    where: { id: coordinator, status: RunStatus.PENDING },
-    data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+  // hand-off the revive leaves on it for whichever process takes it next. The transaction declares
+  // it reads the session's recorded engine, which migration 0414 requires of every PENDING -> RUNNING
+  // write (`common/session-scheduling.ts`): without it the claim is dropped in silence, `updateMany`
+  // answers 0 and nothing at all is claimed.
+  await stack.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.updateMany({
+      where: { id: coordinator, status: RunStatus.PENDING },
+      data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+    });
   });
   const delivered = await dequeue(stack, coordinator, w.runnerId);
   assert.equal(delivered?.turnId, retried.turnId, 'the retried turn was handed to the runner');
@@ -2062,8 +2110,13 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
     const [queued] = await itemTurns(stack.db, coordinator);
     assert.ok(queued, `nothing was queued — ${await factsAbout(stack.db, w, t.taskId)}`);
 
-    // The runner claims the conversation, the engine reads the item and ends that turn.
-    await stack.db.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    // The runner claims the conversation, the engine reads the item and ends that turn. The
+    // transaction declares it reads the session's recorded engine, as migration 0414 requires of
+    // every PENDING -> RUNNING write (`common/session-scheduling.ts`).
+    await stack.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    });
     const handed = await dequeue(stack, coordinator, w.runnerId);
     assert.equal(handed?.turnId, queued.id);
     await stack.db.runEvent.create({
@@ -2448,6 +2501,57 @@ test('the owner closes what is theirs, and the two kinds that have a press of th
       const kept = await itemNow(stack, promoted, card.id);
       assert.equal(kept.state, 'OPEN', 'the card is still in front of the owner, undecided');
       assert.equal(kept.resolutionNote, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/**
+ * An exception that became the owner's is one of the things a project is not recorded done over
+ * (`project_request_done`, `project-done-request.ts`): the coordinator's request names it among its
+ * refusals and files nothing. While the coordinator still carries it, it is the coordinator's work
+ * and not an owner item; once the owner has closed it, it holds nothing back.
+ */
+test('an exception that escalated to the owner holds the coordinator\'s request to record the project done',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'done-held', 'PARKED');
+      const a = await attempt(stack, w, 'done-held', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const ownerItems = async () => {
+        const thrown = await stack.openItems.requestDone(w.ownerId, w.projectId, w.coordinatorSessionId!, {
+          judgment: 'Everything that can be done is done.',
+          gaps: [],
+        }).then(() => null, (error: unknown) => error);
+        assert.ok(thrown instanceof HttpException, 'a project with a failed task cannot be asked done');
+        assert.equal(thrown.getStatus(), 409);
+        const body = thrown.getResponse() as {
+          code: string;
+          written: number;
+          findings: Array<{ code: string; items: Array<{ itemId: string; kind: string }> }>;
+        };
+        assert.equal(body.code, 'DONE_REQUEST_NOT_READY');
+        assert.equal(body.written, 0);
+        return body.findings.find((finding) => finding.code === 'DONE_OWNER_ITEMS_OPEN')?.items ?? [];
+      };
+
+      // With the coordinator, the failure is its work: not an item waiting on the owner.
+      const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      assert.equal(opened.assignee, 'COORDINATOR');
+      assert.deepEqual(await ownerItems(), []);
+
+      // The clock hands it to the owner, and the request names it.
+      const owned = await escalate(stack, w, a);
+      assert.deepEqual(await ownerItems(), [{ itemId: owned.id, kind: 'TASK_FAILED', title: owned.title }]);
+
+      // The owner closes it: it waits on nobody, and holds nothing back.
+      await door(stack)(w, owned.id, { kind: 'OWNER' }, '看过了：环境问题，这条不再需要处理');
+      assert.deepEqual(await ownerItems(), []);
+      const filed = await stack.db.projectOpenItem.count({
+        where: { projectId: w.projectId, kind: 'DONE_REQUEST' },
+      });
+      assert.equal(filed, 0, 'and none of the refused requests was filed');
     } finally {
       await stack.db.$disconnect();
     }

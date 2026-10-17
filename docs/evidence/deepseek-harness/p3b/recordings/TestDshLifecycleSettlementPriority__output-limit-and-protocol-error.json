@@ -1,0 +1,203 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "dsh prompt reached the output token limit",
+          "result": "truncated answer",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "FAILED",
+          "subtype": "max_tokens"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "FAILED",
+      "turnId": "t1"
+    },
+    {
+      "completions": [
+        {
+          "error": "dsh session/prompt (-32603): 401 invalid key [redacted] {\"apiKey\":\"[redacted]\"}",
+          "result": "",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "FAILED",
+          "subtype": "error"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "FAILED",
+      "turnId": "t2"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "reply to m3 after [m1|m2]",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t3"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3439919
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3439919
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3439919
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3439919
+    },
+    {
+      "id": "orbit-dsh-4",
+      "method": "session/prompt",
+      "pid": 3439919
+    },
+    {
+      "id": "orbit-dsh-5",
+      "method": "session/prompt",
+      "pid": 3439919
+    },
+    {
+      "id": "orbit-dsh-6",
+      "method": "session/close",
+      "pid": 3439919
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleSettlementPriorityoutput-limit-and-protocol-err287333979/001/work",
+      "history": [
+        "m1 [max]",
+        "m2 [rpcerr]",
+        "m3"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [max]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "text": "truncated answer",
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "message": "dsh prompt reached the output token limit",
+      "turn": "t1",
+      "type": "error"
+    },
+    {
+      "stopReason": "max_tokens",
+      "subtype": "max_tokens",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "text": "m2 [rpcerr]",
+      "turn": "t2",
+      "type": "user"
+    },
+    {
+      "message": "dsh session/prompt (-32603): 401 invalid key [redacted] {\"apiKey\":\"[redacted]\"}",
+      "turn": "t2",
+      "type": "error"
+    },
+    {
+      "subtype": "error",
+      "turn": "t2",
+      "type": "turn_end"
+    },
+    {
+      "text": "m3",
+      "turn": "t3",
+      "type": "user"
+    },
+    {
+      "text": "reply to m3 after [m1|m2]",
+      "turn": "t3",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t3",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t3",
+      "type": "turn_end"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "FAILED",
+        "subtype": "max_tokens",
+        "result": "truncated answer",
+        "error": "dsh prompt reached the output token limit"
+      },
+      "t2": {
+        "state": "settled",
+        "status": "FAILED",
+        "subtype": "error",
+        "error": "dsh session/prompt (-32603): 401 invalid key [redacted] {\"apiKey\":\"[redacted]\"}"
+      },
+      "t3": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "reply to m3 after [m1|m2]"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleSettlementPriority/output-limit-and-protocol-error",
+  "sideEffects": null
+}

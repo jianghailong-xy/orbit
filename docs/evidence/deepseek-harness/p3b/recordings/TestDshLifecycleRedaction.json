@@ -1,0 +1,106 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "dsh session/prompt (-32603): 401 invalid key [redacted] {\"apiKey\":\"[redacted]\"}",
+          "result": "",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "FAILED",
+          "subtype": "error"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "FAILED",
+      "turnId": "t1"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3440054
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3440054
+    },
+    {
+      "fields": {
+        "keySuffix": "-777",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3440054
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3440054
+    },
+    {
+      "id": "orbit-dsh-4",
+      "method": "session/close",
+      "pid": 3440054
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRedaction2803397636/001/work",
+      "history": [
+        "m1 [rpcerr]"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [rpcerr]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "message": "dsh session/prompt (-32603): 401 invalid key [redacted] {\"apiKey\":\"[redacted]\"}",
+      "turn": "t1",
+      "type": "error"
+    },
+    {
+      "subtype": "error",
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "FAILED",
+        "subtype": "error",
+        "error": "dsh session/prompt (-32603): 401 invalid key [redacted] {\"apiKey\":\"[redacted]\"}"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleRedaction",
+  "sideEffects": null
+}

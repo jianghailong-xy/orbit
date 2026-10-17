@@ -1,0 +1,180 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T13:41:41.859Z",
+    "duration": 18745.001,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2115
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "98f9c8684205f8d2795eaf8b50892bc9341401ac6d728cf8dcedb692190a532c"
+        },
+        {
+          "file": "chromium-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "1f553d133fbf655a686298caf88ca76d9536b1538c33654717451407a1222463"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1990
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "e2d9aa3220b30282f1fed307bc9a2fbad3f9721d47c01b69f2c12800b7f9f7e1"
+        },
+        {
+          "file": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "eb640f22e365202b0f7f31b0dd58bcf3f987018bfa3c90a468103f6cdad27153"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1984
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "960d21e041fa2ef88e693ed36b4d2d43f563b6fbc92b6e1c899df1df8c503e61"
+        },
+        {
+          "file": "chromium-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "bcff39f9b7eab3f68fcb5d9b11c122c8579e1086192538798cb8e9b0b5a9d9ef"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1938
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "08a10b3a7583758fc8a61d34a3023e3bc7320bf59e9db906ca66a6e1f7c4d3d5"
+        },
+        {
+          "file": "chromium-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "cba107faefa9168cb6f7d42b5ebbe75ef99113a25c18c3a019daa307fc7a6a5e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1895
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "765c773187de59e1632fa40003a7cdb1a55ef017dc2ae1f108c73eb81cdac850"
+        },
+        {
+          "file": "webkit-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "98c8c317cf9fc394ab451f21b12397b9715a9cb756acb5b6171c5ea74830fa4f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1884
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "ffc31fa2b41bde7cb766e771992af2f2378d3a5fc3d58e1e5abf3558beb6ed90"
+        },
+        {
+          "file": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "5704a272467f1887852fab6d19521dc1cbfb08b436912a2a9b5ff952130d40e1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1896
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "03d3cbdac39b775728f6db82114523b8e73a64fdff27c59ac990473f1492349c"
+        },
+        {
+          "file": "webkit-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "c02480b4d23a2f2892ecfa106234c8745818b542225ac43b7771820f21f989e1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1863
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "0df93a48265850ac3ca0fed6fc0fcda5b1b27d055da201d098500e231f39fd4d"
+        },
+        {
+          "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--trace.zip",
+          "sha256": "2202b42c6f7921b282e30fcc6ca485be07cb7f0a64c54235738404c2cf7440d5"
+        }
+      ]
+    }
+  ]
+}

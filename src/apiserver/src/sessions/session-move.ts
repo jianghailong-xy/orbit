@@ -12,6 +12,7 @@ import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { runAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { branchName } from '../projects/project-criterion-landing';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
@@ -26,6 +27,7 @@ const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
+  [AgentProvider.DSH]: 'DeepSeek Harness',
 };
 
 /** Why a session cannot move at all (§5.2, "会话自身"). */
@@ -43,6 +45,9 @@ export const MOVE_REFUSAL = {
   RETRY: 'An automatic retry is scheduled. Try again after it runs.',
   /** The move itself only takes an ended session; the client ends an idle one first (End and Move). */
   END: 'End the session first.',
+  /** Its engine was never recorded and its provider is gone (sessionEngine answered null), so nothing
+   *  says which CLI's conversation would have to be carried over. */
+  ENGINE_UNKNOWN: "This session's provider is gone, so Orbit can't tell which engine it runs on.",
 } as const;
 
 /** The session's own state, as §5.2 judges it. */
@@ -67,8 +72,9 @@ export interface SessionMoveFacts {
   /** A merge recovery waiting on its owner (readMergeRecovery). */
   mergeRecoveryOpen: boolean;
   retryAt: Date | null;
-  /** The runtime that runs it (sessionExecRuntime), which a move never changes. */
-  runtime: AgentProvider;
+  /** The engine that runs it (sessionEngine: Session.engine, or the old rules for a row without
+   *  one), which a move never changes; null when nobody can tell. */
+  runtime: AgentProvider | null;
 }
 
 export type SessionMoveVerdict =
@@ -89,13 +95,15 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (s.coordinatesProject || s.dispatchOrigin === 'PROJECT_COORDINATOR') return refuse(MOVE_REFUSAL.COORDINATOR);
   if (s.taskId) return refuse(MOVE_REFUSAL.TASK);
   if (s.importSourceCwd != null) return refuse(MOVE_REFUSAL.IMPORTING);
+  if (s.runtime === null) return refuse(MOVE_REFUSAL.ENGINE_UNKNOWN);
   // How their conversations would carry over has not been verified. agy's lives in a per-session
   // gemini directory on the runner (docs/antigravity-runtime-contract.md §3.1), and a resume from
   // any other directory silently starts a new conversation (§4.3).
   if (
     s.runtime === AgentProvider.KIMI ||
     s.runtime === AgentProvider.OPENCODE ||
-    s.runtime === AgentProvider.ANTIGRAVITY
+    s.runtime === AgentProvider.ANTIGRAVITY ||
+    s.runtime === AgentProvider.DSH
   ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
@@ -155,11 +163,12 @@ export function runnerIsOnline(
  * move only changes where the session belongs, and its next message waits for the runner.
  */
 export function moveTargetRefusal(
-  session: { runtime: AgentProvider; assignedRunnerId: string | null; runnerName: string },
+  session: { runtime: AgentProvider | null; assignedRunnerId: string | null; runnerName: string },
   target: MoveTargetFacts,
 ): string | null {
   if (!target.enabled) return 'This workspace is disabled.';
   if (!target.runnerId || !target.runner) return 'This workspace has no runner.';
+  if (session.runtime === null) return MOVE_REFUSAL.ENGINE_UNKNOWN;
   const runner = runnerLabel(target.runner);
   // As the New Session picker reads the report: an engine the runner says is not installed. No report,
   // or none for this engine, is a runner too old to say — not one that cannot run it.
@@ -191,17 +200,29 @@ export function branchAfterMove(
 /**
  * The account columns a move writes (§5.1). On the same runner the session stays on the account it
  * actually runs on, written onto the session: an empty column follows the workspace, and a Codex
- * conversation lives in its account's directory. On another runner the columns are cleared and
- * follow the new workspace — an account id names a slot on one machine only.
+ * conversation lives in its account's directory (a Claude or Kimi one too). On another runner the
+ * columns are cleared and follow the new workspace — an account id names a slot on one machine only.
  */
 export function accountsAfterMove(args: {
   sameRunner: boolean;
-  session: { provider: string; claudeAccount: string | null; codexAccount: string | null };
-  from: { env: unknown; claudeAccount: string | null; codexAccount: string | null } | null;
+  session: { provider: string; claudeAccount: string | null; codexAccount: string | null; kimiAccount: string | null };
+  from: { env: unknown; claudeAccount: string | null; codexAccount: string | null; kimiAccount: string | null } | null;
   runnerEngines: unknown;
-}): { claudeAccount?: string | null; claudeAccountPinned?: boolean; codexAccount?: string | null; codexAccountPinned?: boolean } {
+}): {
+  claudeAccount?: string | null;
+  claudeAccountPinned?: boolean;
+  codexAccount?: string | null;
+  codexAccountPinned?: boolean;
+  antigravityAccount?: string | null;
+  antigravityAccountPinned?: boolean;
+  kimiAccount?: string | null;
+  kimiAccountPinned?: boolean;
+} {
   if (!args.sameRunner) {
-    return { claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false };
+    return {
+      claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false,
+      antigravityAccount: null, antigravityAccountPinned: false, kimiAccount: null, kimiAccountPinned: false,
+    };
   }
   // A configured provider or a pool runs on a credential of its own, not on one of the runner's accounts.
   const { session } = args;
@@ -214,6 +235,11 @@ export function accountsAfterMove(args: {
     const choice = { codexAccount: session.codexAccount ?? args.from?.codexAccount };
     const current = runAccount(AgentProvider.CODEX, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { codexAccount: current } : {};
+  }
+  if (session.provider === AgentProvider.KIMI) {
+    const choice = { kimiAccount: session.kimiAccount ?? args.from?.kimiAccount };
+    const current = runAccount(AgentProvider.KIMI, args.from?.env, choice, args.runnerEngines);
+    return typeof current === 'string' ? { kimiAccount: current } : {};
   }
   return {};
 }
@@ -229,13 +255,16 @@ export function branchIsMerged(session: { branchMerged: boolean | null; mergeSta
   return session.branchMerged ?? session.mergeStatus === 'merged';
 }
 
-/** The branch the session's work merges into: the one picked for it, its workspace's remembered one,
- *  else what the runner auto-detects (main, else master). */
+/** The branch the session's work merges into: the one picked for it, its project's integration line
+ * when it is a code task, its workspace's remembered one, else what the runner auto-detects (main,
+ * else master). */
 export function mergeTargetOf(
   session: { mergeTarget: string | null; mergeTargets: string[] },
   workspaceDefault: string | null | undefined,
+  projectIntegrationRef?: string | null,
 ): string {
   if (session.mergeTarget) return session.mergeTarget;
+  if (projectIntegrationRef) return branchName(projectIntegrationRef);
   if (workspaceDefault) return workspaceDefault;
   return !session.mergeTargets.includes('main') && session.mergeTargets.includes('master') ? 'master' : 'main';
 }

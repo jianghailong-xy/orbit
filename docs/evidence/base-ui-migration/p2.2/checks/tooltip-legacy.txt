@@ -1,0 +1,31 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep owns|legacy host
+
+[WebServer] (node:2039875) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:2040015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:227:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓  3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:265:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (2.5s)
+  ✓  4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:284:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+(node:2041280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓  6 [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.2s)
+  ✓  7 [webkit-dark-phone] › ui-migration/choices.browser.mjs:265:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (2.1s)
+  ✓  8 [webkit-dark-phone] › ui-migration/choices.browser.mjs:284:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+
+  8 passed (17.7s)

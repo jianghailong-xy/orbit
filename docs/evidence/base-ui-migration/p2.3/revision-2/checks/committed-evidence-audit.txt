@@ -1,0 +1,287 @@
+{
+  "baselineImagesUnchanged": 252,
+  "attachments": {
+    "toasts-run": {
+      "stats": {
+        "startTime": "2026-10-04T08:42:09.100Z",
+        "duration": 395119.768,
+        "expected": 208,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 544
+    },
+    "overlays-regression": {
+      "stats": {
+        "startTime": "2026-10-04T07:49:44.764Z",
+        "duration": 268175.207,
+        "expected": 96,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 256
+    },
+    "production-run": {
+      "stats": {
+        "startTime": "2026-10-04T08:31:58.289Z",
+        "duration": 26868.639000000003,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 24
+    },
+    "reference-motion-run": {
+      "stats": {
+        "startTime": "2026-10-04T08:22:14.330Z",
+        "duration": 57447.882000000005,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 224
+    },
+    "coordinator-after": {
+      "stats": {
+        "startTime": "2026-10-04T07:19:43.089Z",
+        "duration": 28577.854,
+        "expected": 10,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 10
+    },
+    "continuous-motion-after": {
+      "stats": {
+        "startTime": "2026-10-04T07:35:30.824Z",
+        "duration": 29716.139,
+        "expected": 9,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 9
+    },
+    "original-nested-motion": {
+      "stats": {
+        "startTime": "2026-10-04T07:33:59.123Z",
+        "duration": 9455.447,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 3
+    },
+    "original-confirmation-close": {
+      "stats": {
+        "startTime": "2026-10-04T07:45:18.159Z",
+        "duration": 3411.648,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 2
+    },
+    "original-confirmation-open-close": {
+      "stats": {
+        "startTime": "2026-10-04T07:52:15.804Z",
+        "duration": 4022.969,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 4
+    },
+    "static-raster-after": {
+      "stats": {
+        "startTime": "2026-10-04T08:22:18.130Z",
+        "duration": 85401.26000000001,
+        "expected": 56,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 344
+    }
+  },
+  "settledPairs": 24,
+  "midpointImagePairs": 160,
+  "production": [
+    {
+      "project": "chromium-dark-desktop",
+      "box": [
+        892,
+        4,
+        1276,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 638
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "box": [
+        892,
+        4,
+        1276,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 633
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "box": [
+        884,
+        4,
+        1268,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 642
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "box": [
+        884,
+        4,
+        1268,
+        174
+      ],
+      "notificationAndShadow": {
+        "pixels": 65280,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 1152000,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 1152000,
+        "differentPixels": 648
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "box": [
+        4,
+        44,
+        386,
+        230
+      ],
+      "notificationAndShadow": {
+        "pixels": 71052,
+        "differentPixels": 0
+      },
+      "fullPageAgainstTaskStart": {
+        "pixels": 329160,
+        "differentPixels": 0
+      },
+      "fullPageAgainstP0": {
+        "pixels": 329160,
+        "differentPixels": 0
+      }
+    }
+  ]
+}

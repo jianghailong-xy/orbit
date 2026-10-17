@@ -1,0 +1,242 @@
+{
+ "chromium-dark-desktop": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "chromium-dark-phone": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "chromium-light-desktop": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "chromium-light-phone": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "webkit-dark-desktop": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "webkit-dark-phone": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "webkit-light-desktop": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ },
+ "webkit-light-phone": {
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "requests": [
+   "GET /api/runners",
+   "GET /api/users/me",
+   "GET /api/providers",
+   "GET /api/workspaces",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/users/me",
+   "GET /api/wiki/spaces",
+   "GET /api/projects/sidebar",
+   "GET /api/runners",
+   "GET /api/workspaces",
+   "GET /api/sessions/counts",
+   "GET /api/auth/methods",
+   "GET /api/sessions?runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+   "GET /api/workspaces",
+   "GET /api/providers",
+   "PATCH /api/users/me",
+   "GET /api/auth/methods"
+  ],
+  "unhandled": [
+   "GET /api/auth/methods",
+   "GET /api/auth/methods"
+  ],
+  "pageErrors": []
+ }
+}

@@ -1,0 +1,1 @@
+{"destination": "/var/tmp/p23b1/runs/ab-transfer-v2/fixab-1/collected", "stats": {"startTime": "2026-10-07T00:37:04.274Z", "duration": 277021.245, "expected": 94, "skipped": 0, "unexpected": 2, "flaky": 0}, "artifacts": 130}

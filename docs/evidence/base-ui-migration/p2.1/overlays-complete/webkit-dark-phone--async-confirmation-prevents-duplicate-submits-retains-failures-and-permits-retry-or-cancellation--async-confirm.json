@@ -1,7 +1,0 @@
-{
-  "attempts": 2,
-  "pendingBlocksDismissal": true,
-  "duplicatesBlocked": true,
-  "failedThenRetried": true,
-  "result": "confirmed then cancelled"
-}

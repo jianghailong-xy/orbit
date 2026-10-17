@@ -1,0 +1,49 @@
+== Scenario 2: the workspace picks Work; a new session runs on its KIMI_CODE_HOME ==
+Work account: {"id":"a70fa033","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"}
+workspace before: {"id":"34cStX9EAFu0Q44FlkkCi","name":"hpc-kimi-ws","kimiAccount":null}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Kimi account options: ["Automatic\neach new session starts on the account whose quota resets soonest","Default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)\nsigned in","Work\nsigned in"]
+shot /var/tmp/kimi-accounts-stack/shots/2-workspace-account/2a-workspace-kimi-account-options.png
+shot /var/tmp/kimi-accounts-stack/shots/2-workspace-account/2b-workspace-kimi-account-work.png
+web → PATCH /api/workspaces/34cStX9EAFu0Q44FlkkCi {"name":"hpc-kimi-ws","workDir":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/work","repoUrl":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/origin.git","enableWorktree":false,"modelRouting":false,"modelRoutingProviders":[],"env":{},"codexAccount":null,"claudeAccount":null,"antigravityAccount":null,"kimiAccount":"a70fa033"}
+workspace after Save: {"id":"34cStX9EAFu0Q44FlkkCi","kimiAccount":"a70fa033"}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/2-workspace-account/2c-new-session-kimi.png
+web → POST /api/sessions {"prompt":"Scenario 2: which Kimi account is this session on?","assignedRunnerId":"34cSsjpxU1AVt4w2wGiis","workspaceId":"34cStX9EAFu0Q44FlkkCi","provider":"kimi","model":"kimi-code/kimi-for-coding","permissionMode":"auto","effort":"","attachmentIds":[]}
+session 34cSuuxCqlKDnP5r7pEV8
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+shot /var/tmp/kimi-accounts-stack/shots/2-workspace-account/2d-session-reply.png
+GET /sessions/:id: {"id":"34cSuuxCqlKDnP5r7pEV8","provider":"kimi","status":"AWAITING_INPUT","kimiAccount":null,"kimiAccountPinned":false,"workspaceKimiAccount":"a70fa033","runtimeSessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46"}
+runner session records (runs/*/meta.json, kimi): [{"file":"$S/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/meta.json","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","runtimeSessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46"}]
+fake kimi, this session: [{"at":"2026-10-08T17:14:27.439Z","event":"acp.start","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/kimi-home","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"},{"at":"2026-10-08T17:14:27.445Z","event":"acp.session.new","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/kimi-home","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","sessionDir":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/kimi-home/sessions/wd_work_9adccb3b6652/session_629d05ad-d1bf-461f-b788-94e261ed9c46"},{"at":"2026-10-08T17:14:27.508Z","event":"acp.prompt","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/kimi-home","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","sessionDir":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/kimi-home/sessions/wd_work_9adccb3b6652/session_629d05ad-d1bf-461f-b788-94e261ed9c46","turn":1}]
+the overlay, live:
+total 40
+drwx------ 2 root root 4096 Oct  9 01:14 .
+drwxr-xr-x 3 root root 4096 Oct  9 01:14 ..
+lrwxrwxrwx 1 root root   85 Oct  9 01:14 config.toml -> /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/config.toml
+lrwxrwxrwx 1 root root   85 Oct  9 01:14 credentials -> /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/credentials
+lrwxrwxrwx 1 root root   83 Oct  9 01:14 device_id -> /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/device_id
+-rw------- 1 root root  161 Oct  9 01:14 mcp.json
+lrwxrwxrwx 1 root root   79 Oct  9 01:14 oauth -> /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/oauth
+-rw------- 1 root root  317 Oct  9 01:14 session_index.jsonl
+lrwxrwxrwx 1 root root   82 Oct  9 01:14 sessions -> /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions
+-rw-r--r-- 1 root root  238 Oct  9 01:14 workspaces.json
+
+kimi session session_629d05ad-d1bf-461f-b788-94e261ed9c46 in Work's home:
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/wd_work_9adccb3b6652/session_629d05ad-d1bf-461f-b788-94e261ed9c46
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479667508
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479667445
+kimi session session_629d05ad-d1bf-461f-b788-94e261ed9c46 in Default's home:
+(none)
+Work session_index.jsonl:
+(none)
+PASS the web saved kimiAccount = Work on the workspace
+PASS the session runs Kimi
+PASS the runner recorded KIMI_CODE_HOME = Work
+PASS kimi ran in an overlay whose sessions/ is Work's
+PASS the fake kimi answered as account Work
+PASS the conversation is in Work's home, not Default's
+SCENARIO 2 PASS

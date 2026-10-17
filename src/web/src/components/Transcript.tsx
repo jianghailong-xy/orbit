@@ -18,6 +18,7 @@ import {
   FolderOpenOutlined,
   GlobalOutlined,
   LoadingOutlined,
+  MessageFilled,
   MinusCircleOutlined,
   PaperClipOutlined,
   PartitionOutlined,
@@ -27,13 +28,18 @@ import {
   ToolOutlined,
   WarningFilled,
 } from '@ant-design/icons';
-import { Image } from 'antd';
+import { Image } from './ui/Image';
+import { ImagePreview, type ImagePreviewItem } from './ui/ImagePreview';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
+import { checkDuration } from '../lib/checkDuration';
+import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import {
   apiErrorRetryAt,
+  askedQuestions,
+  CONTINUE_MESSAGE,
   isApiErrorText,
   isAuthErrorText,
   isBenignEngineStderr,
@@ -43,8 +49,15 @@ import {
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
   progressBadge,
+  QUESTION_RECORD_COPY,
+  questionAnswerLine,
+  questionLead,
+  questionOutcome,
+  questionReplyLine,
   workflowLaunchReceipt,
   workflowTitle,
+  type AskedQuestion,
+  type QuestionOutcome,
   type TaskProgress,
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
@@ -57,7 +70,7 @@ import {
 } from '../lib/deliveredMessage';
 import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
-import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
@@ -109,6 +122,7 @@ import Markdown from 'react-markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
+import { dshRepair, type DshRepair } from '../lib/dshRuntime';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -170,37 +184,113 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
  * provider runs on the runner's own runtime login (fix it on that machine), any
- * other slug is a configured API key (fix it in Providers). WorkspaceView supplies this; the
+ * other slug is a configured API key (fix it in Infrastructure). WorkspaceView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
 export interface AuthErrorHelp {
-  /** Session's provider slug — a built-in runtime or a configured provider. */
+  /** Session's provider slug — an engine's own sign-in on the runner, or a key or pool. */
   provider: string;
+  /** The session's key as a sentence names it, lowercase — `the DeepSeek key “DeepSeek 2”`: its
+   *  vendor and the name its owner gave it, never its slug or an engine (one key runs on several).
+   *  Absent when the session runs on no key this account still has. */
+  keyName?: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  /** The engine the session runs on — its own, fixed for its life. */
   runtime?: string;
+  googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
   runnerVersion?: string | null;
   onConnectGemini?: () => void;
   onSwitchToGemini?: () => void;
   onOpenProviders?: () => void;
   onInstall?: () => void;
   installDisabled?: boolean;
+  /** DeepSeek Harness: open this session's own key (its provider's edit page). */
+  onEditDshKey?: () => void;
+  /** DeepSeek Harness: install the pinned CLI on this session's runner. */
+  onInstallDsh?: () => void;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
   /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
   retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
-  /** Open Providers — the other way back in, and the only one when the rejected credential is
+  /**
+   * Go and find out what it would say, when what the card holds is not the reader's own to send.
+   * Another session's words are re-sent by the server's own chooser — see `AutoRetryHelp`'s, whose
+   * rule and reason this is a second instance of — and only its answer can promise what the press
+   * carries, or that it carries anything at all.
+   */
+  onNeedRetryText?: () => void;
+  /** Whether the window holds words of the reader's to send, like `AutoRetryHelp`'s. */
+  retryWordsAreTheReaders?: boolean;
+  /** Open Infrastructure — the other way back in, and the only one when the rejected credential is
    *  a configured key rather than a login on the runner. */
   onUseApiKey?: () => void;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
 export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
+
+/**
+ * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
+ * Its credential is a DeepSeek key — the same key Claude Code and OpenCode run on — never a sign-in on
+ * the runner, so every key problem is fixed on that key's own page; everything else is about the
+ * machine (dshRepair says which).
+ */
+export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
+  const machine = help.runnerName || 'this runner';
+  const keyProblem = repair === 'needsKey' || repair === 'invalidKey';
+  return (
+    <div className="chat-authfix" data-seq={seq} data-dsh-repair={repair}>
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {repair === 'needsKey'
+            ? 'DeepSeek Harness needs a DeepSeek key'
+            : repair === 'invalidKey'
+              ? 'DeepSeek rejected this API key'
+              : repair === 'updateRunner'
+                ? 'Waiting for a newer runner'
+                : repair === 'notInstalled'
+                  ? `DeepSeek Harness isn't installed on ${machine}`
+                  : `DeepSeek Harness can't run on ${machine}`}
+        </div>
+      </div>
+      <div className="chat-authfix-desc">
+        {repair === 'needsKey'
+          ? 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.'
+          : repair === 'invalidKey'
+            ? `Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`
+            : repair === 'updateRunner'
+              ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
+              : repair === 'notInstalled'
+                ? 'Install it from Infrastructure, then send your message again.'
+                : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
+      </div>
+      <div className="chat-authfix-actions">
+        {keyProblem && help.onEditDshKey && (
+          <button className="chat-authfix-go" type="button" onClick={help.onEditDshKey}>
+            Update the API key
+          </button>
+        )}
+        {repair === 'notInstalled' && help.onInstallDsh && (
+          <button className="chat-authfix-go" type="button" onClick={help.onInstallDsh} disabled={help.installDisabled}>
+            Install
+          </button>
+        )}
+        {keyProblem && help.onRetry && (
+          <button className="chat-authfix-retry" type="button" onClick={help.onRetry} disabled={help.retryDisabled}>
+            Retry — re-send my last message
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function antigravityRepair(message: string): AntigravityRepair | null {
   if (message.startsWith('Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one')) return 'needsKey';
@@ -220,18 +310,23 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
-          {repair === 'needsKey' ? 'Antigravity needs a Gemini API key'
+          {repair === 'needsKey' ? 'Antigravity needs authentication'
             : repair === 'updateRunner' ? 'Waiting for a newer runner'
               : `Antigravity CLI isn't installed on ${machine}`}
         </div>
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
-            : 'Install it from Providers, then send your message again.'}
+            : 'Install it from Infrastructure, then send your message again.'}
       </div>
+      {repair === 'needsKey' && help.provider === 'antigravity' && (
+        help.googleLogin === 'available' && help.runnerId
+          ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+      )}
       <div className="chat-authfix-actions">
         {repair === 'needsKey' ? (
           <>
@@ -241,7 +336,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
         ) : (
           <>
             {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
-            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Providers</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Infrastructure</button>}
           </>
         )}
       </div>
@@ -298,23 +393,23 @@ function useFullPayload(seq: number, truncated: boolean | undefined, want: boole
 // slide. When this context is absent (the composer's unsent previews, the static
 // HTML export) ChatImage falls back to its own standalone single-image preview.
 type PreviewRegistry = {
-  register: (key: string, order: number, src: string) => void;
+  register: (key: string, order: number, src: string, alt: string) => void;
   unregister: (key: string) => void;
   open: (key: string) => void;
 };
 const ImagePreviewContext = createContext<PreviewRegistry | null>(null);
 
 function ImagePreviewProvider({ children }: { children: ReactNode }) {
-  const entries = useRef(new Map<string, { order: number; src: string }>());
-  const [state, setState] = useState<{ visible: boolean; current: number; items: string[] }>({
-    visible: false,
+  const entries = useRef(new Map<string, { order: number; item: ImagePreviewItem }>());
+  const [state, setState] = useState<{ open: boolean; current: number; items: ImagePreviewItem[] }>({
+    open: false,
     current: 0,
     items: [],
   });
   const registry = useMemo<PreviewRegistry>(
     () => ({
-      register: (key, order, src) => {
-        entries.current.set(key, { order, src });
+      register: (key, order, src, alt) => {
+        entries.current.set(key, { order, item: { src, alt } });
       },
       unregister: (key) => {
         entries.current.delete(key);
@@ -325,7 +420,7 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
         const sorted = [...entries.current.entries()].sort((a, b) => a[1].order - b[1].order);
         const current = sorted.findIndex(([k]) => k === key);
         if (current < 0) return;
-        setState({ visible: true, current, items: sorted.map(([, v]) => v.src) });
+        setState({ open: true, current, items: sorted.map(([, v]) => v.item) });
       },
     }),
     [],
@@ -333,14 +428,13 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
   return (
     <ImagePreviewContext.Provider value={registry}>
       {children}
-      <Image.PreviewGroup
+      <ImagePreview
+        group
+        open={state.open}
         items={state.items}
-        preview={{
-          visible: state.visible,
-          current: state.current,
-          onVisibleChange: (v) => setState((s) => ({ ...s, visible: v })),
-          onChange: (current) => setState((s) => ({ ...s, current })),
-        }}
+        current={state.current}
+        onCurrentChange={(current) => setState((s) => ({ ...s, current }))}
+        onClose={() => setState((s) => ({ ...s, open: false }))}
       />
     </ImagePreviewContext.Provider>
   );
@@ -369,8 +463,8 @@ type TextNode = {
   seq: number;
   text: string;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
-  // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
-  // so the row states its size alone.
+  // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
+  // block an older runner stored has none, and its row states its size alone.
   thinkingMs?: number;
   blocks?: number;
   // Wall-clock of the source event — carried for user turns to show a relative
@@ -393,6 +487,9 @@ type TextNode = {
   // got is the only thing that reports it, and the states above are shown for it alone. On
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
+  // A `!cmd` still on the queue (`queuedTurnEvent`): drawn verbatim as the command it will run, since
+  // Markdown would mangle its shell syntax. No echo carries it — the runner runs one as a Bash card.
+  shell?: boolean;
   // What the control plane recorded, when it stored this `user` event, as appended at delivery
   // (`controlPlaneNote`). Already taken out of `text`; drawn under it, in the same bubble.
   note?: string;
@@ -420,9 +517,17 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
+  // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
+  // Only a top-level message opens one: a steer joins the turn already running, and a message
+  // inside a sub-workspace is that sub-agent's, which never gets a `turn_end` of its own.
+  turnHead?: { endTs?: string };
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
-type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
+type MarkerNode = { kind: 'interrupt'; seq: number };
+// The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
+// the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
+type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
@@ -465,6 +570,7 @@ type Node =
   | TextNode
   | ResultNode
   | MarkerNode
+  | DividerNode
   | ErrorNode
   | DiagnosticNode
   | AuthErrorNode
@@ -878,6 +984,13 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // else, so letting stderr stand as the turn's account would leave this fix doing nothing for the
   // very case that asked for it.
   let turnAccountedFor = false;
+  // The turn's last top-level assistant text so far: what its foot copies once `turn_end` arrives.
+  // Narration between tool calls is overwritten by whatever follows it, so what is left when the
+  // turn ends is the answer the turn ended on.
+  let turnReply: string | undefined;
+  // The `turnHead` the turn now open is drawn from — the message that opened it, until its
+  // `turn_end` closes it. What says how long that turn worked once the end arrives.
+  let turnHead: TextNode['turnHead'];
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -961,11 +1074,16 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
+            shell: p.shell === true,
           };
           if (taskStart) {
             taskStartByParent.set(parentKey(parent), { text, card: taskStart });
           }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
+          if (!parent && !node.steer) {
+            node.turnHead = {};
+            turnHead = node.turnHead;
+          }
           into(parent).push(node);
         }
         break;
@@ -1001,7 +1119,11 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           else if (isUsageLimitErrorText(text)) autoRetry(parent, ev.seq, text, 'quota');
           else if (isRetryableApiErrorText(text)) autoRetry(parent, ev.seq, text, 'apiError');
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
-          else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
+          else {
+            const siblings = into(parent);
+            siblings.push({ kind: 'assistant', seq: ev.seq, text });
+            if (siblings === roots) turnReply = text;
+          }
         }
         break;
       case 'thinking': {
@@ -1073,13 +1195,20 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        // However the turn went, it was working until now: the head row states that span. A
+        // failure is still an end — the answer above the error line took that long to not arrive.
+        if (turnHead) {
+          turnHead.endTs = ev.ts;
+          turnHead = undefined;
+        }
         if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
-            : { kind: 'divider', seq: ev.seq },
+            : { kind: 'divider', seq: ev.seq, ts: ev.ts, reply: turnReply },
         );
         turnAccountedFor = false;
+        turnReply = undefined;
         break;
       }
       case 'interrupt':
@@ -1384,12 +1513,18 @@ function NodeList({
     <>
       {items.flatMap((item) => {
         const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+        // The row a turn opens with, under its message and over everything the turn writes.
+        const head =
+          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+          ) : null;
         return [
           item.kind === 'toolGroup' ? (
             <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
           ) : (
             <NodeView key={item.node.seq} node={item.node} live={live} />
           ),
+          head,
           ...seqs
             .flatMap((seq) => placed?.get(seq) ?? [])
             .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
@@ -1459,15 +1594,44 @@ function StandaloneResult({ node }: { node: ResultNode }) {
   return <ToolResult seq={node.seq} content={full ? full.content : node.content} isError={node.isError} />;
 }
 
+/**
+ * A turn still waiting on the queue, drawn from the event its echo will be (`queuedTurnEvent`,
+ * lib/acceptedUserTurn) by the dispatch that will draw the echo: the card or bubble the transcript
+ * draws once a runner takes the turn, so taking it changes nothing but the queue's line. `queued` is
+ * that line (WorkspaceView's `QueuedTurnMeta`): how the turn stands and the way out of it.
+ */
+export function QueuedUserTurn({
+  event,
+  turnImages,
+  queued,
+}: {
+  event: RunEvent;
+  turnImages?: Record<string, TurnImage[]>;
+  queued: ReactNode;
+}) {
+  // A row with nothing to draw yet — a file-only message before the snapshot names its file — still
+  // has its line, and the way out with it.
+  const node = useMemo<Node>(
+    () => buildNodes([event], turnImages)[0] ?? { kind: 'user', seq: event.seq, text: '' },
+    [event, turnImages],
+  );
+  return <NodeView node={node} queued={queued} />;
+}
+
 // `data-seq` marks where each event's card starts, so ⌘F can scroll to a hit the server found by
 // seq. Only these top-level roots carry it: a lookup takes the last stamp at or before the target,
 // which resolves anything folded inside one (a tool_result, a grouped run, a sub-workspace's events)
 // to the card that contains it.
-function NodeView({ node, live }: { node: Node; live?: boolean }) {
+//
+// `queued` is the queue's own line for a turn still waiting to be delivered (QueuedUserTurn): the
+// turn is drawn by this same dispatch, with that line in the slot each card keeps for it.
+function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?: ReactNode }) {
   const exporting = useContext(ExportCtx);
   const authHelp = useContext(AuthErrorCtx);
   switch (node.kind) {
     case 'user': {
+      // A turn still on the queue is no event yet: nothing for ⌘F to land on, so nothing is stamped.
+      const seq = queued ? undefined : node.seq;
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
@@ -1477,27 +1641,36 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <SessionMessageCard
             card={node.sessionMessage}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
           />
         );
       }
       // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
       // carries nobody's words, and a message of the owner's may carry outcomes that were held for
       // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
-      // else delivery appended folds into the cards, as it does everywhere.
+      // else delivery appended folds into the cards, as it does everywhere. Still queued, the queue's
+      // line goes under the cards — or under the owner's words, the message it is about, when they
+      // are there.
       if (node.sessionReplies) {
         const rest = withoutReplyBlocks(node.note);
+        const words = node.text.trim() !== '';
         return (
           <>
-            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+            {words && <UserBubble node={{ ...node, note: undefined }} queued={queued} />}
             <SessionReplyCards
               cards={node.sessionReplies}
-              seq={node.seq}
+              seq={seq}
               ts={node.ts}
-              attached={rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+              attached={
+                <>
+                  {rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+                  {!words && queued}
+                </>
+              }
             />
           </>
         );
@@ -1509,10 +1682,11 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <WatchWakeCard
             wake={wake}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             linkable={!exporting}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1527,9 +1701,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <OpenItemDeliveryCard
             card={node.itemCard}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1541,11 +1716,12 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <TaskStartCard
             card={node.taskStart}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attachments={<TurnAttachments node={node} />}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
           />
         );
       }
@@ -1556,9 +1732,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <ProjectStartedCard
             card={node.startedCard}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1571,18 +1748,20 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         return node.reviewRequest ? (
           <ReviewRequestedCard
             card={node.reviewRequest}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
           />
         ) : (
           <SentBackByReviewerCard
             card={node.reviewReturn!}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
           />
         );
       }
@@ -1606,10 +1785,11 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <>
             <BackgroundWakeCard
               wake={background}
-              seq={node.seq}
+              seq={seq}
               ts={node.ts}
               undelivered={undelivered}
               steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+              queued={queued}
               attached={
                 background.rest !== '' && (
                   <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
@@ -1620,7 +1800,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           </>
         );
       }
-      return <UserBubble node={node} />;
+      return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
@@ -1631,7 +1811,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'result':
       return <StandaloneResult node={node} />;
     case 'divider':
-      return <div className="chat-turn-divider" data-seq={node.seq} />;
+      return <TurnFoot node={node} />;
     case 'interrupt':
       return (
         <div className="chat-note" data-seq={node.seq}>
@@ -1670,6 +1850,8 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       );
     }
     case 'error': {
+      const dsh = authHelp?.runtime === 'dsh' ? dshRepair(node.message) : null;
+      if (dsh && authHelp) return <DshRepairCard repair={dsh} help={authHelp} seq={node.seq} />;
       const repair = antigravityRepair(node.message);
       if (repair && authHelp && (authHelp.runtime ?? authHelp.provider) === 'antigravity') {
         return <AntigravityRepairCard repair={repair} help={authHelp} seq={node.seq} />;
@@ -1771,7 +1953,7 @@ function ToolFailureCard({
 
 /**
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
- * remedy is a sign-in on that machine rather than a key to fix in Providers.
+ * remedy is a sign-in on that machine rather than a key to fix in Infrastructure.
  */
 const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
 
@@ -1779,10 +1961,9 @@ const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity
  * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
- * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
- * all: its card connects an encrypted Gemini key in Providers.
+ * command to run instead of offering a button that cannot work.
  */
-const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
+const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
 
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
@@ -1801,6 +1982,15 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
  */
 function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
+  // A press that would be the server's own re-send is a promise only the server makes, and the
+  // window's last bubble can be somebody else's — so this card asks for the answer rather than
+  // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
+  // below, which return early.
+  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const onNeedRetryText = help?.onNeedRetryText;
+  useEffect(() => {
+    if (retryIsTheServers) onNeedRetryText?.();
+  }, [retryIsTheServers, onNeedRetryText]);
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
@@ -1838,9 +2028,11 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         )
       ) : help ? (
         <>
+          {/* The key by its vendor and its own name — the same key may run on Claude Code, OpenCode and
+              DeepSeek Harness, so the engine is no way to name it, and its slug is nobody's. */}
           <div className="chat-authfix-desc">
-            The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
-            send your message again.
+            {help.keyName ? `${help.keyName.charAt(0).toUpperCase()}${help.keyName.slice(1)}` : 'The API key'} was
+            rejected. Update it in Infrastructure, then send your message again.
           </div>
           {help.onUseApiKey && (
             <button className="chat-authfix-go" onClick={help.onUseApiKey} type="button">
@@ -1905,6 +2097,20 @@ export interface AutoRetryHelp {
    * which chooses with the same code the automatic retry re-sends with.
    */
   onNeedRetryText?: () => void;
+  /**
+   * Whether the window holds words of the reader's to send — the only ones a press may promise
+   * from the window. False when it holds another session's message (whose press is the server's
+   * own re-send, so the card asks for that answer instead) or none at all — the same condition
+   * `onNeedRetryText` exists for.
+   */
+  retryWordsAreTheReaders?: boolean;
+  /**
+   * Nothing of anybody's waits to go out — not the person's words, and not a reply or confirmation
+   * turn the sweep re-sends on its own (`getSessionRetryMessage.nothingToResend`). The card swaps
+   * its verb for the platform's continue (`CONTINUE_MESSAGE`): sent by hand now, or by the server
+   * at the reset through the switch, which is the arm that owns the sentence.
+   */
+  nothingToResend?: boolean;
   /** Turn the pending auto-retry off. */
   onCancelAuto?: () => void;
   /** Put it back, at the instant the card re-derived from the failing reply. */
@@ -1930,25 +2136,24 @@ const MAX_ATTEMPTS: Record<AutoRetryVariant, number> = {
   apiError: MAX_API_ERROR_RETRIES,
 };
 
-/** The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
- *  uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
- *  window tells the user to wait days for a quota that comes back in hours. Codex names no
- *  window at all, and falls through to the generic wording.
+/** The window that ran out, in the runtime's own terms (`quotaWindowKind`, which the evidence
+ *  card's pause line reads too). Codex names no window at all, and falls through to the generic
+ *  wording.
  *
  *  The runtime calls its 5-hour window a "session limit", but here that reads as a limit on the
  *  Orbit session the card is sitting in — the one noun this product uses for something else
  *  entirely. Titled by its length instead; the runtime's own phrasing survives in the body. */
 function quotaWindow(message: string): { title: string; what: string } {
-  const m = message.toLowerCase();
-  if (m.includes('hit your session limit'))
+  const kind = quotaWindowKind(message);
+  if (kind === 'FIVE_HOUR')
     return { title: '5-hour limit reached', what: 'The 5-hour quota' };
-  if (m.includes('hit your weekly limit'))
+  if (kind === 'WEEKLY')
     return { title: 'Weekly limit reached', what: 'The weekly quota' };
   return { title: 'Usage limit reached', what: 'The quota' };
 }
 
 /** "6:20 PM" today, "Wed, Aug 6, 1:00 PM" beyond it — a bare time on another day misleads. */
-function formatResetAt(at: Date): string {
+function formatClock(at: Date): string {
   const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const sameDay = at.toDateString() === new Date().toDateString();
   return sameDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
@@ -2003,9 +2208,12 @@ function AutoRetryCard({
     return () => clearInterval(t);
   }, [retryAt?.getTime()]);
 
-  // Asked once, and only by a card that has a button to offer and no words for it — a stale card
-  // and the share page's contextless one need nothing (see `onNeedRetryText`).
-  const needsRetryText = live && !help?.retryText && !!help?.onNeedRetryText;
+  // Asked once, and only by a card that cannot promise alone: the window has no words of the
+  // reader's — none at all, or another session's. Only the server's chooser says what such a press
+  // carries, and it may say "nothing at all" (which is what the Continue card is for). A stale
+  // card and the share page's contextless one need nothing.
+  const needsRetryText = live && !!help?.onNeedRetryText
+    && help?.retryWordsAreTheReaders === false;
   useEffect(() => {
     if (needsRetryText) help?.onNeedRetryText?.();
   }, [needsRetryText]);
@@ -2018,6 +2226,11 @@ function AutoRetryCard({
   // card (the session went on) and a share-page one (no context) are history, not an alarm.
   const needsYou = live && !armed && !firing;
   const quota = variant === 'quota';
+  // Nothing for a re-send to carry: the failure landed on a turn nobody sent (a background job's
+  // wake, a turn the runtime started for itself) and the person's own message was answered long
+  // before it. The card says that, and every verb it offers is Continue — by hand, or at the reset
+  // through the switch. Read once: the body, the countdown and the two controls all branch on it.
+  const continues = live && !!help?.nothingToResend;
   const window = quotaWindow(message);
   // The instant a re-armed retry would fire, re-derived from the same two things the server used
   // when it armed the first one: the reply's own "resets 8:20pm" (quota) or the next step of the
@@ -2053,9 +2266,13 @@ function AutoRetryCard({
           : quota
             ? `${window.what} for ${help?.provider ?? 'this provider'}${
                 help?.runnerName ? ` on “${help.runnerName}”` : ''
-              } is used up.${needsYou ? ' Auto-retry is off.' : ''}`
+              } is used up.${continues
+                ? ` Nothing to re-send — the limit landed on a turn that wasn’t yours.`
+                : needsYou ? ' Auto-retry is off.' : ''}`
             : `The ${help?.provider ?? 'provider'} API could not answer — nothing about your
-               message caused it.${needsYou ? ' Auto-retry is off.' : ''}`}
+               message caused it.${continues
+                 ? ` Nothing to re-send — the failure landed on a turn that wasn’t yours.`
+                 : needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
       {/* The error verbatim. Which one it was is the only actionable detail if it keeps
           recurring, and unlike a quota's sentence it is not restated by anything above. */}
@@ -2064,12 +2281,12 @@ function AutoRetryCard({
         <div className="chat-quota-when">
           {quota ? (
             <>
-              Resets <b>{formatResetAt(retryAt!)}</b>{' '}
+              {continues ? 'Continues' : 'Resets'} <b>{formatClock(retryAt!)}</b>{' '}
               <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
             </>
           ) : (
             <>
-              Retrying <b>{formatCountdown(msLeft)}</b>
+              {continues ? 'Continuing' : 'Retrying'} <b>{formatCountdown(msLeft)}</b>
             </>
           )}
         </div>
@@ -2078,12 +2295,16 @@ function AutoRetryCard({
         <div className="chat-quota-auto">
           <div className="chat-quota-auto-txt">
             <div className="chat-quota-auto-l">
-              {quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
+              {continues
+                ? quota ? 'Continue when the quota resets' : 'Continue — this usually clears'
+                : quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
             </div>
             <div className="chat-quota-auto-d">
               {armed
                 ? 'Runs on the server — you can close this tab.'
-                : 'Off — nothing will re-send until you do.'}
+                : continues
+                  ? 'Off — nothing will continue until you do.'
+                  : 'Off — nothing will re-send until you do.'}
             </div>
           </div>
           {/* A real two-state switch: off is rendered, not just implied by the row disappearing,
@@ -2108,7 +2329,9 @@ function AutoRetryCard({
       )}
       {firing && !takenOver && (
         <div className="chat-quota-run">
-          <span className="spin" /> Retrying — re-sending your message…
+          <span className="spin" /> {continues
+            ? 'Continuing — picking up where it left off…'
+            : 'Retrying — re-sending your message…'}
         </div>
       )}
       {/* Once the task has moved on, the card stops offering to re-send and says what happened
@@ -2116,12 +2339,13 @@ function AutoRetryCard({
       {takenOver ? (
         <TaskRunHandoffNotice className="chat-quota-handoff" conflict={takenOver} />
       ) : null}
-      {!takenOver && live && !firing && help?.onRetry && help.retryText && (
+      {!takenOver && live && !firing && help?.onRetry && (help.retryText || continues) && (
         <>
           {/* Quoted for the same reason as the sign-in card's: by now it has scrolled away,
               and on a first-turn limit it was never in the transcript at all. When the bubble
-              is the line directly above, it is neither — see `afterUserMsg`. */}
-          {!afterUserMsg && (
+              is the line directly above, it is neither — see `afterUserMsg`. Never for a
+              continue: the platform's sentence is not something the reader wrote. */}
+          {!afterUserMsg && !!help.retryText && (
             <>
               <div className="chat-quota-lastl">Will re-send:</div>
               <div className="chat-quota-last">{help.retryText}</div>
@@ -2135,15 +2359,21 @@ function AutoRetryCard({
               disabled={help.retryDisabled}
               type="button"
             >
-              {armed ? 'Retry now anyway' : 'Retry now'}
+              {armed
+                ? continues ? 'Continue now anyway' : 'Retry now anyway'
+                : continues ? 'Continue' : 'Retry now'}
             </button>
-            {armed && (
+            {armed ? (
               <span className="chat-quota-note">
                 {quota
                   ? 'The quota hasn’t reset yet — this will likely fail again.'
                   : 'The API may still be failing — this could fail again.'}
               </span>
-            )}
+            ) : continues ? (
+              // Said here rather than left to the transcript: the sentence is the platform's, and
+              // this is the one place the reader is told which words the press sends in their name.
+              <span className="chat-quota-note">Sends “{CONTINUE_MESSAGE}”</span>
+            ) : null}
           </div>
         </>
       )}
@@ -2167,7 +2397,11 @@ export const USER_BUBBLE_TRUNCATE = 6000;
 // time) fades in on hover, like Claude; it's absolutely positioned so it never adds height,
 // and lives inside the hover wrap so the pointer can travel down onto it without dismissing
 // it (CSS :hover hits ancestors).
-function UserBubble({ node }: { node: TextNode }) {
+//
+// Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
+// with that line at its foot — so a message does not change shape when the runner picks it up — and
+// no seq, being no event yet. A queued `!cmd` shows the command verbatim.
+function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
   const [copied, setCopied] = useState(false);
@@ -2193,15 +2427,23 @@ function UserBubble({ node }: { node: TextNode }) {
   };
   return (
     <div className="chat-user-wrap">
-      <div className="chat-msg chat-user" data-seq={node.seq}>
+      <div
+        className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
+        data-seq={queued ? undefined : node.seq}
+      >
         <TurnAttachments node={node} />
-        {shownText && <MD breaks>{shownText}</MD>}
+        {node.shell ? (
+          <code className="chat-queued-cmd">!{shownText}</code>
+        ) : (
+          shownText && <MD breaks>{shownText}</MD>
+        )}
         {attached && (
           // Named, not hidden: without this the agent answers about a quota outage nobody
           // appears to have raised. Folded under the words, so what the model read is one click
           // away without putting it in the middle of someone's sentence.
           <ControlPlaneNote kind={attached.kind} text={attached.text} />
         )}
+        {queued}
       </div>
       {node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
         // The one thing a bubble must never do is stand there looking sent when the engine
@@ -2288,6 +2530,67 @@ function TurnAttachments({ node }: { node: TextNode }) {
       )}
     </>
   );
+}
+
+// The foot of a finished turn, in the reply's own column (where Codex puts its row): a copy button
+// that hands back the turn's reply as written — its Markdown source, like the user bubble's copy —
+// and the time the turn ended. It stands where the blank divider between turns stood and is drawn
+// at rest, since it is also what marks where one turn ends; the user bubble's meta row waits for
+// hover. A turn with nothing to copy keeps its time; one with neither is the old blank divider.
+function TurnFoot({ node }: { node: DividerNode }) {
+  const [copied, setCopied] = useState(false);
+  const { seq, ts, reply } = node;
+  if (!reply && !ts) return <div className="chat-turn-divider" data-seq={seq} />;
+  const copy = () => {
+    if (!reply) return;
+    void copyText(reply).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  return (
+    <div className="chat-turn-divider chat-turn-foot" data-seq={seq}>
+      {reply && (
+        <button
+          type="button"
+          className="chat-copy"
+          onClick={copy}
+          title={copied ? 'Copied' : 'Copy reply'}
+          aria-label={copied ? 'Copied' : 'Copy reply'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      )}
+      {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
+    </div>
+  );
+}
+
+/**
+ * The head of a turn, over the turn's own output: how long it worked, or has been working — the row
+ * Codex draws above a turn's answer (owner, 2026-10-10). The span runs from the turn's `user`
+ * message to its `turn_end`, both of them stored, so a turn read back later says exactly what the
+ * turn on screen said; while the turn is still open it counts up once a second. A turn whose start
+ * the loaded window doesn't reach states no duration rather than a wrong one, and a turn that
+ * neither ended nor is still running states nothing at all.
+ */
+function TurnHead({ startTs, endTs, live }: { startTs?: string; endTs?: string; live?: boolean }) {
+  const start = startTs ? Date.parse(startTs) : NaN;
+  const end = endTs ? Date.parse(endTs) : NaN;
+  const ended = Number.isFinite(start) && Number.isFinite(end) && end >= start;
+  const ticking = !ended && !!live && Number.isFinite(start);
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!ticking) return undefined;
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [ticking]);
+  // A turn is never under a second: "Worked for 0s" reads as a bug, not as a measurement.
+  const span = (ms: number) => checkDuration(Math.max(1000, ms));
+  if (ended) return <div className="chat-turn-head">Worked for {span(end - start)}</div>;
+  if (!live) return null;
+  return <div className="chat-turn-head">{ticking ? `Working for ${span(Date.now() - start)}` : 'Working…'}</div>;
 }
 
 // Relative timestamp under a user bubble ("just now", "5m ago", "3h ago", "2d ago",
@@ -2482,7 +2785,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   );
 }
 
-// A user-sent image: click to open AntD's full-screen preview (zoom/rotate, ESC to close).
+// A user-sent image: click to open the full-screen preview (zoom/rotate, ESC to close).
 // The displayed src is already the full-resolution image (just CSS-constrained to 220px),
 // so the lightbox shows it at native size with no extra fetch. The hover mask is the
 // click affordance — without it a bare <img> gives no hint it's interactive.
@@ -2503,7 +2806,7 @@ export function ChatImage({
 }) {
   const exp = useContext(ExportCtx);
   const registry = useContext(ImagePreviewContext);
-  // Static export: AntD's Image lightbox is JS-driven and inert in a saved file — render a
+  // Static export: the preview is JS-driven and inert in a saved file — render a
   // plain <img> (the src is already the full-resolution data URL).
   if (exp) return <img className={className} src={src} alt={alt} />;
   // In the transcript: join the shared left/right pager (see ImagePreviewProvider).
@@ -2512,19 +2815,17 @@ export function ChatImage({
       <GroupedChatImage registry={registry} previewKey={previewKey} order={order} src={src} className={className} alt={alt} />
     );
   }
-  // Standalone (the composer's unsent previews): AntD's own single-image lightbox.
+  // Standalone (the composer's unsent previews): its own single-image preview.
   return (
     <Image
       className={className}
       src={src}
       alt={alt}
-      preview={{
-        mask: (
-          <span className="chat-image-mask">
-            <EyeOutlined /> Preview
-          </span>
-        ),
-      }}
+      cover={
+        <span className="chat-image-mask">
+          <EyeOutlined /> Preview
+        </span>
+      }
     />
   );
 }
@@ -2548,9 +2849,9 @@ function GroupedChatImage({
   alt: string;
 }) {
   useEffect(() => {
-    registry.register(previewKey, order, src);
+    registry.register(previewKey, order, src, alt);
     return () => registry.unregister(previewKey);
-  }, [registry, previewKey, order, src]);
+  }, [registry, previewKey, order, src, alt]);
   return (
     <button type="button" className="chat-image-btn" onClick={() => registry.open(previewKey)}>
       <img className={className} src={src} alt={alt} />
@@ -2974,18 +3275,31 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
+  const baseLabel = `⊕ Orbit attached: ${kind}`;
+  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
   return (
-    <div className="chat-injected">
+    <div className={`chat-injected${open ? ' is-open' : ''}`}>
       <button
         type="button"
         className="chat-injected-head"
+        data-display-kind={kind}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {`⊕ Orbit attached: ${kind}`}
-        {tasks && ` · ${summarizeReferencedTasks(tasks.tasks)}`}
-        {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
+        {label}
       </button>
+      {!open && (
+        <div className="chat-injected-overview">
+          <div className="chat-injected-summary">
+            <strong>Orbit context</strong>
+            <span>Attached to this message</span>
+          </div>
+          <p>Context is kept out of your message and available when you need the full details.</p>
+          <button type="button" className="chat-injected-action" onClick={() => setOpen(true)}>
+            View full context <RightOutlined />
+          </button>
+        </div>
+      )}
       {open &&
         (tasks || jobs || wiki ? (
           <>
@@ -3004,8 +3318,9 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
- * ten of them. The duration comes from having watched it stream (lib/thinkingDraft); a reloaded
- * block has only its size, and states that rather than nothing.
+ * ten of them. The duration is the one the runner stored on the block (lib/thinkingDraft), so a
+ * reload states it too; a block an older runner stored has only its size, and states that rather
+ * than nothing.
  */
 function Thinking({ text, seq, ms, blocks }: { text: string; seq?: number; ms?: number; blocks?: number }) {
   const exp = useContext(ExportCtx);
@@ -3091,10 +3406,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
   const exp = useContext(ExportCtx);
-  // A plan or a question to the user is the point of the turn — open it by
-  // default; a result carrying an image (a screenshot the workspace produced for the
-  // user) opens so the picture shows without a click. A static export opens every card
-  // (nothing can be un-folded after the fact).
+  // A plan is the point of the turn — open it by default; a result carrying an image (a
+  // screenshot the workspace produced for the user) opens so the picture shows without a click.
+  // A static export opens every card (nothing can be un-folded after the fact).
   // A created batch joins them: it is a write to state outside this session, the titles it names
   // appear nowhere else in the transcript, and under auto-approval the panel that would have shown
   // them was never on screen. The folded row carries the shape and the count — which is what the
@@ -3106,40 +3420,59 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // Keyed on the *preview* result, which is why a clipped image keeps its (dataless) block: this
   // decides whether the card opens, and opening the card is what fetches the picture back. Asking
   // `resultImages` here instead would deadlock the two — the refetch below is gated on being open.
-  const defaultOpen =
+  // A question to the user no longer opens: folded, its card is already the record of what was
+  // asked and how it was answered (see `questionUnread` below for the one time it still does).
+  const usuallyOpen =
     !!exp ||
     node.name === 'ExitPlanMode' ||
-    node.name === 'AskUserQuestion' ||
     isShell ||
     isAutoOpenBatch(node) ||
     hasResultImage(node.result?.content);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = manualOpen ?? defaultOpen;
+  const isQuestion = node.name === 'AskUserQuestion';
   // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until
-  // then — and for the folded majority, forever — the server's preview is what renders.
-  const fullInput = useFullPayload(node.seq, node.truncated, open);
+  // then — and for the folded majority, forever — the server's preview is what renders. A
+  // question's folded card is its record, read off the call and the result, so it reads both
+  // whole while folded: a clipped one would lose the questions' text, or the answers after the cut.
+  const fullInput = useFullPayload(node.seq, node.truncated, isQuestion || (manualOpen ?? usuallyOpen));
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
-  // fail to parse and render nothing — it needs the whole result regardless of the fold.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create';
+  // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
+  // question's record.
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
     node.result?.truncated,
-    (open || needsWholeResult) && !!node.result && !hideResult,
+    ((manualOpen ?? usuallyOpen) || needsWholeResult) && !!node.result && !hideResult,
   );
   const input = fullInput?.input ?? node.input;
   const resultContent = fullResult ? fullResult.content : node.result?.content;
-  // The chosen answer for an AskUserQuestion lives only in the result text
-  // ("The user answered: …"); pass it in so the historical card can highlight
-  // the picked option(s).
+  // How a question ended lives only in the result text ("The user answered: …"), so the card reads
+  // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
+  const outcome = useMemo(
+    () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
+    [questions, answer, node.result?.isError],
+  );
+  // A result this client cannot read, once it is whole: its own words are then the only answer
+  // there is, so the card opens on them, as it always did.
+  const questionUnread =
+    questions.length > 0 &&
+    !outcome &&
+    !!node.result &&
+    !node.result.isError &&
+    answer !== '' &&
+    (!node.result.truncated || !!fullResult);
+  const defaultOpen = usuallyOpen || questionUnread;
+  const open = manualOpen ?? defaultOpen;
   // `input` keeps its reference across tree rebuilds (the source event object is reused when
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
   const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
-    () => describeTool(node.name, input, isShell, answer),
-    [node.name, input, isShell, answer],
+    () => describeTool(node.name, input, isShell, outcome),
+    [node.name, input, isShell, outcome],
   );
   const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
   const isBackgroundTask = isBackgroundTaskCall(node.name);
@@ -3189,6 +3522,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         )}
         {isBackgroundTask ? (
           <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+        ) : outcome?.kind === 'replied' ? (
+          // The engine files "Chat about this" as the call's error; it is the person's reply.
+          <MessageFilled className="chat-tool-status replied" />
         ) : (
           <>
             {meta && <span className="chat-tool-meta">{meta}</span>}
@@ -3196,18 +3532,27 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           </>
         )}
       </div>
+      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
+      {questions.length > 0 && !(hasDetail && open) && (
+        <QuestionFolded
+          questions={questions}
+          outcome={outcome}
+          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+        />
+      )}
       {hasDetail && open && (
         <div className="chat-tool-detail">
           {/* A failed call is opened to find out why, and the input is rarely the answer — a
               heredoc alone clamps to sixteen lines, which is enough to push the reason off the
               bottom of the card. Put the error first when there is one; everywhere else the
               call still reads input-then-output. */}
-          {node.result?.isError && (
+          {node.result?.isError && !outcome && (
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
           {node.name === 'Workflow' && (
-            <TaskProgressDetail
-              id={node.id}
+            <WorkflowProgressDetail
+              node={node}
+              live={live}
               // Before a runner that reports progress, a workflow's receipt is still all there is.
               // An agent's ack is internal metadata; its own transcript below says what it did.
               fallback={
@@ -3217,15 +3562,21 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               }
             />
           )}
-          {body && <div className="chat-tool-body">{body}</div>}
-          {node.children.length > 0 && (
+          {body && (node.name === 'Workflow' ? (
+            <details className="chat-workflow-source" open={exp ? true : undefined}>
+              <summary>Workflow source</summary>
+              <div className="chat-tool-body">{body}</div>
+            </details>
+          ) : <div className="chat-tool-body">{body}</div>)}
+          {node.name !== 'Workflow' && node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
           )}
           {/* A sub-agent's totals close its transcript rather than open it. */}
           {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && (
+          {/* A question's result, once read, is only the replay above said again. */}
+          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
           {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
@@ -3386,10 +3737,66 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
   );
 }
 
+/** A running background task's folded card: what its sub-agent is on right now — the last thing
+    its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
+  const lookup = useContext(TaskLookupCtx);
+  if (!lookup.running(node.id) && !(live && !node.result)) return null;
+  for (let i = node.children.length - 1; i >= 0; i--) {
+    const child = node.children[i];
+    let text: string | undefined;
+    if (child.kind === 'tool') {
+      const d = describeTool(child.name, child.input);
+      text = d.path ? `${d.label} ${splitPath(d.path).base}` : d.summary ? `${d.label} ${d.summary}` : d.label;
+    } else if (child.kind === 'thinking') {
+      text = 'Thinking…';
+    } else if (child.kind === 'assistant') {
+      text = child.text.split('\n').find((line) => line.trim());
+    }
+    if (text) return <div className="chat-tool-live">{text}</div>;
+  }
+  return null;
+}
+
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
 function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
   const progress = useContext(TaskLookupCtx).progress(id);
   return progress ? <TaskProgressBlock progress={progress} /> : <>{fallback}</>;
+}
+
+function WorkflowProgressDetail({ node, live, fallback }: { node: ToolNode; live?: boolean; fallback?: ReactNode }) {
+  const progress = useContext(TaskLookupCtx).progress(node.id);
+  const exp = useContext(ExportCtx);
+  const agents = new Map(node.children.filter((child): child is ToolNode => child.kind === 'tool').map((child) => [child.id, child]));
+  const linked = new Set(progress?.agents.map((agent) => agent.transcriptKey).filter(Boolean));
+  const remaining = node.children.filter((child) => child.kind !== 'tool' || !linked.has(child.id));
+  return (
+    <>
+      {progress ? (
+        <TaskProgressBlock
+          progress={progress}
+          defaultOpen={!!exp}
+          renderAgent={(agent) => {
+            const child = agent.transcriptKey ? agents.get(agent.transcriptKey) : undefined;
+            return child ? <WorkflowAgentTranscript node={child} live={live} /> : null;
+          }}
+        />
+      ) : fallback}
+      {remaining.length > 0 && <div className="chat-subagent"><NodeList nodes={remaining} live={live} /></div>}
+    </>
+  );
+}
+
+function WorkflowAgentTranscript({ node, live }: { node: ToolNode; live?: boolean }) {
+  const fullResult = useFullPayload(node.result?.seq ?? 0, node.result?.truncated, !!node.result);
+  return (
+    <>
+      <NodeList nodes={node.children} live={live} />
+      {node.result && (
+        <ToolResult seq={node.seq} content={fullResult ? fullResult.content : node.result.content} isError={node.result.isError} compact markdown />
+      )}
+    </>
+  );
 }
 
 function ToolStatus({ node, live }: { node: ToolNode; live?: boolean }) {
@@ -3438,7 +3845,7 @@ function shellCommandSummary(command: string): string {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean, answer?: string): ToolDesc {
+function describeTool(name: string, input: any, isShell?: boolean, outcome?: QuestionOutcome | null): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -3581,16 +3988,16 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         ) : undefined,
       };
     case 'AskUserQuestion': {
-      // A multiple-choice prompt to the user — render each question as a card
-      // (header · question · options) instead of dumping the nested questions
-      // array as a raw JSON blob via the default branch.
-      const qs: any[] = Array.isArray(i.questions) ? i.questions : [];
+      // A multiple-choice prompt to the user, drawn with how it ended: open, each question as a
+      // card (header · question · options, the pick ticked) instead of the nested questions array
+      // as a raw JSON blob; folded, ToolView draws the record under the row (`QuestionFolded`).
+      const qs = askedQuestions(i);
       return {
         label: 'Question',
         icon: <QuestionCircleOutlined />,
         tone: 'agent',
-        summary: qs.map((q) => q?.header).filter(Boolean).join('  ·  ') || undefined,
-        body: qs.length ? <Questions questions={qs} answer={answer} /> : undefined,
+        summary: qs.map((q) => q.header).filter(Boolean).join('  ·  ') || undefined,
+        body: qs.length ? <QuestionReplay questions={qs} outcome={outcome ?? null} /> : undefined,
       };
     }
     // Orbit's own two writes, rendered as what they did rather than as the JSON they were sent.
@@ -3630,7 +4037,9 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         summary: shape || undefined,
         body: tasks.length ? (
           <div className="tool-batch">
-            {shouldDraw(graph) ? <BatchGraph tasks={tasks} /> : null}
+            {/* The record lists the titles either way, so the picture stands where it fits and
+                leaves nothing in its place when it does not. */}
+            <BatchGraph tasks={tasks} fallback={null} />
             <ul className="dag-approval-ops">
               {tasks.map((t, n) => (
                 <li key={n} className="dag-op">
@@ -3892,47 +4301,85 @@ function Todos({ todos }: { todos: any[] }) {
   );
 }
 
-// labelPicked reports whether an option was chosen, given the answer result text
-// (… "Q"="A". — multi-select joins the picks as "a,b,c" inside the one quote
-// pair). The text only ever contains the picked labels, each bounded by a quote
-// or a comma, so a label is picked iff it appears delimited that way. The
-// boundary check keeps a label that's merely a substring of the echoed question
-// (or of a longer sibling label) from matching; a typed-in custom answer is no
-// option's label, so it highlights nothing.
-function labelPicked(answer: string, label: string): boolean {
-  if (!answer || !label) return false;
-  const bound = (c: string | undefined) => c === '"' || c === ',';
-  for (let i = answer.indexOf(label); i >= 0; i = answer.indexOf(label, i + 1)) {
-    if (bound(answer[i - 1]) && bound(answer[i + label.length])) return true;
-  }
-  return false;
+// QuestionFolded is an answered question's folded card, under its row: each question's opening,
+// then how it was answered — the option picked, the words typed, or the reply given in the
+// conversation instead. One question keeps two lines of its opening and several keep one each, so
+// the card stays a record rather than the replay; a click opens the replay, as the row's does.
+function QuestionFolded({
+  questions,
+  outcome,
+  onOpen,
+}: {
+  questions: AskedQuestion[];
+  outcome: QuestionOutcome | null;
+  onOpen: () => void;
+}) {
+  const several = questions.length > 1;
+  return (
+    <div className="chat-q-folded" onClick={onOpen}>
+      {questions.map((q, k) => {
+        const line = outcome?.kind === 'answered' ? questionAnswerLine(q, outcome.answers[k] ?? null) : null;
+        return (
+          <Fragment key={k}>
+            <div className={`chat-q-lead${several ? ' is-one-line' : ''}`}>{questionLead(q.question)}</div>
+            {line && (
+              <div className="chat-q-answer">
+                <CheckCircleFilled />
+                <span className="chat-q-answer-words">{line}</span>
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
+      {outcome?.kind === 'replied' && (
+        <div className="chat-q-answer">
+          <MessageFilled />
+          <span>
+            <span className="chat-q-answer-words">{questionReplyLine(outcome.words)}</span>
+            <span className="chat-q-answer-note">{QUESTION_RECORD_COPY.repliedInChat}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
-// Questions renders an AskUserQuestion input: each question as a card with its
-// header, prompt text, and the options (label + description); once answered, the
-// option(s) the user picked are highlighted (see labelPicked).
-function Questions({ questions, answer }: { questions: any[]; answer?: string }) {
+// QuestionReplay is the open card: each question as it was asked — header, prompt text, and every
+// option with its description — with the option(s) picked highlighted, then the words typed
+// instead of an option, or the reply given in the conversation instead of any.
+function QuestionReplay({ questions, outcome }: { questions: AskedQuestion[]; outcome: QuestionOutcome | null }) {
   return (
     <div className="chat-questions">
-      {questions.map((q: any, k: number) => (
-        <div className="chat-q" key={k}>
-          {q?.header && <div className="chat-q-header">{q.header}</div>}
-          {q?.question && <div className="chat-q-text">{String(q.question)}</div>}
-          <div className="chat-q-opts">
-            {(q?.options ?? []).map((o: any, j: number) => {
-              const label = o?.label ?? '';
-              const picked = !!answer && labelPicked(answer, label);
-              return (
-                <div className={`chat-q-opt${picked ? ' is-picked' : ''}`} key={j}>
-                  <span className="chat-q-opt-label">{label}</span>
-                  {o?.description && <span className="chat-q-opt-desc">{o.description}</span>}
+      {questions.map((q, k) => {
+        const answer = outcome?.kind === 'answered' ? (outcome.answers[k] ?? null) : null;
+        return (
+          <div className="chat-q" key={k}>
+            {q.header && <div className="chat-q-header">{q.header}</div>}
+            {q.question && <div className="chat-q-text">{q.question}</div>}
+            <div className="chat-q-opts">
+              {q.options.map((o, j) => (
+                <div className={`chat-q-opt${answer?.picked.includes(j) ? ' is-picked' : ''}`} key={j}>
+                  <span className="chat-q-opt-label">{o.label}</span>
+                  {o.description && <span className="chat-q-opt-desc">{o.description}</span>}
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            {answer?.typed && (
+              <div className="chat-q-words">
+                <span className="chat-q-words-label">{QUESTION_RECORD_COPY.yourAnswer}</span>
+                {answer.typed}
+              </div>
+            )}
+            {q.multiSelect && <div className="chat-q-multi">{QUESTION_RECORD_COPY.multipleChoice}</div>}
           </div>
-          {q?.multiSelect && <div className="chat-q-multi">multi-select</div>}
+        );
+      })}
+      {outcome?.kind === 'replied' && (
+        <div className="chat-q-words">
+          <span className="chat-q-words-label">{QUESTION_RECORD_COPY.repliedInChat}</span>
+          {outcome.words}
         </div>
-      ))}
+      )}
     </div>
   );
 }

@@ -1,0 +1,17 @@
+{
+  "parent": "801d41ac9b9ec33671a00190e6f3c77cee22ab94",
+  "testedCommit": "8d78a684b607094e416c18d48c8881492efa0e05",
+  "webTree": "efeb783da7d7292f845b29b83fa891652ac3d7e5",
+  "changedWebFiles": [
+    "src/web/ui-migration/choices-lifecycle.browser.mjs",
+    "src/web/ui-migration/choices-scroll-observation.mjs"
+  ],
+  "runtimeFilesUnchanged": 609,
+  "historicalEvidenceFilesUnchanged": 13094,
+  "dependencyBuildTypesAndBrowserConfigsUnchanged": true,
+  "reuse": [
+    "r3 build/test 295 files / 3661 tests and four type checks",
+    "r3 toasts-entry 24/24 and production-entry 8/8",
+    "r2 visual/interaction evidence with original limitations"
+  ]
+}

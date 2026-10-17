@@ -1,0 +1,2384 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/var/tmp/p23b1/trees/tip/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "ui-migration/b1.config.mjs",
+   "--update-snapshots=all",
+   "-g",
+   "(settings|profile|session)$"
+  ],
+  "configFile": "/var/tmp/p23b1/trees/tip/src/web/ui-migration/b1.config.mjs",
+  "rootDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/var/tmp/p23b1/trees/tip/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p23b1/runs/diag-verify-after/output",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/var/tmp/p23b1/trees/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "b1-state.diag.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p23b1/runs/diag-verify-after/output/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/var/tmp/p23b1/trees/verify/src/web",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "b1-state.diag.mjs",
+   "file": "b1-state.diag.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1110,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:23.390Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-light-desktop/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-light-desktop/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-light-desktop/attachments/computed-styles-and-timings-7f052067c168b81cebe6634c085020e86a6cfc7f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-0565093358f2f2bed680",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1219,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:24.638Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-light-desktop/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-light-desktop/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-light-desktop/attachments/computed-styles-and-timings-7ff964184860d89256e46f6fc1ab85cd2a0d8f34.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-18c20adda0a7f4dfa868",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4233,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:25.863Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-desktop/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-desktop/attachments/computed-styles-and-timings-8e8cc3d33eb1f21be3f1f1cdd21530fc401c8968.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-437a53c1785417bd40ce",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 919,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:30.356Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-light-phone/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-light-phone/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-light-phone/attachments/computed-styles-and-timings-5deeda9beea0473178ebc0231ce38fb973a913ff.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-b3f96da7779f1a3181f6",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1140,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:31.325Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-light-phone/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-light-phone/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-light-phone/attachments/computed-styles-and-timings-7276c9db685543dd97a829148b9115f013afd4a8.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-79b4768653f66f8602ad",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3956,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:32.469Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-light-phone/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-light-phone/attachments/computed-styles-and-timings-01aadea0d9f089cb34e7dd74d1267d651f5a73ce.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-570cb8b798072225218c",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1020,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:36.654Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-dark-desktop/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-dark-desktop/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-dark-desktop/attachments/computed-styles-and-timings-e6ba5caa2dfc1dd51e42531af2c2d1b7bd3aee2b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-e504299eb08a66331f40",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1241,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:37.723Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-dark-desktop/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-dark-desktop/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-dark-desktop/attachments/computed-styles-and-timings-673cade272cc17d1e4d4393c5c50f7da9a056aa6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-d988b94fe3e8ca93dc54",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4214,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:38.971Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-desktop/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-desktop/attachments/computed-styles-and-timings-b045baa26e25c89db7db2c70a1ba6108adbed783.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-6b235da7b75c7a76df7d",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 896,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:43.427Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-dark-phone/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-dark-phone/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-chromium-dark-phone/attachments/computed-styles-and-timings-986e29ee42acb6343984337fe8f3ff3bdf781d58.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-4ae0cfcc88472df15264",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1142,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:44.372Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-dark-phone/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-dark-phone/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-chromium-dark-phone/attachments/computed-styles-and-timings-128518ff980c69bd6092487f3fbb9c6fe9a04d76.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-68b242074bff42c7e15f",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3882,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:45.518Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/chromium-dark-phone/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-chromium-dark-phone/attachments/computed-styles-and-timings-559ffe1275b8149b1fb2f6d2df065a767664f28f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-59efcdb84b4295cfe8de",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1324,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:49.658Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-light-desktop/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-light-desktop/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-68171eb3d31624a957059d6dd65ce848bfe379b2.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-4e239cf0eea15693dfdb",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1498,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:51.102Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-light-desktop/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-light-desktop/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-light-desktop/attachments/computed-styles-and-timings-89bbbb33cf3df96a1629a838723ceca5e61b144a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-a3de8a25d3b0b5824626",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4871,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:52.604Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-desktop/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-desktop/attachments/computed-styles-and-timings-05681e1ed3601492d8e77f0772d4566328928df8.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-1c50b43d6e73ea70d235",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1081,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:57.752Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-light-phone/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-light-phone/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-light-phone/attachments/computed-styles-and-timings-121a1ae0f26102888c88e1a237f9a83d9cf8db79.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-5ccd3ebb6d40493d1cd3",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1331,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:40:58.901Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-light-phone/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-light-phone/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-light-phone/attachments/computed-styles-and-timings-b1d05b7ec1c03418e3b673da1a816544864c686a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-8948fa9525bc8a622978",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4373,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:00.236Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-light-phone/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-light-phone/attachments/computed-styles-and-timings-cf86b6381047c57bb8a1643150fbc34dbc707d9b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-586901b903555d091a63",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1211,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:04.848Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-dark-desktop/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-dark-desktop/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-9c20c32848614c9a9365652801e08640410a8dee.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-bfb2dbd02046cb0ccb34",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1557,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:06.122Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-dark-desktop/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-dark-desktop/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-dark-desktop/attachments/computed-styles-and-timings-e4ec19ad28fdfd5638dff411a2b52f30b4a05cb9.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-c4be6252c2b58a519778",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4914,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:07.683Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-desktop/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-desktop/attachments/computed-styles-and-timings-9fbeae44f786db1d70c63d05df57479413fdccc9.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-1e5e4d844ab9b3e22c36",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1047,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/settings.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/settings-saved.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:12.833Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "settings-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/settings.png"
+          },
+          {
+           "name": "settings-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-dark-phone/settings-actual.png"
+          },
+          {
+           "name": "settings-saved-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/settings-saved.png"
+          },
+          {
+           "name": "settings-saved-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-dark-phone/settings-saved-actual.png"
+          },
+          {
+           "name": "settings-saved-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-b8ef85d5113abf95f921478c6e2ef97902fa9a92.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-03e936b8a3b3485205e4",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1322,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/profile.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/profile-validation.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:13.943Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "profile-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/profile.png"
+          },
+          {
+           "name": "profile-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-dark-phone/profile-actual.png"
+          },
+          {
+           "name": "profile-validation-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/profile-validation.png"
+          },
+          {
+           "name": "profile-validation-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-dark-phone/profile-validation-actual.png"
+          },
+          {
+           "name": "profile-validation-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-profile-webkit-dark-phone/attachments/computed-styles-and-timings-9d873500a38671823e2a20eb61a13e437c2b55b0.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-03225857bf065fb74861",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4513,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-idle.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-streaming.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-composer-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-attachment-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-attachment-staged.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/notification-error.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T23:41:15.269Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-idle.png"
+          },
+          {
+           "name": "session-idle-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/session-idle-actual.png"
+          },
+          {
+           "name": "session-streaming-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-streaming.png"
+          },
+          {
+           "name": "session-streaming-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/session-streaming-actual.png"
+          },
+          {
+           "name": "session-composer-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-composer-focus.png"
+          },
+          {
+           "name": "session-composer-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/session-composer-focus-actual.png"
+          },
+          {
+           "name": "session-attachment-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-attachment-menu.png"
+          },
+          {
+           "name": "session-attachment-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/session-attachment-menu-actual.png"
+          },
+          {
+           "name": "session-attachment-staged-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/session-attachment-staged.png"
+          },
+          {
+           "name": "session-attachment-staged-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/session-attachment-staged-actual.png"
+          },
+          {
+           "name": "notification-error-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/snapshots/webkit-dark-phone/notification-error.png"
+          },
+          {
+           "name": "notification-error-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/notification-error-actual.png"
+          },
+          {
+           "name": "notification-error-b1-state",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p23b1/runs/diag-verify-after/output/b1-state.diag.mjs-session-webkit-dark-phone/attachments/computed-styles-and-timings-bf6049e42f75644d095b381694ab40084486b6b4.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "68e1128db22815957832-ae9c2a686879bb291cab",
+     "file": "b1-state.diag.mjs",
+     "line": 114,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T23:40:22.503Z",
+  "duration": 57348.143000000004,
+  "expected": 24,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

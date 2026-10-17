@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Button, Input, Typography } from 'antd';
 import { useId, useState } from 'react';
 import { api } from '../api';
 import { MD } from '../components/Transcript';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/Textarea';
+import '../components/ui/Typography.css';
 import type { WriteToast } from '../components/TaskScheduleEditor';
 import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { useToast } from '../lib/toast';
@@ -222,7 +225,7 @@ export function TaskAcceptanceFields({
           <label className="tdp-acceptance-label" htmlFor={criteriaId}>
             Acceptance criteria
           </label>
-          <Input.TextArea
+          <Textarea
             id={criteriaId}
             className="tdp-acceptance-criteria-input"
             autoSize={{ minRows: 3, maxRows: 10 }}
@@ -249,9 +252,9 @@ export function TaskAcceptanceFields({
               <MD breaks>{criteria}</MD>
             </div>
           ) : (
-            <Typography.Text type="secondary" className="tdp-acceptance-empty">
+            <span className="tdp-acceptance-empty orbit-typography orbit-typography-secondary">
               {ACCEPTANCE_EMPTY}
-            </Typography.Text>
+            </span>
           )}
         </>
       )}
@@ -301,14 +304,14 @@ export function TaskAcceptanceFields({
           </span>
         </div>
       ) : (
-        <Typography.Text type="secondary" className="tdp-acceptance-empty">
+        <span className="tdp-acceptance-empty orbit-typography orbit-typography-secondary">
           {ACCEPTANCE_PAIR_EMPTY}
-        </Typography.Text>
+        </span>
       )}
 
-      <Typography.Text id={hintId} type="secondary" className="tdp-acceptance-hint">
+      <span id={hintId} className="tdp-acceptance-hint orbit-typography orbit-typography-secondary">
         {ACCEPTANCE_AUTOMATIC_HINT}
-      </Typography.Text>
+      </span>
       {editing && problem && (
         <div id={problemId} role="alert" className="tdp-acceptance-error">
           {problem}
@@ -316,7 +319,7 @@ export function TaskAcceptanceFields({
       )}
       {editing && (
         <div className="tdp-acceptance-actions">
-          <Button size="small" type="primary" loading={saving} disabled={saving || !canSave} onClick={onSave}>
+          <Button size="small" variant="primary" loading={saving} disabled={saving || !canSave} onClick={onSave}>
             Save acceptance
           </Button>
           <Button size="small" disabled={saving} onClick={onCancel}>

@@ -272,7 +272,7 @@ func cliTaskProgress(args []string, out io.Writer) error {
 		}
 		body["expectedRevision"] = *expectedRevision
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}

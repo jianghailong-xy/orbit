@@ -267,6 +267,18 @@ export enum PermissionMode {
   BYPASS = 'bypassPermissions',
 }
 
+/**
+ * The permission modes DeepSeek Harness (`dsh`) can enforce, measured on 0.2.0-rc.2 (P4 evidence,
+ * docs/evidence/deepseek-harness/p4/): Default and Don't Ask run its read-only file sandbox and
+ * either ask through Orbit's approval card or reject each escalation; Auto runs its workspace-write
+ * sandbox. Plan, Accept Edits and Bypass have no enforceable equivalent and are refused.
+ */
+export const DSH_PERMISSION_MODES: readonly PermissionMode[] = [
+  PermissionMode.DEFAULT,
+  PermissionMode.AUTO,
+  PermissionMode.DONT_ASK,
+];
+
 /** Normalized run-event types streamed from runner → control plane → UI. */
 export enum RunEventType {
   SYSTEM = 'system',
@@ -292,6 +304,13 @@ export enum RunEventType {
   // `acknowledged` — the engine echoing it back — means it entered the conversation.
   USER_DELIVERY = 'user_delivery',
   TURN_END = 'turn_end', // one turn finished; session parks for the next input
+  // What the person will probably type next, predicted after a turn ended (Claude
+  // Code's `--prompt-suggestions`; the server's DeepSeek guess for every other engine,
+  // docs/prompt-suggestions-design.md §8 P2). Durable and filed against
+  // the turn it follows, so a reload replays it, and it is never drawn as a transcript row: a
+  // client offers it in the empty composer while it is still the newest of user / turn_end /
+  // prompt_suggestion. Payload: { text, source: 'engine' | 'orbit' }.
+  PROMPT_SUGGESTION = 'prompt_suggestion',
   INTERRUPT = 'interrupt', // a turn was interrupted by the user
   // Tool-permission approvals (live-only SSE nudges; the durable record is the
   // Approval row, not a RunEvent — so they never collide with the runner's seq).
@@ -438,4 +457,7 @@ export enum AgentProvider {
   OPENCODE = 'opencode',
   /** Google's Antigravity CLI (`agy`), driven headless; see docs/antigravity-runtime-contract.md. */
   ANTIGRAVITY = 'antigravity',
+  /** DeepSeek Harness, driven through ACP. An engine like the rest: it runs on a DeepSeek key, which
+   *  Claude Code and OpenCode can run as well (providerEngines.ts). */
+  DSH = 'dsh',
 }

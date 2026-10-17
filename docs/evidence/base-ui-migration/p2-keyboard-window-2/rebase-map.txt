@@ -1,0 +1,23 @@
+# pre-rebase commit (on 7732f14f8; kept at refs/kw2/pre-rebase)  rebased commit (on origin/main c7efa24cb)  subject
+5cd02c2ae6c75f315427f26b87b8ba7838c73b8f f74f4251f8f976ba42bc3e3b0f89c38dc29071a0 test(web): probe the remaining popup opening windows against the old AntD components
+53d8fcb2d971a3c3a54426a34889bdd97dc1c734 4d3d25519c59262f40b7604b6c07d6c7319a3288 test(web): compare the submenu window inside a multi-item menu, and record the probe's dev check
+0594f6d2c33ee60179eae2784ad781491e275e30 e2bdbb989f0f6c6071d4a530bf58d922acf01c73 test(web): pin keys pressed before focus enters an open submenu, menu, select or dialog
+4d54fbe5fec229e02a5de4a5b8f4970756107363 8818d242a51e3c1b37981b631e48f738f9dd4659 test(web): pin Home and End pressed before focus enters an open menu
+9975b1f5555f550c660eb667bd52f2dc6400f4ef ed0d535c62f6091c4eeaa1bfea2d384ba5d5517b docs(web): record the second window batch's baselines and before-fix runs
+2d8073fc9d2e883c417189c9e1f815e2dab612d8 9579d4b9693364d0648fdb2a3c24b4354954ca46 docs(web): record the last two baseline chunks of the second window batch
+0638f1944db440eb76e1e02741ce54093b398af6 fbb7e2861a7acf655af79dbd5ade904892ab8f2c docs(web): record P0 by its original command before the window fixes
+e78ecf52777a988b35ca560ca2f2411536c66ac2 b73a1952f3cb6bc061ceb1351734d877878eacd4 fix(web): move focus into an opened dialog before the next key, as the replaced modal did
+616f1e3783d70069c13e621faf3b8772ff441029 7a0953bf74ec5fc4fc3f6e62c2964fc3391c5e34 fix(web): let Tab and Shift+Tab that beat the focus move leave a select from its list
+069601b675c735a69263f4a75f8d4349c0877c77 f513f52a607c81cc665c3e0dd4eafc844c22676b fix(web): hand keys that beat the focus move to an open submenu, and Home, End, Tab and Shift+Tab to a menu
+3a559f9246b76c6feee873f819f8681ac20bd34e b851a30d77c45f13dcf5b3bdd9d3d3acf93c8757 docs(web): record the window fixes' first after-fix runs
+aed0a7bab6e39a50edaeea4cf16cecdae212b6d5 f8aa1697324027ce9680581e4e6afad84d89ac7a fix(web): move focus to a submenu item before handing it Enter or Space
+d0f16fd5a0bb36cb226bd13b652fa1528caf24f0 19706ab6e7d0e895ec098def020c84a8dd5bd3b2 docs(web): record the second submenu fix's held-frames runs and the inventory rescan
+9081988b8094bb2488134e0a0741a8c1edc17d99 dce0d391306579eb9ebcce1748151c1108cbbbe9 docs(web): queue the final tree's production-build checks after the submenu chunks
+d2a674aa75ad88630ad8699fe1268a29214fccb5 053a05962893f2129f3599b77b77dee455e1348a docs(web): draft the second window batch's evidence README and the inventory record tools
+7582be8c47c87c07ea909327fccf77ba5fb9e140 d3f0eb6b8907463e231c5656326741ffd2355e4a docs(web): make the final-tree queue resumable and hold it under 6 GB free
+ff03af88c58af6a3305b77857c5d0b1f57a41972 5b355e56418f66387c91015d48b63fc333a49630 docs(web): cut the final-tree runs small for the shared disk
+25f13640b93fd92d9b59e2f4ff3645cf5cf73b2a b9622d099a53891505cc2331974669b4a03bfd71 docs(web): record the first final-tree submenu chunk
+66e5e819c78b6580ef84c365e687bd2a9764bfb1 92afa5eb263ec03498c5fcbaccfd7669d0d67db0 docs(web): record the final tree's submenu chunks, entry repeats and first production checks
+3299eb8b8b777ff6cdb9cceeddcdf7ce2cae87a3 226bfe4eed399a78aa6f2ac8d8e38b70a0c76a81 docs(web): summarise every window combination before and after the fixes, and compare the first pilot runs
+efa679f0ab633668f34fb15f637d1171aa9fdeb4 20e48a7c690b2463d675663b3793fb7a771080e8 docs(web): record the final tree's second pilot run, three choices projects and the pilot comparisons
+0e928e2fdbc03515caa4cd7e5b453c99c0d0295d 37efe24903bbd8bc969abfbc0bed4a3c1b67a089 docs(web): add the remaining pilot comparisons to the README draft

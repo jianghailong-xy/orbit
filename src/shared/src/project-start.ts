@@ -19,19 +19,32 @@ import type { IntegrationLine } from './project-progress';
  * - `projectBranchName` — the project branch as a full `refs/heads/…` ref, only with
  *   `PROJECT_BRANCH`. Absent on a request means `refs/heads/project/<project id>`, or the branch the
  *   project already names.
+ * - `upstreamRef` — the project's main branch as a full `refs/heads/…` ref: where its line comes
+ *   from and what its work is merged into, with either line. On a start it is the owner's choice,
+ *   recorded as such; on a coordinator's request it is a suggestion. Absent asks for nothing: the
+ *   project keeps the main branch it stands on — for a new binding, the one this account chose
+ *   last for the same repository, else `refs/heads/main`. In a start's record it is the main branch
+ *   the start left the project on, present when the start or the request it answered named one.
  * - `automatic` — `project.coordinator_enabled`: the coordinator runs the project for the owner.
  * - `maxConcurrentTasks` — how many of its tasks may be in flight at once.
  * - `mergeCheckCommand` — the check run on the combined tree before anything lands; null for none.
+ * - `mergeCheckTimeoutSeconds` — that check's budget in seconds; null runs it on the one-hour
+ *   default. Absent on a start's own body means the setting is not named and is left as it stands,
+ *   which is what a client that does not know the field sends — `mergeCheckCommand` by contrast is
+ *   sent either way, because a card that cannot say "no check" cannot be drawn.
  */
 export interface ProjectStartSettings {
   line: IntegrationLine;
   projectBranchName?: string;
+  upstreamRef?: string;
   automatic: boolean;
   maxConcurrentTasks: number;
   mergeCheckCommand: string | null;
+  mergeCheckTimeoutSeconds?: number | null;
 }
 
-/** One of the settings above, as a difference names it. `line` covers the branch name too. */
+/** One of the settings above, as a difference names it. `line` covers the branch name and the
+ *  main branch too. */
 export type ProjectStartSettingKey = 'line' | 'automatic' | 'maxConcurrentTasks' | 'mergeCheckCommand';
 
 /** Every setting, in the order a card lists them. */
@@ -71,6 +84,12 @@ export interface ProjectStartRecord {
 
 /** The door's answer to a start. A start that did not happen is a 4xx, never this body. */
 export interface StartProjectResponse extends ProjectStartRecord {
+  /**
+   * The conversation that coordinates the project now. A start with Automatic on opens one when the
+   * project had none — it is the coordinator who runs an Automatic project — and says so with
+   * `created`; null when Automatic is off and there was none to report.
+   */
+  coordinator: { sessionId: string; created: boolean } | null;
   projectId: string;
   /** When the project was started: this start's own time, and from now on the project's. */
   startedAt: string;
@@ -87,11 +106,17 @@ export interface StartProjectResponse extends ProjectStartRecord {
 
 /**
  * What `project_request_start` sends (`POST /runner/projects/:id/start-requests`): the settings the
- * coordinator suggests the project start with, and one sentence on why. The merge check may be left
- * out, which suggests none.
+ * coordinator suggests the project start with, and one sentence on why. The merge check — its
+ * command and its budget — may be left out, which suggests none; Automatic may be left out, which is
+ * on — the owner's card opens with it on either way (the owner, 2026-10-07).
  */
-export type ProjectStartRequestBody = Omit<ProjectStartSettings, 'mergeCheckCommand'> & {
+export type ProjectStartRequestBody = Omit<
+  ProjectStartSettings,
+  'mergeCheckCommand' | 'automatic' | 'mergeCheckTimeoutSeconds'
+> & {
+  automatic?: boolean;
   mergeCheckCommand?: string | null;
+  mergeCheckTimeoutSeconds?: number | null;
   why: string;
 };
 
@@ -150,7 +175,12 @@ export interface ProjectStartRequest {
   planDigest: string;
   /** The repository the check found the project integrating into, or null for a project with none. */
   repository: string | null;
-  /** The check's `WARN` findings: what the owner should know before pressing Start. */
+  /**
+   * The check's `WARN` findings. Filed empty since 2026-10-07: they are about how the plan is
+   * written, which only the coordinator can change, so they come back to it in
+   * `ProjectStartRequestFiled` and the owner's card shows none. A request filed before then may
+   * still carry some; the cards ignore them.
+   */
   warnings: ProjectStartFinding[];
 }
 
@@ -209,7 +239,8 @@ function storedMergeCheck(command: string | null | undefined): string | null {
  * Which of `settings` are not what `asked` asked for, in card order.
  *
  * A branch name the request did not give is not a difference: absent asks for whichever project
- * branch the project has. A merge check is compared as stored, so whitespace is not one either.
+ * branch the project has, and whichever main branch. A merge check is compared as stored, so
+ * whitespace is not one either.
  */
 export function differingStartSettings(
   asked: ProjectStartSettings,
@@ -221,6 +252,7 @@ export function differingStartSettings(
     || (asked.line === 'PROJECT_BRANCH'
       && asked.projectBranchName !== undefined
       && asked.projectBranchName !== settings.projectBranchName)
+    || (asked.upstreamRef !== undefined && asked.upstreamRef !== settings.upstreamRef)
   ) {
     differs.add('line');
   }

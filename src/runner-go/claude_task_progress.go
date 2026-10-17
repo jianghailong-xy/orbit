@@ -97,6 +97,7 @@ func workflowAgentPayload(entry map[string]interface{}) map[string]interface{} {
 	a := map[string]interface{}{"index": toInt(entry["index"])}
 	for key, max := range map[string]int{
 		"label": 80, "phaseTitle": 80, "state": 20, "model": 60, "lastToolName": 60,
+		"agentId":         80,
 		"lastToolSummary": 160, "lastAttemptReason": 40, "error": 240,
 	} {
 		if s := asString(entry[key]); s != "" {
@@ -128,6 +129,7 @@ func nonNilList(l []interface{}) []interface{} {
 // (task_type, workflow_name), and a client that joins mid-run gets everything from any one frame.
 func (b *bgTailer) noteTaskProgress(p map[string]interface{}) map[string]interface{} {
 	id := asString(p["toolUseId"])
+	b.noteWorkflowAgents(p)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.progress == nil {

@@ -5,7 +5,11 @@ import java.net.URI
 import java.net.URLDecoder
 import kotlinx.serialization.Serializable
 
-enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, PROJECTS, PROJECT, TASKS, TASK, LIST, WIKI, WIKI_ENTRY, WATCH, RUNNER, SETTINGS, BUILD }
+enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, PROJECTS, PROJECT, TASKS, TASK, LIST, WIKI, WIKI_ENTRY, WATCH, RUNNER, SETTINGS, BUILD,
+    /** A project's sessions page (A05-7): `id` the project, `workspaceId` the workspace it was entered over. */
+    PROJECT_SESSIONS,
+    WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
+    WIKI_ACTIVITY }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -18,6 +22,12 @@ data class OrbitRoute(
     val recordId: String? = null,
     val origin: Origin = Origin.LIST,
     val sessionView: String = "open",
+    val wikiPart: Int = 0,
+    val wikiSection: String? = null,
+    val wikiVersion: Int? = null,
+    /** Which arrival of a link this frame is, for the Wiki and Watch pages a link opens: each arrival is a page of its
+     * own, whose state starts afresh even where an equal page is on the stack already. 0 for every other route. */
+    val entry: Long = 0,
 )
 
 @Serializable
@@ -34,9 +44,21 @@ data class OrbitNavigation(
     fun push(route: OrbitRoute): OrbitNavigation = if (current == route) this
         else copy(stacks = stacks + (section to (frames + route)))
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
-    fun select(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key,
-        stacks = stacks + (key to (stacks[key] ?: listOf(root))))
-    fun receive(route: OrbitRoute): OrbitNavigation = if (account == null) copy(pending = route) else push(route)
+    /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
+     * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
+     * stack being left going with it. */
+    fun select(key: String, root: OrbitRoute): OrbitNavigation = if (key == section) this else land(key, root)
+    /** A session completed or moved to Trash from its page leaves the stack it showed on (iOS `NavState.removeConsole`). */
+    fun dropSession(id: String): OrbitNavigation {
+        val kept = frames.filterNot { it.destination == Destination.SESSION && ObjectId.same(it.id, id) }
+        return if (kept.isEmpty() || kept.size == frames.size) this else copy(stacks = stacks + (section to kept))
+    }
+    /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. */
+    fun land(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key, stacks = mapOf(key to listOf(root)))
+    fun receive(route: OrbitRoute): OrbitNavigation {
+        val arrived = route.arrived()
+        return if (account == null) copy(pending = arrived) else push(arrived)
+    }
 
     /** No previous account's paths survive logout/switch. Cold-start links survive the login screen. */
     fun bindAccount(key: String?): OrbitNavigation {
@@ -44,6 +66,21 @@ data class OrbitNavigation(
         val next = OrbitNavigation(account = key, pending = if (account == null) pending else null)
         return if (key != null && next.pending != null) next.copy(pending = null).push(next.pending) else next
     }
+}
+
+/** The destination of a drawer project row: the project's own page (iOS `DrawerDestination.project`). The two
+ * spellings of its id are one destination. */
+fun projectDestination(id: String) = "project:${ObjectId.canonical(id) ?: id}"
+
+/** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
+val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
+
+/** A link to a Wiki or Watch page arrives as a page of its own ([OrbitRoute.entry]); any other route as it is. */
+internal fun OrbitRoute.arrived(): OrbitRoute = if (isWikiOrWatch) copy(entry = OrbitArrivals.next()) else this
+
+internal object OrbitArrivals {
+    /** Distinct across process restarts too: a restored stack's entries are never handed out again. */
+    @Volatile var next: () -> Long = { kotlin.random.Random.nextLong(1, Long.MAX_VALUE) }
 }
 
 object ObjectId {
@@ -58,13 +95,22 @@ object ObjectId {
         return "${hex.take(8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
     }
     fun same(a: String?, b: String?): Boolean = a == b || (a != null && b != null && canonical(a) != null && canonical(a) == canonical(b))
+    /** OrbitKit `PublicID.toPublic`: a UUID's 16 bytes as Base62, the spelling the deployment's own routes use. */
+    fun toPublic(id: String): String {
+        val uuid = canonical(id) ?: return id
+        var number = BigInteger(uuid.replace("-", ""), 16)
+        if (number.signum() == 0) return "0"
+        val out = StringBuilder(); val base = BigInteger.valueOf(62)
+        while (number.signum() > 0) { val (q, r) = number.divideAndRemainder(base); out.append(alphabet[r.toInt()]); number = q }
+        return out.reverse().toString()
+    }
 }
 
 object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
-        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER)
+        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI)
 
     fun parse(raw: String, server: String? = null, origin: Origin = Origin.LINK): OrbitRoute? { return try {
         val uri = URI(raw)

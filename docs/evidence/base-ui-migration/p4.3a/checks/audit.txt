@@ -1,0 +1,5 @@
+delivery de2426d9cca647553565b3bfbe09d9f2dbe5d5e2, reference 9acb176da0acd9a4d829ec1892c2efb139457c61
+Record 2026-10-08b.json verified: 1 file entries and 2 index.css entries match the audit; read after 5 earlier record(s), 1 points need its new/changed entries and 2 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 6 records: 0 unowned, 0 pending; P0.1 baseline clean.
+before 9acb176da P4.3a points 83 unowned 0 pending 0 {"KEEP": 1, "P4.3a": 83, "P4.3b": 30, "P4.4": 55, "P5.1": 28, "P5.2": 11, "P5.3": 94, "P6": 38}
+after de2426d9c P4.3a points 0 unowned 0 pending 0 {"KEEP": 1, "P4.3b": 30, "P4.4": 55, "P5.1": 28, "P5.2": 11, "P5.3": 94, "P6": 38}
+exits: delivery audit 0, reference audit 0, check-owners 0, verify-record 0, closure 0

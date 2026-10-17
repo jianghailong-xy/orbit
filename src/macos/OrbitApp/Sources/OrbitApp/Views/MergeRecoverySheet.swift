@@ -88,7 +88,10 @@ struct MergeRecoverySheet: View {
     private func review(_ d: SessionDetail, _ r: MergeRecovery) -> some View {
         let supported = d.mergeRecoverySupported == true
         // The bar's gate: the session's authoritative run status, the stream's until it loads.
-        let turnActive = (app.session(id: console.sessionID)?.effectiveRunStatus ?? console.sessionStatus) == .running
+        let session = app.session(id: console.sessionID)
+        let turnActive = WorktreeBarLogic.turnActive(status: session?.effectiveRunStatus ?? console.sessionStatus,
+                                                     runningSubagents: session?.runningSubagentCount,
+                                                     sending: console.sending || console.awaitingReply)
         // Working = the recovery itself is running; a turn in flight only holds the steps back.
         let working = console.worktree.busy || d.mergeStatus == "pending"
         let repairRunning = d.mergeRepairSession?.effectiveRunState == .queued

@@ -1,0 +1,400 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/toasts.config.mjs",
+   "toasts.browser.mjs",
+   "--grep",
+   "legacy AntApp confirmation",
+   "--project=webkit-dark-desktop",
+   "--repeat-each=5",
+   "--reporter=json",
+   "--output=/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts"
+  ],
+  "configFile": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 5,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "json"
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14408 --strictPort",
+   "cwd": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/",
+   "url": "http://127.0.0.1:14408",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts.browser.mjs",
+   "file": "toasts.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1616,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:27:33.096Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-1defc0ec74bddbb6ee96",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1476,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:27:35.019Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-36598806d25859394653",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1529,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:27:36.845Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-9134f98b2f9eda0993b6",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1128,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:27:38.728Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-ddb4b94ae0ea7815dd63",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1448,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:27:40.182Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-70eec1ef50039f285d7f",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T13:27:32.359Z",
+  "duration": 9409.6,
+  "expected": 5,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

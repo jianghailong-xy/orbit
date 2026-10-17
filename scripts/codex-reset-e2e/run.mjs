@@ -1000,7 +1000,7 @@ const SCENARIOS = [
   },
   {
     id: 'S11',
-    title: 'Provider outcome noCredit, then no balance: nothing spent, the empty count is read back, the entry is disabled and the API refuses NO_CREDIT_AVAILABLE',
+    title: 'Provider outcome noCredit, then no balance: nothing spent, the empty count is read back, the reset section is hidden and the API refuses NO_CREDIT_AVAILABLE',
     async run(ctx, facts) {
       const { page } = ctx;
       await onWorkspace(ctx, ctx.w1);
@@ -1018,14 +1018,11 @@ const SCENARIOS = [
       const calls = ctx.fake.consumeCalls(ledgerMark);
       assert.equal(calls.length, 1);
       assert.deepEqual(calls[0].params, { idempotencyKey: done.providerIdempotencyKey });
-      const shown = await watchCard(page, 'the card to say there is no credit', (s) => fold(s.card?.statusTitle) === 'No reset credit available', 60_000, seen);
-      assert.equal(fold(shown.card.statusDetail), 'Codex reports no earned reset credits on this account. No credit was used.');
       const empty = await eventually('the empty count to be stored', async () => {
         const block = await storedBlock(ctx);
         return block?.rateLimitResetCredits?.availableCount === 0 ? block : null;
       }, 90_000, 1000);
-      await clearCard(page);
-      await watchCard(page, 'the entry to be disabled for no credit', (s) => s.card?.count === '0 available' && button(s, 'Use reset credit')?.disabled === true && s.card.reasons.includes('No reset credits available.'), 150_000, seen);
+      await watchCard(page, 'the reset section to be hidden for no credit', (s) => s.popoverVisible && s.card === null, 150_000, seen);
       const refused = await pageFetch(page, 'POST', `/api/runners/${ctx.runnerPublicId}/codex-rate-limit-reset`, {
         clientRequestId: randomUUID(),
         accountFingerprint: empty.accountFingerprint,

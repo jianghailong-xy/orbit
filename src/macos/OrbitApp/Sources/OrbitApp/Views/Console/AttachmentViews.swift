@@ -56,15 +56,16 @@ struct ChatAttachmentImage: View {
     }
 }
 
-/// A non-image attachment: a name chip (web's `.chat-file`). Tapping it fetches the bytes and hands
-/// them to the platform, the way web's chip downloads — an attachment the reader can see and not
-/// open is the same dead end as a path no client can reach. (A file that turns out not to decode as
-/// an image lands here too, so the chip a screenshot falls back to is reachable as well.)
+/// A non-image attachment: a name chip (web's `.chat-file`). Tapping it fetches the bytes and
+/// previews text in-app or hands other formats to the platform. A file that turns out not to decode
+/// as an image lands here too, so the chip a screenshot falls back to is reachable as well.
 struct ChatAttachmentFile: View {
     let attachment: TurnAttachment
     @Environment(AttachmentImageStore.self) private var store
     @Environment(AppModel.self) private var app: AppModel?
     @State private var fetching = false
+    @State private var textPreview: TextFilePreview?
+    @State private var previewData: Data?
 
     private var name: String { attachment.name ?? "file" }
 
@@ -86,20 +87,39 @@ struct ChatAttachmentFile: View {
         .buttonStyle(.plain)
         .disabled(fetching)
         .help("Open \(name)")
+        .monospaceOutputViewer(
+            isPresented: Binding(
+                get: { textPreview != nil },
+                set: { if !$0 { textPreview = nil; previewData = nil } }
+            ),
+            text: textPreview?.text ?? "",
+            lineCount: textPreview?.lineCount ?? 0,
+            title: name,
+            isMarkdown: textPreview?.isMarkdown ?? false,
+            onOpenFile: {
+                if let previewData, !FileHandoff.deliver(previewData, named: name) {
+                    app?.showToast("Couldn't open that file", detail: name, tone: .error)
+                }
+            }
+        )
     }
 
-    /// Fetch the bytes by attachment id, then hand them on: the share sheet on iOS, the file's own
-    /// application on a Mac. A fetch that comes back empty says so — a tap that does nothing is what
-    /// this chip used to be.
+    /// Attachments and generated file links use the same text reader; other formats keep the
+    /// platform's share sheet on iOS and the file's own application on a Mac.
     private func fetch() {
         guard !fetching else { return }
         fetching = true
         Task {
             defer { fetching = false }
-            guard let data = await store.data(for: attachment.id),
-                  FileHandoff.deliver(data, named: name) else {
+            guard let data = await store.data(for: attachment.id) else {
                 app?.showToast("Couldn't open that file", detail: name, tone: .error)
                 return
+            }
+            if let preview = TextFilePreview(data: data, fileName: name) {
+                previewData = data
+                textPreview = preview
+            } else if !FileHandoff.deliver(data, named: name) {
+                app?.showToast("Couldn't open that file", detail: name, tone: .error)
             }
         }
     }

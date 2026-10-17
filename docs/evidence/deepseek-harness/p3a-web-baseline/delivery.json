@@ -1,0 +1,203 @@
+{
+  "task": {
+    "title": "集成修复：修复卡片预览基线回归，恢复 P2/P3a 合并检查",
+    "ref": "orbit-task:34a0zVVwUbI31q8rqv9Eh"
+  },
+  "branch": "orbit/p3a-73d270",
+  "baselineCommit": "06ca960964d7803f5cc0918294720b26d421cf20",
+  "checkedCodeCommit": "ddf1cce091645f68f1534121dd9f7bbf2117afa5",
+  "nodeVersion": "v26.10.0",
+  "goVersion": "go version go1.27.1 linux/amd64",
+  "fullCheck": {
+    "command": "npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web && (cd src/runner-go && go test ./...)",
+    "environment": {
+      "NO_COLOR": "1"
+    },
+    "exitCode": 0,
+    "startedAt": "2026-10-04T10:17:25Z",
+    "finishedAt": "2026-10-04T10:24:45Z",
+    "rawOutput": "full-check.log",
+    "summary": {
+      "build": "passed",
+      "shared": {
+        "files": 23,
+        "passedTests": 382
+      },
+      "apiserver": {
+        "passedTests": 4345,
+        "failedTests": 0,
+        "skippedTests": 0
+      },
+      "web": {
+        "files": 295,
+        "passedTests": 3656,
+        "failedTests": 0
+      },
+      "go": {
+        "orbit": "ok, 211.296s",
+        "orbit/cmd/release-manifest": "no test files; unchanged existing package"
+      }
+    },
+    "stageExitCodes": {
+      "build": 0,
+      "shared": 0,
+      "apiserver": 0,
+      "web": 0,
+      "go": 0
+    },
+    "stageExitCodeBasis": "All stages ran in the unchanged && chain and the complete command returned 0."
+  },
+  "beforeCheck": {
+    "command": "NO_COLOR=1 npm test -w @orbit/web",
+    "exitCode": 1,
+    "failedFiles": 6,
+    "failedTests": 30,
+    "passedTests": 3625,
+    "rawOutput": "web-before.log",
+    "perTestClassification": "failures.json"
+  },
+  "targetedChecks": [
+    {
+      "command": "NO_COLOR=1 npm test -w @orbit/web -- src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx src/components/WorkspaceView.criteriaDecisionCard.test.tsx src/components/WorkspaceView.promotionPlacement.test.tsx src/components/WorkspaceView.settlementPointer.test.tsx",
+      "exitCode": 0,
+      "passedTests": 43,
+      "rawOutput": "targeted-first.log"
+    },
+    {
+      "command": "NO_COLOR=1 npm test -w @orbit/web -- src/components/CriteriaDecisionCard.receipt.test.tsx src/components/CriteriaDecisionCard.sessionSwitch.test.tsx",
+      "exitCode": 0,
+      "passedTests": 5,
+      "rawOutput": "targeted-remaining.log"
+    }
+  ],
+  "testTypecheck": {
+    "command": "./node_modules/.bin/tsc -p docs/evidence/deepseek-harness/p3a-web-baseline/test-typecheck-config.json --pretty false",
+    "exitCode": 0,
+    "rawOutput": "test-typecheck-final.log",
+    "notes": [
+      "Web build excludes test files; this config checks all six modified test files.",
+      "Early /tmp config failed resolving vite/client, then repository config needed node types. Those setup failures are preserved as test-typecheck.log and test-typecheck-retry.log and were not treated as green.",
+      "Typechecking exposed two existing merged fixtures missing required automatic/revert fields; both now declare automatic:false and revert:null."
+    ]
+  },
+  "preparation": {
+    "command": "bash scripts/worktree-overlay.sh",
+    "firstExitCode": 2,
+    "retryExitCode": 0,
+    "firstRawOutput": "overlay.log",
+    "retryRawOutput": "overlay-retry.log",
+    "reason": "Private worktree dependencies installed because main installation did not match the lockfile. First Prisma generate hit a read-only cache; retry succeeded before tests."
+  },
+  "changedTestFiles": [
+    "src/web/src/components/CriteriaDecisionCard.receipt.test.tsx",
+    "src/web/src/components/CriteriaDecisionCard.sessionSwitch.test.tsx",
+    "src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+    "src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+    "src/web/src/components/WorkspaceView.promotionPlacement.test.tsx",
+    "src/web/src/components/WorkspaceView.settlementPointer.test.tsx"
+  ],
+  "changes": [
+    "Count and locate visible compact previews, then click them before inspecting full portal forms.",
+    "Preserve original API payloads, receipts, card identity, counts, placement and stale-answer invariants.",
+    "Verify close/reopen preserves form state, focus returns to the preview, and route switches remove open and retained portals.",
+    "Verify closed previews cannot submit through shortcuts; opened reviews keep the existing Enter/chord actions."
+  ],
+  "diagnosis": "All 30 reproduced failures were old inline DOM/interaction contracts. Real migrated interactions and the unchanged complete gate pass; no production fix was necessary.",
+  "review": "Independent read-only review of all six files found no lost business assertions or empty portal assertions.",
+  "limits": [
+    "This check covers the task branch containing project baseline b489cca63 plus main 182fa7832 and this test fix; it does not by itself establish P2/P3a combined integration-tree success.",
+    "Platform landing and coordinator integration_retry for P2/P3a remain pending. This task did not rerun or reopen their acceptance, close their exception items, or change integration scheduling.",
+    "No deployment, release, Go driver, DSH permission capability, dependency manifest or acceptance-command changes were made.",
+    "Some final-report source frames in the baseline raw log reflect edits started only after those file workers finished; baseline commit and failure names are authoritative for the original source. See failures.json notes."
+  ],
+  "artifacts": {
+    "baseline-commit.txt": {
+      "bytes": 41,
+      "sha256": "e2deae87ddb9889328ed6c859438ec449154ca4a72da43ddc21995d474f9a3bf"
+    },
+    "checked-commit.txt": {
+      "bytes": 41,
+      "sha256": "02521247ba15e7757a6bc4d5cb5d4d4376fa552f1100c8b4e39b72040c8da4ff"
+    },
+    "failures.json": {
+      "bytes": 15836,
+      "sha256": "5d71e4b795782e5953f7862f587e5dfbe47c327fdfeda504806eaf5495f4cde9"
+    },
+    "full-check.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "full-check.finished": {
+      "bytes": 21,
+      "sha256": "d494dfc4513b835ba01863b405348a73584d460521792ccad7e33792bc1a4c71"
+    },
+    "full-check.log": {
+      "bytes": 475659,
+      "sha256": "f9ded6b90e819ad5448287315c40ac0075ac02697e178fd723de1b5bfc54d9a1"
+    },
+    "full-check.started": {
+      "bytes": 21,
+      "sha256": "aefeceab935483906762729ec93e6c129765bc8b1c9e452b4c067dd61fb2debb"
+    },
+    "overlay-retry.log": {
+      "bytes": 705,
+      "sha256": "a41b207c7f25d5df2b2fe7e416e0d30ae318114c16003067f42012808094b15a"
+    },
+    "overlay.log": {
+      "bytes": 899,
+      "sha256": "0a0bd046a9e8ad9656c6aaa70192284f11eed1cece5d9cf1747c31278f2c25ea"
+    },
+    "targeted-first.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "targeted-first.log": {
+      "bytes": 725,
+      "sha256": "cf553d1744c23cc1c83ee832ff72cd21d23db4f7e7f9229da917f9e27c4969c6"
+    },
+    "targeted-remaining.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "targeted-remaining.log": {
+      "bytes": 399,
+      "sha256": "9946ddd08abf53b43e994ae353670eb8b89ba7a6781789311289954aaea02b34"
+    },
+    "test-typecheck-config.json": {
+      "bytes": 683,
+      "sha256": "73f1a3ef84f03d1f9fcf65e7fe709d407ea3c6beb58d015fdb341870e04fb492"
+    },
+    "test-typecheck-final.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "test-typecheck-final.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "test-typecheck-retry.exit": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "test-typecheck-retry.log": {
+      "bytes": 3743,
+      "sha256": "351de147b2b0d325714a669569bfa6ba0f067a5da011f0a5cfa3fbba1c1eda08"
+    },
+    "test-typecheck.exit": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "test-typecheck.log": {
+      "bytes": 179,
+      "sha256": "3b32d54f4d9599847feaf337ca33f29c4bdb31243163f2a82ddd08dc4cfeebc9"
+    },
+    "web-before.exit": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "web-before.log": {
+      "bytes": 61329,
+      "sha256": "ad7539439ea98462daebef8674e4b331ec2b9b07e392d0ec19d5e62ab48d0629"
+    }
+  }
+}

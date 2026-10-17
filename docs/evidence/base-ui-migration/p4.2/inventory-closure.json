@@ -1,0 +1,1410 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "9317b2712fba68964fbdb1bdd0cc57634b819935",
+   "scopeHash": "dee5a3a40936ac0c0fdda936cc37cc8367673eb7b9203615ea0ca77e1caa004c"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.2": 81,
+   "P4.3a": 83,
+   "P4.3b": 31,
+   "P4.4": 54,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 94,
+   "P6": 37
+  },
+  "unowned": [
+   {
+    "path": "src/web/src/components/DeepSeekBalance.tsx",
+    "reason": "no owner"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.accountFold.test.tsx",
+    "reason": "no owner"
+   },
+   {
+    "path": "src/web/src/pages/AdminUsersPage.disable.test.tsx",
+    "reason": "no owner"
+   }
+  ],
+  "pending": [],
+  "p42": [
+   {
+    "path": "src/web/src/components/AccountPause.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/AccountPause.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/AccountPools.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ClaudeHistoryOffer.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/CodexSignIn.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.accounts.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.antigravityAccounts.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.claudeAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.duplicateAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.removeAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.renameAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.singleAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.test-helpers.ts",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/RunnerEnginesSection.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/RunnerRegisterGuide.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/RunnerTokenRotation.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/SharedPool.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2577,
+    "kind": "ant-class",
+    "text": ".rd-env-row > .ant-input:first-child {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2586,
+    "kind": "ant-class",
+    "text": ".rd-import-row .ant-input {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2706,
+    "kind": "antd-reference",
+    "text": "/* Every rule below is deliberately qualified with .rd-history-panel: antd's own `.ant-radio-group`"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2706,
+    "kind": "ant-class",
+    "text": "/* Every rule below is deliberately qualified with .rd-history-panel: antd's own `.ant-radio-group`"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2707,
+    "kind": "ant-class",
+    "text": "and `.ant-radio` rules are single-class too, and they are injected after this stylesheet, so a"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2714,
+    "kind": "ant-class",
+    "text": ".rd-history-panel .rd-history-choices .ant-radio-wrapper {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2719,
+    "kind": "ant-class",
+    "text": ".rd-history-panel .rd-history-choices .ant-radio-wrapper:last-child {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2722,
+    "kind": "antd-reference",
+    "text": "/* antd centres the control against the whole wrapper, which for a two-line choice parks the dot"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2724,
+    "kind": "ant-class",
+    "text": ".rd-history-panel .rd-history-choices .ant-radio {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2728,
+    "kind": "antd-reference",
+    "text": "/* The label and its explanation stack; antd puts both inside the wrapper's second span. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2768,
+    "kind": "ant-class",
+    "text": ".rd-set-row .ant-switch {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2774,
+    "kind": "antd-reference",
+    "text": "so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2788,
+    "kind": "ant-class",
+    "text": ".rd-engines-list .ant-checkbox-wrapper {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2796,
+    "kind": "ant-class",
+    "text": ".rd-engines-list .ant-checkbox-wrapper.is-on {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2803,
+    "kind": "ant-class",
+    "text": ".rd-engines-list .ant-checkbox-wrapper-disabled.is-on {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2806,
+    "kind": "ant-class",
+    "text": ".rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2810,
+    "kind": "ant-class",
+    "text": ".rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner::after {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 2813,
+    "kind": "ant-class",
+    "text": ".rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox + span {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 14889,
+    "kind": "antd-reference",
+    "text": "Mirrors AntD's own selectors so this outranks their default cell padding. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 14890,
+    "kind": "ant-class",
+    "text": ".provider-keys .ant-table-thead > tr > th.ant-table-cell,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 14891,
+    "kind": "ant-class",
+    "text": ".provider-keys .ant-table-tbody > tr > td.ant-table-cell {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15235,
+    "kind": "ant-class",
+    "text": ".re-runner-status > .ant-tag {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15388,
+    "kind": "ant-class",
+    "text": ".re-runner-card .re-row > .ant-tag {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15472,
+    "kind": "ant-class",
+    "text": ".re-status .ant-tag {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15492,
+    "kind": "ant-class",
+    "text": ".re-action.ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15501,
+    "kind": "ant-class",
+    "text": ".re-action.ant-btn-default:not(:disabled) {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15533,
+    "kind": "ant-class",
+    "text": ".re-action.re-more.ant-dropdown-open {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15543,
+    "kind": "ant-class",
+    "text": ".re-account-menu .ant-dropdown-menu {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15550,
+    "kind": "ant-class",
+    "text": ".re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15557,
+    "kind": "ant-class",
+    "text": ".re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-icon {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15561,
+    "kind": "ant-class",
+    "text": ".re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 15869,
+    "kind": "ant-class",
+    "text": ".pool-status .ant-tag {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16391,
+    "kind": "ant-class",
+    "text": ".who-warn .ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16405,
+    "kind": "ant-class",
+    "text": ".add-kinds .ant-radio-wrapper.add-kind {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16414,
+    "kind": "ant-class",
+    "text": ".add-kinds .ant-radio-wrapper.add-kind.ant-radio-wrapper-checked {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16418,
+    "kind": "ant-class",
+    "text": ".add-kinds .add-kind .ant-radio {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16422,
+    "kind": "ant-class",
+    "text": ".add-kinds .add-kind .ant-radio-label {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16555,
+    "kind": "antd-reference",
+    "text": "as something wrong with it. Weightier than antd's resting colour, lighter than its :hover and"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16557,
+    "kind": "ant-class",
+    "text": ".pool-row .pool-signout.ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16600,
+    "kind": "ant-class",
+    "text": ".cx-code .ant-typography-copy {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 16654,
+    "kind": "ant-class",
+    "text": ".np-engine .ant-segmented-item-label {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 23045,
+    "kind": "ant-class",
+    "text": ".account-pause-durations .ant-radio-button-wrapper {"
+   },
+   {
+    "path": "src/web/src/pages/AdminUsersPage.accessTokens.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/AdminUsersPage.signIn.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/AdminUsersPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/EnrollPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/ProviderConnectPage.gemini.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProviderConnectPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/ProviderPoolPage.access.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProviderPoolPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/ProviderPoolPage.whoCanUseIt.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProvidersPage.codexLogin.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProvidersPage.pools.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProvidersPage.sharedPools.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProvidersPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/RunnerDetailPage.codexAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/RunnerDetailPage.layout.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/RunnerDetailPage.modelRouting.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/RunnerDetailPage.selfUpdate.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/RunnerDetailPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/RunnersPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/RunnersPage.tsx",
+    "category": "production"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "a794459b14424e0fbc239a6947d589fa4852e946",
+   "scopeHash": "44e84ef10ae4c9721686195d83bea888062e465cb598a2d7775b256dee3098cc"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.3a": 83,
+   "P4.3b": 31,
+   "P4.4": 54,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 94,
+   "P6": 37
+  },
+  "unowned": [],
+  "pending": [],
+  "p42": []
+ },
+ "counts": {
+  "scannedFiles": [
+   742,
+   742
+  ],
+  "productionFiles": [
+   371,
+   371
+  ],
+  "testFiles": [
+   369,
+   369
+  ],
+  "antdProductionFiles": [
+   96,
+   79
+  ],
+  "antdTestFiles": [
+   80,
+   64
+  ],
+  "antSelectorTestFiles": [
+   61,
+   42
+  ],
+  "antClassTestFiles": [
+   66,
+   47
+  ],
+  "iconProductionFiles": [
+   110,
+   109
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   297,
+   275
+  ],
+  "retirementBlockingFiles": [
+   237,
+   195
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   443,
+   306
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   417,
+   284
+  ],
+  "antd-reference": [
+   351,
+   297
+  ],
+  "icon-class": [
+   80,
+   79
+  ],
+  "icon-reference": [
+   121,
+   120
+  ],
+  "imperative-confirm": [
+   22,
+   12
+  ],
+  "imperative-feedback": [
+   222,
+   221
+  ],
+  "internal-ref": [
+   6,
+   4
+  ],
+  "provider": [
+   92,
+   76
+  ],
+  "rc-support": [
+   231,
+   231
+  ],
+  "ref-focus": [
+   28,
+   28
+  ],
+  "theme": [
+   2,
+   2
+  ],
+  "use-app": [
+   16,
+   9
+  ],
+  "use-token": [
+   1,
+   1
+  ]
+ },
+ "files": {
+  "src/web/src/components/AccountPause.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/AccountPause.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "InputNumber",
+     "Modal",
+     "Radio",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   }
+  },
+  "src/web/src/components/AccountPools.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Checkbox",
+     "Input",
+     "Modal",
+     "Popconfirm",
+     "Radio",
+     "Segmented",
+     "Select",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   }
+  },
+  "src/web/src/components/ClaudeHistoryOffer.tsx": {
+   "before": {
+    "antdImports": [
+     "Radio"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/CodexSignIn.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Modal",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/DeepSeekBalance.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/components/RunnerEngines.accountFold.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.accounts.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.antigravityAccounts.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.claudeAccount.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.duplicateAccount.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.removeAccount.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.renameAccount.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 3,
+     "provider": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.singleAccount.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 1,
+     "antd-reference": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.test-helpers.ts": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/RunnerEngines.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Dropdown",
+     "MenuProps",
+     "Popconfirm",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   }
+  },
+  "src/web/src/components/RunnerEnginesSection.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   }
+  },
+  "src/web/src/components/RunnerRegisterGuide.tsx": {
+   "before": {
+    "antdImports": [
+     "Segmented"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/RunnerTokenRotation.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-confirm": 1,
+     "imperative-feedback": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/components/SharedPool.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Checkbox",
+     "Dropdown",
+     "Input",
+     "MenuProps",
+     "Modal",
+     "Segmented",
+     "Select",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-confirm": 2,
+     "imperative-feedback": 5,
+     "use-app": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 149,
+     "ant-selector": 149,
+     "antd-reference": 40,
+     "icon-class": 25
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 113,
+     "ant-selector": 113,
+     "antd-reference": 34,
+     "icon-class": 24
+    }
+   }
+  },
+  "src/web/src/pages/AdminUsersPage.accessTokens.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/AdminUsersPage.disable.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/AdminUsersPage.signIn.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/AdminUsersPage.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Input",
+     "Modal",
+     "Popconfirm",
+     "Space",
+     "Spin",
+     "Table",
+     "TableColumnsType",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 12,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 11
+    }
+   }
+  },
+  "src/web/src/pages/CliLoginPage.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/pages/EnrollPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Card",
+     "Descriptions",
+     "Result",
+     "Spin",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/pages/ProviderConnectPage.gemini.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProviderConnectPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Input",
+     "InputNumber",
+     "Select",
+     "Space",
+     "Spin",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   }
+  },
+  "src/web/src/pages/ProviderPoolPage.access.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3,
+     "antd-reference": 1,
+     "icon-class": 4,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 4
+    }
+   }
+  },
+  "src/web/src/pages/ProviderPoolPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Modal",
+     "Popconfirm",
+     "Radio",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 11
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 11
+    }
+   }
+  },
+  "src/web/src/pages/ProviderPoolPage.whoCanUseIt.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 25,
+     "ant-selector": 24,
+     "antd-reference": 1,
+     "icon-class": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 1
+    }
+   }
+  },
+  "src/web/src/pages/ProvidersPage.codexLogin.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 16,
+     "ant-selector": 16,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProvidersPage.pools.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProvidersPage.sharedPools.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 10,
+     "ant-selector": 10,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProvidersPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Popconfirm",
+     "Space",
+     "Table",
+     "TableColumnsType",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.codexAccount.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.layout.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 11,
+     "ant-selector": 11,
+     "antd-reference": 3,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.modelRouting.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.selfUpdate.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Checkbox",
+     "Dropdown",
+     "Input",
+     "InputNumber",
+     "MenuProps",
+     "Modal",
+     "RefSelectProps",
+     "Select",
+     "Spin",
+     "Switch",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 5,
+     "icon-reference": 1,
+     "imperative-confirm": 6,
+     "imperative-feedback": 20,
+     "internal-ref": 2,
+     "ref-focus": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 20,
+     "ref-focus": 1
+    }
+   }
+  },
+  "src/web/src/pages/RunnersPage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-class": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 1
+    }
+   }
+  },
+  "src/web/src/pages/RunnersPage.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Dropdown",
+     "Input",
+     "MenuProps",
+     "Modal",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-confirm": 1,
+     "imperative-feedback": 3,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   }
+  }
+ }
+}

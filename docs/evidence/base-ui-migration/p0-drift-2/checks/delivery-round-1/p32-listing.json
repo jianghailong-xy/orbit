@@ -1,0 +1,198 @@
+{
+ "failures": [
+  {
+   "project": "chromium-dark-desktop",
+   "test": "task",
+   "stoppedAt": "task-share-dialog.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 722,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    1618,
+    186,
+    "722 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "打开后按一次 Tab 的焦点位置：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "task",
+   "stoppedAt": "task-share-dialog.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 722,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    21183,
+    186,
+    "722 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "打开后按一次 Tab 的焦点位置：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "task",
+   "stoppedAt": "task-action-menu.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 326,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    466,
+    82,
+    "326 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "More 按钮的焦点环：旧菜单打开后焦点留在触发按钮，Orbit Menu 把焦点移入菜单（P2.2 约定）；WebKit 另有 “Share…” 地球图标底行约 30 像素（行高数值精度，P3.2「未消除的差异」第 5 条）"
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "task",
+   "stoppedAt": "task-action-menu.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 422,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    557,
+    82,
+    "422 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "More 按钮的焦点环：旧菜单打开后焦点留在触发按钮，Orbit Menu 把焦点移入菜单（P2.2 约定）；WebKit 另有 “Share…” 地球图标底行约 30 像素（行高数值精度，P3.2「未消除的差异」第 5 条）"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "task",
+   "stoppedAt": "task-share-dialog.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 706,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    1260,
+    138,
+    "706 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "打开后按一次 Tab 的焦点位置：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "task",
+   "stoppedAt": "task-share-dialog.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 706,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    1257,
+    138,
+    "706 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "打开后按一次 Tab 的焦点位置：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "task",
+   "stoppedAt": "task-action-menu.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 330,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    489,
+    82,
+    "330 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "More 按钮的焦点环：旧菜单打开后焦点留在触发按钮，Orbit Menu 把焦点移入菜单（P2.2 约定）；WebKit 另有 “Share…” 地球图标底行约 30 像素（行高数值精度，P3.2「未消除的差异」第 5 条）"
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "task",
+   "stoppedAt": "task-action-menu.png",
+   "expectedLayer": "p0-drift",
+   "differentPixels": 426,
+   "fffcdb532To066d3dd30": [
+    "changed",
+    586,
+    82,
+    "426 pixels (ratio 0.01 of all image pixels) are different."
+   ],
+   "p32Category": "More 按钮的焦点环：旧菜单打开后焦点留在触发按钮，Orbit Menu 把焦点移入菜单（P2.2 约定）；WebKit 另有 “Share…” 地球图标底行约 30 像素（行高数值精度，P3.2「未消除的差异」第 5 条）"
+  }
+ ],
+ "overThresholdChangedByP32": [
+  "chromium-dark-desktop/task-share-dialog.png",
+  "chromium-dark-phone/task-share-dialog.png",
+  "chromium-light-desktop/task-action-menu.png",
+  "chromium-light-desktop/task-share-dialog.png",
+  "chromium-light-phone/task-action-menu.png",
+  "chromium-light-phone/task-share-dialog.png",
+  "webkit-dark-desktop/task-share-dialog.png",
+  "webkit-dark-phone/task-share-dialog.png",
+  "webkit-light-desktop/task-action-menu.png",
+  "webkit-light-desktop/task-share-dialog.png",
+  "webkit-light-phone/task-action-menu.png",
+  "webkit-light-phone/task-share-dialog.png"
+ ],
+ "belowThresholdChangedByP32": [
+  {
+   "screenshot": "chromium-dark-desktop/task-action-menu.png",
+   "differentPixels": 466,
+   "maxChannelDelta": 45,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-menu.png",
+   "differentPixels": 627,
+   "maxChannelDelta": 45,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-desktop/breakpoint-599-dialog.png",
+   "differentPixels": 11,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-desktop/breakpoint-601-dialog.png",
+   "differentPixels": 11,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-menu.png",
+   "differentPixels": 489,
+   "maxChannelDelta": 45,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-focus.png",
+   "differentPixels": 66,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-hover.png",
+   "differentPixels": 66,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-menu.png",
+   "differentPixels": 655,
+   "maxChannelDelta": 45,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-detail.png",
+   "differentPixels": 66,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-light-desktop/breakpoint-599-dialog.png",
+   "differentPixels": 8,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  },
+  {
+   "screenshot": "webkit-light-desktop/breakpoint-601-dialog.png",
+   "differentPixels": 8,
+   "maxChannelDelta": 1,
+   "p0Comparator": "match"
+  }
+ ]
+}

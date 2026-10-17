@@ -77,6 +77,26 @@ test('a project small enough to draw is not folded at all', () => {
   assert.equal(fold.edges.length, edges.length);
 });
 
+test('a task drawn as itself says how it is settled and whether Orbit starts it', () => {
+  // What the start card reads to say which of the plan's work comes to the owner — the tasks the
+  // owner confirms, the ones whose evidence somebody reviews — and which starts with the project.
+  const tasks: FoldTask[] = [
+    { ...task('a', 'A · deploy'), completionCriterion: 'OWNER_CONFIRMED', autoRunWhenReady: true },
+    { ...task('b', 'B · code'), completionCriterion: 'EVIDENCE_JUDGMENT', autoRunWhenReady: false },
+  ];
+  const fold = foldProjectGraph(tasks, [{ sourceTaskId: 'a', targetTaskId: 'b' }]);
+  const marks = new Map(fold.marks.map((mark) => [mark.id, mark]));
+  const a = marks.get('a');
+  const b = marks.get('b');
+  assert.equal(a?.kind, 'TASK');
+  assert.equal(b?.kind, 'TASK');
+  if (a?.kind !== 'TASK' || b?.kind !== 'TASK') return;
+  assert.equal(a.completionCriterion, 'OWNER_CONFIRMED');
+  assert.equal(a.autoRunWhenReady, true);
+  assert.equal(b.completionCriterion, 'EVIDENCE_JUDGMENT');
+  assert.equal(b.autoRunWhenReady, false);
+});
+
 test('a long straight run folds, and the work at its head does not', () => {
   const { tasks, edges } = chain(118, (i) => (i < 12 ? TaskStatus.DONE : TaskStatus.OPEN));
 

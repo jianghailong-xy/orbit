@@ -1,0 +1,116 @@
+<!doctype html>
+<!-- Design mock: Add Account on Antigravity's engine page — Claude Code's Add Account card
+     (RunnerEnginePage.addAccountRow) running Antigravity's Google paste-back sign-in
+     (RunnerSignInView/PasteBackForm). Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Antigravity accounts · Add Account (iOS)</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 431px); gap: 34px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Antigravity 账号 · Add Account：再加一个 Google 账号，走 Claude Code 加账号的同一套流程</h1>
+  <p class="m-sub zh">点 Add Account 的那一下就开始登录，名字先用 Account 3 占着、随时可改；登录还是今天 Antigravity 的 Google 登录（打开 Google 页 → 同意 → 把授权码贴回来）。<b>登录成功、runner 报上新账号、名字存好</b>之后卡片自己收起，留下新账号那一行——和 Claude Code / Codex 加账号的规则完全一样。新账号的登录放在自己的目录里，Default 和其他账号都不动。</p>
+
+  <div class="m-stage">
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">1</span>点 Add Account</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>①</b> 名字先填好：Default、Work 之后就是 Account 3（被占用就往后数）。点下的同时 runner 开始一个新的 Google 登录，几秒后出现登录页链接。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">2</span>去 Google 同意，贴回授权码</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>②</b> Open the sign-in page 在 Safari 打开 Google，选要加的账号、同意，页面给一串授权码，复制回来贴进来 Submit。<b>③</b> 登录中随时可以改名，回车或点别处就存。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">3</span>登录成功</div>
+        <div id="p3"></div>
+        <p class="m-cap zh"><b>④</b> runner 验过新令牌能读到额度才算登录成功（今天的 Google 登录就是这么做的）。成功后这张卡不用点 Close，账号一出现在列表里就自己收起。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">结果</span>卡片收起，多了一行</div>
+        <div id="p4"></div>
+        <p class="m-cap zh"><b>⑤</b> 新账号 Personal 带着自己的四条额度出现在列表里，Add Account 回到原样，再点就是再加一个。运行器页那一行变成 3 accounts signed in。</p>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>失败或取消</b>：卡片留着，橙字写原因，按钮变成 Try signing in to Antigravity again——和今天一样，也和 Claude Code 一样。原来的账号不受影响。</span></li>
+      <li><span class="m-n">2</span><span><b>同一个 Google 账号登了两次</b>：新行下面写 This is the same account as Default — signing in twice does not double the quota，旁边一个 Remove（Claude Code / Codex 已有的提示，web 上显示）。</span></li>
+      <li><span class="m-n">3</span><span><b>条款</b>：Google 条款一直在 Accounts 区下面（图 2 ⑥），这一页里每个登录按钮都在它上面。</span></li>
+    </ul>
+  </div>
+</section>
+
+<script src="glyphs.js"></script>
+<script src="kit.js"></script>
+<script>
+  const head = `<div class="hd">${mark('antigravity', 30)}<div><div class="n">Antigravity</div><div class="s">1.3.0 · checked 17m ago</div></div></div>`;
+  const update = section({ rows: [btnRow('Update Engines Now')],
+    footer: '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>' });
+  const def = accountRow({ name: 'Default', sub: '~/.orbit/antigravity/google', status: { text: 'Signed in', tone: 'ok' },
+    windows: agWindows(), buttons: [BTN.again, BTN.pause] });
+  const work = accountRow({ id: 'a-work', name: 'Work', sub: '~/.orbit/antigravity-accounts/5c2e91a0', status: { text: 'Signed in', tone: 'ok' },
+    windows: [
+      { group: 'gemini-weekly', label: 'Weekly', pct: 61, remaining: true, resets: 'Resets Sat, Oct 10 at 8:05 AM' },
+      { group: 'gemini-5h', label: '5-hour', pct: 4, remaining: true, resets: 'Resets 7:40 PM', warn: true },
+      { group: '3p-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sat, Oct 10 at 8:05 AM' },
+      { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 7:40 PM' },
+    ], buttons: [BTN.again, BTN.pause] });
+
+  const card = (inner) => `<div class="r" id="card"><div class="sig" style="gap:10px">${inner}<span class="bl">Close</span></div></div>`;
+  const page = (rows) => head + section({ header: 'Accounts', rows: [def, work, ...rows], footer: GOOGLE_TERMS }) + update;
+
+  // 1 — pressed: the name it picked, and the runner starting the sign-in.
+  const s1 = page([card(`<div class="fld">Account 3</div>
+    <div class="sig" style="gap:6px"><div class="sig-row">${ICON.spin}Starting sign-in on the runner…</div>
+      <div class="sig-h">The runner picks it up on its next check-in, so the link can take up to a minute to show here.</div>
+      <span class="bl">Cancel</span></div>`)]);
+  // 2 — the paste-back form, the name being changed while it is up.
+  const s2 = page([card(`<div class="fld" id="name">Personal<span class="caret"></span></div>
+    <div class="sig" style="gap:6px">
+      <span class="bb prom" id="open" style="align-self:flex-start">${ICON.open}Open the sign-in page</span>
+      <div class="sig-h">Approve it there, then paste the code the page gives you:</div>
+      <div class="code-row" id="code"><div class="fld">4/0AVG7fiQ3x…</div><span class="bb">Submit</span></div>
+      <span class="bl">Cancel</span></div>`)]);
+  // 3 — signed in.
+  const s3 = page([card(`<div class="fld">Personal</div>
+    <div class="sig-row" id="done">${ICON.check}Signed in — this runner is ready.</div>`)]);
+  // 4 — folded: the new account's own row, Add Account back.
+  const s4 = page([accountRow({ id: 'a-new', name: 'Personal', sub: '~/.orbit/antigravity-accounts/a81d07e3', status: { text: 'Signed in', tone: 'ok' },
+      windows: [
+        { group: 'gemini-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Tue, Oct 13 at 5:30 PM' },
+        { group: 'gemini-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 10:30 PM' },
+        { group: '3p-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Tue, Oct 13 at 5:30 PM' },
+        { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 10:30 PM' },
+      ], buttons: [BTN.again, BTN.pause] }), `<div id="add">${btnRow('Add Account')}</div>`]);
+
+  document.getElementById('p1').outerHTML = phone({ title: 'Antigravity', body: s1 });
+  document.getElementById('p2').outerHTML = phone({ title: 'Antigravity', body: s2 });
+  document.getElementById('p3').outerHTML = phone({ title: 'Antigravity', body: s3 });
+  document.getElementById('p4').outerHTML = phone({ title: 'Antigravity', body: s4 });
+
+  window.drawMarks = () => {
+    const [p1, p2, p3, p4] = document.querySelectorAll('.ph');
+    for (const ph of [p1, p2, p3]) scrollTo(ph, '#card', 400);
+    scrollTo(p4, '#a-new', 150);
+    ringMark(p1, '#card .fld', '1', 4);
+    ringMark(p2, '#open', '2', 4, 0);
+    ringMark(p2, '#code', null, 4);
+    ringMark(p2, '#name', '3', 4);
+    ringMark(p3, '#done', '4', 5);
+    ringMark(p4, '#a-new', '5', 2, -8, 14);
+  };
+</script>
+</body>
+</html>

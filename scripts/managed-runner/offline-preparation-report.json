@@ -1,0 +1,54 @@
+{
+  "stage": "PREPARATION_ONLY",
+  "recordedAt": "2026-10-04T08:04:23.702792+00:00",
+  "baseCommit": "540ac044572c6b60c3df9130e5b40b6154843ac6",
+  "branch": "orbit/ceph-rbd-fb89d2",
+  "commitReceipt": "PENDING_RUNNER_FINALIZE",
+  "clusterAcceptance": "NOT_EXECUTED",
+  "checks": [
+    {
+      "command": "python3 -B -m unittest discover -s scripts/managed-runner -p 'test_*.py' -v",
+      "exitCode": 0,
+      "testsPassed": 18,
+      "type": "offline mock and temporary local probe"
+    },
+    {
+      "command": "python3 -B scripts/managed-runner/ceph_rbd.py check --environment deploy/managed-runner/storage/environment.example.json",
+      "exitCode": 0,
+      "type": "offline JSON/template invariants"
+    },
+    {
+      "check": "render example to new temporary directory and parse three manifests",
+      "result": "passed; placeholders remain"
+    },
+    {
+      "check": "Python AST, all JSON, local Markdown links, new-file whitespace, default entry isolation",
+      "result": "passed"
+    },
+    {
+      "check": "optional Markdown lint",
+      "result": "unavailable; markdownlint package is not installed in worktree"
+    }
+  ],
+  "files": {
+    "deploy/managed-runner/storage/README.md": "217e7d8be04c30e506dcbb0dfd69d5fe4e7e140f2d15e7990de6962f3f49ddab",
+    "deploy/managed-runner/storage/backup-request.example.json": "ca62fc235d077233d08d17d04d470f34c45f1b53a7959fb99f80ced348e76843",
+    "deploy/managed-runner/storage/csi-config.template.json": "1ac66b3318d394e3b5e83865d71a6582a587b3dab7dca2ec2fffd9557f2307f1",
+    "deploy/managed-runner/storage/environment.example.json": "80819624b7f9de53685ada8623be9825aada521bdb251c8936edf8b6c0db1edb",
+    "deploy/managed-runner/storage/pvc.template.json": "b2f0c20f55f55d8cb46e4bf373b3b44a8d34a7beaf59240229d837edf528a4de",
+    "deploy/managed-runner/storage/storageclass.template.json": "21711e42e51ad4832765b849b618c79eb87acf4c137703f10095e7d1a78f2782",
+    "scripts/managed-runner/README.md": "ed13ab3df15ca9e48ed47d4875988981495a169ea3f4d17b8eb6d50715d78bd9",
+    "scripts/managed-runner/ceph-rbd-payload.py": "056a6a3b9219a79c6d85fdfcc76b22de7fb5ad6616bde7a38988496b5931d7f4",
+    "scripts/managed-runner/ceph-rbd-verify.py": "ab1507fc5ca00ce38e7ad4383a89fe4332420597cd6c6384ae65b7b2c82c959e",
+    "scripts/managed-runner/ceph_rbd.py": "5be57e287649d78a44e553b3e2382dcefd98acd16e95b2b7b22f12d75e4eb8d6",
+    "scripts/managed-runner/test_ceph_rbd.py": "5d761630eb68344c3a6f75fa151449e902cefd29bb5f252406f7d3ae72f3915d",
+    "scripts/managed-runner/test_ceph_rbd_verify.py": "e9c912c809baa35a588d48b2c597e7855d0ef0724f5085655ffb765db222b74c"
+  },
+  "remaining": [
+    "Provide an explicitly authorized non-production multi-node Kubernetes/Ceph environment; confirm external/Rook topology, actual versions, CephX/Secret/network/kernel compatibility and storage specifications.",
+    "Deploy/review real atomic fail-closed single-Pod admission/reservations in that test environment; prove same-node/cross-node duplicates, outage and race/stale-generation cases are blocked.",
+    "Actually mount files/Git/SQLite WAL on Ceph RBD and compare data after clean drain, node unmap/detach and cross-node reuse of the original PVC/image.",
+    "Actually verify predecessor power-off or separately validated persistent fencing, observe controlled takeover, preserve Ceph health/mapping/timing and prove old-writer isolation and safe rejoin.",
+    "Independently review operator evidence; perform separate backup/export/restore validation. No production storage or architecture operation is authorized."
+  ]
+}

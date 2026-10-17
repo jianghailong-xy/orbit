@@ -1,0 +1,70 @@
+[
+  {
+    "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+    "project": "chromium-light-desktop",
+    "file": "choices-lifecycle.browser.mjs",
+    "attachments": {
+      "scroll-unlock": {
+        "limitMs": 100,
+        "unlockedAfterMs": 105.7000000178814,
+        "firstRead": {
+          "phase": "first-read-after-hidden-and-focus",
+          "afterEscapeMs": 335.40000000596046,
+          "overflow": [
+            "visible",
+            "visible"
+          ],
+          "locked": false
+        },
+        "finalRead": {
+          "phase": "final-read",
+          "afterEscapeMs": 335.40000000596046,
+          "overflow": [
+            "visible",
+            "visible"
+          ],
+          "locked": false
+        },
+        "samples": [
+          {
+            "phase": "final-escape",
+            "afterEscapeMs": 0.20000001788139343,
+            "overflow": [
+              "visible",
+              "hidden"
+            ],
+            "locked": true
+          },
+          {
+            "phase": "style-change",
+            "afterEscapeMs": 105.7000000178814,
+            "overflow": [
+              "visible",
+              "visible"
+            ],
+            "locked": false
+          },
+          {
+            "phase": "first-read-after-hidden-and-focus",
+            "afterEscapeMs": 335.40000000596046,
+            "overflow": [
+              "visible",
+              "visible"
+            ],
+            "locked": false
+          },
+          {
+            "phase": "final-read",
+            "afterEscapeMs": 335.40000000596046,
+            "overflow": [
+              "visible",
+              "visible"
+            ],
+            "locked": false
+          }
+        ]
+      }
+    },
+    "trace": "/tmp/orbit-p22-r4-coordinator-review-c1iqk9rf/coordinator-choices-entry-results/choices-lifecycle.browser.-370c5-restore-one-layer-at-a-time-chromium-light-desktop/trace.zip"
+  }
+]

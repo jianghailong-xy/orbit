@@ -1,0 +1,36 @@
+==> require.resolve('@orbit/shared') from src/web = /var/tmp/p2kw-c2604b/before2/src/shared/dist/index.js
+==> OK: /var/tmp/p2kw-c2604b/before2 is ready to build and test
+46a418fba Merge orbit/p2-menu-select-antd-288742: keyboard-window probe, baselines and delivered-tree checks from the previous session
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4520 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     5.99 kB │ gzip:   2.55 kB
+dist/assets/Transcript-BtITXXF3.css                 6.36 kB │ gzip:   1.80 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-DZoI8I2b.css                    431.23 kB │ gzip:  71.30 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-CvMPPKsw.js            1.01 kB │ gzip:   0.59 kB
+dist/assets/ProjectDependencyGraph-e1jyD8YB.js     14.24 kB │ gzip:   5.21 kB
+dist/assets/projectDependencyGraph-Dr7lC3mp.js    166.24 kB │ gzip:  56.16 kB
+dist/assets/TaskDependencyGraph-AGjwZ7bZ.js       188.58 kB │ gzip:  60.86 kB
+dist/assets/taskDependencyGraph-Bx_saetJ.js       538.22 kB │ gzip: 176.89 kB
+dist/assets/Transcript-pL6dO1Qc.js                831.80 kB │ gzip: 257.73 kB
+dist/assets/sessionExport-BYMH31Zd.js             839.11 kB │ gzip: 201.71 kB
+dist/assets/index-QLrTFeRN.js                   1,988.39 kB │ gzip: 601.03 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.70s

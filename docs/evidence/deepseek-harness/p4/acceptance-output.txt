@@ -1,0 +1,132 @@
+=== RUN   TestDshACPProcessMultiTurn
+--- PASS: TestDshACPProcessMultiTurn (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures
+=== RUN   TestDshACPStartupAndProtocolFailures/missing-executable
+--- PASS: TestDshACPStartupAndProtocolFailures/missing-executable (0.00s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unsupported-version
+--- PASS: TestDshACPStartupAndProtocolFailures/unsupported-version (0.00s)
+=== RUN   TestDshACPStartupAndProtocolFailures/malformed-stdout
+--- PASS: TestDshACPStartupAndProtocolFailures/malformed-stdout (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/wrong-protocol-version
+--- PASS: TestDshACPStartupAndProtocolFailures/wrong-protocol-version (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/eof-zero
+--- PASS: TestDshACPStartupAndProtocolFailures/eof-zero (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unclosed-tool
+--- PASS: TestDshACPStartupAndProtocolFailures/unclosed-tool (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/rpc-error-does-not-poison-next-turn
+--- PASS: TestDshACPStartupAndProtocolFailures/rpc-error-does-not-poison-next-turn (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unknown-live-model-rejected
+--- PASS: TestDshACPStartupAndProtocolFailures/unknown-live-model-rejected (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/non-object-result
+--- PASS: TestDshACPStartupAndProtocolFailures/non-object-result (0.01s)
+--- PASS: TestDshACPStartupAndProtocolFailures (0.07s)
+=== RUN   TestDshACPPermissionRoundTrip
+=== RUN   TestDshACPPermissionRoundTrip/allow-once
+--- PASS: TestDshACPPermissionRoundTrip/allow-once (0.01s)
+=== RUN   TestDshACPPermissionRoundTrip/reject-once
+--- PASS: TestDshACPPermissionRoundTrip/reject-once (0.02s)
+--- PASS: TestDshACPPermissionRoundTrip (0.03s)
+=== RUN   TestDshACPRecordedEventMapping
+=== RUN   TestDshACPRecordedEventMapping/committed_blocks_and_known_context
+--- PASS: TestDshACPRecordedEventMapping/committed_blocks_and_known_context (0.02s)
+=== RUN   TestDshACPRecordedEventMapping/basic_multiturn
+--- PASS: TestDshACPRecordedEventMapping/basic_multiturn (0.02s)
+=== RUN   TestDshACPRecordedEventMapping/native_tools_and_failed_tool
+--- PASS: TestDshACPRecordedEventMapping/native_tools_and_failed_tool (0.02s)
+--- PASS: TestDshACPRecordedEventMapping (0.06s)
+=== RUN   TestDshEventsToolCallJoin
+--- PASS: TestDshEventsToolCallJoin (0.04s)
+=== RUN   TestDshLifecycleInterrupt
+=== RUN   TestDshLifecycleInterrupt/cancel-active-turn
+--- PASS: TestDshLifecycleInterrupt/cancel-active-turn (0.04s)
+=== RUN   TestDshLifecycleInterrupt/cancel-beats-racing-end_turn
+--- PASS: TestDshLifecycleInterrupt/cancel-beats-racing-end_turn (0.04s)
+=== RUN   TestDshLifecycleInterrupt/approval-stop
+--- PASS: TestDshLifecycleInterrupt/approval-stop (0.04s)
+--- PASS: TestDshLifecycleInterrupt (0.13s)
+=== RUN   TestDshLifecycleCredentialReload
+--- PASS: TestDshLifecycleCredentialReload (0.07s)
+=== RUN   TestDshLifecycleWiring
+=== RUN   TestDshLifecycleWiring/file-policy
+--- PASS: TestDshLifecycleWiring/file-policy (0.00s)
+=== RUN   TestDshLifecycleWiring/production-seam-reads-dispatch
+--- PASS: TestDshLifecycleWiring/production-seam-reads-dispatch (0.00s)
+=== RUN   TestDshLifecycleWiring/canonical-cwd-seal-and-execdir
+--- PASS: TestDshLifecycleWiring/canonical-cwd-seal-and-execdir (0.02s)
+=== RUN   TestDshLifecycleWiring/launch-cwd-mismatch
+--- PASS: TestDshLifecycleWiring/launch-cwd-mismatch (0.00s)
+=== RUN   TestDshLifecycleWiring/resume-failure-never-opens-new
+--- PASS: TestDshLifecycleWiring/resume-failure-never-opens-new (0.01s)
+=== RUN   TestDshLifecycleWiring/runtime-id-conflict
+--- PASS: TestDshLifecycleWiring/runtime-id-conflict (0.02s)
+--- PASS: TestDshLifecycleWiring (0.05s)
+=== RUN   TestDshMCPServers
+=== RUN   TestDshMCPServers/orbit-server-and-session-identity
+--- PASS: TestDshMCPServers/orbit-server-and-session-identity (0.00s)
+=== RUN   TestDshMCPServers/sse-entry-refused-before-launch
+--- PASS: TestDshMCPServers/sse-entry-refused-before-launch (0.00s)
+=== RUN   TestDshMCPServers/unverified-remote-refused
+--- PASS: TestDshMCPServers/unverified-remote-refused (0.00s)
+=== RUN   TestDshMCPServers/relative-command-refused
+--- PASS: TestDshMCPServers/relative-command-refused (0.00s)
+=== RUN   TestDshMCPServers/third-party-server-only-where-unapproved-actions-run
+--- PASS: TestDshMCPServers/third-party-server-only-where-unapproved-actions-run (0.00s)
+=== RUN   TestDshMCPServers/session-identity-is-not-the-agents-to-set
+--- PASS: TestDshMCPServers/session-identity-is-not-the-agents-to-set (0.00s)
+--- PASS: TestDshMCPServers (0.00s)
+=== RUN   TestDshToolPolicy
+--- PASS: TestDshToolPolicy (0.00s)
+=== RUN   TestDshAgentOverlay
+--- PASS: TestDshAgentOverlay (0.00s)
+=== RUN   TestDshRealOrbitMCPAndAgentInstructions
+    dsh_mcp_test.go:732: turn t1 settled SUCCEEDED/completed result="P4 Orbit MCP answer" error=""
+--- PASS: TestDshRealOrbitMCPAndAgentInstructions (0.66s)
+=== RUN   TestDshRealThirdPartyMCPRunsUnasked
+    dsh_mcp_test.go:807: turn t1 settled SUCCEEDED/completed result="P4 third-party answer" error=""
+--- PASS: TestDshRealThirdPartyMCPRunsUnasked (0.66s)
+=== RUN   TestDshPermissionPolicy
+=== RUN   TestDshPermissionPolicy/supported-modes
+--- PASS: TestDshPermissionPolicy/supported-modes (0.00s)
+=== RUN   TestDshPermissionPolicy/unsupported-modes-refused-before-launch
+--- PASS: TestDshPermissionPolicy/unsupported-modes-refused-before-launch (0.00s)
+--- PASS: TestDshPermissionPolicy (0.00s)
+=== RUN   TestDshPermissionBridge
+=== RUN   TestDshPermissionBridge/allow-once-joins-the-bare-tool-call-id
+--- PASS: TestDshPermissionBridge/allow-once-joins-the-bare-tool-call-id (0.01s)
+=== RUN   TestDshPermissionBridge/reject
+--- PASS: TestDshPermissionBridge/reject (0.01s)
+=== RUN   TestDshPermissionBridge/late-allow-after-stop-is-never-sent
+--- PASS: TestDshPermissionBridge/late-allow-after-stop-is-never-sent (0.00s)
+=== RUN   TestDshPermissionBridge/closed-bridge-cancels-without-asking
+--- PASS: TestDshPermissionBridge/closed-bridge-cancels-without-asking (0.00s)
+=== RUN   TestDshPermissionBridge/unknown-tool-call-is-rejected
+--- PASS: TestDshPermissionBridge/unknown-tool-call-is-rejected (0.00s)
+=== RUN   TestDshPermissionBridge/dont-ask-rejects-unasked
+--- PASS: TestDshPermissionBridge/dont-ask-rejects-unasked (0.00s)
+=== RUN   TestDshPermissionBridge/unknown-options-never-default-to-allow
+--- PASS: TestDshPermissionBridge/unknown-options-never-default-to-allow (0.00s)
+--- PASS: TestDshPermissionBridge (0.01s)
+=== RUN   TestDshPermissionCard
+--- PASS: TestDshPermissionCard (0.00s)
+=== RUN   TestDshRealApprovalAllowOnce
+    dsh_permissions_test.go:269: turn t1 settled SUCCEEDED/completed result="P4 allowed answer" error=""
+--- PASS: TestDshRealApprovalAllowOnce (0.71s)
+=== RUN   TestDshRealApprovalReject
+    dsh_permissions_test.go:299: turn t1 settled SUCCEEDED/completed result="P4 denied answer" error=""
+--- PASS: TestDshRealApprovalReject (0.59s)
+=== RUN   TestDshRealApprovalStop
+    dsh_permissions_test.go:327: turn t1 settled INTERRUPTED/interrupted result="" error=""
+    dsh_permissions_test.go:334: turn t2 settled SUCCEEDED/completed result="P4 after stop" error=""
+--- PASS: TestDshRealApprovalStop (1.60s)
+=== RUN   TestDshRealApprovalDisconnect
+[orbit-runner 2026-10-05T14:11:05.004Z] dsh permission reply: dsh ACP transport closed
+    dsh_permissions_test.go:362: turn t1 settled FAILED/error result="" error="dsh ACP transport closed: EOF"
+--- PASS: TestDshRealApprovalDisconnect (1.61s)
+=== RUN   TestDshRealDontAskRejectsUnasked
+    dsh_permissions_test.go:391: turn t1 settled SUCCEEDED/completed result="P4 dont ask answer" error=""
+--- PASS: TestDshRealDontAskRejectsUnasked (0.63s)
+=== RUN   TestDshRealAutoWorkspaceBoundary
+    dsh_permissions_test.go:428: turn t1 settled SUCCEEDED/completed result="P4 auto answer" error=""
+--- PASS: TestDshRealAutoWorkspaceBoundary (0.71s)
+PASS
+ok  	orbit	7.654s

@@ -47,6 +47,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { EngineSignedOutConflict } from '../sessions/engine-signin-preflight';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProviderPlanUsageService } from './plan-usage.service';
@@ -163,6 +164,15 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     assert.equal(claimed.sessionId, sessionId);
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
     return claimed;
+  }
+  /** The runner asking for work and handed none: `sessionId` names a pool nothing of its owner's holds, so
+   *  it is not dispatched at all — it waits, PENDING, saying why — and is parked again after. */
+  async function heldBack(who: Person, sessionId: string): Promise<void> {
+    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    assert.equal(await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, false), null, 'the runner was offered a session');
+    const { error } = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { error: true } });
+    assert.equal(error, PROVIDER_UNAVAILABLE_ERROR);
+    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
   }
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(who: Person, sessionId: string) {
@@ -336,14 +346,14 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
 
   await t.test('(4) a session of somebody not in the pool is handed nothing of it — whatever names the slug', async () => {
     const forged = await sessionOn(db, otto, pool.slug, RunStatus.PENDING);
-    const claimed = await claim(otto, forged);
-    assert.deepEqual(claimed.agent.env, otto.env, 'his runner was handed something of the pool');
-    assert.deepEqual(await keysIn(claimed), []);
+    await heldBack(otto, forged);
     assert.deepEqual(await tokensOf(forged), []);
     assert.equal(await db.poolGatewayToken.count({ where: { userId: otto.id } }), 0);
     assert.equal(await keyOn(forged), null);
-    const reclaimed = (await runnerApi.reclaim({ id: otto.runnerId, ownerId: otto.id })).sessions.find((s) => s.sessionId === forged);
-    assert.deepEqual(reclaimed?.agent.env, otto.env);
+    // A restarted runner of his is not handed it either.
+    const reclaimed = (await runnerApi.reclaim({ id: otto.runnerId, ownerId: otto.id })).sessions;
+    assert.equal(reclaimed.find((s) => s.sessionId === forged), undefined, 'his runner rebuilt the session on the pool');
+    assert.deepEqual(await keysIn(reclaimed), []);
     assert.deepEqual(await tokensOf(forged), []);
   });
 
@@ -368,13 +378,15 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     await pools.removePerson(ann.id, pool.id, max.id);
     assert.equal(await db.poolGatewayToken.count({ where: { userId: max.id } }), 0);
     const [first] = maxSessions;
-    assert.deepEqual((await claim(max, first.id)).agent.env, max.env);
+    await heldBack(max, first.id);
+    assert.deepEqual(await tokensOf(first.id), []);
 
     assert.ok(await db.poolGatewayToken.count({ where: { poolId: pool.id } }) > 0);
     await pools.remove(ann.id, pool.id);
     assert.equal(await db.poolGatewayToken.count({ where: { poolId: pool.id } }), 0);
     assert.equal(await db.session.count({ where: { id: miaSession } }), 1);
-    assert.deepEqual((await claim(mia, miaSession)).agent.env, mia.env);
+    await heldBack(mia, miaSession);
+    assert.deepEqual(await tokensOf(miaSession), []);
   });
 
   await t.test("(7) a pool of one's own ChatGPT accounts takes people and keys: everyone in it runs on an account while one can and on a key when none can; everyone out is Just me again", async () => {
@@ -531,7 +543,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     );
     assert.equal(await db.poolGatewayToken.count({ where: { poolId: own.id, userId: pia.id } }), 0);
     assert.ok(!(await pools.list(pia.id)).some((listed) => listed.id === own.id));
-    assert.deepEqual((await claim(pia, piaSession)).agent.env, pia.env, 'her runner was handed something of the pool');
+    await heldBack(pia, piaSession);
     assert.deepEqual(await tokensOf(piaSession), []);
     // The owner's own session runs on as before.
     assert.match((await claim(olga, olgaSession)).agent.env?.OPENAI_API_KEY ?? '', /^orbit-gwl-/);

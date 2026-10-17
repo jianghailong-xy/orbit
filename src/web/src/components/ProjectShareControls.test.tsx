@@ -106,28 +106,31 @@ async function click(element: Element | null | undefined, what: string): Promise
 const buttonNamed = (text: string) =>
   [...container!.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) ?? null;
 
-/** Open the ⋯ and answer its items. */
+/** Open the ⋯ and answer its items: the menu the button opened, by its role, and its entries by theirs. */
 async function openMenu(): Promise<HTMLElement[]> {
   await click(container!.querySelector('button[aria-label="More project actions"]'), 'the ⋯ button');
-  await vi.waitFor(() => expect(document.body.querySelector('.project-more-menu')).not.toBeNull());
-  return [...document.body.querySelectorAll<HTMLElement>('.project-more-menu .ant-dropdown-menu-item')];
+  await vi.waitFor(() => expect(document.body.querySelector('[role="menu"].project-more-menu')).not.toBeNull());
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menu"].project-more-menu [role="menuitem"]')];
 }
 const item = (items: HTMLElement[], label: string) =>
-  items.find((el) => el.querySelector('.ant-dropdown-menu-title-content')?.textContent?.startsWith(label));
+  items.find((el) => el.textContent?.startsWith(label));
 
 const dialog = (): HTMLElement => {
-  const found = document.body.querySelector<HTMLElement>('.ant-modal.share-dialog');
+  const found = document.body.querySelector<HTMLElement>('[role="dialog"].share-dialog');
   if (!found) throw new Error('the Share dialog is not open');
   return found;
 };
+/** A dialog's name, as assistive technology reads it. */
+const nameOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent ?? undefined;
 const layers = () =>
   [...dialog().querySelectorAll<HTMLElement>('.share-layer')].map((row) => ({
     name: row.querySelector('.share-layer-name')?.textContent,
     detail: row.querySelector('.share-layer-detail')?.textContent,
     nested: row.classList.contains('is-nested'),
     idle: row.classList.contains('is-idle'),
-    on: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked,
-    locked: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled,
+    on: row.querySelector('[role="checkbox"]')!.getAttribute('aria-checked') === 'true',
+    locked: row.querySelector('[role="checkbox"]')!.getAttribute('aria-disabled') === 'true',
     count: row.querySelector('.share-layer-count')?.textContent,
   }));
 
@@ -180,7 +183,7 @@ describe('the project header’s sharing controls', { timeout: 60_000 }, () => {
     expect(buttonNamed('Share')).toBeNull();
     // The pill opens the project's Share dialog.
     await click(pill, 'the Shared · Live pill');
-    await vi.waitFor(() => expect(dialog().querySelector('.ant-modal-title')?.textContent).toBe('Share project'));
+    await vi.waitFor(() => expect(nameOf(dialog())).toBe('Share project'));
   });
 
   it('Copy link copies the signed-in address, not a public one', async () => {
@@ -239,6 +242,28 @@ describe('the project header’s sharing controls', { timeout: 60_000 }, () => {
   });
 });
 
+describe('Copy as Markdown, by the project’s main branch', () => {
+  const criteriaLines = (markdown: string) => markdown.split('\n').filter((line) => / — (Met|Not met) by its work/u.test(line));
+
+  it('says on main and not on main yet word for word as before for a project on main', () => {
+    const before = [
+      '1. 同一 owner 的多行订阅可以归入一个池。 — Met by its work · on main',
+      '2. 派发时选中窗口占用最低的那一行。 — Met by its work · on the project branch · not on main yet',
+      '3. 客户端能看到每个成员的占用。 — Not met by its work',
+    ];
+    expect(criteriaLines(projectMarkdown(PROJECT_DOC, APP_URL))).toEqual(before);
+    expect(criteriaLines(projectMarkdown({ ...PROJECT_DOC, integration: { upstreamRef: 'main' } }, APP_URL))).toEqual(before);
+  });
+
+  it('names master for a project on master, off the document the page holds', () => {
+    expect(criteriaLines(projectMarkdown({ ...PROJECT_DOC, integration: { upstreamRef: 'master' } }, APP_URL))).toEqual([
+      '1. 同一 owner 的多行订阅可以归入一个池。 — Met by its work · on master',
+      '2. 派发时选中窗口占用最低的那一行。 — Met by its work · on the project branch · not on master yet',
+      '3. 客户端能看到每个成员的占用。 — Not met by its work',
+    ]);
+  });
+});
+
 describe('the Share dialog, on a project', { timeout: 60_000 }, () => {
   it('has Task pages on by default, and Comments & files and Conversations under it, greyed out with it', async () => {
     // A link opened with the defaults (contract §1): Task pages on, the two below it off.
@@ -263,7 +288,7 @@ describe('the Share dialog, on a project', { timeout: 60_000 }, () => {
     ]);
 
     // Task pages off: saved as it is made, and the two layers under it go grey and cannot be pressed.
-    await click(dialog().querySelector('[data-layer="taskPages"] input[type="checkbox"]'), 'the Task pages box');
+    await click(dialog().querySelector('[data-layer="taskPages"] [role="checkbox"]'), 'the Task pages box');
     expect(vi.mocked(putShareLink).mock.calls).toEqual([['PROJECT', PROJECT, { include: { taskPages: false } }]]);
     await vi.waitFor(() =>
       expect(layers().slice(1).map(({ name, on, idle, locked }) => ({ name, on, idle, locked }))).toEqual([

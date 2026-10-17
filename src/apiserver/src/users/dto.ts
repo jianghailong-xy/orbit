@@ -19,6 +19,15 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+
+  /**
+   * Create the account without a password: it signs in with Google only (docs/google-sign-in-design.md
+   * §5.4). Refused together with `password`, and with `force`, which would otherwise erase an existing
+   * account's password.
+   */
+  @IsOptional()
+  @IsBoolean()
+  passwordless?: boolean;
 }
 
 /** The longest display name an account may give itself. */
@@ -103,10 +112,46 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   enableOrchestration?: boolean;
+
+  /**
+   * Whether smart model selection is on for this account: the master switch over the whole
+   * feature, read wherever it acts (common/model-routing-switch.ts). Default OFF (absent = off),
+   * unlike the switches above, so it is only ever written to turn it on — or back off.
+   */
+  @IsOptional()
+  @IsBoolean()
+  modelRouting?: boolean;
+
+  /**
+   * Whether this account's Claude sessions offer the engine's guess at the next message once a
+   * turn ends (common/prompt-suggestions-switch.ts). Each guess is one more request on the
+   * session's account, so it can be turned off. Default on (absent = on), so the switch is only
+   * ever written to turn it off. Read at spawn: a running engine keeps what it started with.
+   */
+  @IsOptional()
+  @IsBoolean()
+  promptSuggestions?: boolean;
+
+  /**
+   * Whether this account's clients show the server's rolling recap of a session
+   * (Session.recapText, 0418) in place of the raw last reply. Default on (absent = on), so the
+   * switch is only ever written to turn it off. A display preference, read by every client's
+   * session list; what the server SPENDS on recaps is the deployment's own switch
+   * (ORBIT_RECAP_ENABLED), and the recap itself is not withdrawn from the payload.
+   */
+  @IsOptional()
+  @IsBoolean()
+  recaps?: boolean;
 }
 
 /** Set a user's access role (admin area). */
 export class UpdateRoleDto {
   @IsIn(['MEMBER', 'ADMIN'])
   role!: 'MEMBER' | 'ADMIN';
+}
+
+/** Disable an account, or enable it again (admin area, docs/google-sign-in-design.md §5.5). */
+export class SetDisabledDto {
+  @IsBoolean()
+  disabled!: boolean;
 }

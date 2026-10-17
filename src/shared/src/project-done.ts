@@ -1,3 +1,5 @@
+import type { OpenItemKind } from './project-progress';
+
 /**
  * Who recorded a project's DONE (`project.done_by`, migration 0345): the account owner in person on
  * `POST /projects/:id/done`, or Orbit's projection from committed facts (`project-done-derived.ts`).
@@ -19,6 +21,8 @@ export type ProjectDoneBy = 'OWNER' | 'DERIVED';
  */
 export interface AcceptedGap {
   criterionKey: string;
+  /** A few words naming the gap — the card's headline for it. */
+  title?: string;
   /** Why Orbit cannot prove the criterion. */
   whyNotProven?: string;
   /** What the coordinator checked instead. */
@@ -29,18 +33,143 @@ export interface AcceptedGap {
 }
 
 /**
+ * One gap as `project_request_done` files it: every part of the explanation is required, because
+ * the owner decides on it — which criterion, why Orbit cannot prove it, what the coordinator checked
+ * instead, and where that evidence is. One criterion may carry several gaps.
+ */
+export interface DoneRequestGap extends AcceptedGap {
+  whyNotProven: string;
+  coordinatorChecked: string;
+  evidenceRefs: string[];
+}
+
+/**
  * A coordinator's request that its owner record the project done: the `DONE_REQUEST` open item's
  * payload, and what the owner's "Is this project done?" card is drawn from.
  *
  * `criteriaDigest` is the seal of the criteria the request was made about — the one
  * `POST /projects/:id/done` compares — so a request whose criteria have moved since is answered 409.
+ * `stateDigest` does the same for the work: the project's tasks, where each criterion's work has
+ * landed and the landings in flight, as the check read them. A request whose state has moved since
+ * is superseded, and pressing Record as done on it is 409; one filed without the check carries none.
  */
 export interface DoneRequest {
   criteriaDigest: string;
   /** The coordinator's call, in a sentence or two. */
   judgment: string;
-  /** Every criterion Orbit cannot prove, one gap each. */
+  /** What Orbit cannot prove: the gaps, each naming its criterion. */
   gaps: AcceptedGap[];
+  stateDigest?: string;
+  /** The check's `WARN` findings: every criterion not LANDED, with why. */
+  warnings?: ProjectDoneFinding[];
+}
+
+/**
+ * Why a criterion is not on main by work of its own (D4), as the apiserver's
+ * `criterion-landing-reason.ts` reads it off the landing lane's rows:
+ *
+ * - `IN_FLIGHT` — a landing of its work, or a merge of the project branch into main, is queued or
+ *   running.
+ * - `ON_PROJECT_BRANCH` — its work is on the project branch, with commits of its own, and nothing
+ *   is taking it to main.
+ * - `NOTHING_TO_LAND` — its work ran a branch and the line found no commit of its own on it.
+ * - `NO_RECEIPT` — no receipt puts its work on either branch: merged outside Orbit, or not merged.
+ * - `CODELESS` — its work has no branch to land.
+ */
+export type CriterionLandingReason =
+  | 'IN_FLIGHT'
+  | 'ON_PROJECT_BRANCH'
+  | 'NOTHING_TO_LAND'
+  | 'NO_RECEIPT'
+  | 'CODELESS';
+
+/**
+ * `project_request_done` sends this (`POST /runner/projects/:id/done-requests`): the coordinator's
+ * call in a sentence or two, and every criterion Orbit cannot prove.
+ */
+export interface RequestProjectDoneBody {
+  judgment: string;
+  gaps: DoneRequestGap[];
+}
+
+/**
+ * The check a done request goes through, in `task-plan-preflight`'s shape: `REFUSE` means the project
+ * is not ready to be recorded done and nothing is filed, `WARN` is filed with the request for the
+ * owner to read. Every finding comes back at once.
+ *
+ * - `DONE_NO_CRITERIA` — the project states no criteria, so there is nothing to be done against.
+ * - `DONE_CRITERION_UNSATISFIED` — a criterion its work has not met, one finding each.
+ * - `DONE_TASKS_IN_FLIGHT` — tasks running, queued for a runner, or IN_PROGRESS.
+ * - `DONE_OWNER_ITEMS_OPEN` — open items waiting on the owner.
+ * - `DONE_INTEGRATION_IN_FLIGHT` — a landing or a merge into main (LAND_TASK, CHECK_PROMOTION,
+ *   LAND_PROMOTION) queued or running.
+ * - `DONE_CRITERION_UNLANDED` (warn) — a criterion not LANDED, one finding each, with its reason.
+ */
+export type ProjectDoneCheckCode =
+  | 'DONE_NO_CRITERIA'
+  | 'DONE_CRITERION_UNSATISFIED'
+  | 'DONE_TASKS_IN_FLIGHT'
+  | 'DONE_OWNER_ITEMS_OPEN'
+  | 'DONE_INTEGRATION_IN_FLIGHT'
+  | 'DONE_CRITERION_UNLANDED';
+
+export interface ProjectDoneFinding {
+  severity: 'REFUSE' | 'WARN';
+  code: ProjectDoneCheckCode;
+  message: string;
+  /** One executable sentence, as a blocker's `requiredAction` is. */
+  requiredAction: string;
+  /** The criterion a finding is about, by the `key` `project_get` gives it; null for the others. */
+  criterion: { key: string; ordinal: number; text: string } | null;
+  /** Why the criterion is not LANDED — `DONE_CRITERION_UNLANDED` only; null for the others. */
+  reason: CriterionLandingReason | null;
+  /** The tasks a finding is about, oldest first; empty for the others. */
+  tasks: Array<{ taskId: string; title: string }>;
+  /** The owner's open items — `DONE_OWNER_ITEMS_OPEN` only. */
+  items: Array<{ itemId: string; kind: OpenItemKind; title: string }>;
+  /** The landings in flight — `DONE_INTEGRATION_IN_FLIGHT` only. */
+  jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
+}
+
+/** What filing a done request answers: the request, the open item that holds it, and the one it
+ *  replaced. `alreadyOpen` is a re-send of the request already open, which writes nothing. */
+export interface ProjectDoneRequestFiled extends DoneRequest {
+  stateDigest: string;
+  warnings: ProjectDoneFinding[];
+  itemId: string;
+  state: 'OPEN';
+  alreadyOpen: boolean;
+  superseded: { itemId: string } | null;
+}
+
+/**
+ * What the account owner sends when the answer to a coordinator's done request is "Not yet…".
+ *
+ * The note is the owner's explanation of what is still missing.  The server trims it before it is
+ * stored and before it is delivered to the coordinator; the wire type deliberately stays a plain
+ * string so the same contract is usable by the web and native clients.
+ */
+export interface ProjectDoneRequestDeclineBody {
+  note: string;
+}
+
+/** The result of ending a `DONE_REQUEST` with the owner's "Not yet…" answer. */
+export interface ProjectDoneRequestDeclined {
+  itemId: string;
+  state: 'RESOLVED';
+  resolution: 'DECLINED';
+  /** The normalized note retained in `project_open_item.answer`. */
+  note: string;
+  /** Null when the project has no current coordinator conversation. */
+  delivery: { sessionId: string; turnId: string } | null;
+}
+
+/** The 409 a done request that is not ready gets: every finding, refusals first. */
+export interface ProjectDoneNotReadyBody {
+  code: 'DONE_REQUEST_NOT_READY';
+  message: string;
+  written: 0;
+  findings: ProjectDoneFinding[];
 }
 
 /**

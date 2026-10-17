@@ -3,6 +3,7 @@ import {
   dragOffset,
   isFullSwipe,
   restingOffset,
+  sessionMovable,
   sessionSwipeActions,
   settleSwipe,
   swipeActionsOnScreen,
@@ -27,6 +28,17 @@ describe('sessionSwipeActions', () => {
       trailing: ['delete', 'move', 'share'],
     });
     expect(sessionSwipeActions('trash')).toEqual({ leading: ['restore'], trailing: ['purge'] });
+  });
+
+  // A project's member goes where its coordinator goes, so its row offers no Move — on the swipe as
+  // in the menu, and the trailing edge is narrower by the one button it lost.
+  it('offers Move only to a session that can be moved on its own', () => {
+    expect(sessionSwipeActions('open', false).trailing).toEqual(['delete', 'share']);
+    expect(swipeGeometry('open', ROW, true, false).trailingWidth).toBe(144);
+    expect(sessionMovable({})).toBe(true);
+    expect(sessionMovable({ projectMembership: null })).toBe(true);
+    expect(sessionMovable({ projectMembership: { role: 'COORDINATOR' } })).toBe(true);
+    expect(sessionMovable({ projectMembership: { role: 'TASK' } })).toBe(false);
   });
 
   it('reads Share · Move · Delete from left to right on the trailing edge', () => {

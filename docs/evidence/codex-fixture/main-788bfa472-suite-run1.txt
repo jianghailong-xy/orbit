@@ -1,0 +1,19 @@
+# origin/main 788bfa472 + this fix (cherry-picked as 9facacb61), HPC, codex-cli 0.161.0, run 1.
+# Only the head, every failure line and the summary of the raw output are kept (runner log chatter cut).
+9facacb61 test(runner): assert codex 0.161's retried rate limit in TestRealCodexOnAChatGPTLogin
+788bfa472 chore(release): publish the runner's Kimi sign-in region as 0.1.222
+codex-cli 0.161.0
+2026-10-07T17:02:23Z
+ok  	orbit	14.869s
+--- FAIL: TestDshLifecycleCrashRestartRecovery (20.19s)
+    --- FAIL: TestDshLifecycleCrashRestartRecovery/runner-killed-mid-tool (20.07s)
+        dsh_lifecycle_test.go:1275: turn t2 never settled: {ID:t2 Kind:message Content:m2 [effect-hang] Env:map[] TaskAcceptance:false Status:IN_FLIGHT Deliveries:2 expired:false Completions:[]}
+FAIL
+FAIL	orbit	281.942s
+?   	orbit/cmd/release-manifest	[no test files]
+FAIL
+real	5m11.260s
+user	1m10.931s
+sys	0m23.276s
+MAIN_EXIT=1
+2026-10-07T17:07:34Z

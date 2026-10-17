@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-choices -w @orbit/web -- --grep 'multiple choices in Dialog keep their owner' --project chromium-light-phone --repeat-each 40",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_97b088650636",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "590c3b7c0784b5f1562a5e4cd57aba39612cb7bd",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-07T00:08:20.489072+00:00",
+ "exitCode": 1,
+ "outputSha256": "4eb92c6f1dae6f04b42f0eb0a2491c9dfa300543d47c858f544d8ec774c7310a",
+ "outputBytes": 10230,
+ "note": "39 passed / 1 failed on the delivered tree (P3.2 measured the same: 6/40 on the project tip, 9/40 on its branch). The failure is repeat 22 at choices.browser.mjs:624: Row actions stays 1 instead of 2. Its trace has no network errors; the ArrowDown press starts at +0ms and ends at +13.7ms, and the Enter press starts at +15.7ms, inside one animation frame: the Orbit Menu open window (Enter on the trigger toggles the menu closed before focus has moved into it)."
+}

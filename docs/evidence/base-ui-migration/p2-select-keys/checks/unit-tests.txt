@@ -1,0 +1,16 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/theme.test.tsx src/components/ui/boundary.test.ts
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.2 [39m[90m/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab/src/web[39m
+
+ [32m✓[39m src/components/ui/boundary.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 349[2mms[22m[39m
+   [33m[2m✓[22m[39m keeps Base UI inside Orbit components, fixtures private, and public components free of AntD[33m 348[2mms[22m[39m
+ [32m✓[39m src/lib/theme.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m6 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 16:31:43
+[2m   Duration [22m 970ms[2m (environment 37%, tests 30%, transform 26%, import 7%)[22m
+

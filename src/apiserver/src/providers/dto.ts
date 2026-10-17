@@ -7,11 +7,12 @@ import { IsPublicId } from '../common/public-id';
 // Moonshot's own API, `antigravity` for Google's Gemini API. The runner translates a codex provider's
 // OPENAI_BASE_URL into codex `-c model_providers.*` overrides (wire_api="responses"), a kimi
 // provider's key into the CLI's KIMI_MODEL_* provider, and hands an antigravity provider's key and
-// endpoint to agy as GEMINI_API_KEY / GOOGLE_GEMINI_BASE_URL.
+// endpoint to agy as GEMINI_API_KEY / GOOGLE_GEMINI_BASE_URL. `dsh` uses the dedicated Harness
+// API-key provider through ORBIT_DSH_API_KEY / ORBIT_DSH_BASE_URL and ACP model options.
 // This is the runtime a row *borrows*; `kimi` and `antigravity` remain reserved as provider SLUGS
 // (provider-slug.ts), so a configured row can run on their CLIs without claiming the built-in
 // engine's identity.
-const RUNTIMES = ['claude', 'codex', 'kimi', 'antigravity'];
+const RUNTIMES = ['claude', 'codex', 'kimi', 'antigravity', 'dsh'];
 
 export class CreateModelProviderDto {
   /** Preferred dispatch identifier. Normally omitted: the server derives one from the preset or
@@ -22,7 +23,8 @@ export class CreateModelProviderDto {
   @IsString() @MinLength(1) baseUrl!: string;
   /** Plaintext provider API key; stored AES-GCM encrypted, never returned to the browser. */
   @IsString() @MinLength(1) apiKey!: string;
-  /** Picker model list: [{ value, label, contextWindow? }]. Ignored when `presetSlug` is set. */
+  /** Picker model list: [{ value, label, contextWindow? }]. Ignored when following a preset.
+   *  dsh requires an empty list because its ACP catalogue supplies opaque model selections. */
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
   @IsOptional() @IsString() defaultModel?: string;
   /** The vendor preset (@orbit/shared PROVIDER_PRESETS) this provider is being created from: its

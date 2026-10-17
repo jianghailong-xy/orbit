@@ -1,0 +1,375 @@
+{
+  "traceSha256": "01feaee43d851098dc8cec0aba41a6a7709803fcc541d20dd4fe3b3a37bdd9e6",
+  "events": [
+    {
+      "type": "before",
+      "callId": "call@77",
+      "startTime": 7330.56,
+      "class": "Frame",
+      "method": "evaluateExpression",
+      "params": {
+        "expression": "() => {\n    const state = {\n      limitMs: 100,\n      startedAt: null,\n      unlockedAfterMs: null,\n      samples: []\n    };\n    let finish;\n    let deadline;\n    state.complete = new Promise(resolve => {\n      finish = resolve;\n    });\n    state.read = phase => {\n      const overflow = [document.documentElement, document.body].map(node => getComputedStyle(node).overflowY);\n      const sample = {\n        phase,\n        afterEscapeMs: performance.now() - state.startedAt,\n        overflow,\n        locked: overflow.some(value => /hidden|clip/.test(value))\n      };\n      state.samples.push(sample);\n      return sample;\n    };\n    const stop = () => {\n      observer.disconnect();\n      clearTimeout(deadline);\n      finish();\n    };\n    const observer = new MutationObserver(() => {\n      if (state.startedAt === null) return;\n      const sample = state.read('style-change');\n      if (!sample.locked) {\n        state.unlockedAfterMs = sample.afterEscapeMs;\n        stop();\n      }\n    });\n    observer.observe(document.documentElement, {\n      attributes: true\n    });\n    observer.observe(document.body, {\n      attributes: true\n    });\n    window.addEventListener('keydown', () => {\n      state.startedAt = performance.now();\n      state.read('final-escape');\n      deadline = setTimeout(() => {\n        state.read('deadline');\n        stop();\n      }, state.limitMs);\n    }, {\n      capture: true,\n      once: true\n    });\n    window.choiceScrollUnlock = state;\n  }",
+        "isFunction": true,
+        "arg": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        }
+      },
+      "stepId": "pw:api@70"
+    },
+    {
+      "type": "after",
+      "callId": "call@77",
+      "endTime": 7361.343,
+      "result": {
+        "value": {
+          "v": "undefined"
+        }
+      }
+    },
+    {
+      "type": "before",
+      "callId": "call@79",
+      "startTime": 7371.913,
+      "class": "Page",
+      "method": "keyboardPress",
+      "params": {
+        "key": "Escape"
+      },
+      "stepId": "pw:api@71"
+    },
+    {
+      "type": "input",
+      "callId": "call@79"
+    },
+    {
+      "type": "after",
+      "callId": "call@79",
+      "endTime": 7476.009
+    },
+    {
+      "type": "before",
+      "callId": "call@81",
+      "startTime": 7488.187,
+      "title": "Expect \"not toBeVisible\"",
+      "class": "Frame",
+      "method": "expect",
+      "params": {
+        "selector": "internal:role=dialog[name=\"Share workspace\"s]",
+        "expression": "to.be.visible",
+        "expectedValue": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        },
+        "isNot": true,
+        "timeout": 15000
+      },
+      "stepId": "expect@72"
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7494.185,
+      "message": "Expect \"not toBeVisible\" getByRole('dialog', { name: 'Share workspace', exact: true }) with timeout 15000ms"
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7494.197,
+      "message": "waiting for getByRole('dialog', { name: 'Share workspace', exact: true })"
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7511.297,
+      "message": "  locator resolved to <div id=\"_r_26_\" role=\"dialog\" tabindex=\"-1\" data-closed=\"\" data-ending-style=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_28_\" class=\"orbit-overlay orbit-dialog\">…</div>"
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7511.341,
+      "message": "  unexpected value \"visible\""
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7539.339,
+      "message": "  locator resolved to <div id=\"_r_26_\" role=\"dialog\" tabindex=\"-1\" data-closed=\"\" data-ending-style=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_28_\" class=\"orbit-overlay orbit-dialog\">…</div>"
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7539.372,
+      "message": "  unexpected value \"visible\""
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7597.776,
+      "message": "  locator resolved to <div id=\"_r_26_\" role=\"dialog\" tabindex=\"-1\" data-closed=\"\" data-ending-style=\"\" data-base-ui-focusable=\"\" aria-labelledby=\"base-ui-_r_28_\" class=\"orbit-overlay orbit-dialog\">…</div>"
+    },
+    {
+      "type": "log",
+      "callId": "call@81",
+      "time": 7597.803,
+      "message": "  unexpected value \"visible\""
+    },
+    {
+      "type": "after",
+      "callId": "call@81",
+      "endTime": 7700.014
+    },
+    {
+      "type": "before",
+      "callId": "call@83",
+      "startTime": 7702.61,
+      "title": "Expect \"toBeFocused\"",
+      "class": "Frame",
+      "method": "expect",
+      "params": {
+        "selector": "internal:role=button[name=\"Open Dialog\"s]",
+        "expression": "to.be.focused",
+        "expectedValue": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        },
+        "isNot": false,
+        "timeout": 15000
+      },
+      "stepId": "expect@73"
+    },
+    {
+      "type": "log",
+      "callId": "call@83",
+      "time": 7704.408,
+      "message": "Expect \"toBeFocused\" getByRole('button', { name: 'Open Dialog', exact: true }) with timeout 15000ms"
+    },
+    {
+      "type": "log",
+      "callId": "call@83",
+      "time": 7704.414,
+      "message": "waiting for getByRole('button', { name: 'Open Dialog', exact: true })"
+    },
+    {
+      "type": "after",
+      "callId": "call@83",
+      "endTime": 7706.303
+    },
+    {
+      "type": "before",
+      "callId": "call@85",
+      "startTime": 7708.059,
+      "class": "Frame",
+      "method": "evaluateExpression",
+      "params": {
+        "expression": "async () => {\n    const state = window.choiceScrollUnlock;\n    // The exact first read that used to be asserted synchronously is retained.\n    const firstRead = state.read('first-read-after-hidden-and-focus');\n    await state.complete;\n    const finalRead = state.read('final-read');\n    return {\n      limitMs: state.limitMs,\n      unlockedAfterMs: state.unlockedAfterMs,\n      firstRead,\n      finalRead,\n      samples: state.samples\n    };\n  }",
+        "isFunction": true,
+        "arg": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        }
+      },
+      "stepId": "pw:api@74"
+    },
+    {
+      "type": "after",
+      "callId": "call@85",
+      "endTime": 7710.055,
+      "result": {
+        "value": {
+          "o": [
+            {
+              "k": "limitMs",
+              "v": {
+                "n": 100
+              }
+            },
+            {
+              "k": "unlockedAfterMs",
+              "v": {
+                "n": 105.7000000178814
+              }
+            },
+            {
+              "k": "firstRead",
+              "v": {
+                "o": [
+                  {
+                    "k": "phase",
+                    "v": {
+                      "s": "first-read-after-hidden-and-focus"
+                    }
+                  },
+                  {
+                    "k": "afterEscapeMs",
+                    "v": {
+                      "n": 335.40000000596046
+                    }
+                  },
+                  {
+                    "k": "overflow",
+                    "v": {
+                      "a": [
+                        {
+                          "s": "visible"
+                        },
+                        {
+                          "s": "visible"
+                        }
+                      ],
+                      "id": 3
+                    }
+                  },
+                  {
+                    "k": "locked",
+                    "v": {
+                      "b": false
+                    }
+                  }
+                ],
+                "id": 2
+              }
+            },
+            {
+              "k": "finalRead",
+              "v": {
+                "o": [
+                  {
+                    "k": "phase",
+                    "v": {
+                      "s": "final-read"
+                    }
+                  },
+                  {
+                    "k": "afterEscapeMs",
+                    "v": {
+                      "n": 335.40000000596046
+                    }
+                  },
+                  {
+                    "k": "overflow",
+                    "v": {
+                      "a": [
+                        {
+                          "s": "visible"
+                        },
+                        {
+                          "s": "visible"
+                        }
+                      ],
+                      "id": 5
+                    }
+                  },
+                  {
+                    "k": "locked",
+                    "v": {
+                      "b": false
+                    }
+                  }
+                ],
+                "id": 4
+              }
+            },
+            {
+              "k": "samples",
+              "v": {
+                "a": [
+                  {
+                    "o": [
+                      {
+                        "k": "phase",
+                        "v": {
+                          "s": "final-escape"
+                        }
+                      },
+                      {
+                        "k": "afterEscapeMs",
+                        "v": {
+                          "n": 0.20000001788139343
+                        }
+                      },
+                      {
+                        "k": "overflow",
+                        "v": {
+                          "a": [
+                            {
+                              "s": "visible"
+                            },
+                            {
+                              "s": "hidden"
+                            }
+                          ],
+                          "id": 8
+                        }
+                      },
+                      {
+                        "k": "locked",
+                        "v": {
+                          "b": true
+                        }
+                      }
+                    ],
+                    "id": 7
+                  },
+                  {
+                    "o": [
+                      {
+                        "k": "phase",
+                        "v": {
+                          "s": "style-change"
+                        }
+                      },
+                      {
+                        "k": "afterEscapeMs",
+                        "v": {
+                          "n": 105.7000000178814
+                        }
+                      },
+                      {
+                        "k": "overflow",
+                        "v": {
+                          "a": [
+                            {
+                              "s": "visible"
+                            },
+                            {
+                              "s": "visible"
+                            }
+                          ],
+                          "id": 10
+                        }
+                      },
+                      {
+                        "k": "locked",
+                        "v": {
+                          "b": false
+                        }
+                      }
+                    ],
+                    "id": 9
+                  },
+                  {
+                    "ref": 2
+                  },
+                  {
+                    "ref": 4
+                  }
+                ],
+                "id": 6
+              }
+            }
+          ],
+          "id": 1
+        }
+      }
+    }
+  ]
+}

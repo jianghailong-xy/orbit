@@ -1,0 +1,19 @@
+{
+ "label": "fix-prior-select",
+ "step": "prior-select",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "KW2_RESULTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/fix-prior-select/results node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys.config.mjs",
+ "commit": "c7ddf671d882e93d45531e2b63405c6a04ddfde1",
+ "webChanges": [
+  "M src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+  " M src/web/ui-migration/choices-first-frame.browser.mjs"
+ ],
+ "webDiffSha256": "2218f956b7c1586f0ef44aa3f3650b36147980131f4aad51cedb581bfad3281e",
+ "startedAt": "2026-10-08T08:52:22Z",
+ "endedAt": "2026-10-08T09:34:19+00:00",
+ "loadAverage": {
+  "start": "23.77 26.79 27.82",
+  "end": "28.92 26.79 27.45"
+ },
+ "exitCode": 0
+}

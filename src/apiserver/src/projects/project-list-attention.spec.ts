@@ -63,6 +63,7 @@ test('the blocker aggregate returns one typed summary per project', async () => 
     ownerItems: [],
     coordinatorItems: null,
     startRequest: null,
+    doneRequest: null,
   });
 });
 
@@ -86,6 +87,9 @@ test('the item aggregate is grouped in the database, scoped by the same project 
   // A start request asks only while nobody has started the project — the rule the needs-you count
   // reads (`projectsReadyToStart`) — in the same statement, not in a read of its own.
   assert.match(items?.text ?? '', /item\.kind <> 'START_REQUEST' OR proj\.started_at IS NULL/);
+  // A done request asks only while the project is OPEN — `projectsReadyToClose`'s rule, read the
+  // same way.
+  assert.match(items?.text ?? '', /item\.kind <> 'DONE_REQUEST' OR proj\."status" = 'OPEN'/);
 });
 
 test('the four owner item kinds come from the kind, the escalations from the reason', async () => {
@@ -173,6 +177,22 @@ test('a start request is the row’s own field, under none of the four and not w
   assert.equal(row?.coordinatorItems, null);
 });
 
+// Its counterpart at the other end: the coordinator asking the owner to record the project done is
+// the row's "Ready to close", from a field of its own for the same reasons.
+test('a done request is the row’s own field, under none of the four and not with the coordinator', async () => {
+  const asked = new Date('2026-10-01T20:00:00.000Z');
+  const { prisma } = fakePrisma([], [
+    { projectId: 'project-a', kind: 'DONE_REQUEST', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 1, oldestWaitingSince: asked, nextEscalationAt: null },
+  ]);
+
+  const row = (await readProjectListAttention(prisma, OWNER_ID)).get('project-a');
+
+  assert.deepEqual(row?.doneRequest, { waitingSince: asked });
+  assert.equal(row?.startRequest, null);
+  assert.deepEqual(row?.ownerItems, []);
+  assert.equal(row?.coordinatorItems, null);
+});
+
 test('a project with no start request says so with null, beside its other items', async () => {
   const { prisma } = fakePrisma([], [
     { projectId: 'project-a', kind: 'COORDINATOR_QUESTION', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 1, oldestWaitingSince: new Date(), nextEscalationAt: null },
@@ -181,6 +201,7 @@ test('a project with no start request says so with null, beside its other items'
   const row = (await readProjectListAttention(prisma, OWNER_ID)).get('project-a');
 
   assert.equal(row?.startRequest, null);
+  assert.equal(row?.doneRequest, null);
   assert.equal(row?.ownerItems.length, 1);
 });
 
@@ -195,5 +216,6 @@ test('a project with no open blockers and no items has one explicit empty shape'
     ownerItems: [],
     coordinatorItems: null,
     startRequest: null,
+    doneRequest: null,
   });
 });

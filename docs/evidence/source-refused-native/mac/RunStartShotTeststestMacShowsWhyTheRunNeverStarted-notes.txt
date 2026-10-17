@@ -1,0 +1,23 @@
+mac-refused: no window after launch; pressing ⌘N
+mac: card shown for S1; body text follows
+mac: refs/heads/project/34bZ3i4AvgJaaow5E9tH shown
+mac: git: fatal: couldn't find remote ref refs/heads/project/34bZ3i4AvgJaaow5E9tH shown
+mac: BASE_REF_NOT_FOUND shown
+mac: Start it again shown
+mac: Chat about this shown
+mac-1-refused: no window to scroll in
+mac-1-refused: no window to photograph
+mac-2-start-it-again: no window to scroll in
+mac-2-start-it-again: no window to photograph
+mac-offline: no window after launch; pressing ⌘N
+mac: Send it again shown
+mac-3-offline: no window to scroll in
+mac-3-offline: no window to photograph
+mac-not-installed: no window after launch; pressing ⌘N
+mac-4-not-installed: no window to scroll in
+mac-4-not-installed: no window to photograph
+mac-project: no window after launch; pressing ⌘N
+mac: code+ref shown
+mac: task row shown
+mac-5-project-blocker: no window to scroll in
+mac-5-project-blocker: no window to photograph

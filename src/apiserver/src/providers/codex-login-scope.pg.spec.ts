@@ -47,6 +47,7 @@ import { RunnerProvidersController } from '../runner-api/runner-providers.contro
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CodexLoginService } from './codex-login.service';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersController } from './providers.controller';
 import { ProvidersService } from './providers.service';
@@ -144,6 +145,9 @@ const doorsOver: { providers: unknown; login: unknown; prisma: unknown } = {
   providers: [
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
     { provide: CodexLoginService, useFactory: () => doorsOver.login },
+    // The DeepSeek balance route's own dependency: no route this spec reads reaches it, and a module
+    // that omitted it would fail to build the controller.
+    { provide: DeepSeekBalanceService, useValue: {} },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     JwtAuthGuard,
     RunnerAuthGuard,
@@ -369,6 +373,8 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
     const page = (await call(200, owner.id, 'GET', at)).json;
     assert.deepEqual(page.login, {
       state: 'ACTIVE',
+      // Nobody paused it (migration 0374): a pause would say until when.
+      pausedUntil: null,
       email: 'owner@example.invalid',
       plan: 'plus',
       fingerprint: `…${ACCOUNT_ID.slice(-4)}`,

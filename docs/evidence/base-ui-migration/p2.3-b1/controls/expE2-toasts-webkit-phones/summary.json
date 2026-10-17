@@ -1,0 +1,1140 @@
+{
+  "stats": {
+    "startTime": "2026-10-07T00:50:16.294Z",
+    "duration": 187217.02300000002,
+    "expected": 65,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "247c7cfe5dca965ca6008f0d0b3de2b2e66b2bb3637e7caadfd0b369457fc51e"
+        },
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "489a861eb0bab4593cc3cc7ce2c7ffafab91e5dc5758aa9c2c74e8c1b8297f39"
+        },
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "0a2bd4a3f40e221995007501940084058e75cfe674279ae4c14f9f2b83cb6adf"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+          "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "3b2eb0599f0d80ba3a835c56e05bb529fbdbfed7282733efa53096936973599a"
+        },
+        {
+          "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "eb7cca0123307297933e5e46efc53824fee4da5af297df6c6ae34fa8cda98e2f"
+        },
+        {
+          "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "5fa2ef1af111959d68863a8ba9506234a25a9bde9b7490b5177e094771eb1818"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+          "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "b2a8663faa9bd6ae8fec60ef83543611ce56cb8a189f69edf6f3d15cbbafb32a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+          "sha256": "a6bd3a83fb53d79a0eb4717af314e70e6f2f27a6c1ece3d228cc3ae48da44593"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+          "sha256": "eac428c943692caa5b5e8ae84c59e10375472f41d6fef7e455fd7d5ce02dd165"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+          "sha256": "68ab46249465bb276b0a6b52c3050b714040923f68709b3d8129d524df3334e0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+          "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--native-hover-deadline-resumes-after-portal-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+          "sha256": "3e0c47ad453c23eb84588dd42553b12f86dee659dd03bfb212fa8195ce08a06a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "02adc2bdf191ae8a9784ac2e79801a2c61bc9e54de5ed0c8ddc3b12477502f03"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "6f82d537c7e1305454631cf2acf82b18f062ae62c62c39348fc558026e0a37da"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "5cf61453106455e166e9aea4ff21bf10faad30931d8091dc7e938b933d68e518"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+          "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+          "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "468cd0c8f594ccfcfe18c59b914d163a184138c2fbe81f36bf3ee99344a3ff4c"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "b8deb3db5bf2d00d190d82df0f1c244fe1b8c90a2956b8015529084fd986db03"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "c9340c8572de04f8f760825ce80c274a566159c6624272d895ccf7b3049ede94"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "0fceccb507837a99eb0f8dc727176782ebba1a8eafca490f4996d20cefd527ef"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "d5541b8318844cd2c320c91584e8af75ef4f6e9d664637226825ccbd5e41f31a"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "f349dd30a57eab749ff03cf1d36b4456db18354f5adbe6f619d3cfab724a3802"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "be4370a651afb15b9cee51724c952e8df378698259ff99aa9fc100866f672da6"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "548ab72508f4725dd51510340624f38b7e45c61ba292ece99b3864bf3d44f384"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "2e0a7e3f451eef1f51c27ef803ff1399476490bdce34b28cdb423644fabd556d"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "170285c655993b5a79ab6c8a17dc30c32567e69de7ec070a883970625941733d"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "4c4b4c97c31bcc709e0f3b866f5f31ad8ff1dae85eda000435d1f0daef6230b6"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "3d7a40ebccafc77445ff7c6fd88fcf2844f1c1d1d915ba23c561d5233436507f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "24ccdba9d4f223c3693eb8b093080eeb305cfdb101be692b26e5dae862ebf48f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "0266a8db7eef8da57ae651077d4de4d4167d621d662b5160287806ee76df106d"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "eb99e8e2f230d49a4944c7e5f944a767d38537dc4bea420a9253f8574731b39f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+          "sha256": "cfb09d39ec126cc3db8dbda7009110152df87098591a9d1b1fb066e57776be61"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+          "sha256": "fe6eaa7949c0a00a394c0f735a8551cd4edb0721fe527a7a5178aedbf6e702dc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+          "sha256": "8e49bc18802f72aef4569995b2291895f6e032bfaac5fea0dfb0e2e3b62a2533"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+          "sha256": "47fe609397edaf62f7feb9393d454cd787fcf096a52c4c909fd624bdb42163d2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+          "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--native-hover-deadline-resumes-after-portal-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+          "sha256": "0d4f59d055aaf3737f42bbe3e69515b46c31cbd8ebc85e33e1eb5724e79a0707"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "afbd60c0d60da6aa6669edb191e4f9c7688288bc40c4e3f530ff63c0b1a176b6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "unexpected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "61d5505c8b7ea9d62f790994e56b715e38846fc327d24acb150ea470069bbfa0"
+        },
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--error-context.md",
+          "sha256": "4b734ad7a6ceb862b04f3251241351488ca3471ee9606ffb0ae91ea1cb8c42d0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "unexpected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "89d6f6f2fcff387aaae1dcc08863e2c9d82f9252f9250a2f43773b367a0d21ca"
+        },
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--error-context.md",
+          "sha256": "863a517a7692e2f3c366dd5603cc9ec68aebb1073cbe461e3709a7a2dcd483b6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+          "sha256": "1fcef69b0688804df055ac541b5b2662ab92436b8be1cd55cb4bf2f8b10ca914"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+          "sha256": "21d6fe9580b5edc9db654dcc74584faf103763399b4d58c74078b5e22a7c5d91"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "bd47abdad472077df26ddc3b823e6911ec6659f269411284cadfbb54104bb0f2"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "f810310a5924fe4c1ce2c7ef7412fa08e0ef90a6bf5b9144301c0c435b39b368"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "ed6018451208a0274adb9b71ec7246c371dfc7b8dadbd53f01a736d63d8fec0e"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "a99856da80eedafceb7ab85a829e9c85798e9c01e415e6e61c32bcc961e75ef4"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "565565681e45d45b136a47e35f3492c07eaeeebed9d473a6204703e0ad560409"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "dc814b675637bacfce0ad3ec96013d7ab08c8e0228fd4c11f9b3519c0f82085b"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "f17aa977b86347f8e5d9b7cc5d7c7482baf33426bde04971ebb3c246d0bec4f6"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "97ee15954b3a30edb9a5a0a14f215c395cf854ed685f631264636ff533fa19a1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "c3dc675b5a93a96172926a57bd2d891414537d4ccff16c646f42ea8fce09edc8"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "c18e6967f4445b13ac157f0ead8d58dd0702f3ff4c27c9e887f0a9a0e2a00804"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "523fae53a70eb911178ca8eb8c99bf7b84e51a336a7df663ab8954bb5af05ff3"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "3f25f6eaed1db73639843bdb561fbcbb249deca28ddea40721d513503bca030c"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "51a2d9a618da098b29bd3744bb20733aeab36d8b18ec07b529e15112f3db7cab"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "3e86056581e58773785e455bae98415892b147d95ad005cd694200378b01d573"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--a-newly-posted-notification-still-plays-its-original-entrance-animation-once--fresh-notification-animation.json",
+          "sha256": "3319bc0b396f0698fa84597e7b8d996242e6b44ef04327171457c5fe3d6dd0f9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "8decb4b0d20068b0162b422bf00e55e9131d3b7cd1d1b493b4163acc8941f914"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "b91daf5a781ced6d41bc396edae524a368052bb1d5b9bfd19100c42fe4aa10c3"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+          "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-attention.png",
+          "sha256": "7b3b58ecb97cbd0d57b9d2d2fd995cbf68e27c0950a651f957b47bcd9fd10659"
+        },
+        {
+          "file": "webkit-light-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+          "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "4361262e1d85dfec36cda94d2f18465387cce703fa65ddd4a29e948a32719696"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "af4dad9e437c15111d46de98bff2f262c1caa2882b5f6baddc2e7931d06ff8b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "70c7b94439cbc1bcb7b91ee06adf68263a04c35d7600f5420fb970e1968e20a2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+          "sha256": "3e1ecdd993d67b1c1f2615f17f67321d743330d00c13983c64b807ff9f7cd7e5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-attention.png",
+          "sha256": "da20c94b08b29464e1b4618d7aa560fee324dfe8aa7562e1b991dd10b4c6dcc8"
+        },
+        {
+          "file": "webkit-dark-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-stages.json",
+          "sha256": "3bd526fb8241d2ad884df99a6eb5526a16512206df46d74146ca1a9cecc77e9c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "eb53e2ac4283ba4e4ae8519ac10cc6402c2e9c10aa6cc75710c5a337f304a0e6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "8c2cb3bfff10d9e9fce5c927cda77e6c5953af065d16d48587b66aeb50feb4c1"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "cf7c537714ec43bf270badfcbcaf863ab932486584997da6298674341f5a89ea"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "db2cb34836fbf538dbe3298f018ccd1fcfb752b750a55b69204de66ed82d3b6c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "36ec6fed71a8bfc4831df4fa273101bc57522438ac2c14baf2e3982883051583"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "4ea7f580134d7b75abba64b8091267a3fdbb62b718a770473c4a7704ea6484e3"
+        },
+        {
+          "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "4e5caeb413ec7f8489ecfbbe4624fc04e11e6753e630cca79a78881d7728aa00"
+        },
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+          "sha256": "950c52624d650b3e82f59f8f4ed7d422bf1c910cf1186d14091b578e1bf25683"
+        },
+        {
+          "file": "webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "6a3262e4d4991abb960057f940c43e28b4aa80a3cda7d932e8830802379f00fa"
+        },
+        {
+          "file": "webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "a84c58e4591d44f992fe2553a9ff9a790090fc07941e732b667f7b9e7a06bd82"
+        },
+        {
+          "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "2c762aca611c5bc4a16b6de04a0756727c4b5ad41ee6b2ea84a1ec7eea5a7d84"
+        },
+        {
+          "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "1e8fcc76b327f054dad3a3f1a1768c83a9bba7d75b3a8cd9ef66f990a75ef65c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "unexpected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--error-context.md",
+          "sha256": "afa01d67298a451df8ce25a74ced22968f976b2aae2ad7a5cc1a962ef8c6dcd4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "f85383d02c0843652b630189a1ea9bd6ade059d1b0ec98a5b5d4be4a43cd354a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json",
+          "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+          "sha256": "704a4fe3378d7faade9983dff7a044b5b9d5e1e41dfa3e4242868489b29b3131"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "f6522b468b965d083581d1f3c5e244f6c4cb754abefe422932e74fb7b5e1d092"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "64b7677876d6017647f1fb1464991211c366d69980d91dcff616cc2500cc648e"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--before-overlay.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json",
+          "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+          "sha256": "09736a52fde73638615631113dfc2b10908b3c4e4c8ad691b5c090723a4576f4"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--notification-and-overlay.png",
+          "sha256": "b2ab4ff35730f3330a7fbf227c7f68a94313323b133f0f476bfe8bca14d32363"
+        },
+        {
+          "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--keyboard.json",
+          "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "a938c9d41de37b0880b72bc2547d62343e6a5c2714b979a54b59aa468dc56b36"
+        },
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+          "sha256": "d8617bb7e3f2a7bd0478aee400d9fc10c18e30a6fed48c1926c04acd5c34645d"
+        },
+        {
+          "file": "webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+          "sha256": "be6869f8e3357f33aacced24a0783bee4681b3e8c03c2f58c7dc414529a72653"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--event-and-entity-deduplication-Undo-and-session-navigation-retain-the-business-boundary--actions.json",
+          "sha256": "309ca3cd66d3f995bc47858f7d559a97d173a2349dfb8fe80def4e3d2e631594"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+          "sha256": "02f2b9c906f4d76b077771015cd7197fc94e2ba008b50b8b95a1a376a921e9ac"
+        },
+        {
+          "file": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--accessibility.json",
+          "sha256": "a6ebee4f9040eba65047022b4fd3df641a00aa0576001167d982526ff85f0ec9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+          "sha256": "d1cc2d4e6555213bf32a61e944ef94422d61b349fcd4b85a342bc2ac48f800f0"
+        },
+        {
+          "file": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+          "sha256": "784a7b6f0f90d272da08392f85fccafd504de59b97771c46773332073dc094a4"
+        },
+        {
+          "file": "webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json",
+          "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+          "sha256": "e5276354189b355c99287a031a4c47d0124f04316ae5101ba5e97b5329c3f789"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+          "sha256": "feff6e5a625690985a257303111c2a8b57312a89db9b2f9d922b8ecbf6528d48"
+        },
+        {
+          "file": "webkit-dark-phone--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-and-motion.json",
+          "sha256": "071512c21360eff8f33063164f8aa60e295c192eb9679085f8067e168b181269"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-origin-follows-viewport-resize-across-the-phone-breakpoint--responsive-origin.json",
+          "sha256": "26c582e69141fa4af9c99506e12048f6a81c0adac113417b77dbdee8c6fa8119"
+        }
+      ]
+    }
+  ]
+}

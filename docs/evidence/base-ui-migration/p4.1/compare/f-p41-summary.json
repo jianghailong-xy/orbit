@@ -1,0 +1,6805 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      527,
+      530
+     ],
+     [
+      151,
+      155
+     ],
+     11,
+     33
+    ],
+    [
+     [
+      583,
+      586
+     ],
+     [
+      151,
+      155
+     ],
+     11,
+     33
+    ],
+    [
+     [
+      607,
+      610
+     ],
+     [
+      151,
+      153
+     ],
+     7,
+     2
+    ],
+    [
+     [
+      718,
+      721
+     ],
+     [
+      151,
+      153
+     ],
+     6,
+     1
+    ],
+    [
+     [
+      734,
+      737
+     ],
+     [
+      151,
+      153
+     ],
+     6,
+     1
+    ],
+    [
+     [
+      849,
+      852
+     ],
+     [
+      151,
+      152
+     ],
+     5,
+     1
+    ]
+   ],
+   "max": 33,
+   "pixels": 81,
+   "shot": "chromium-dark-desktop/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      525,
+      648
+     ],
+     [
+      424,
+      439
+     ],
+     305,
+     167
+    ],
+    [
+     [
+      566,
+      649
+     ],
+     [
+      424,
+      435
+     ],
+     334,
+     167
+    ],
+    [
+     [
+      602,
+      648
+     ],
+     [
+      424,
+      427
+     ],
+     38,
+     167
+    ],
+    [
+     [
+      638,
+      640
+     ],
+     [
+      424,
+      424
+     ],
+     3,
+     167
+    ],
+    [
+     [
+      584,
+      601
+     ],
+     [
+      427,
+      427
+     ],
+     15,
+     167
+    ],
+    [
+     [
+      535,
+      585
+     ],
+     [
+      488,
+      499
+     ],
+     198,
+     167
+    ]
+   ],
+   "max": 167,
+   "pixels": 15628,
+   "shot": "chromium-dark-desktop/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      51,
+      101
+     ],
+     [
+      531,
+      542
+     ],
+     198,
+     167
+    ],
+    [
+     [
+      42,
+      93
+     ],
+     [
+      532,
+      542
+     ],
+     205,
+     167
+    ],
+    [
+     [
+      315,
+      348
+     ],
+     [
+      548,
+      570
+     ],
+     222,
+     123
+    ],
+    [
+     [
+      58,
+      259
+     ],
+     [
+      553,
+      567
+     ],
+     721,
+     136
+    ],
+    [
+     [
+      125,
+      126
+     ],
+     [
+      553,
+      555
+     ],
+     6,
+     94
+    ],
+    [
+     [
+      150,
+      158
+     ],
+     [
+      553,
+      555
+     ],
+     12,
+     98
+    ]
+   ],
+   "max": 167,
+   "pixels": 9112,
+   "shot": "chromium-dark-phone/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      527,
+      530
+     ],
+     [
+      151,
+      155
+     ],
+     11,
+     32
+    ],
+    [
+     [
+      583,
+      586
+     ],
+     [
+      151,
+      155
+     ],
+     11,
+     32
+    ],
+    [
+     [
+      607,
+      609
+     ],
+     [
+      151,
+      153
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      719,
+      721
+     ],
+     [
+      151,
+      153
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      734,
+      737
+     ],
+     [
+      151,
+      153
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      849,
+      852
+     ],
+     [
+      151,
+      153
+     ],
+     7,
+     2
+    ]
+   ],
+   "max": 32,
+   "pixels": 84,
+   "shot": "chromium-light-desktop/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      525,
+      648
+     ],
+     [
+      424,
+      439
+     ],
+     308,
+     224
+    ],
+    [
+     [
+      566,
+      649
+     ],
+     [
+      424,
+      435
+     ],
+     336,
+     224
+    ],
+    [
+     [
+      602,
+      648
+     ],
+     [
+      424,
+      427
+     ],
+     38,
+     224
+    ],
+    [
+     [
+      638,
+      640
+     ],
+     [
+      424,
+      424
+     ],
+     3,
+     224
+    ],
+    [
+     [
+      584,
+      601
+     ],
+     [
+      427,
+      427
+     ],
+     15,
+     224
+    ],
+    [
+     [
+      535,
+      585
+     ],
+     [
+      488,
+      499
+     ],
+     208,
+     224
+    ]
+   ],
+   "max": 224,
+   "pixels": 15733,
+   "shot": "chromium-light-desktop/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      366,
+      373
+     ],
+     [
+      95,
+      102
+     ],
+     8,
+     1
+    ],
+    [
+     [
+      41,
+      44
+     ],
+     [
+      215,
+      223
+     ],
+     16,
+     28
+    ],
+    [
+     [
+      101,
+      104
+     ],
+     [
+      215,
+      222
+     ],
+     16,
+     32
+    ],
+    [
+     [
+      123,
+      126
+     ],
+     [
+      215,
+      217
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      238,
+      241
+     ],
+     [
+      215,
+      217
+     ],
+     7,
+     2
+    ],
+    [
+     [
+      271,
+      274
+     ],
+     [
+      290,
+      292
+     ],
+     7,
+     2
+    ]
+   ],
+   "max": 32,
+   "pixels": 87,
+   "shot": "chromium-light-phone/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      51,
+      101
+     ],
+     [
+      531,
+      542
+     ],
+     208,
+     224
+    ],
+    [
+     [
+      42,
+      93
+     ],
+     [
+      532,
+      542
+     ],
+     201,
+     224
+    ],
+    [
+     [
+      315,
+      348
+     ],
+     [
+      548,
+      570
+     ],
+     226,
+     178
+    ],
+    [
+     [
+      58,
+      259
+     ],
+     [
+      553,
+      567
+     ],
+     742,
+     155
+    ],
+    [
+     [
+      125,
+      126
+     ],
+     [
+      553,
+      555
+     ],
+     6,
+     107
+    ],
+    [
+     [
+      150,
+      158
+     ],
+     [
+      553,
+      555
+     ],
+     12,
+     112
+    ]
+   ],
+   "max": 224,
+   "pixels": 9190,
+   "shot": "chromium-light-phone/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      530,
+      581
+     ],
+     [
+      488,
+      499
+     ],
+     253,
+     167
+    ],
+    [
+     [
+      522,
+      567
+     ],
+     [
+      489,
+      499
+     ],
+     158,
+     167
+    ],
+    [
+     [
+      997,
+      1030
+     ],
+     [
+      494,
+      516
+     ],
+     229,
+     115
+    ],
+    [
+     [
+      538,
+      806
+     ],
+     [
+      510,
+      524
+     ],
+     784,
+     136
+    ],
+    [
+     [
+      605,
+      606
+     ],
+     [
+      510,
+      512
+     ],
+     6,
+     91
+    ],
+    [
+     [
+      630,
+      638
+     ],
+     [
+      510,
+      512
+     ],
+     12,
+     95
+    ]
+   ],
+   "max": 167,
+   "pixels": 15119,
+   "shot": "webkit-dark-desktop/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      50,
+      101
+     ],
+     [
+      531,
+      542
+     ],
+     253,
+     167
+    ],
+    [
+     [
+      42,
+      87
+     ],
+     [
+      532,
+      542
+     ],
+     158,
+     167
+    ],
+    [
+     [
+      307,
+      340
+     ],
+     [
+      548,
+      570
+     ],
+     229,
+     115
+    ],
+    [
+     [
+      58,
+      259
+     ],
+     [
+      553,
+      567
+     ],
+     735,
+     136
+    ],
+    [
+     [
+      125,
+      126
+     ],
+     [
+      553,
+      555
+     ],
+     6,
+     91
+    ],
+    [
+     [
+      150,
+      158
+     ],
+     [
+      553,
+      555
+     ],
+     12,
+     95
+    ]
+   ],
+   "max": 167,
+   "pixels": 9175,
+   "shot": "webkit-dark-phone/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      530,
+      581
+     ],
+     [
+      488,
+      499
+     ],
+     256,
+     224
+    ],
+    [
+     [
+      522,
+      567
+     ],
+     [
+      489,
+      499
+     ],
+     159,
+     224
+    ],
+    [
+     [
+      997,
+      1030
+     ],
+     [
+      494,
+      516
+     ],
+     229,
+     167
+    ],
+    [
+     [
+      538,
+      806
+     ],
+     [
+      510,
+      524
+     ],
+     802,
+     155
+    ],
+    [
+     [
+      605,
+      606
+     ],
+     [
+      510,
+      512
+     ],
+     6,
+     105
+    ],
+    [
+     [
+      630,
+      638
+     ],
+     [
+      510,
+      512
+     ],
+     12,
+     110
+    ]
+   ],
+   "max": 224,
+   "pixels": 15181,
+   "shot": "webkit-light-desktop/p41-profile-signin.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      333,
+      381
+     ],
+     [
+      42,
+      247
+     ],
+     4617,
+     110
+    ],
+    [
+     [
+      352,
+      377
+     ],
+     [
+      43,
+      48
+     ],
+     64,
+     1
+    ],
+    [
+     [
+      0,
+      6
+     ],
+     [
+      232,
+      239
+     ],
+     23,
+     19
+    ],
+    [
+     [
+      0,
+      195
+     ],
+     [
+      250,
+      268
+     ],
+     1162,
+     241
+    ],
+    [
+     [
+      49,
+      56
+     ],
+     [
+      253,
+      255
+     ],
+     23,
+     224
+    ],
+    [
+     [
+      73,
+      76
+     ],
+     [
+      253,
+      254
+     ],
+     8,
+     224
+    ]
+   ],
+   "max": 241,
+   "pixels": 20674,
+   "shot": "webkit-light-phone/p41-cli-denied.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      50,
+      101
+     ],
+     [
+      531,
+      542
+     ],
+     256,
+     224
+    ],
+    [
+     [
+      42,
+      87
+     ],
+     [
+      532,
+      542
+     ],
+     159,
+     224
+    ],
+    [
+     [
+      307,
+      340
+     ],
+     [
+      548,
+      570
+     ],
+     229,
+     167
+    ],
+    [
+     [
+      58,
+      259
+     ],
+     [
+      553,
+      567
+     ],
+     753,
+     155
+    ],
+    [
+     [
+      125,
+      126
+     ],
+     [
+      553,
+      555
+     ],
+     6,
+     105
+    ],
+    [
+     [
+      150,
+      158
+     ],
+     [
+      553,
+      555
+     ],
+     12,
+     110
+    ]
+   ],
+   "max": 224,
+   "pixels": 9230,
+   "shot": "webkit-light-phone/p41-profile-signin.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 60,
+  "beyond": 12,
+  "identical": 200,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-dark-desktop/p41-profile-signin": {
+   "card": {
+    "height": [
+     227,
+     226
+    ]
+   }
+  },
+  "chromium-dark-desktop/p41-tokens-ended": {
+   "table": {
+    "width": [
+     936,
+     984.5625
+    ]
+   }
+  },
+  "chromium-dark-desktop/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-desktop/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-desktop/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-admin-tokens": {
+   "table": {
+    "width": [
+     326,
+     920.859375
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-profile-signin": {
+   "card": {
+    "height": [
+     249,
+     248
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-tokens": {
+   "table": {
+    "width": [
+     358,
+     920.859375
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-tokens-empty": {
+   "table": {
+    "width": [
+     358,
+     565.40625
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-tokens-ended": {
+   "table": {
+    "width": [
+     358,
+     984.5625
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/p41-profile-signin": {
+   "card": {
+    "height": [
+     227,
+     226
+    ]
+   }
+  },
+  "chromium-light-desktop/p41-tokens-ended": {
+   "table": {
+    "width": [
+     936,
+     984.5625
+    ]
+   }
+  },
+  "chromium-light-desktop/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/p41-admin-tokens": {
+   "table": {
+    "width": [
+     326,
+     920.859375
+    ]
+   }
+  },
+  "chromium-light-phone/p41-profile-signin": {
+   "card": {
+    "height": [
+     249,
+     248
+    ]
+   }
+  },
+  "chromium-light-phone/p41-tokens": {
+   "table": {
+    "width": [
+     358,
+     920.859375
+    ]
+   }
+  },
+  "chromium-light-phone/p41-tokens-empty": {
+   "table": {
+    "width": [
+     358,
+     565.40625
+    ]
+   }
+  },
+  "chromium-light-phone/p41-tokens-ended": {
+   "table": {
+    "width": [
+     358,
+     984.5625
+    ]
+   }
+  },
+  "chromium-light-phone/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-admin-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-admin-tokens": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-cli": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "details": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-cli-approved": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-cli-denied": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-cli-error": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-cli-loading": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-cli-warnings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-profile-mismatch": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "newPassword": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-profile-photo": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "photo": {
+    "lineHeight": [
+     "44px",
+     "44.000038px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-profile-ready": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-profile-reset": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "current": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-profile-signin": {
+   "basic": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "card": {
+    "height": [
+     227,
+     226
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-settings-mode-open": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-settings-saving": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-settings-theme": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-setup": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-setup-invalid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-setup-required": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-setup-valid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens": {
+   "header": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-empty": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-ended": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     936,
+     984.546875
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-hover": {
+   "row": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "scopes": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-new-workspaces": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-tokens-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-admin-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-admin-tokens": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     326,
+     920.84375
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-cli": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "details": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-cli-approved": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-cli-denied": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-cli-error": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-cli-loading": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-cli-warnings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-profile-mismatch": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "newPassword": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-profile-photo": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "photo": {
+    "lineHeight": [
+     "44px",
+     "44.000038px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-profile-ready": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-profile-reset": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "current": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-profile-signin": {
+   "basic": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "card": {
+    "height": [
+     249,
+     248
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-settings-mode-open": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-settings-saving": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-settings-theme": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-setup": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-setup-invalid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-setup-required": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-setup-valid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens": {
+   "header": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     358,
+     920.84375
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-empty": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     358,
+     565.40625
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-ended": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     358,
+     984.546875
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-hover": {
+   "row": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "scopes": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-new-workspaces": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-tokens-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-admin-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-admin-tokens": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-cli": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "details": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-cli-approved": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-cli-denied": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-cli-error": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-cli-loading": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-cli-warnings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-profile-mismatch": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "newPassword": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-profile-photo": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "photo": {
+    "lineHeight": [
+     "44px",
+     "44.000038px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-profile-ready": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-profile-reset": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "current": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-profile-signin": {
+   "basic": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "card": {
+    "height": [
+     227,
+     226
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-settings-mode-open": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-settings-saving": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-settings-theme": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-setup": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-setup-invalid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-setup-required": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-setup-valid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens": {
+   "header": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-empty": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-ended": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     936,
+     984.546875
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-hover": {
+   "row": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "scopes": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-new-workspaces": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-tokens-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-admin-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-admin-tokens": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     326,
+     920.84375
+    ]
+   }
+  },
+  "webkit-light-phone/p41-cli": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "details": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-cli-approved": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-cli-denied": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-cli-error": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-cli-loading": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-cli-warnings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-profile-mismatch": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "newPassword": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-profile-photo": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "photo": {
+    "lineHeight": [
+     "44px",
+     "44.000038px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-profile-ready": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-profile-reset": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "current": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-profile-signin": {
+   "basic": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "card": {
+    "height": [
+     249,
+     248
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-settings-mode-open": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-settings-saving": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-settings-theme": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-setup": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-setup-invalid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "password": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-setup-required": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "email": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-setup-valid": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "confirm": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens": {
+   "header": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     358,
+     920.84375
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-empty": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     358,
+     565.40625
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-ended": {
+   "table": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     358,
+     984.546875
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-hover": {
+   "row": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-new": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-new-custom": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "scopes": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-new-never": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-new-workspaces": {
+   "option": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-tokens-revoke": {
+   "question": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 96
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Enter a new passwordAt least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Please enter EmailEmail is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Enter a new passwordAt least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Please enter EmailEmail is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Enter a new passwordAt least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Please enter EmailEmail is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "chromium-light-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "chromium-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "chromium-light-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "chromium-light-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Enter a new passwordAt least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "chromium-light-phone :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "chromium-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "chromium-light-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Please enter EmailEmail is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "button",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "button",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "button",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ],
+   "webkit-light-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+    {
+     "del": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "checkbox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "boxes": [
+       "false",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "false",
+       "true",
+       "true",
+       "false",
+       "true"
+      ],
+      "dialogs": [
+       "New access token"
+      ],
+      "focus": {
+       "name": "Read",
+       "role": "input"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "custom scopes",
+      "url": "/settings/access-tokens"
+     },
+     "step": "custom scopes"
+    }
+   ],
+   "webkit-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test",
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked inside the dialog",
+      "url": "/admin"
+     },
+     "step": "asked inside the dialog"
+    }
+   ],
+   "webkit-light-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Revoke “CI pipeline”?"
+      ],
+      "focus": {
+       "name": "Revoke “CI pipeline”?",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Revoke",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "asked",
+      "url": "/settings/access-tokens"
+     },
+     "step": "asked"
+    }
+   ],
+   "webkit-light-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Passwords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm new password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "At least 6 characters",
+        "name": "New password"
+       },
+       {
+        "describedBy": "Confirm your new passwordPasswords do not match",
+        "name": "Confirm new password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "short new password, confirmation differs",
+      "url": "/settings/profile"
+     },
+     "step": "short new password, confirmation differs"
+    }
+   ],
+   "webkit-light-phone :: P4.1 profile › photo: choose, show and remove": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": "",
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Choose photo",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "photo": {
+       "alt": null,
+       "height": 62,
+       "width": 62
+      },
+      "requests": [
+       {
+        "body": "<multipart>",
+        "method": "PUT",
+        "path": "/api/users/me/avatar"
+       }
+      ],
+      "step": "photo chosen",
+      "url": "/settings/profile"
+     },
+     "step": "photo chosen"
+    }
+   ],
+   "webkit-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default",
+       "role": "option"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [
+       "Default",
+       "Plan",
+       "Accept Edits",
+       "Auto",
+       "Don't Ask",
+       "Bypass"
+      ],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "options": [],
+      "requests": [],
+      "step": "mode list open",
+      "url": "/settings"
+     },
+     "step": "mode list open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Default permission mode",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "defaultPermissionMode": "plan"
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "mode chosen",
+      "url": "/settings"
+     },
+     "step": "mode chosen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Smart model selection",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "button",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "modelRouting": true
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "smart model selection on",
+      "url": "/settings"
+     },
+     "step": "smart model selection on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "When a session finishes",
+       "role": "switch"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "notifySessionFinished": false
+        },
+        "method": "PATCH",
+        "path": "/api/users/me/preferences"
+       }
+      ],
+      "step": "saving",
+      "switches": [
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       },
+       {
+        "checked": "true",
+        "disabled": true
+       }
+      ],
+      "url": "/settings"
+     },
+     "step": "saving"
+    }
+   ],
+   "webkit-light-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Password must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "passwords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm password",
+       "role": "input"
+      },
+      "invalid": [
+       {
+        "describedBy": "Email is not a valid email",
+        "name": "Email"
+       },
+       {
+        "describedBy": "Please enter PasswordPassword must be at least 6 characters",
+        "name": "Password"
+       },
+       {
+        "describedBy": "Please enter Confirm passwordpasswords do not match",
+        "name": "Confirm password"
+       }
+      ],
+      "notifications": "",
+      "requests": [],
+      "step": "invalid email, short password, confirmation differs",
+      "url": "/setup"
+     },
+     "step": "invalid email, short password, confirmation differs"
+    }
+   ]
+  },
+  "equal": 39,
+  "total": 96
+ }
+}

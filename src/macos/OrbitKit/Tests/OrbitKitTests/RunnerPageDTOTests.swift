@@ -254,6 +254,16 @@ final class RunnerPageDTOTests: XCTestCase {
         XCTAssertEqual(try encoded(StartLoginRequest(engine: .codex, accountName: "Work")),
                        ["engine": .string("codex"), "accountName": .string("Work")])
     }
+
+    /// …and Kimi's names its site only when one was picked: a runner that can't be told one gets the
+    /// bare sign-in it always had.
+    func testAKimiSignInNamesItsSiteOnlyWhenPicked() throws {
+        XCTAssertEqual(try encoded(StartLoginRequest(engine: .kimi)), ["engine": .string("kimi")])
+        XCTAssertEqual(try encoded(StartLoginRequest(engine: .kimi, region: KimiSite.global.rawValue)),
+                       ["engine": .string("kimi"), "region": .string("global")])
+        XCTAssertEqual(try encoded(StartLoginRequest(engine: .kimi, region: KimiSite.mainlandCN.rawValue)),
+                       ["engine": .string("kimi"), "region": .string("mainland-cn")])
+    }
 }
 
 // MARK: - the routes

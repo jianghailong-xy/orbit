@@ -1,0 +1,14 @@
+{
+  "sourceCommit": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "fixtureCommit": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "notificationSources": {
+    "src/web/src/components/ToastViewport.tsx": "59d77705da3ad144a382f9fa5aadd818fe43fa74ac3a5436bfe39896e486c970",
+    "src/web/src/index.css": "cefcb429f4c6112b6d536c42fc5c19b757dd25a8a73e248d7f382cff4c7ddc98",
+    "src/web/src/lib/toast.tsx": "42fd0a73c62fff0ef04269010bb5b00740639edd64d141e13ebb2d4cc5ca63dc",
+    "src/web/src/lib/toastStore.ts": "937ef73ac118a19e77743d18874f88c9359899dd5d4eb908d03e3f80f970daf0",
+    "src/web/src/lib/toastFeed.ts": "3cdde8889a661bf802c4b5704c7d44577cec182d874562a6e41b86eb3ebaf522"
+  },
+  "fixtureSupplied": "components/ui and toasts fixture; notification production sources untouched",
+  "lockedVersionsMatch": true,
+  "settledStackScriptSha256": "69b9d41961b97e44676716f28302c566b6aa81b372c133a68e2bf14f00cae0c7"
+}

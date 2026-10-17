@@ -1,0 +1,232 @@
+{
+ "stats": {
+  "startTime": "2026-10-06T22:10:46.657Z",
+  "duration": 318957.102,
+  "expected": 77,
+  "skipped": 11,
+  "unexpected": 24,
+  "flaky": 0
+ },
+ "unexpected": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "file": "breakpoints.browser.mjs",
+   "screenshot": "breakpoint-601-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 6090
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "file": "breakpoints.browser.mjs",
+   "screenshot": "breakpoint-601-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 5326
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "file": "breakpoints.browser.mjs",
+   "screenshot": "breakpoint-601-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 6061
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "file": "breakpoints.browser.mjs",
+   "screenshot": "breakpoint-601-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 5376
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "share",
+   "file": "pages.browser.mjs",
+   "screenshot": "task-public-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 6090
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 3843
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 10
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 83
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 2279
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 135
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 22
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "share",
+   "file": "pages.browser.mjs",
+   "screenshot": "task-public-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 5326
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 7640
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 18
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 4512
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 95
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "share",
+   "file": "pages.browser.mjs",
+   "screenshot": "task-public-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 6061
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 3843
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 2279
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 376
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "share",
+   "file": "pages.browser.mjs",
+   "screenshot": "task-public-share.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 5376
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 7644
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "projects",
+   "file": "pages.browser.mjs",
+   "screenshot": "project-graph-fullscreen.png",
+   "expectedLayer": "accepted",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 4516
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mpage\u001b[39m\u001b[2m).\u001b[22mtoHaveScreenshot\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed",
+   "differentPixels": 339
+  }
+ ],
+ "flaky": [],
+ "expectedFailures": 16,
+ "skipped": 11,
+ "passed": 61
+}

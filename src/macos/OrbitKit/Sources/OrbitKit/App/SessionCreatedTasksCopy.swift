@@ -1,17 +1,20 @@
 import Foundation
 
-/// The words of the "Tasks created here" card above a session's composer, and the sentence its
+/// The words of the Tasks card above a session's composer (Tasks created here, merged with the tasks
+/// the session's watches wait on — `SessionTaskCard`), and the sentence its
 /// collapsed row writes. The browser writes the same ones (`SESSION_CREATED_TASKS_COPY` and
 /// `createdTasksCountLine` in `@orbit/shared`), and both ends are proved against one set of cases,
 /// `src/shared/src/session-created-tasks.fixture.json` — see `SessionCreatedTasksCopyParityTests`.
 public enum SessionCreatedTasksCopy {
-    public static let title = "Tasks created here"
+    public static let title = "Tasks"
     public static let viewAll = "View all in Tasks ›"
     public static let openProject = "Open project ›"
     /// Followed directly by the replaced task's title.
     public static let replacesPrefix = "Replaces "
     /// The Tasks page's filter chip; followed directly by the session's title.
     public static let createdInChip = "Created in "
+    /// Where a watched task created elsewhere would say its age.
+    public static let elsewhere = "elsewhere"
     /// Between the sentence's parts, and before a row's `Replaces …`: U+00B7 between two spaces.
     public static let separator = " · "
 

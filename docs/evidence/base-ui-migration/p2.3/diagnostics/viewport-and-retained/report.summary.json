@@ -1,0 +1,481 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/toasts.config.mjs",
+   "--project=webkit-dark-phone",
+   "--grep",
+   "unchanged appearance|retained|breakpoint"
+  ],
+  "configFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts.browser.mjs",
+   "file": "toasts.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1433,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:29:54.542Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e62c9baec909c11c65f4",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1007,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:29:56.062Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-68f11b073576c92aa9ae",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 991,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:29:57.074Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-9667f9e0b8394e61706e",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "retained closed overlays release notifications and normal motion settles at the original origin",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 17206,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('region', { name: 'Notifications', exact: true })\nExpected: visible\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('region', { name: 'Notifications', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('region', { name: 'Notifications', exact: true })\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('region', { name: 'Notifications', exact: true })\nExpected: visible\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('region', { name: 'Notifications', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('region', { name: 'Notifications', exact: true })\u001b[22m\n\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:280:31",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 31,
+           "line": 280
+          },
+          "snippet": "  278 |   await dialog.getByRole('button', { name: 'Error notice', exact: true }).click();\n  279 |   await finishAnimations();\n> 280 |   await expect(notices(page)).toBeVisible();\n      |                               ^\n  281 |   await shot(info, 'retained-reopened-with-motion', page);\n  282 |   await attach(info, 'retained-and-motion', { visibleAfterClose: true, sameSettledGeometry: true, reopenedAcceptsNewNotifications: true });\n  283 | });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 31,
+            "line": 280
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('region', { name: 'Notifications', exact: true })\nExpected: visible\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('region', { name: 'Notifications', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('region', { name: 'Notifications', exact: true })\u001b[22m\n\n\n  278 |   await dialog.getByRole('button', { name: 'Error notice', exact: true }).click();\n  279 |   await finishAnimations();\n> 280 |   await expect(notices(page)).toBeVisible();\n      |                               ^\n  281 |   await shot(info, 'retained-reopened-with-motion', page);\n  282 |   await attach(info, 'retained-and-motion', { visibleAfterClose: true, sameSettledGeometry: true, reopenedAcceptsNewNotifications: true });\n  283 | });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:280:31"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:29:58.070Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 31,
+          "line": 280
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-d08ef23cf0ce618d2cdb",
+     "file": "toasts.browser.mjs",
+     "line": 251,
+     "column": 1
+    },
+    {
+     "title": "notification origin follows viewport resize across the phone breakpoint",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1084,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:30:15.630Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "responsive-origin",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-2befbb3ab6b7e0524d05",
+     "file": "toasts.browser.mjs",
+     "line": 285,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T06:29:53.766Z",
+  "duration": 23108.782000000003,
+  "expected": 4,
+  "skipped": 0,
+  "unexpected": 1,
+  "flaky": 0
+ }
+}

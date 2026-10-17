@@ -1,16 +1,18 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { ProvidersService } from './providers.service';
 
 /**
- * Admin-only management of the SHARED model providers (ownerId null — visible to every
- * user's pickers). Personal (BYOK) providers are each user's own, managed via
- * /providers/mine; they never appear here. Gated like the user-management area.
+ * Admin-only management of the SHARED model providers (ownerId null — in admins' pickers, and
+ * dispatchable for admins' sessions, only: usableProviderScope). Personal (BYOK) providers are each
+ * user's own, managed via /providers/mine; they never appear here. Gated like the user-management area.
  */
 @UseGuards(JwtAuthGuard, AdminRoleGuard)
+@PatForbidden('ADMIN')
 @Controller('admin/providers')
 export class AdminProvidersController {
   constructor(private readonly providers: ProvidersService) {}

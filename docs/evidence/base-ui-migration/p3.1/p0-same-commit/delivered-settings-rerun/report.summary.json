@@ -1,0 +1,306 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p0-reference.config.mjs",
+   "--update-snapshots=none",
+   "pages.browser.mjs",
+   "-g",
+   "settings",
+   "--project=webkit-dark-phone"
+  ],
+  "configFile": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/p0-reference.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/p31-head-vs-ref-2",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/tmp/p31-head-vs-ref-2/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "pages.browser.mjs",
+   "file": "pages.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 885,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:33:05.329Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/tmp/p31-head-vs-ref-2/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-ca793b566c39b73770b99c26df6e4a606ed1e463.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-e5b310b8c10d6e70833e",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T08:33:03.994Z",
+  "duration": 2352.1420000000003,
+  "expected": 1,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

@@ -40,6 +40,26 @@ test('records the client build behind an authenticated request', async () => {
   assert.deepEqual(calls[0].create, { userId: USER, kind: 'web', version: '0.1.114' });
 });
 
+test('records Android builds and observes an upgrade without waiting for the throttle', async () => {
+  const { calls, hit } = harness();
+  hit('android/0.1.114');
+  hit('android/0.1.114');
+  hit('android/0.1.115-test.42+fe2e1bcf9');
+  await settle();
+  assert.deepEqual(calls, [
+    {
+      where: { userId_kind: { userId: USER, kind: 'android' } },
+      create: { userId: USER, kind: 'android', version: '0.1.114' },
+      update: { version: '0.1.114' },
+    },
+    {
+      where: { userId_kind: { userId: USER, kind: 'android' } },
+      create: { userId: USER, kind: 'android', version: '0.1.115-test.42+fe2e1bcf9' },
+      update: { version: '0.1.115-test.42+fe2e1bcf9' },
+    },
+  ]);
+});
+
 // It is telemetry riding on every request. Anything it does not understand it must drop, because
 // the alternative — a 400 — breaks a shipped client over a header it only sends to be helpful.
 test('ignores a header it cannot trust, without failing the request', async () => {
@@ -51,6 +71,9 @@ test('ignores a header it cannot trust, without failing the request', async () =
     'web/',                      // empty version
     'web/../../etc/passwd',      // not a version
     `web/${'9'.repeat(33)}`,     // unbounded junk
+    'android/',
+    'android/../../etc/passwd',
+    `android/${'9'.repeat(33)}`,
   ]) {
     const result = hit(bad);
     assert.ok(result, `request still served for ${String(bad)}`);
@@ -64,6 +87,7 @@ test('ignores a header it cannot trust, without failing the request', async () =
 test('skips an unauthenticated request', async () => {
   const { calls, hit } = harness();
   hit('web/0.1.114', null);
+  hit('android/0.1.114', null);
   await settle();
   assert.deepEqual(calls, []);
 });
@@ -94,10 +118,11 @@ test('tracks each client kind separately', async () => {
   hit('web/0.1.114');
   hit('ios/0.1.99');
   hit('macos/0.1.100');
+  hit('android/0.1.114');
   await settle();
   assert.deepEqual(
     calls.map((c) => c.create.kind),
-    ['web', 'ios', 'macos'],
+    ['web', 'ios', 'macos', 'android'],
   );
 });
 

@@ -87,7 +87,6 @@ test('the name an account carries anyway stores nothing of its own', async () =>
 test('only an account of an engine that keeps accounts, by an id an account can have', async () => {
   const h = harness();
   for (const [engine, account] of [
-    ['kimi', 'default'],
     ['claude', 'Default'],
     ['claude', '../default'],
     ['claude', '3FA91C2E'],
@@ -95,8 +94,6 @@ test('only an account of an engine that keeps accounts, by an id an account can 
     await assert.rejects(h.patch(engine, account, { name: 'Main' }), BadRequestException, `${engine}/${account}`);
   }
   await assert.rejects(h.patch('opencode', 'default', { name: 'Main' }), BadRequestException);
-  // Reported on the Runners page since it is installed there, but it keeps no accounts either.
-  await assert.rejects(h.patch('antigravity', 'default', { name: 'Main' }), BadRequestException);
   assert.deepEqual(h.writes, []);
 });
 
@@ -118,6 +115,29 @@ test('somebody else’s runner, and an account this runner does not report, are 
   // A slot it does not list — removed, or never its own — and an engine it reports no accounts for.
   await assert.rejects(h.patch('claude', '0b05070e', { name: 'Main' }), NotFoundException);
   await assert.rejects(h.patch('codex', 'default', { name: 'Main' }), NotFoundException);
+  await assert.rejects(h.patch('kimi', 'default', { name: 'Main' }), NotFoundException);
   await assert.rejects(harness(null).patch('claude', 'default', { name: 'Main' }), NotFoundException);
   assert.deepEqual(h.writes, []);
+});
+
+test("an Antigravity Google account is renamed as Claude's and Codex's are", async () => {
+  const google: RunnerEngineAccount = { id: WORK, name: 'Work', home: '/home/ada/.orbit/antigravity-accounts/3fa91c2e', auth: 'yes' };
+  const h = harness([{
+    engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google',
+    accounts: [{ id: 'default', home: '/home/ada/.orbit/antigravity/google', auth: 'yes' }, google],
+  }]);
+  assert.deepEqual(await h.patch('antigravity', WORK, { name: 'Personal' }), { ...google, name: 'Personal' });
+  assert.equal(h.writes.length, 1);
+});
+
+test("a Kimi Code account is renamed as Claude's and Codex's are, and keeps its site", async () => {
+  const kimi: RunnerEngineAccount = {
+    id: WORK, name: 'Work', home: '/home/ada/.orbit/kimi-accounts/3fa91c2e', auth: 'yes', kimiRegion: 'global',
+  };
+  const h = harness([{
+    engine: 'kimi', installed: true, auth: 'yes', kimiRegion: 'mainland-cn',
+    accounts: [{ id: 'default', home: '/home/ada/.kimi-code', auth: 'yes', kimiRegion: 'mainland-cn' }, kimi],
+  }]);
+  assert.deepEqual(await h.patch('kimi', WORK, { name: 'Personal' }), { ...kimi, name: 'Personal' });
+  assert.equal(h.writes.length, 1);
 });

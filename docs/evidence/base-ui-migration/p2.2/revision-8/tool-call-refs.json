@@ -1,0 +1,170 @@
+[
+  {
+    "name": "r8-prepare-dependencies",
+    "ref": "bgj_8e6055e973fd",
+    "command": "bash scripts/worktree-overlay.sh",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-build-test",
+    "ref": "bgj_8a52de0d2369",
+    "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-list-choices",
+    "ref": "bgj_bf01e86bc02e",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/choices.config.mjs --list --reporter=list",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-list-toasts",
+    "ref": "bgj_1d3531b0c4cd",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs --list --reporter=list",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-list-p0",
+    "ref": "bgj_91054c003c9e",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs --list --reporter=list",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-choices-entry",
+    "ref": "bgj_58ae8e7158b3",
+    "command": "npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-production-notifications",
+    "ref": "bgj_dd22677afc6c",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs feedback-production.browser.mjs",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-toasts-full",
+    "ref": "bgj_fa6ca3793db8",
+    "command": "npm run test:ui-toasts -w @orbit/web",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-choices-full-first",
+    "ref": "bgj_94ab8b1fe065",
+    "command": "npm run test:ui-choices -w @orbit/web",
+    "exitCode": 1
+  },
+  {
+    "name": "r8-attention-link",
+    "ref": "bgj_32c7c3c078f1",
+    "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.config.mjs",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-fixture-types",
+    "ref": "bgj_132520d9a0f9",
+    "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-accepted-prepare-dependencies",
+    "ref": "bgj_ea6fc076e39d",
+    "command": "cd /var/tmp/p22-r8-accepted && bash scripts/worktree-overlay.sh",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-rerun-merged",
+    "ref": "bgj_d2ce2a1a41bc",
+    "command": "npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project chromium-dark-desktop --project chromium-dark-phone --project webkit-light-desktop --grep 'touch or pointer menus dismiss outside|reduce Dialog Popover Select exits|select supports arrows, Enter, clear|tooltip center zoom origin matches|normal flipped entrance and exit motion matches search' --repeat-each 3",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-rerun-accepted",
+    "ref": "bgj_014ba3f67af3",
+    "command": "cd /var/tmp/p22-r8-accepted && npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project chromium-dark-desktop --project chromium-dark-phone --project webkit-light-desktop --grep 'touch or pointer menus dismiss outside|reduce Dialog Popover Select exits|select supports arrows, Enter, clear|tooltip center zoom origin matches|normal flipped entrance and exit motion matches search' --repeat-each 3",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-select-keys-throttle",
+    "ref": "bgj_45195f18db99",
+    "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.config.mjs --project chromium-dark-desktop",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-select-keys-repeat-timeout",
+    "ref": "bgj_6b6825b1dfd1",
+    "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop",
+    "exitCode": 1
+  },
+  {
+    "name": "r8-select-keys-repeat-killed",
+    "ref": "bgj_b22f37618622",
+    "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop --reporter=dot,json",
+    "exitCode": null
+  },
+  {
+    "name": "r8-select-keys-repeat-merged",
+    "ref": "bgj_4c53248760df",
+    "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-select-keys-repeat-accepted",
+    "ref": "bgj_e3a6b73936d9",
+    "command": "cd /var/tmp/p22-r8-accepted && node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop",
+    "exitCode": 1
+  },
+  {
+    "name": "r8-final-prepare-dependencies",
+    "ref": "bgj_50d72c76ef96",
+    "command": "bash scripts/worktree-overlay.sh",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-build-test",
+    "ref": "bgj_6ad1c0483740",
+    "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-list-choices",
+    "ref": "bgj_90a6c8811200",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/choices.config.mjs --list --reporter=list",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-list-toasts",
+    "ref": "bgj_f841f7f77c7f",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs --list --reporter=list",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-list-p0",
+    "ref": "bgj_6a34648ee304",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs --list --reporter=list",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-choices-entry",
+    "ref": "bgj_599ea454c708",
+    "command": "npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-production-notifications",
+    "ref": "bgj_75b37d089a59",
+    "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs feedback-production.browser.mjs",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-fixture-types",
+    "ref": "bgj_d582e2fee425",
+    "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit",
+    "exitCode": 0
+  },
+  {
+    "name": "r8-final-attention-link",
+    "ref": "bgj_2c6376696b5b",
+    "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.config.mjs",
+    "exitCode": 0
+  }
+]

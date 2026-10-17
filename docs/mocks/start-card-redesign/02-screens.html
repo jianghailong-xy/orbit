@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Start 卡片重新设计：新页面</title>
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+</head>
+<body>
+<h1>Start 卡片重新设计：新页面（第 2 版）</h1>
+<p class="lede">同一个项目、同一份请求（截图里的「Wiki 服务端执行与 System model」）。页面从上到下回答三个问题：<b>做完是什么样</b>（Done when）→ <b>放多少手、以后什么会找你</b>（How it runs）→ <b>打算怎么做</b>（Plan）。Start 固定在底部。</p>
+<p class="lede">按 owner 10-07 的决定改过：<b>Automatic 默认开</b>；<b>卡片上不放就绪检查的提醒</b>（包括 “Orbit can't tell…” 和 Orbit checked 三行）；<b>合并检查可以为空</b>；<b>项目还没有协调者时，按下 Start 顺手建一个</b>（最右一屏）。为什么这么排见 <code>01-principles.png</code>；文案、状态和要改的东西见 <code>03-spec.png</code>。</p>
+
+<div class="row">
+  <figure>
+    <span class="tag after">打开时 · 第一屏</span>
+    <div data-phone="top"></div>
+    <figcaption>
+      <b>先说谁在请求、要你确认什么</b>
+      <ol>
+        <li><span class="num">1</span>协调者的原话放在最上面（三行，More 展开）：这张卡是它在请你开始。</li>
+        <li><span class="num">2</span>第一节就是 <b>Done when</b>：确认“做完”的定义是只有你能做的事，所以放第一位、不折叠，仍是每条两行加 Read all。</li>
+        <li><span class="num">3</span><b>Start 固定在底部</b>，下面一行写明按下等于什么：P1a 马上开工、确认这 7 条、seal。</li>
+        <li><span class="num">4</span>想先改点什么：右上角 <b>Chat</b>，就是协调会话里的 Chat about this（从项目页打开时，跳到协调会话）。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">往下 · How it runs（默认 Automatic 开）</span>
+    <div data-phone="how"></div>
+    <figcaption>
+      <b>放手是默认，会找你的只剩三件</b>
+      <ol>
+        <li><span class="num">1</span>Automatic 默认开：协调者判定任务完成、处理路上的问题，合并检查通过后自己合进 main（带可回退的回执）。清单写明还会找你的事：P10 的确认、标准变更、它 2 小时内解决不了的问题。</li>
+        <li><span class="num">2</span>这次协调者建议关（理由在顶上它的话里：main 会部署到生产）。卡片仍默认开，只在这一节的说明里提一句，你可以自己关。</li>
+        <li>其余三项一项一行，点开再改；开始以后在项目页都还能改。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">你把 Automatic 关掉</span>
+    <div data-phone="off"></div>
+    <figcaption>
+      <b>关掉是你的选择，清单马上告诉你代价</b>
+      <ol>
+        <li><span class="num">1</span>关掉后，这些都会找你：11 个任务做没做完（证据审核）、P10 的确认、路上的冲突和检查失败、分支进 main、标准变更。</li>
+        <li>这就是产品介绍里的“拨盘”：默认放手，收回的时候清楚自己要多做什么。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">最底下 · Plan</span>
+    <div data-phone="plan"></div>
+    <figcaption>
+      <b>计划看个大概，页面到这里就结束了</b>
+      <ol>
+        <li><span class="num">1</span>12 个任务按层排，和批量创建审阅（BatchReview）一样：只有一个任务的层写标题，同层多个的只列编号，写 “N in parallel”。P1a 标 <b>Now</b>，要你确认的 P10 标 <b>You</b>。</li>
+        <li>Plan 之后没有别的了：不再有 Orbit checked 和黄色提醒。协调者能修的在请求前修好，只跟协调者有关的只告诉协调者。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag opt">示意 · 自己点 Start…，还没有协调者、没设合并检查</span>
+    <div data-phone="own"></div>
+    <figcaption>
+      <b>没有协调者，就在开始时建一个</b>
+      <ol>
+        <li><span class="num">1</span>Automatic 默认开，但项目还没有协调者：卡片先写明开始时会在 orbit-develop（任务所在的 workspace）建一个，规则和 <code>project_ensure_coordinator</code> 一样。建不出来（比如 runner 都离线）就整次不写，并说明原因。</li>
+        <li><span class="num">2</span>合并检查为空是正常状态：写 None 和 “Work lands once it rebases cleanly.”，不变色，也不拒绝。</li>
+        <li><span class="num">3</span>底栏写明按下会建协调者。还没有协调者就没人可聊，所以右上角没有 Chat；页头只写 Nobody asked yet · no coordinator yet，没有引用。</li>
+        <li>关掉 Automatic 时不建：事情都会找你，用不着协调者。</li>
+      </ol>
+    </figcaption>
+  </figure>
+</div>
+
+<script>
+const FRAMES = {
+  top: { o: { suggestedOff: true }, anchor: null, y: 0,
+         marks: [['[data-k="quote"]', 1], ['[data-k="donebody"]', 2], ['[data-k="bar"] .r-go', 3, { fixed: true, pad: 4 }], ['[data-k="chat"]', 4, { fixed: true }]] },
+  how: { o: { suggestedOff: true }, anchor: 'how', y: 132,
+         marks: [['[data-k="auto"]', 1, { pad: 0 }], ['[data-k="howft"]', 2, { pad: 3 }]] },
+  off: { o: { automatic: false }, anchor: 'how', y: 132,
+         marks: [['[data-k="ctu"]', 1, { pad: 2 }]] },
+  plan: { o: { suggestedOff: true }, anchor: 'planbody', y: -716,
+          marks: [['[data-k="planbody"]', 1, { pad: 2 }]] },
+  own: { o: { own: true, noCoordinator: true, noMergeCheck: true }, anchor: 'how', y: 132,
+         marks: [['[data-k="opens"]', 1, { pad: 3 }], ['[data-k="merge"]', 2, { pad: 0 }], ['[data-k="bar"] .r-cap', 3, { fixed: true, pad: 3 }]] },
+};
+document.querySelectorAll('[data-phone]').forEach((slot) => {
+  const v = slot.dataset.phone;
+  slot.outerHTML = rPhone(v, FRAMES[v].o);
+});
+window.__layout = () => {
+  document.querySelectorAll('.phone').forEach((ph) => {
+    const f = FRAMES[ph.dataset.v];
+    rLayout(ph, f.anchor, f.y, f.marks);
+  });
+};
+document.fonts.ready.then(() => window.__layout());
+</script>
+</body>
+</html>

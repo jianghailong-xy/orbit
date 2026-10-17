@@ -13,6 +13,7 @@ import {
 import { redactSecrets } from '../common/secret-redaction';
 import type { PrismaService } from '../prisma/prisma.service';
 import { findQuote } from './wiki-docs';
+import { wikiPlanProjectIds } from './wiki-plan';
 import { isOwnerTurn, type WikiPrincipal, type WikiService } from './wiki.service';
 
 /**
@@ -36,8 +37,14 @@ import { isOwnerTurn, type WikiPrincipal, type WikiService } from './wiki.servic
 
 type Reader = Pick<PrismaService, '$queryRaw' | 'wikiSource' | 'wikiNote' | 'project' | 'session' | 'task' | 'toolCall' | 'taskComment'>;
 
-/** A section's session condition as the plan stores it: projects by id (wiki-plan.ts `PlanSources`). */
+/**
+ * A section's session condition as the material reads it: its projects as ids. It comes in two shapes: a
+ * stored version's `sources.sessions` (wiki-plan.ts `PlanSessions`, each project the id it resolved to), and
+ * a read of the plan (`WikiPlans.version`, contract `plan.reads.version`), where each project is { id, title }.
+ * Neither is cast to this type: `storedSessionCondition` reads both.
+ */
 export interface StoredSessionCondition {
+  /** Project ids, read by `wikiPlanProjectIds` from a stored id or a read's { id, title }. */
   projects: string[];
   since: string | null;
   until: string | null;
@@ -46,6 +53,27 @@ export interface StoredSessionCondition {
   entryKinds: string[];
   topics: string[];
   evidence: string;
+}
+
+/**
+ * A section's `sources.sessions`, from a stored version or a read of one, as the material reads it, or null
+ * when the section has none. The maintenance run's documents step read the plan through `WikiPlans.version` and
+ * passed the read's { id, title } projects on as ids, which `::uuid[]` refused with 22P02 (P10, 2026-10-09).
+ */
+export function storedSessionCondition(raw: unknown): StoredSessionCondition | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const condition = raw as Record<string, unknown>;
+  const texts = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
+  return {
+    projects: wikiPlanProjectIds(condition.projects),
+    since: typeof condition.since === 'string' ? condition.since : null,
+    until: typeof condition.until === 'string' ? condition.until : null,
+    keywords: texts(condition.keywords),
+    anchorPaths: texts(condition.anchorPaths),
+    entryKinds: texts(condition.entryKinds),
+    topics: texts(condition.topics),
+    evidence: typeof condition.evidence === 'string' ? condition.evidence : '',
+  };
 }
 
 interface CandidateEntry {

@@ -13,8 +13,8 @@ import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools'
  * again. `login` is the first of them — the account its sessions run on.
  *
  * The pages draw such a pool the way they draw every other one: each account is one of the pool's members
- * (`withLogin`), carrying `login` the way a shared pool's member carries its `key` — so the Providers
- * card, the session picker and the composer take it as they take any pool.
+ * (`withLogin`), carrying `login` the way a shared pool's member carries its `key` — so its card on
+ * Infrastructure, the session picker and the composer take it as they take any pool.
  */
 
 /** The account a Codex pool runs on, as the server reads it (codex-login.ts). */
@@ -150,4 +150,23 @@ function loginMember(pool: ProviderPool, login: CodexLogin, index: number, now: 
     pausedUntil: login.pausedUntil,
     login,
   };
+}
+
+/**
+ * The account a session on a login pool is on, as the session's detail names it (`poolCodexLogin`,
+ * the masked view the session DTO carries): that account as the pool's member of it — whatever its
+ * state, a spent one still renders — read as the claim's pick (`current`). The pool's own `next`
+ * member is no answer here: it marks the account a session STARTING now would get, which with the
+ * pool's oldest account spent can be nobody while the session runs on that very account. Null when
+ * the session names none, or names an account the pool no longer holds (the next claim chooses
+ * again, and naming anyone until then would be a guess).
+ */
+export function poolSessionLoginMember(
+  pool: ProviderPool,
+  login: CodexLogin | null | undefined,
+  now: number = Date.now(),
+): { member: PoolMember; current: boolean } | null {
+  if (!login) return null;
+  const member = withLogin(pool, now).members.find((m) => m.login?.fingerprint === login.fingerprint);
+  return member ? { member, current: true } : null;
 }

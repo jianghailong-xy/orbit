@@ -1,0 +1,76 @@
+{
+  "taskId": "34ZwbaJcJDtbbnY32Ly5v",
+  "baseCommit": "634c8cb0ced5f053c68946b5556bb6d58231bf4c",
+  "checks": [
+    {
+      "kind": "web-full-suite",
+      "node": "v26.10.0",
+      "cwd": "src/web",
+      "command": "NO_COLOR=1 node ../../node_modules/vitest/vitest.mjs run --maxWorkers=2 --testTimeout=30000 > ../../docs/evidence/session-project-navigation/web-full-node26.log 2>&1",
+      "jobId": "bgj_343341775cd3",
+      "exitCode": 0,
+      "testFiles": 299,
+      "tests": 3744,
+      "note": "Full suite passed before the final DONE-project detail fallback; the fallback and its additional rendering regression were then verified in both final 100-test targeted runs. Raw full-suite output remains in the cited Orbit tool record; its log file is omitted from this commit.",
+      "toolCallRef": "exec-5e2cbd25-7a4f-4275-be17-fa87e8fe0006"
+    },
+    {
+      "kind": "project-rendering-and-events",
+      "node": "v22.23.3",
+      "cwd": "src/web",
+      "command": "NO_COLOR=1 /root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin/node ../../node_modules/vitest/vitest.mjs run src/components/WorkspaceView.projectSessions.test.tsx src/components/WorkspaceView.sessionProjects.test.tsx src/lib/sessionProjects.test.ts src/lib/useSessionProjectData.test.tsx src/lib/useControlPlane.projects.test.tsx --maxWorkers=1 --testTimeout=30000 > ../../docs/evidence/session-project-navigation/project-node22.log 2>&1",
+      "exitCode": 0,
+      "testFiles": 5,
+      "tests": 100,
+      "log": "project-node22.log",
+      "toolCallRef": "exec-827bfd19-1a64-4714-9fe3-ab1ffbd1a35f"
+    },
+    {
+      "kind": "project-rendering-and-events",
+      "node": "v26.10.0",
+      "cwd": "src/web",
+      "command": "NO_COLOR=1 node ../../node_modules/vitest/vitest.mjs run src/components/WorkspaceView.projectSessions.test.tsx src/components/WorkspaceView.sessionProjects.test.tsx src/lib/sessionProjects.test.ts src/lib/useSessionProjectData.test.tsx src/lib/useControlPlane.projects.test.tsx --maxWorkers=1 --testTimeout=30000 > ../../docs/evidence/session-project-navigation/project-node26.log 2>&1",
+      "exitCode": 0,
+      "testFiles": 5,
+      "tests": 100,
+      "log": "project-node26.log",
+      "toolCallRef": "exec-42d8da40-a092-48bd-93df-2eeab3bd3f2c"
+    },
+    {
+      "kind": "web-source-typecheck",
+      "cwd": ".",
+      "command": "npx tsc -p src/web/tsconfig.json",
+      "exitCode": 0,
+      "toolCallRef": "exec-2a7681cd-3382-4afb-aebd-40815b357b14"
+    },
+    {
+      "kind": "changed-tests-typecheck",
+      "cwd": ".",
+      "command": "node node_modules/typescript/bin/tsc -p src/web/.tsconfig-project-session-tests.json",
+      "exitCode": 0,
+      "temporaryConfig": {
+        "extends": "./tsconfig.json",
+        "include": [
+          "src/components/WorkspaceView.projectSessions.test.tsx",
+          "src/components/WorkspaceView.sessionProjects.test.tsx",
+          "src/lib/sessionProjects.test.ts",
+          "src/lib/useSessionProjectData.test.tsx",
+          "src/lib/useControlPlane.projects.test.tsx"
+        ],
+        "exclude": []
+      },
+      "toolCallRef": "exec-b612f6d6-6be0-494d-b375-e3c2242abce6"
+    }
+  ],
+  "screenshots": {
+    "record": "04-web-project-sessions-actual.json",
+    "attachmentId": "34Zz1BH9UVDFjGkltbglR"
+  },
+  "revisionPackaging": {
+    "supersedesCommit": "e20ee9ff37ab0a806000b65e6971b36fcc7e9c2c",
+    "sourceTree": "32e71f3c364b0f6983f496b9c1b5a178b1b72dcb",
+    "sourceComparisonCommand": "git diff --exit-code e20ee9ff3 HEAD -- src",
+    "sourceComparisonExpectedExitCode": 0,
+    "note": "Documentation-only amendment: keep only final captures in evidence, omit duplicated mocks and the full-suite log."
+  }
+}

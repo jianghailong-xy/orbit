@@ -1,0 +1,2503 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/breakpoint-599-dialog.png": {
+   "equal": true,
+   "sha256": "a8d4c1687cfd60124091621fd0e8c145174237323c52e66d98e00065b9a80a04"
+  },
+  "chromium-dark-desktop/breakpoint-599-share.png": {
+   "equal": true,
+   "sha256": "44f28d51b4be65e5cc57341f000ed1206a135ce13df4c7fc6da3cf5a19d753a6"
+  },
+  "chromium-dark-desktop/breakpoint-601-dialog.png": {
+   "equal": true,
+   "sha256": "2a1f94c39e54e2fd22a5875296d5a37d9bbeeae9dfe9613a2f81532c7833ba96"
+  },
+  "chromium-dark-desktop/breakpoint-601-share.png": {
+   "equal": true,
+   "sha256": "ee7f345a8ae0c4427599e6e3183daa54c3eba4a5f1b8c5db7ba724b043be8e77"
+  },
+  "chromium-dark-desktop/breakpoint-639-graph.png": {
+   "equal": true,
+   "sha256": "9dccdcef4db9de1e43491be08841f32a1fd4e401a3e0f7649b408ec732d360d3"
+  },
+  "chromium-dark-desktop/breakpoint-639-projects.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 3,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      192,
+      193
+     ]
+    },
+    {
+     "maxChannelDiff": 4,
+     "pixels": 4,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      222,
+      223
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 4,
+   "pixels": 7,
+   "pixelsAtMost2": 4,
+   "sha256Del": "92671f312c24aa02a6185f52dd92486cc82770530272e1541e28c15f0cd8bef1",
+   "sha256Ref": "128218565194f26290e5d44d9f724f74a51878e3e96152eb21a171cc104deeca"
+  },
+  "chromium-dark-desktop/breakpoint-641-graph.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      623,
+      624
+     ],
+     "y": [
+      292,
+      295
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      623,
+      624
+     ],
+     "y": [
+      359,
+      361
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "dbc687038cf25a5c797413d1ffe5850c001fed431ad5b1a863e80945ee1a9ca7",
+   "sha256Ref": "9fdef711f34af27447e675ffaa599d63ee84f488f8e5d70494e29652899ac364"
+  },
+  "chromium-dark-desktop/breakpoint-641-projects.png": {
+   "equal": true,
+   "sha256": "171027981201740cffbe4ebaefe52aad282bd8057b008e589311252eb12c283c"
+  },
+  "chromium-dark-desktop/breakpoint-959-session.png": {
+   "equal": true,
+   "sha256": "494318ddefdbb270d5a668607c57a46b67e00fc0c3b2a336b3a8dc7125d830ba"
+  },
+  "chromium-dark-desktop/breakpoint-959-wiki.png": {
+   "equal": true,
+   "sha256": "1d3587a25559632c81f1520e585c66b1d0eacc324de3af12f5da1390ade1e96b"
+  },
+  "chromium-dark-desktop/breakpoint-961-session.png": {
+   "equal": true,
+   "sha256": "d25589fe49b0906c4645f1126360f43ec0540b0d23e4e7ca7df4e4920500e547"
+  },
+  "chromium-dark-desktop/breakpoint-961-wiki.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      496,
+      499
+     ],
+     "y": [
+      24,
+      26
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 6,
+   "pixelsAtMost2": 6,
+   "sha256Del": "da51c547dca8e774a23530093ecaca77d23f969edf40ec10e7266576c231ab08",
+   "sha256Ref": "92b1f659d4a160ba376169c8a1bb7e777224e2039c9b8476d9347303ee104bbe"
+  },
+  "chromium-dark-desktop/notification-error.png": {
+   "equal": true,
+   "sha256": "91d7ba89419e9c949bb4ff7e3c1538e31c17495d76e404d83a03adb3abd9b404"
+  },
+  "chromium-dark-desktop/profile-validation.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 11,
+     "x": [
+      525,
+      530
+     ],
+     "y": [
+      242,
+      247
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      957,
+      960
+     ],
+     "y": [
+      242,
+      243
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      974,
+      976
+     ],
+     "y": [
+      242,
+      243
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1033,
+      1034
+     ],
+     "y": [
+      268,
+      270
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1058,
+      1059
+     ],
+     "y": [
+      379,
+      381
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      500,
+      501
+     ],
+     "y": [
+      408,
+      410
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1058,
+      1059
+     ],
+     "y": [
+      408,
+      410
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      500,
+      507
+     ],
+     "y": [
+      890,
+      897
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1052,
+      1059
+     ],
+     "y": [
+      890,
+      897
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 47,
+   "pixelsAtMost2": 47,
+   "sha256Del": "4f9aef5bbdd513d5ef67c85b2af28762c530d457a80aa3f9d50d3e0e248c505d",
+   "sha256Ref": "40598d3e0732b6201ec10bcb202be431e06355d11711549d1bdea56da64fc530"
+  },
+  "chromium-dark-desktop/profile.png": {
+   "equal": true,
+   "sha256": "7521aef91eca4d1e95a7bf104b7b0ba705e91457859d0cbd1ca7bc552b6773ce"
+  },
+  "chromium-dark-desktop/project-graph-fullscreen.png": {
+   "equal": true,
+   "sha256": "af2e8aecb2e0956c2f0bb80ed91fbe0e6d44567bedb80eabbe7e3a96c8d9c092"
+  },
+  "chromium-dark-desktop/project-graph.png": {
+   "equal": true,
+   "sha256": "ef6f29167f86dbd5647d05ef3d1d8cdcfce17bfff013b8c0bdb80610ab8faa36"
+  },
+  "chromium-dark-desktop/project-overview.png": {
+   "equal": true,
+   "sha256": "9a9430209e3ace78dfa766820d9e6525bd752600d5692b231ea81fedf956f0a1"
+  },
+  "chromium-dark-desktop/projects-error.png": {
+   "equal": true,
+   "sha256": "d5cca31aba9993385c5192197d08fab73d0b658ec04b1eee1f000d6d946ffaf5"
+  },
+  "chromium-dark-desktop/projects-list.png": {
+   "equal": true,
+   "sha256": "035ab67a19a0c3bd8ed1e7bd8297681f00eaa11cde7e49a809a96f9d14c5afc0"
+  },
+  "chromium-dark-desktop/projects-loading.png": {
+   "equal": true,
+   "sha256": "8998c10fd3543010ea773f3fc2398edad288232db80f4c1e3bd4de0be540e91e"
+  },
+  "chromium-dark-desktop/projects-search-empty.png": {
+   "equal": true,
+   "sha256": "23d5d9992dd5753221d0a94daef2c41fa611077ab3923453f419aa951323264f"
+  },
+  "chromium-dark-desktop/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "83c0e5eee56c3487676644d2299ad8f125d66f828a172e4c7da40b6c36157271"
+  },
+  "chromium-dark-desktop/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "1d8fcd0963f922428c21e777e610eb60efc367983f9b744cf8639accf6b64d59"
+  },
+  "chromium-dark-desktop/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "434f44daa1befd9c9010399c532a060d36eda986183da6156b6c9eb0eb95cbba"
+  },
+  "chromium-dark-desktop/session-idle.png": {
+   "equal": true,
+   "sha256": "73ce99e930c5e2092f97048f84c95e9774c1b385c5e2860bc43ace4225709c1a"
+  },
+  "chromium-dark-desktop/session-streaming.png": {
+   "equal": true,
+   "sha256": "4b78fa606401def3190e4635542aebb18d2f69656d13aaabf16154a8cb4b8088"
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "equal": true,
+   "sha256": "8f7ec8b463f419562c2e28d85d6a7e176f2fa5767e7494c5484e9980e93f862f"
+  },
+  "chromium-dark-desktop/settings.png": {
+   "equal": true,
+   "sha256": "0bb811ccda2151e9fffa9a3c57046cb1e86874602147a2e8a9522851914d00cc"
+  },
+  "chromium-dark-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "3df609a2c08f3a46cccbfe19d24f3ada6f8552d9f01eb9a429a4108e3844a242"
+  },
+  "chromium-dark-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "651f8cce3992d8943abe404683c9b4aef944cfc8d3e600e1639eaa395853bd57"
+  },
+  "chromium-dark-desktop/task-action-menu.png": {
+   "equal": true,
+   "sha256": "f25867226da7cf56e5ddb500545e331cf56447d14a8b9dfca4fd5ce072c01fee"
+  },
+  "chromium-dark-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "2b715852439d7fa49b87cdcdcfa19f081c9f2a0aab1efc6dc404293856093cd5"
+  },
+  "chromium-dark-desktop/task-public-share.png": {
+   "equal": true,
+   "sha256": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c"
+  },
+  "chromium-dark-desktop/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "4d8e1b6a6796a0432cca1f79b8528047b8afbd8ce4baa79a6cbf99d2ead5ba38"
+  },
+  "chromium-dark-desktop/wiki-home.png": {
+   "equal": true,
+   "sha256": "f9cead60b48f95558e5b22f601f5fc6b7dbfe7a9263efaadb2320e3e8c21900f"
+  },
+  "chromium-dark-desktop/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "e9da2ac92546dee57853d1642f092ec90ba86b972017c26093226d8469987896"
+  },
+  "chromium-dark-phone/notification-error.png": {
+   "equal": true,
+   "sha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e"
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      271,
+      274
+     ],
+     "y": [
+      169,
+      170
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      290,
+      290
+     ],
+     "y": [
+      169,
+      169
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      343,
+      346
+     ],
+     "y": [
+      169,
+      170
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      347,
+      348
+     ],
+     "y": [
+      195,
+      197
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      309,
+      311
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      309,
+      311
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      338,
+      340
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      338,
+      340
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 29,
+   "pixelsAtMost2": 29,
+   "sha256Del": "15f5aeb26991232ee5ade4aac7c4a057460cd9dcf0360d85c274fc337b62b76a",
+   "sha256Ref": "6189a07b94b719cb888da6cad7f5ebba6af6fd27c3c79b7b8f70aedeb06b5f78"
+  },
+  "chromium-dark-phone/profile.png": {
+   "equal": true,
+   "sha256": "5a266cd0deb90ba08e9bd2503f7ccc2b7ab44a87b225141d513078815a7b6020"
+  },
+  "chromium-dark-phone/project-graph-fullscreen.png": {
+   "equal": true,
+   "sha256": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04"
+  },
+  "chromium-dark-phone/project-graph.png": {
+   "equal": true,
+   "sha256": "e4eacd8d6f1f434a1b99f982fd58beddfbf115cd51082843a62f855b70d6f296"
+  },
+  "chromium-dark-phone/project-overview.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      778,
+      780
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      778,
+      781
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      808,
+      811
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      808,
+      811
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 19,
+   "pixelsAtMost2": 19,
+   "sha256Del": "8b50e9973cde6c3822b2359f961fcb3a44ea8c834bad202c5bfee91d0022855c",
+   "sha256Ref": "b5d967b2f20bd1292635f9320511cdad263da5a1c980617ce08265c930d37a1e"
+  },
+  "chromium-dark-phone/projects-error.png": {
+   "equal": true,
+   "sha256": "e63566cbeea337d9474a12267eaec1a86a7a4bea7649be9b5e50f2816347ca57"
+  },
+  "chromium-dark-phone/projects-list.png": {
+   "equal": true,
+   "sha256": "0a8be67e46e7baf377b8e9f6842165a46ef713ff5e8fd1e168307d75859328ea"
+  },
+  "chromium-dark-phone/projects-loading.png": {
+   "equal": true,
+   "sha256": "1614aa0e4d60b611754415281630f307085f93381245f3c1d8129de81d20f69f"
+  },
+  "chromium-dark-phone/projects-search-empty.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 3,
+     "pixels": 6,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      149,
+      153
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 3,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      192,
+      193
+     ]
+    },
+    {
+     "maxChannelDiff": 4,
+     "pixels": 4,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      222,
+      223
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 4,
+   "pixels": 13,
+   "pixelsAtMost2": 9,
+   "sha256Del": "ad4d2042668ddad43527cfa4a22f729c1271e432b892838579c492924b0ec0c0",
+   "sha256Ref": "2183f0e6d5f26ff1c2b81de94660336020f4ed799b06c7854749338c19f08802"
+  },
+  "chromium-dark-phone/session-attachment-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      26,
+      27
+     ],
+     "y": [
+      326,
+      327
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      26,
+      27
+     ],
+     "y": [
+      338,
+      339
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "ac212e01664a76bd4317372e5985e6feceee6689c490bfcf1447b5c24782e06d",
+   "sha256Ref": "01240ceae44edb1980862d9d9093ebfcb22ffca1cf8cf4136800c74def50eae8"
+  },
+  "chromium-dark-phone/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "33a3ffa6183617aa5f100d407dd8fc78cc1c8a03ccc5e9404c47fd6e13243e05"
+  },
+  "chromium-dark-phone/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "3183e94a16af8aa138c783efb796456ef4423a9d412e4b9e1f3df016d1e8ef2b"
+  },
+  "chromium-dark-phone/session-idle.png": {
+   "equal": true,
+   "sha256": "30db161a582062433a28bdfda12c95f347264d8967278674d561ee63505f3eac"
+  },
+  "chromium-dark-phone/session-streaming.png": {
+   "equal": true,
+   "sha256": "112c86141e46bb1f40ad2b63c3b359817826c66f93e1af94d55c8a49ca7ebd8e"
+  },
+  "chromium-dark-phone/settings-saved.png": {
+   "equal": true,
+   "sha256": "5df35df360fb8b4736c962e56fc10b6c1a597a02e7547f018819a3cb0f09e3ad"
+  },
+  "chromium-dark-phone/settings.png": {
+   "equal": true,
+   "sha256": "8f82671d9eb1e7be57baf347d90ee0dceaa116886417b7c0db662c599e7b2bcf"
+  },
+  "chromium-dark-phone/task-action-focus.png": {
+   "equal": true,
+   "sha256": "b84799263fee89ccf7f8088fc99d7fa125327d5d896f255d662977588ad0d17c"
+  },
+  "chromium-dark-phone/task-action-hover.png": {
+   "equal": true,
+   "sha256": "832020df658d2d727559043faeee4c6680f6a2d799835bac100329298c638256"
+  },
+  "chromium-dark-phone/task-action-menu.png": {
+   "equal": true,
+   "sha256": "e5bbd20d11e74d07e03df024cf8cfe4a6c539dbfae711a810a8446551b530830"
+  },
+  "chromium-dark-phone/task-detail.png": {
+   "equal": true,
+   "sha256": "feddbad5d9380c31a61900e5d4db4934220384b9179e12bba1816c12f0d90cea"
+  },
+  "chromium-dark-phone/task-public-share.png": {
+   "equal": true,
+   "sha256": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b"
+  },
+  "chromium-dark-phone/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37"
+  },
+  "chromium-dark-phone/wiki-contents.png": {
+   "equal": true,
+   "sha256": "57864eac86c00aaa15516ce2f74b0348c5b611a31e492218775cd600ecbee0dc"
+  },
+  "chromium-dark-phone/wiki-home.png": {
+   "equal": true,
+   "sha256": "170b95ca2bbd0c99eef4e9c042dd0447d7b9b92e8a2c90eb15409d67b4b1e7fe"
+  },
+  "chromium-dark-phone/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "46134d646fac295df159e7e15acb746882c6a4be178f9d151dfc23ac99119717"
+  },
+  "chromium-light-desktop/breakpoint-599-dialog.png": {
+   "equal": true,
+   "sha256": "819762ce17b65952fc13a4e11f6ebeffc6dcab7cec9037b909250bf7ca114bf5"
+  },
+  "chromium-light-desktop/breakpoint-599-share.png": {
+   "equal": true,
+   "sha256": "59ce81b7b27542bb3ab9d6ba0afd48d6cde516ada450c3d9b9471094deaf9f88"
+  },
+  "chromium-light-desktop/breakpoint-601-dialog.png": {
+   "equal": true,
+   "sha256": "3f66283d449cc36db8f55ebd23dccca124b4f3a161dac7bce5f7c3c84ffad278"
+  },
+  "chromium-light-desktop/breakpoint-601-share.png": {
+   "equal": true,
+   "sha256": "e0fb7cefb5368a5b2e9afa660dc01f53e7d60ced1470bdb42a2ac11976f8ee22"
+  },
+  "chromium-light-desktop/breakpoint-639-graph.png": {
+   "equal": true,
+   "sha256": "0868ab643d46c3ae512a6229e2a9fe0d941e6a7b03a3d5bc87c7973e34a9cf68"
+  },
+  "chromium-light-desktop/breakpoint-639-projects.png": {
+   "equal": true,
+   "sha256": "330533cae964d4df2d94eab6ccd5f1eba1ebcb07ac68b954298f6001e3fd5d11"
+  },
+  "chromium-light-desktop/breakpoint-641-graph.png": {
+   "equal": true,
+   "sha256": "cc7502b07bebb6759e34ce970b6728dce6b416cb411cc7703eade9cba50c1b07"
+  },
+  "chromium-light-desktop/breakpoint-641-projects.png": {
+   "equal": true,
+   "sha256": "250a5bb3d7790f9796bfbde7c6c06be996f370351eeabfb35222991f1101674b"
+  },
+  "chromium-light-desktop/breakpoint-959-session.png": {
+   "equal": true,
+   "sha256": "d99a35ba82e81b13ac07f26b47d2c6194705e70cdb02ab83865144fea60c4627"
+  },
+  "chromium-light-desktop/breakpoint-959-wiki.png": {
+   "equal": true,
+   "sha256": "d5bbbb804d0e7bb6f0fdae575a3ba054cdc3db303da0a4195d91b2b7629d6bcf"
+  },
+  "chromium-light-desktop/breakpoint-961-session.png": {
+   "equal": true,
+   "sha256": "20cf47f3ca41cfaeee1c9bee3c57e3f05c9284152306e45bb5e8ef4c96e1f072"
+  },
+  "chromium-light-desktop/breakpoint-961-wiki.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      496,
+      499
+     ],
+     "y": [
+      24,
+      26
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 7,
+   "pixelsAtMost2": 7,
+   "sha256Del": "8a78ac02b0c7a81c9b28da7583341ac3e5297afa5fdf4b8c14bc30c2d8619152",
+   "sha256Ref": "aa6463fffe31a000bb119aa6e6550a07e12ad6d048d6a30146d9436cfa9fca91"
+  },
+  "chromium-light-desktop/notification-error.png": {
+   "equal": true,
+   "sha256": "21866a6d83028fa6e0f849966222099293b04f78a1dd0481a7eee868b657ef05"
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "equal": true,
+   "sha256": "15e140cacae184750b390fccd5ab0fbcfff55459e4f1f2404094eccc52a027cb"
+  },
+  "chromium-light-desktop/profile.png": {
+   "equal": true,
+   "sha256": "0f9986c6bfc461fa8860ba98f030239219ac557c32f1ce8393ff1800724eec15"
+  },
+  "chromium-light-desktop/project-graph-fullscreen.png": {
+   "equal": true,
+   "sha256": "a216d34fc7810ddba043beb1747bb01d5f2ad728400ff13a9fc8e5a1887b0b05"
+  },
+  "chromium-light-desktop/project-graph.png": {
+   "equal": true,
+   "sha256": "200967342d72d2a9cd5f62e8c4a0cbed9b3b7c202811f66703537bf5024b9364"
+  },
+  "chromium-light-desktop/project-overview.png": {
+   "equal": true,
+   "sha256": "10d556cbefd47409464d674ca131d94ac2efa66e905a17de116a593136a1facc"
+  },
+  "chromium-light-desktop/projects-error.png": {
+   "equal": true,
+   "sha256": "1b56e0a8bfcdc0f816854113a7f8d5c851bda1690a23e9947ba3e07214a6e8f6"
+  },
+  "chromium-light-desktop/projects-list.png": {
+   "equal": true,
+   "sha256": "992ff55f6473f1f0e30f0d38e4a65253bc7bd586d4556234d0488f528ec949ae"
+  },
+  "chromium-light-desktop/projects-loading.png": {
+   "equal": true,
+   "sha256": "1799070d992b94a61cd1c6b1b2bb12961c76e2c522e55eeb9d54b7d96a546eb5"
+  },
+  "chromium-light-desktop/projects-search-empty.png": {
+   "equal": true,
+   "sha256": "3e7b8a1884a9e9e46ce99643caa8bd78b07362f87f8a88871e5ef42d4e801e0f"
+  },
+  "chromium-light-desktop/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "1c56db3c3004e030117b59c3c6db398f993985faea376f698be0db6f6f7bbe7e"
+  },
+  "chromium-light-desktop/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "d42adc6fef72ad57e5fb335a0e47acae9514a9fcfc7fd9886b0b28609d749851"
+  },
+  "chromium-light-desktop/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "e9ce5be0bdd48fdc56999eb785a3c27ced21b792bd4edcf82dca1a06f1e92dd7"
+  },
+  "chromium-light-desktop/session-idle.png": {
+   "equal": true,
+   "sha256": "1ae39c1a6e91081de6b63dcc1dfd8a3d071386709a8e97299dc150da0ad996cf"
+  },
+  "chromium-light-desktop/session-streaming.png": {
+   "equal": true,
+   "sha256": "06b9b1134439feabee2be0e2559c5c3e2c420dce95f398f6f4d255300ffcdebb"
+  },
+  "chromium-light-desktop/settings-saved.png": {
+   "equal": true,
+   "sha256": "a108623d260df558f209a179a44cb60ac9b3ea70b5b53e6ef986fdab1f99c13c"
+  },
+  "chromium-light-desktop/settings.png": {
+   "equal": true,
+   "sha256": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a"
+  },
+  "chromium-light-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "53fd92a21b5d363674f9fa8ac9257bc884d4be53cc48117102d9420003742042"
+  },
+  "chromium-light-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "423757c0f7007210f39053660a428783818da7460c3ba2f2131497e420c3e4b3"
+  },
+  "chromium-light-desktop/task-action-menu.png": {
+   "equal": true,
+   "sha256": "e9234a96e06fc13c50eac67f15521d088dcaf10f7577a2ee8210693dd174f76f"
+  },
+  "chromium-light-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "b99cd3fbdd0bf11de4d13aed94551cedd17227508add7d54839d6981434187c9"
+  },
+  "chromium-light-desktop/task-public-share.png": {
+   "equal": true,
+   "sha256": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab"
+  },
+  "chromium-light-desktop/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "64f02d0417b70ffaa52c5a74be668ae4ebdc99d7ce407e90924b2c2629f36828"
+  },
+  "chromium-light-desktop/wiki-home.png": {
+   "equal": true,
+   "sha256": "1ba1bc049828ef9251cf91bc2963ed2e2abfd012df428cbd8a94fbb57a696a28"
+  },
+  "chromium-light-desktop/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "c6936e21529463f165cd853adb9dbedcb7ca9e6df200e77819068b6cf1747b81"
+  },
+  "chromium-light-phone/notification-error.png": {
+   "equal": true,
+   "sha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194"
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 13,
+     "x": [
+      41,
+      46
+     ],
+     "y": [
+      169,
+      174
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 7,
+     "x": [
+      271,
+      274
+     ],
+     "y": [
+      169,
+      171
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      288,
+      289
+     ],
+     "y": [
+      169,
+      170
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      344,
+      346
+     ],
+     "y": [
+      169,
+      171
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 27,
+   "pixelsAtMost2": 27,
+   "sha256Del": "be26efc571cce306b154878b0bb48588b6133f4f1d93bb0c4c8550da348e1a2a",
+   "sha256Ref": "0564d0237849d9fa47783ad745d9cc241a245657a9a4eb15ffa0c2bdf311b883"
+  },
+  "chromium-light-phone/profile.png": {
+   "equal": true,
+   "sha256": "4b966dec5ba6f0ccd0a48719d9682fc2758c7656d2dcfb956e9fa000fb9a880f"
+  },
+  "chromium-light-phone/project-graph-fullscreen.png": {
+   "equal": true,
+   "sha256": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27"
+  },
+  "chromium-light-phone/project-graph.png": {
+   "equal": true,
+   "sha256": "e607f487ff68030704825e83535601e49155e5334a0d8793ebbadce6e8cfd90c"
+  },
+  "chromium-light-phone/project-overview.png": {
+   "equal": true,
+   "sha256": "da93eb5caa592200f94152830ac5947ba390c485a080cc798cb201f8b44ce836"
+  },
+  "chromium-light-phone/projects-error.png": {
+   "equal": true,
+   "sha256": "18b3b9c5652c13f68d4647f4640ebbd5efb441bbb6f52231b7d3dcaa3d0fe41b"
+  },
+  "chromium-light-phone/projects-list.png": {
+   "equal": true,
+   "sha256": "93c9a517fbfe60397330c8a4e8866c2d3984ffad74e009bdda4299a8e190d07e"
+  },
+  "chromium-light-phone/projects-loading.png": {
+   "equal": true,
+   "sha256": "f6b89be306f058e88fd69868e5e74027cd3cc836f8203346ae7c46d8f6731247"
+  },
+  "chromium-light-phone/projects-search-empty.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      149,
+      153
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      18,
+      19
+     ],
+     "y": [
+      192,
+      193
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 4,
+     "x": [
+      18,
+      21
+     ],
+     "y": [
+      222,
+      223
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 12,
+   "pixelsAtMost2": 12,
+   "sha256Del": "fb05e69f3c0d23ad4b236be84deea7424b6fbfe2ea1ed4d3266ef28fff8d0128",
+   "sha256Ref": "64ab73ad7ea02e255dab79dcbb156f55ac0f8c6d31ac3b60d17074ffeb0c27c8"
+  },
+  "chromium-light-phone/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "73987e3c014dac469138b1564e21478e93c5d44376607f54f587c292475b1f00"
+  },
+  "chromium-light-phone/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "5f8eea566775512397762e9d4a4df146c8f016ae89fd3426a4cdba7be906850b"
+  },
+  "chromium-light-phone/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "58aa7ab6fe17276dcc3d2fa465d735a3e34950018092e9e8c06fc50461281089"
+  },
+  "chromium-light-phone/session-idle.png": {
+   "equal": true,
+   "sha256": "dd804528a07f0f37f85a1860fcf7b4918ea1a17cfe0bd840ea08ab84e8ccf79b"
+  },
+  "chromium-light-phone/session-streaming.png": {
+   "equal": true,
+   "sha256": "c8df62d3ac623ce195d663a087e7e54e647567050efc189541e5e0b1534c759a"
+  },
+  "chromium-light-phone/settings-saved.png": {
+   "equal": true,
+   "sha256": "a658d52a2efee3aa75953ac59bdddb74f03ff13aa7860e724bfd65d1e7b5bed9"
+  },
+  "chromium-light-phone/settings.png": {
+   "equal": true,
+   "sha256": "6003bc62f9224ed1ed6e6f7c83b2e60da52c36301a90f5be81f6673c05791d5d"
+  },
+  "chromium-light-phone/task-action-focus.png": {
+   "equal": true,
+   "sha256": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780"
+  },
+  "chromium-light-phone/task-action-hover.png": {
+   "equal": true,
+   "sha256": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79"
+  },
+  "chromium-light-phone/task-action-menu.png": {
+   "equal": true,
+   "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b"
+  },
+  "chromium-light-phone/task-detail.png": {
+   "equal": true,
+   "sha256": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990"
+  },
+  "chromium-light-phone/task-public-share.png": {
+   "equal": true,
+   "sha256": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048"
+  },
+  "chromium-light-phone/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b"
+  },
+  "chromium-light-phone/wiki-contents.png": {
+   "equal": true,
+   "sha256": "852535b3aef10af0e58aca89b6cd3f2886c2ea7907566afdcf207cf99e9bf809"
+  },
+  "chromium-light-phone/wiki-home.png": {
+   "equal": true,
+   "sha256": "748a8043f39f9d6a6371c2aab74f9a24e36f4c9356e53b4a8c28de07e7b2a818"
+  },
+  "chromium-light-phone/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "dbbd58f8dbff203c9ad9fbfec1fc4bdae29805d4cc4e39888b53591335012d38"
+  },
+  "webkit-dark-desktop/breakpoint-599-dialog.png": {
+   "equal": true,
+   "sha256": "a00bba305113163960ed4016a00f21a4b40ab95817b3505682089a17b3c7435d"
+  },
+  "webkit-dark-desktop/breakpoint-599-share.png": {
+   "equal": true,
+   "sha256": "a13dc7a2bd275eb9226cedae966421816dd8b1e267553fd5d84d20b29cd3a8b1"
+  },
+  "webkit-dark-desktop/breakpoint-601-dialog.png": {
+   "equal": true,
+   "sha256": "9cbe8afd42d775243ce3d001f960b1a3a0206842284894f4ca1f0a4a83dfbf01"
+  },
+  "webkit-dark-desktop/breakpoint-601-share.png": {
+   "equal": true,
+   "sha256": "21772b0dd8ec4d76faf756b79fd95381ebfcf33a939dd1e1d5a11aae76a8aae7"
+  },
+  "webkit-dark-desktop/breakpoint-639-graph.png": {
+   "equal": true,
+   "sha256": "476a58610951bdb0c6486ab8f0b0d496ec01fc241b0329a18e050dc4b66cac14"
+  },
+  "webkit-dark-desktop/breakpoint-639-projects.png": {
+   "equal": true,
+   "sha256": "777b8188a81db6a12b62b0660d39897dc1ae30ea73343c7d9749009993a561b1"
+  },
+  "webkit-dark-desktop/breakpoint-641-graph.png": {
+   "equal": true,
+   "sha256": "e9f81625d0b41ee3df3dfb01d99797a253fc3ae85d558b3711d10ff91d411f6a"
+  },
+  "webkit-dark-desktop/breakpoint-641-projects.png": {
+   "equal": true,
+   "sha256": "589c6221709e40bb575bef86da73375800e2fe47982cffe88270320a98c6cc79"
+  },
+  "webkit-dark-desktop/breakpoint-959-session.png": {
+   "equal": true,
+   "sha256": "4117d7b22fca64369c5bef0549af387b62607894907ce77e7d2c7539edffa401"
+  },
+  "webkit-dark-desktop/breakpoint-959-wiki.png": {
+   "equal": true,
+   "sha256": "a9fd597d8a3269e1897b536cac47d07598d0c6118cc3db9105c4ea1eb4dba82d"
+  },
+  "webkit-dark-desktop/breakpoint-961-session.png": {
+   "equal": true,
+   "sha256": "06bd96fe99ab189e810ec5cb818b19bf7fe92c9684c2160d9ebf9c998e320b96"
+  },
+  "webkit-dark-desktop/breakpoint-961-wiki.png": {
+   "equal": true,
+   "sha256": "9f84cd8e542cff492e0a859e90720fb8f5507198f110c0757d2f1e2cae30a3ed"
+  },
+  "webkit-dark-desktop/notification-error.png": {
+   "equal": true,
+   "sha256": "41ee2a5447597982f1d8fc8b06d4c036db9f2a8dbfbf90c473e5aacd339db558"
+  },
+  "webkit-dark-desktop/profile-validation.png": {
+   "equal": true,
+   "sha256": "58f0e4f9a87920c1cd63294d295a003e0367e6be82eb055cf484b6e033e15036"
+  },
+  "webkit-dark-desktop/profile.png": {
+   "equal": true,
+   "sha256": "6defe597090a656474f02256dcd705e11579786e5ecb95874918ec7eaeb11b3f"
+  },
+  "webkit-dark-desktop/project-graph-fullscreen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      24,
+      29
+     ],
+     "y": [
+      25,
+      29
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1250,
+      1255
+     ],
+     "y": [
+      25,
+      29
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      24,
+      28
+     ],
+     "y": [
+      844,
+      848
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1251,
+      1254
+     ],
+     "y": [
+      844,
+      848
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 17,
+   "pixelsAtMost2": 17,
+   "sha256Del": "65b1cd0fb0fe294a389dab0f646edc8618352868a23432bf53d04b598a4dfb96",
+   "sha256Ref": "0cb2ef59f78c848d260081a13a12d9b9fadddc49fb5eb7f57bc33ced3bc7b811"
+  },
+  "webkit-dark-desktop/project-graph.png": {
+   "equal": true,
+   "sha256": "06577c22c0720c2438957b08f13813d201764dc5b6d28efcbc880fc7f0fab709"
+  },
+  "webkit-dark-desktop/project-overview.png": {
+   "equal": true,
+   "sha256": "9f91a985250ff64c1def13cf72c1f265b23cf52013640c2f0e30f590dee6e94e"
+  },
+  "webkit-dark-desktop/projects-error.png": {
+   "equal": true,
+   "sha256": "6ab5b1696fb70c385db9063e2b3d21665717c5d008b46e8c5a25084977be0cef"
+  },
+  "webkit-dark-desktop/projects-list.png": {
+   "equal": true,
+   "sha256": "5f659c07a445b1c945bdc4cfc75e255fc32f478ac02ef3039f8a3d072a291657"
+  },
+  "webkit-dark-desktop/projects-loading.png": {
+   "equal": true,
+   "sha256": "817cdf28cd285876e0fe50bebcb0e76e8c7b5891abbf41fdb2c09f9ddcd3474d"
+  },
+  "webkit-dark-desktop/projects-search-empty.png": {
+   "equal": true,
+   "sha256": "05d3164d954f27561f156669f5ff19cabdd28e7c4fc6374f9f12745fc181b48f"
+  },
+  "webkit-dark-desktop/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "ad636275dd3975ebf5809ab24741003ed7296f955763440bad13e11a2f71f237"
+  },
+  "webkit-dark-desktop/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "f7ad0d8d21fc0f27a41c995572c058c137b64ff23299dbd87974ab1530cced75"
+  },
+  "webkit-dark-desktop/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "6a2ba484772e38d5dd3faa60e25b90e0975f825a8353bda773b4b39b2440eca3"
+  },
+  "webkit-dark-desktop/session-idle.png": {
+   "equal": true,
+   "sha256": "0fbac743f68bcbf93800b8b51a5ad31f5dddcc2553bfd81f299948023267ff5a"
+  },
+  "webkit-dark-desktop/session-streaming.png": {
+   "equal": true,
+   "sha256": "93f8024c82d8b4407c9a719ab74e53fd3d5ebf79c63afceae897dd151e9a6c06"
+  },
+  "webkit-dark-desktop/settings-saved.png": {
+   "equal": true,
+   "sha256": "e7bb335b8da6f305b7a8cff0cbc1529bf848c8515a89eb85da601393573f2887"
+  },
+  "webkit-dark-desktop/settings.png": {
+   "equal": true,
+   "sha256": "ee8599f88fded863da3da0b5579a9dce8ca79864c24d65a3b58bf7989ec65998"
+  },
+  "webkit-dark-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "7faa28663bc162938edc882005f5a05705b8ba29135819b77e022ca165e88304"
+  },
+  "webkit-dark-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "be683362036780de6db46769c038be14826da479299ce77c9b4231734136b916"
+  },
+  "webkit-dark-desktop/task-action-menu.png": {
+   "equal": true,
+   "sha256": "f021d6622b6b3c0172481654af3c951ecc8c9e841407397a6b8f73166e8d9d71"
+  },
+  "webkit-dark-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "0c44cd621c41bef3d91b4245dc5f87e95c650e90a9076da8b59f64bd4d77b2a4"
+  },
+  "webkit-dark-desktop/task-public-share.png": {
+   "equal": true,
+   "sha256": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852"
+  },
+  "webkit-dark-desktop/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "b25516ca0e3d7e25fe5bad276b3d5fc30725f41c171f00c7f29dfa962d9f8d6e"
+  },
+  "webkit-dark-desktop/wiki-home.png": {
+   "equal": true,
+   "sha256": "b0d0c8f9ffe58d3e330cb719898968f1381632457fc1d13a260adfb2703ee778"
+  },
+  "webkit-dark-desktop/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "23a571354596a6542377ac7d6c11c0f6c2aa9792e80aa004642023d122038376"
+  },
+  "webkit-dark-phone/notification-error.png": {
+   "equal": true,
+   "sha256": "05b985e2a10990b802e16267d3e273fac6aa07deb9964e2c9a5994542b444928"
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "equal": true,
+   "sha256": "0f3a4108c15f1319245ea6e51311cd7bf410c28ba0bbfd3986ac0dff64089b2e"
+  },
+  "webkit-dark-phone/profile.png": {
+   "equal": true,
+   "sha256": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8"
+  },
+  "webkit-dark-phone/project-graph-fullscreen.png": {
+   "equal": true,
+   "sha256": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74"
+  },
+  "webkit-dark-phone/project-graph.png": {
+   "equal": true,
+   "sha256": "b1f23376cf9ec3565b06a65ebfa095109ca1afe1e7c806e8b9824abc43592df4"
+  },
+  "webkit-dark-phone/project-overview.png": {
+   "equal": true,
+   "sha256": "156df04993ddc8a6e80510fe2507d10666ac60ccf10647793a50922819aeecdf"
+  },
+  "webkit-dark-phone/projects-error.png": {
+   "equal": true,
+   "sha256": "4ec3d1663023cdc43821c11098ac7215ca8a8cd3a51965837e90aec423ab73f3"
+  },
+  "webkit-dark-phone/projects-list.png": {
+   "equal": true,
+   "sha256": "dd29ed7d5494935dd15fc54f81ae1f43395340b8236ef3da30e32b5c178ae94c"
+  },
+  "webkit-dark-phone/projects-loading.png": {
+   "equal": true,
+   "sha256": "9bd2154df1f3083598c6b03cbe712d74831da45803db139a39dd6ec49f65795a"
+  },
+  "webkit-dark-phone/projects-search-empty.png": {
+   "equal": true,
+   "sha256": "0fbfd38a6877dc70206f8109e0796ee70eca21f12bd4f40dec04db65c2b1c671"
+  },
+  "webkit-dark-phone/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "53e77a01dd67f94de15e2620939eff341ab4b84177d5e23fa932d02192724b49"
+  },
+  "webkit-dark-phone/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "3a76b9156075d82c91d4ca42892fd741f25b827fc842530e74cb0cada15362a6"
+  },
+  "webkit-dark-phone/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "7c4726da2ea9b3550d24b23d154306fa651197c887b0cdc98e39fe575bed1e29"
+  },
+  "webkit-dark-phone/session-idle.png": {
+   "equal": true,
+   "sha256": "f8d569ed67365e15ecb80d274a6862299cb01f54c889f80ebd450b60ef966b52"
+  },
+  "webkit-dark-phone/session-streaming.png": {
+   "equal": true,
+   "sha256": "d4ee34eb79f525cbe1444cd3d3167aa6b62222638499a6343b9300cf50536aad"
+  },
+  "webkit-dark-phone/settings-saved.png": {
+   "equal": true,
+   "sha256": "40656db95780414b9ffba66014745816e1eba22a958fad4a30ef14ea625db8a5"
+  },
+  "webkit-dark-phone/settings.png": {
+   "equal": true,
+   "sha256": "afce26a702816d0b13e6376e7d91150ee59e06577002012f5e76061a90590cc3"
+  },
+  "webkit-dark-phone/task-action-focus.png": {
+   "equal": true,
+   "sha256": "b9edf27f85d9304718043b232450b4d9ff3ced817e0f0bd828d7aea23337cc1f"
+  },
+  "webkit-dark-phone/task-action-hover.png": {
+   "equal": true,
+   "sha256": "f02a4c45316f9edda3043baaad3cb35aac7a2589adb65d6eb4f836ed5a5b9b75"
+  },
+  "webkit-dark-phone/task-action-menu.png": {
+   "equal": true,
+   "sha256": "213ec5ec43e0851f2ada09159bfeace4effe72f365472a86a63dd6eda271ba30"
+  },
+  "webkit-dark-phone/task-detail.png": {
+   "equal": true,
+   "sha256": "1a41a568778acba3a00e435f20732406d55b240f641043ddeabb16cf05510044"
+  },
+  "webkit-dark-phone/task-public-share.png": {
+   "equal": true,
+   "sha256": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c"
+  },
+  "webkit-dark-phone/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478"
+  },
+  "webkit-dark-phone/wiki-contents.png": {
+   "equal": true,
+   "sha256": "3384758be6181749dd2f6a4afe5c40f3df30743a445d9323874789a42d87abc9"
+  },
+  "webkit-dark-phone/wiki-home.png": {
+   "equal": true,
+   "sha256": "9a19d303b85015f090fb4e32d206bbd461043fd08d830d5b95076329c4ce4b41"
+  },
+  "webkit-dark-phone/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "cf5ca334f49d2003cdbb8ed98655c61949794d01fc332b1e7d4c919c4b5ff22d"
+  },
+  "webkit-light-desktop/breakpoint-599-dialog.png": {
+   "equal": true,
+   "sha256": "a9a8a2f5cb12a620a3847e3e66917cb47caef18ed5473dada3ab129f74176431"
+  },
+  "webkit-light-desktop/breakpoint-599-share.png": {
+   "equal": true,
+   "sha256": "741c28464f8492cf3ccb401b49068847be37cfed2afa722e15fb60a2e1c9a598"
+  },
+  "webkit-light-desktop/breakpoint-601-dialog.png": {
+   "equal": true,
+   "sha256": "5aa074a2dc2c613c35ccb7d242a04134219be97a5671be1c9f78788cac44f53d"
+  },
+  "webkit-light-desktop/breakpoint-601-share.png": {
+   "equal": true,
+   "sha256": "118113262d6073fd94a5374e522748c402216e4a8b9695ae10980d9e0ed6b5e3"
+  },
+  "webkit-light-desktop/breakpoint-639-graph.png": {
+   "equal": true,
+   "sha256": "1526b3fa2ecabe44617dd542da23085c5fd50884368bc90a7fd2850fe201301f"
+  },
+  "webkit-light-desktop/breakpoint-639-projects.png": {
+   "equal": true,
+   "sha256": "d62edba5fe757c10a1d20f3f50ca945650778236273b55ad7295115329879098"
+  },
+  "webkit-light-desktop/breakpoint-641-graph.png": {
+   "equal": true,
+   "sha256": "a64f537c7410cbd1da286e5b9c8e11f18e425a1747cc1a5361ddec1124b8a4d1"
+  },
+  "webkit-light-desktop/breakpoint-641-projects.png": {
+   "equal": true,
+   "sha256": "dbd43b5f7243bd667bfb9f3948243355c76d717477c5ca7b6164ecf8a1f3ccb7"
+  },
+  "webkit-light-desktop/breakpoint-959-session.png": {
+   "equal": true,
+   "sha256": "0bdeb7116f017a8e1b385373b7694460939f62c3201221775d3a9f77799014bb"
+  },
+  "webkit-light-desktop/breakpoint-959-wiki.png": {
+   "equal": true,
+   "sha256": "8ffae3dddf66cc572c0d0005bd013af4006839db1e60565f6e6242b72479bc4b"
+  },
+  "webkit-light-desktop/breakpoint-961-session.png": {
+   "equal": true,
+   "sha256": "6c38f12d9c3334f20ac1f8d6a486ff1fb5e0db0b36359f3f973abc63b3b5df74"
+  },
+  "webkit-light-desktop/breakpoint-961-wiki.png": {
+   "equal": true,
+   "sha256": "d18c04e6fe42b9069e139425ae15cdee3e9d2f12dde3589e2e173997e22ebef3"
+  },
+  "webkit-light-desktop/notification-error.png": {
+   "equal": true,
+   "sha256": "86ba60f9ca515365d30e449d43e3204a30922c4000177f0c99993e831714ecac"
+  },
+  "webkit-light-desktop/profile-validation.png": {
+   "equal": true,
+   "sha256": "d2e26d04427a7bae6e44cf9dadd0e4ea1c7a4c3722b8792b7ef2b5bd177e8038"
+  },
+  "webkit-light-desktop/profile.png": {
+   "equal": true,
+   "sha256": "79d972e84ded03469b5ffb3c7657bec5343c67e8e3b1e5022e7acccdc39ad0e9"
+  },
+  "webkit-light-desktop/project-graph-fullscreen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      26,
+      29
+     ],
+     "y": [
+      25,
+      28
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1251,
+      1254
+     ],
+     "y": [
+      25,
+      29
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1250,
+      1255
+     ],
+     "y": [
+      844,
+      848
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      29,
+      29
+     ],
+     "y": [
+      848,
+      848
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "ad2882f0a97112c2edcda60eee7d1c0e5a025b6253cba744741babf2772718d7",
+   "sha256Ref": "c0be1eba38a1d396f9574e78b7bece78e74e8749959d9885635de2964383d105"
+  },
+  "webkit-light-desktop/project-graph.png": {
+   "equal": true,
+   "sha256": "4418d20aba11b05a761e5ff5d9421c9ff28d82b3150978768566ef12a46b962c"
+  },
+  "webkit-light-desktop/project-overview.png": {
+   "equal": true,
+   "sha256": "97e1f90a776f69d667d961b033e9e145b726a29cbd35dd04a31b887170e8ecd1"
+  },
+  "webkit-light-desktop/projects-error.png": {
+   "equal": true,
+   "sha256": "7cc413b1b1758145ff73ef947c25b8703b1513a3b41117f23481249cff32f56e"
+  },
+  "webkit-light-desktop/projects-list.png": {
+   "equal": true,
+   "sha256": "1dfdaf476b4e0f7385ae97be36add3a0968e3960ce451bb83ed66c28f3a2a850"
+  },
+  "webkit-light-desktop/projects-loading.png": {
+   "equal": true,
+   "sha256": "6eab08b15d3dffb67ece9e7eaa05e09bd7f90234842acb5d3fe2750a5471afc4"
+  },
+  "webkit-light-desktop/projects-search-empty.png": {
+   "equal": true,
+   "sha256": "1ae048000ee7f69e69fea77535c6cb44f0d6772c6d8d24c7fc287280e7e8da8f"
+  },
+  "webkit-light-desktop/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "474422e8e83e7c21f50a0cd091645628f55f409a9b52ff4f2e12b8a3c238d3f3"
+  },
+  "webkit-light-desktop/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "52cf06630f5a1af4231465d5b8a9e2d8017cb52174d558aab546f75d9c641959"
+  },
+  "webkit-light-desktop/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "c5e4e5e52df9d0174d96a239c201872d77f13fc08f9be2208c68b50c2cfe1163"
+  },
+  "webkit-light-desktop/session-idle.png": {
+   "equal": true,
+   "sha256": "b18a984f6f3836a25926fd6144e25619504fb2fc9d6979455e9c51fe012690bc"
+  },
+  "webkit-light-desktop/session-streaming.png": {
+   "equal": true,
+   "sha256": "13bb369ee4b8763d0d60687e22b727f3162d05364450779379bd5aa317fad360"
+  },
+  "webkit-light-desktop/settings-saved.png": {
+   "equal": true,
+   "sha256": "676287ec035cae6e8efab01d34f54f5eb698449dfab38570f4bcc7b861b1cafe"
+  },
+  "webkit-light-desktop/settings.png": {
+   "equal": true,
+   "sha256": "1ca8d75ff9a133c0097f7eaeada5f60b68fb0027a4959fcfc1b9a051c0c6f6f9"
+  },
+  "webkit-light-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "1d94d4e73e7373beab30cb3fd01872777b8880c625c7c8b55b9fc7cae4736e0e"
+  },
+  "webkit-light-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "9e55133ae4566a884b98bf4876200997b3d322b7bce1521cc46c6450fa652dc9"
+  },
+  "webkit-light-desktop/task-action-menu.png": {
+   "equal": true,
+   "sha256": "1d9a855f85f816adb23963b43c84dec303bdadce91b9c373bd73ecdc733624cc"
+  },
+  "webkit-light-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "f2fee0d8b8fb84406b40c5954ceb2234ffb5a89a3c70fd029995a5e71d9f189e"
+  },
+  "webkit-light-desktop/task-public-share.png": {
+   "equal": true,
+   "sha256": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56"
+  },
+  "webkit-light-desktop/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "b6bb1d236105d93b5d9465e7704d0b06085bf4aae500c9dbc6fe75a1ceefa927"
+  },
+  "webkit-light-desktop/wiki-home.png": {
+   "equal": true,
+   "sha256": "d3f746a766ed07b05b87e6973b80ec05de0e0527ea82fd418e135d617a3643f9"
+  },
+  "webkit-light-desktop/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "b968378236aae49e545acbd48a3a0f3c62a98f48accf561b31a7ce217214cfd3"
+  },
+  "webkit-light-phone/notification-error.png": {
+   "equal": true,
+   "sha256": "a5295cf3dc9fecaa41b0404bc12cc62ba9e6cf8d0b00fc022c3ed82f4d495961"
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "equal": true,
+   "sha256": "fe86cd9b21ba30505c00b74bb38c4c5442c2d979a30237e12630bde31c3c4333"
+  },
+  "webkit-light-phone/profile.png": {
+   "equal": true,
+   "sha256": "19d4e052db4726179df29fce1df55b4163df1d49e304f41a1d5d59dcde3bd8ae"
+  },
+  "webkit-light-phone/project-graph-fullscreen.png": {
+   "equal": true,
+   "sha256": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64"
+  },
+  "webkit-light-phone/project-graph.png": {
+   "equal": true,
+   "sha256": "47bd30854211a436140c04fc248055dd75cdb8d6ca0cc5a6e02107921acd6673"
+  },
+  "webkit-light-phone/project-overview.png": {
+   "equal": true,
+   "sha256": "73f6ecab0a3b68b03ee01528f4437df6f58a2f94b483b36458b20e74abd4a7b8"
+  },
+  "webkit-light-phone/projects-error.png": {
+   "equal": true,
+   "sha256": "bf80fed79089ba055f584a8c3f09ea5c857dc2a0710fc771538ace5574c12e1e"
+  },
+  "webkit-light-phone/projects-list.png": {
+   "equal": true,
+   "sha256": "d8c22faa736fa636a094f19f954394c6597eea76c4a7288dc2173a710ee99ede"
+  },
+  "webkit-light-phone/projects-loading.png": {
+   "equal": true,
+   "sha256": "1d31a39992a6f1c3e68ebc1f45a64291ccf7b7035f156f784648001a61a538e1"
+  },
+  "webkit-light-phone/projects-search-empty.png": {
+   "equal": true,
+   "sha256": "10c4ed86c0df40dc2c46924299bfedb98587fb9aad287c79a24eda51b9bca774"
+  },
+  "webkit-light-phone/session-attachment-menu.png": {
+   "equal": true,
+   "sha256": "693ed52ac4b28181851cf9c7848d9a16cd929fc9b504079b869c98fcd2588068"
+  },
+  "webkit-light-phone/session-attachment-staged.png": {
+   "equal": true,
+   "sha256": "681d802e82fe6a2e6410ea10439779a564d2bd92e4e2134c5a38872f99425f39"
+  },
+  "webkit-light-phone/session-composer-focus.png": {
+   "equal": true,
+   "sha256": "45254e6ab720f7935fd9bebf13fbaec66de991e40f3b6ab167b30139dd8d8dd7"
+  },
+  "webkit-light-phone/session-idle.png": {
+   "equal": true,
+   "sha256": "afcf7dc6b95ca73b0bcb60b7e97f9092fb24c2cd2c571a57fe4ae8f09f0ff21b"
+  },
+  "webkit-light-phone/session-streaming.png": {
+   "equal": true,
+   "sha256": "247f9251aecd81336ed491704932054d9ae7aa34fd865258cc8ce0a03795a11e"
+  },
+  "webkit-light-phone/settings-saved.png": {
+   "equal": true,
+   "sha256": "645f9b38aa43728c1c594cde778aa1321f04f072862a1cbe4bf8d39dad9c4f43"
+  },
+  "webkit-light-phone/settings.png": {
+   "equal": true,
+   "sha256": "4e25c276d7a5863fca4936879170859516dc5b6e6f773e7a1d6c8bd84eae30ef"
+  },
+  "webkit-light-phone/task-action-focus.png": {
+   "equal": true,
+   "sha256": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479"
+  },
+  "webkit-light-phone/task-action-hover.png": {
+   "equal": true,
+   "sha256": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329"
+  },
+  "webkit-light-phone/task-action-menu.png": {
+   "equal": true,
+   "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802"
+  },
+  "webkit-light-phone/task-detail.png": {
+   "equal": true,
+   "sha256": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca"
+  },
+  "webkit-light-phone/task-public-share.png": {
+   "equal": true,
+   "sha256": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209"
+  },
+  "webkit-light-phone/task-share-dialog.png": {
+   "equal": true,
+   "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5"
+  },
+  "webkit-light-phone/wiki-contents.png": {
+   "equal": true,
+   "sha256": "20ea1c28980a475031ff17c284b1e280c3bc99c9979905936f9a8916338c637b"
+  },
+  "webkit-light-phone/wiki-home.png": {
+   "equal": true,
+   "sha256": "d578763aa2034724bed41da335ef5badbbd60916e6e209eb9a5f83e4b0bcaa11"
+  },
+  "webkit-light-phone/wiki-new-entry.png": {
+   "equal": true,
+   "sha256": "67ce4f6fb9ce491215e82a2c62b5e7bc963b294dacf3564465e81619d65e9da0"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/breakpoint-599-dialog": {},
+  "chromium-dark-desktop/breakpoint-599-share": {},
+  "chromium-dark-desktop/breakpoint-601-dialog": {},
+  "chromium-dark-desktop/breakpoint-601-share": {},
+  "chromium-dark-desktop/breakpoint-639-graph": {},
+  "chromium-dark-desktop/breakpoint-639-projects": {},
+  "chromium-dark-desktop/breakpoint-641-graph": {},
+  "chromium-dark-desktop/breakpoint-641-projects": {},
+  "chromium-dark-desktop/breakpoint-959-session": {},
+  "chromium-dark-desktop/breakpoint-959-wiki": {},
+  "chromium-dark-desktop/breakpoint-961-session": {},
+  "chromium-dark-desktop/breakpoint-961-wiki": {},
+  "chromium-dark-desktop/notification-error": {},
+  "chromium-dark-desktop/profile": {},
+  "chromium-dark-desktop/profile-validation": {},
+  "chromium-dark-desktop/project-graph": {},
+  "chromium-dark-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-desktop/project-overview": {},
+  "chromium-dark-desktop/projects-error": {},
+  "chromium-dark-desktop/projects-list": {},
+  "chromium-dark-desktop/projects-loading": {},
+  "chromium-dark-desktop/projects-search-empty": {},
+  "chromium-dark-desktop/session-attachment-menu": {},
+  "chromium-dark-desktop/session-attachment-staged": {},
+  "chromium-dark-desktop/session-composer-focus": {},
+  "chromium-dark-desktop/session-idle": {},
+  "chromium-dark-desktop/session-streaming": {},
+  "chromium-dark-desktop/settings": {},
+  "chromium-dark-desktop/settings-saved": {},
+  "chromium-dark-desktop/task-action-focus": {},
+  "chromium-dark-desktop/task-action-hover": {},
+  "chromium-dark-desktop/task-action-menu": {},
+  "chromium-dark-desktop/task-detail": {},
+  "chromium-dark-desktop/task-public-share": {},
+  "chromium-dark-desktop/task-share-dialog": {},
+  "chromium-dark-desktop/wiki-home": {},
+  "chromium-dark-desktop/wiki-new-entry": {},
+  "chromium-dark-phone/notification-error": {},
+  "chromium-dark-phone/profile": {},
+  "chromium-dark-phone/profile-validation": {},
+  "chromium-dark-phone/project-graph": {},
+  "chromium-dark-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/project-overview": {},
+  "chromium-dark-phone/projects-error": {},
+  "chromium-dark-phone/projects-list": {},
+  "chromium-dark-phone/projects-loading": {},
+  "chromium-dark-phone/projects-search-empty": {},
+  "chromium-dark-phone/session-attachment-menu": {},
+  "chromium-dark-phone/session-attachment-staged": {},
+  "chromium-dark-phone/session-composer-focus": {},
+  "chromium-dark-phone/session-idle": {},
+  "chromium-dark-phone/session-streaming": {},
+  "chromium-dark-phone/settings": {},
+  "chromium-dark-phone/settings-saved": {},
+  "chromium-dark-phone/task-action-focus": {},
+  "chromium-dark-phone/task-action-hover": {},
+  "chromium-dark-phone/task-action-menu": {},
+  "chromium-dark-phone/task-detail": {},
+  "chromium-dark-phone/task-public-share": {},
+  "chromium-dark-phone/task-share-dialog": {},
+  "chromium-dark-phone/wiki-contents": {},
+  "chromium-dark-phone/wiki-home": {},
+  "chromium-dark-phone/wiki-new-entry": {},
+  "chromium-light-desktop/breakpoint-599-dialog": {},
+  "chromium-light-desktop/breakpoint-599-share": {},
+  "chromium-light-desktop/breakpoint-601-dialog": {},
+  "chromium-light-desktop/breakpoint-601-share": {},
+  "chromium-light-desktop/breakpoint-639-graph": {},
+  "chromium-light-desktop/breakpoint-639-projects": {},
+  "chromium-light-desktop/breakpoint-641-graph": {},
+  "chromium-light-desktop/breakpoint-641-projects": {},
+  "chromium-light-desktop/breakpoint-959-session": {},
+  "chromium-light-desktop/breakpoint-959-wiki": {},
+  "chromium-light-desktop/breakpoint-961-session": {},
+  "chromium-light-desktop/breakpoint-961-wiki": {},
+  "chromium-light-desktop/notification-error": {},
+  "chromium-light-desktop/profile": {},
+  "chromium-light-desktop/profile-validation": {},
+  "chromium-light-desktop/project-graph": {},
+  "chromium-light-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/project-overview": {},
+  "chromium-light-desktop/projects-error": {},
+  "chromium-light-desktop/projects-list": {},
+  "chromium-light-desktop/projects-loading": {},
+  "chromium-light-desktop/projects-search-empty": {},
+  "chromium-light-desktop/session-attachment-menu": {},
+  "chromium-light-desktop/session-attachment-staged": {},
+  "chromium-light-desktop/session-composer-focus": {},
+  "chromium-light-desktop/session-idle": {},
+  "chromium-light-desktop/session-streaming": {},
+  "chromium-light-desktop/settings": {},
+  "chromium-light-desktop/settings-saved": {},
+  "chromium-light-desktop/task-action-focus": {},
+  "chromium-light-desktop/task-action-hover": {},
+  "chromium-light-desktop/task-action-menu": {},
+  "chromium-light-desktop/task-detail": {},
+  "chromium-light-desktop/task-public-share": {},
+  "chromium-light-desktop/task-share-dialog": {},
+  "chromium-light-desktop/wiki-home": {},
+  "chromium-light-desktop/wiki-new-entry": {},
+  "chromium-light-phone/notification-error": {},
+  "chromium-light-phone/profile": {},
+  "chromium-light-phone/profile-validation": {},
+  "chromium-light-phone/project-graph": {},
+  "chromium-light-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/project-overview": {},
+  "chromium-light-phone/projects-error": {},
+  "chromium-light-phone/projects-list": {},
+  "chromium-light-phone/projects-loading": {},
+  "chromium-light-phone/projects-search-empty": {},
+  "chromium-light-phone/session-attachment-menu": {},
+  "chromium-light-phone/session-attachment-staged": {},
+  "chromium-light-phone/session-composer-focus": {},
+  "chromium-light-phone/session-idle": {},
+  "chromium-light-phone/session-streaming": {},
+  "chromium-light-phone/settings": {},
+  "chromium-light-phone/settings-saved": {},
+  "chromium-light-phone/task-action-focus": {},
+  "chromium-light-phone/task-action-hover": {},
+  "chromium-light-phone/task-action-menu": {},
+  "chromium-light-phone/task-detail": {},
+  "chromium-light-phone/task-public-share": {},
+  "chromium-light-phone/task-share-dialog": {},
+  "chromium-light-phone/wiki-contents": {},
+  "chromium-light-phone/wiki-home": {},
+  "chromium-light-phone/wiki-new-entry": {},
+  "webkit-dark-desktop/breakpoint-599-dialog": {},
+  "webkit-dark-desktop/breakpoint-599-share": {},
+  "webkit-dark-desktop/breakpoint-601-dialog": {},
+  "webkit-dark-desktop/breakpoint-601-share": {},
+  "webkit-dark-desktop/breakpoint-639-graph": {},
+  "webkit-dark-desktop/breakpoint-639-projects": {},
+  "webkit-dark-desktop/breakpoint-641-graph": {},
+  "webkit-dark-desktop/breakpoint-641-projects": {},
+  "webkit-dark-desktop/breakpoint-959-session": {},
+  "webkit-dark-desktop/breakpoint-959-wiki": {},
+  "webkit-dark-desktop/breakpoint-961-session": {},
+  "webkit-dark-desktop/breakpoint-961-wiki": {},
+  "webkit-dark-desktop/notification-error": {},
+  "webkit-dark-desktop/profile": {},
+  "webkit-dark-desktop/profile-validation": {},
+  "webkit-dark-desktop/project-graph": {},
+  "webkit-dark-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/project-overview": {},
+  "webkit-dark-desktop/projects-error": {},
+  "webkit-dark-desktop/projects-list": {},
+  "webkit-dark-desktop/projects-loading": {},
+  "webkit-dark-desktop/projects-search-empty": {},
+  "webkit-dark-desktop/session-attachment-menu": {},
+  "webkit-dark-desktop/session-attachment-staged": {},
+  "webkit-dark-desktop/session-composer-focus": {},
+  "webkit-dark-desktop/session-idle": {},
+  "webkit-dark-desktop/session-streaming": {},
+  "webkit-dark-desktop/settings": {},
+  "webkit-dark-desktop/settings-saved": {},
+  "webkit-dark-desktop/task-action-focus": {},
+  "webkit-dark-desktop/task-action-hover": {},
+  "webkit-dark-desktop/task-action-menu": {},
+  "webkit-dark-desktop/task-detail": {},
+  "webkit-dark-desktop/task-public-share": {},
+  "webkit-dark-desktop/task-share-dialog": {},
+  "webkit-dark-desktop/wiki-home": {},
+  "webkit-dark-desktop/wiki-new-entry": {},
+  "webkit-dark-phone/notification-error": {},
+  "webkit-dark-phone/profile": {},
+  "webkit-dark-phone/profile-validation": {},
+  "webkit-dark-phone/project-graph": {},
+  "webkit-dark-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/project-overview": {},
+  "webkit-dark-phone/projects-error": {},
+  "webkit-dark-phone/projects-list": {},
+  "webkit-dark-phone/projects-loading": {},
+  "webkit-dark-phone/projects-search-empty": {},
+  "webkit-dark-phone/session-attachment-menu": {},
+  "webkit-dark-phone/session-attachment-staged": {},
+  "webkit-dark-phone/session-composer-focus": {},
+  "webkit-dark-phone/session-idle": {},
+  "webkit-dark-phone/session-streaming": {},
+  "webkit-dark-phone/settings": {},
+  "webkit-dark-phone/settings-saved": {},
+  "webkit-dark-phone/task-action-focus": {},
+  "webkit-dark-phone/task-action-hover": {},
+  "webkit-dark-phone/task-action-menu": {},
+  "webkit-dark-phone/task-detail": {},
+  "webkit-dark-phone/task-public-share": {},
+  "webkit-dark-phone/task-share-dialog": {},
+  "webkit-dark-phone/wiki-contents": {},
+  "webkit-dark-phone/wiki-home": {},
+  "webkit-dark-phone/wiki-new-entry": {},
+  "webkit-light-desktop/breakpoint-599-dialog": {},
+  "webkit-light-desktop/breakpoint-599-share": {},
+  "webkit-light-desktop/breakpoint-601-dialog": {},
+  "webkit-light-desktop/breakpoint-601-share": {},
+  "webkit-light-desktop/breakpoint-639-graph": {},
+  "webkit-light-desktop/breakpoint-639-projects": {},
+  "webkit-light-desktop/breakpoint-641-graph": {},
+  "webkit-light-desktop/breakpoint-641-projects": {},
+  "webkit-light-desktop/breakpoint-959-session": {},
+  "webkit-light-desktop/breakpoint-959-wiki": {},
+  "webkit-light-desktop/breakpoint-961-session": {},
+  "webkit-light-desktop/breakpoint-961-wiki": {},
+  "webkit-light-desktop/notification-error": {},
+  "webkit-light-desktop/profile": {},
+  "webkit-light-desktop/profile-validation": {},
+  "webkit-light-desktop/project-graph": {},
+  "webkit-light-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/project-overview": {},
+  "webkit-light-desktop/projects-error": {},
+  "webkit-light-desktop/projects-list": {},
+  "webkit-light-desktop/projects-loading": {},
+  "webkit-light-desktop/projects-search-empty": {},
+  "webkit-light-desktop/session-attachment-menu": {},
+  "webkit-light-desktop/session-attachment-staged": {},
+  "webkit-light-desktop/session-composer-focus": {},
+  "webkit-light-desktop/session-idle": {},
+  "webkit-light-desktop/session-streaming": {},
+  "webkit-light-desktop/settings": {},
+  "webkit-light-desktop/settings-saved": {},
+  "webkit-light-desktop/task-action-focus": {},
+  "webkit-light-desktop/task-action-hover": {},
+  "webkit-light-desktop/task-action-menu": {},
+  "webkit-light-desktop/task-detail": {},
+  "webkit-light-desktop/task-public-share": {},
+  "webkit-light-desktop/task-share-dialog": {},
+  "webkit-light-desktop/wiki-home": {},
+  "webkit-light-desktop/wiki-new-entry": {},
+  "webkit-light-phone/notification-error": {},
+  "webkit-light-phone/profile": {},
+  "webkit-light-phone/profile-validation": {},
+  "webkit-light-phone/project-graph": {},
+  "webkit-light-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/project-overview": {},
+  "webkit-light-phone/projects-error": {},
+  "webkit-light-phone/projects-list": {},
+  "webkit-light-phone/projects-loading": {},
+  "webkit-light-phone/projects-search-empty": {},
+  "webkit-light-phone/session-attachment-menu": {},
+  "webkit-light-phone/session-attachment-staged": {},
+  "webkit-light-phone/session-composer-focus": {},
+  "webkit-light-phone/session-idle": {},
+  "webkit-light-phone/session-streaming": {},
+  "webkit-light-phone/settings": {},
+  "webkit-light-phone/settings-saved": {},
+  "webkit-light-phone/task-action-focus": {},
+  "webkit-light-phone/task-action-hover": {},
+  "webkit-light-phone/task-action-menu": {},
+  "webkit-light-phone/task-detail": {},
+  "webkit-light-phone/task-public-share": {},
+  "webkit-light-phone/task-share-dialog": {},
+  "webkit-light-phone/wiki-contents": {},
+  "webkit-light-phone/wiki-home": {},
+  "webkit-light-phone/wiki-new-entry": {}
+ },
+ "tests": {
+  "chromium-dark-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-desktop :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: record browser performance baseline": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-desktop :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-desktop :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P2.3 production notification compatibility": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: controlled error \u203a projects error and retry": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: controlled loading \u203a projects loading and release": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: profile": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: projects": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: record browser performance baseline": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: session": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: settings": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: share": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: wiki": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {}
+}

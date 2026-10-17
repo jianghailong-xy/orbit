@@ -12,14 +12,20 @@ import (
 	"unsafe"
 )
 
+// antigravityGooglePTYOutput is where the PTY's output is copied to. A variable only so a test can
+// hold that copy back and have agy's exit seen before its last output, an order nothing else forces.
+var antigravityGooglePTYOutput = func(out io.Writer) io.Writer { return out }
+
 // agy itself owns the PTY session/process group, so cancellation can target precisely the PID
-// this relay started. No script shell or detached wrapper can outlive it.
-func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, error) {
+// this relay started. No script shell or detached wrapper can outlive it. The channel returned is
+// closed once the copy to out stops: when the last process has closed the terminal and everything
+// printed to it has been read, or when the master is closed.
+func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, <-chan struct{}, error) {
 	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	fail := func(err error) (io.WriteCloser, error) { _ = master.Close(); return nil, err }
+	fail := func(err error) (io.WriteCloser, <-chan struct{}, error) { _ = master.Close(); return nil, nil, err }
 	var unlock int32
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, master.Fd(), 0x40045431, uintptr(unsafe.Pointer(&unlock))); errno != 0 {
 		return fail(errno)
@@ -52,6 +58,10 @@ func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, er
 	if err := cmd.Start(); err != nil {
 		return fail(err)
 	}
-	go func() { _, _ = io.Copy(out, master) }()
-	return master, nil
+	copied := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(antigravityGooglePTYOutput(out), master)
+		close(copied)
+	}()
+	return master, copied, nil
 }

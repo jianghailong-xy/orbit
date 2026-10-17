@@ -33,6 +33,8 @@ public struct TaskProgress: Equatable, Sendable, Codable {
         public var toolCalls: Int?
         public var lastToolName: String?
         public var lastToolSummary: String?
+        /// The Agent call whose nested transcript contains this workflow agent's activity.
+        public var transcriptKey: String?
         public var error: String?
         /// Answered from the workflow's journal on a resume rather than run again.
         public var cached: Bool = false
@@ -91,6 +93,7 @@ public struct TaskProgress: Equatable, Sendable, Codable {
                              tokens: a["tokens"]?.intValue, toolCalls: a["toolCalls"]?.intValue,
                              lastToolName: a["lastToolName"]?.stringValue,
                              lastToolSummary: a["lastToolSummary"]?.stringValue,
+                             transcriptKey: a["transcriptKey"]?.stringValue,
                              error: a["error"]?.stringValue,
                              cached: a["cached"]?.boolValue ?? false)
             }

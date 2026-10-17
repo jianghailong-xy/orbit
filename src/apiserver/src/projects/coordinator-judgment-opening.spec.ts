@@ -43,10 +43,10 @@ const ENDED = attemptEndedUnsettledFact({
 test('the opening says what happened, and says it from the fact rather than from the project', () => {
   const opening = buildJudgmentOpening(ENDED, '协调重做');
 
-  assert.match(opening, /发生了什么：/);
+  assert.match(opening, /What happened: /);
   // The task's id, in the spelling every tool this session can call takes back.
   assert.match(opening, new RegExp(uuidToBase62(TASK)));
-  assert.match(opening, /不是终态/);
+  assert.match(opening, /not a terminal state/);
   // The status came out of `detail`, which is the only reader that field is for.
   assert.match(opening, /IN_PROGRESS/);
   // Raw uuids are not a spelling anything here accepts, so neither id may go out as one.
@@ -58,8 +58,8 @@ test('the opening names where the full state is read, with this project’s id a
   const opening = buildJudgmentOpening(ENDED, '协调重做');
   const projectId = uuidToBase62(PROJECT);
 
-  assert.match(opening, new RegExp(`project_get（projectId 传 ${projectId}）`));
-  assert.match(opening, new RegExp(`task_list（projectId 传 ${projectId}）`));
+  assert.match(opening, new RegExp(`project_get \\(projectId: ${projectId}\\)`));
+  assert.match(opening, new RegExp(`task_list \\(projectId: ${projectId}\\)`));
   assert.match(opening, /task_get/);
 });
 
@@ -69,7 +69,7 @@ test('the opening names the tools that are in reach, and the ones that are not',
     'task_create', 'task_update', 'task_comment', 'task_start', 'project_update']) {
     assert.match(opening, new RegExp(tool), `the opening must name ${tool}`);
   }
-  assert.match(opening, /没给你的工具就别去找/);
+  assert.match(opening, /Do not go looking for tools you were not given/);
 });
 
 /**
@@ -83,29 +83,29 @@ test('the opening names the tools that are in reach, and the ones that are not',
 test('the opening does not instruct, and does not repeat the two sentences that are false here', () => {
   const opening = buildJudgmentOpening(ENDED, '协调重做');
 
-  assert.doesNotMatch(opening, /没有任何自动的环会替你决定什么时候动/);
-  assert.doesNotMatch(opening, /推进靠的是跟人对话/);
-  // No imperative about the work itself. "先读再说" is the conversational opening's, and "你应该"
+  assert.doesNotMatch(opening, /No automatic loop decides for you when to act/);
+  assert.doesNotMatch(opening, /Progress comes from talking with people/);
+  // No imperative about the work itself. "Read first" is the conversational opening's, and "you should"
   // is the shape any later edit would most likely reach for.
-  assert.doesNotMatch(opening, /先读再说/);
-  assert.doesNotMatch(opening, /你应该|你需要|请先|接下来你/);
+  assert.doesNotMatch(opening, /Read first/);
+  assert.doesNotMatch(opening, /you should|you need to|please first|next, you/i);
 });
 
 test('the opening states the two facts about the session itself: one fact, one turn', () => {
   const opening = buildJudgmentOpening(ENDED, '协调重做');
 
-  assert.match(opening, /只有这一轮/);
-  assert.match(opening, /不会有人接着往里发消息/);
+  assert.match(opening, /has only this one turn/);
+  assert.match(opening, /nobody will send it further messages/);
   // And that the person's conversation is a different one over the same database.
-  assert.match(opening, /不共享上下文/);
+  assert.match(opening, /shares no context/);
 });
 
 test('the opening carries no project state beyond the title and the fact', () => {
   const opening = buildJudgmentOpening(ENDED, '协调重做');
   // Everything a coordinator needs is a read, named above. Copying any of it in would freeze it at
   // the moment the fact was claimed, which is before this session runs.
-  assert.doesNotMatch(opening, /验收标准是|目标是|作业指导是/);
-  assert.match(opening, /这段开场白里除了上面那条事实，没有这个项目的任何其他状态/);
+  assert.doesNotMatch(opening, /acceptance criteria are|the goal is|instructions are/i);
+  assert.match(opening, /apart from the fact above, this opening message carries none of the project’s state/);
 });
 
 test('every wake event has a sentence of its own', () => {
@@ -118,9 +118,9 @@ test('every wake event has a sentence of its own', () => {
   ])!;
   const criterion = criterionReadyFact(PROJECT, 'ab12', [{ taskId: TASK, status: 'DONE' }])!;
 
-  assert.match(describeWakeFact(ENDED), /会话结束了/);
+  assert.match(describeWakeFact(ENDED), /A session of task \w+ ended/);
   assert.match(describeWakeFact(budget), /COORDINATOR_STEERS/);
-  assert.match(describeWakeFact(settled), /2 个任务都到了终态/);
+  assert.match(describeWakeFact(settled), /All 2 tasks in this project have reached a terminal state/);
   assert.match(describeWakeFact(criterion), /ab12/);
 
   // A fifth event added without a sentence here opens its session saying so, rather than saying
@@ -146,14 +146,14 @@ test('a blocker notification gives the coordinator the human handoff and the exi
     },
   });
 
-  assert.match(describeWakeFact(blocker), /需要账号所有者裁决/);
+  assert.match(describeWakeFact(blocker), /needs the account owner’s ruling/);
   const message = buildCoordinatorDeliveryMessage(blocker, 'tea-cli app-build');
-  assert.match(message, /agent 的原话：/);
-  assert.match(message, /当前判据：/);
+  assert.match(message, /The agent’s own words:/);
+  assert.match(message, /The current criterion:/);
   assert.match(message, /project_blocker_resolve/);
-  assert.match(message, /只有账号所有者同意后 blocker 才会关闭/);
+  assert.match(message, /the blocker closes only once the account owner agrees/);
   assert.match(message, new RegExp(uuidToBase62(blockerId)));
-  assert.match(message, /不要合并，也不要放行下一条任务/);
+  assert.match(message, /do not merge, and do not release the next task/);
 });
 
 test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the judgment did', () => {
@@ -165,7 +165,7 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the
   for (const tool of ['project_get', 'project_merge_evidence', 'task_comment']) {
     assert.match(opening, new RegExp(tool), `settlement judgment must be handed ${tool}`);
   }
-  const merge = opening.lastIndexOf('合并到 main');
+  const merge = opening.lastIndexOf('merge into main');
   const evidence = opening.lastIndexOf('project_merge_evidence');
   assert.ok(merge < evidence, 'the evidence order drifted');
 
@@ -176,23 +176,23 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the
     assert.equal(opening.includes(gone), false,
       `the settlement opening still names ${gone}, which 0229 removed`);
   }
-  assert.match(opening, /task_comment 中升级给人/);
+  assert.match(opening, /task_comment on the tasks concerned to escalate it to a person/);
   // It used to tell the session to file a "merge and record main evidence" task against a
   // criterion, and on 2026-10-01 one did — in the gap between the work landing on the project branch
   // and that branch reaching main, against a criterion that was already met (D5). It now says to
   // look for the landing first, and that such a task is not a judgment's to open.
-  assert.equal(opening.includes('合并并录入主干证据'), false, 'the merge-task instruction is back');
-  assert.match(opening, /LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION 排队或在跑——那就什么都不开，结束本轮/);
+  assert.equal(opening.includes('merge and record main evidence'), false, 'the merge-task instruction is back');
+  assert.match(opening, /LAND_TASK, CHECK_PROMOTION or LAND_PROMOTION queued or running — then open nothing and end this turn/);
   assert.match(opening, /TASK_LANDING_IN_FLIGHT/);
-  assert.match(opening, /不开“合进 main”的任务/);
-  assert.match(opening, /不服务任何验收标准，不得带 criterionKey/);
+  assert.match(opening, /Open no “merge into main” task/);
+  assert.match(opening, /serves no acceptance criterion and may not carry a criterionKey/);
   // And it says what the work that IS still missing is filed with: the criterion it serves.
-  assert.match(opening, /task_create 开普通任务，带上它服务的那条 criterionKey/);
+  assert.match(opening, /open an ordinary task with task_create, carrying the criterionKey it serves/);
   // And it says the removal out loud rather than leaving the session to infer it from an absence.
-  assert.match(opening, /没有任何东西会判定这些验收标准/);
-  assert.match(opening, /status 你也写不了/);
+  assert.match(opening, /Nothing in Orbit judges these acceptance criteria/);
+  assert.match(opening, /cannot write status with project_update either/);
   assert.match(opening, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
-  assert.match(opening, /不是对“真人在场”的密码学证明/);
+  assert.match(opening, /not a cryptographic proof of human presence/);
 });
 
 /**
@@ -216,21 +216,21 @@ test('the confirmation card refuses status from a session, and derives DONE rath
     [{ key: 'ab12', text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] }],
   )!;
   const card = buildCoordinatorDeliveryMessage(landed, '验收闭环');
-  const [status] = card.split('\n\n').filter((para) => para.includes('project_update 的 status'));
+  const [status] = card.split('\n\n').filter((para) => para.includes('status with project_update'));
 
-  assert.ok(status, 'the card says nothing about project_update 的 status');
-  assert.doesNotMatch(card, /没有守卫/);
+  assert.ok(status, 'the card says nothing about status with project_update');
+  assert.doesNotMatch(card, /no guard/);
   // The refusal, spelled with the code the reader would meet as an HTTP 403.
-  assert.match(status, /写不了|拒掉/);
+  assert.match(status, /cannot write|refused/);
   assert.match(status, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
   // And DONE as the projection of its three inputs, named so the reader stops looking for a writer.
-  assert.match(status, /投影/);
-  assert.match(status, /满足/);
+  assert.match(status, /projects it/);
+  assert.match(status, /satisfied/);
   assert.match(status, /LANDED/);
-  assert.match(status, /账号所有者[^。]*这一版标准集|这一版标准集[^。]*账号所有者/);
+  assert.match(status, /account owner[^.]*this version of the standard set|this version of the standard set[^.]*account owner/);
   // None of which this conversation performs: the card may not read as an invitation to write it.
-  assert.doesNotMatch(status, /你去写|你来写|由你/);
-  assert.doesNotMatch(status, /写不写由账号所有者决定/);
+  assert.doesNotMatch(status, /you write it|you go and write|up to you|by you/i);
+  assert.doesNotMatch(status, /whether it is written is the account owner’s decision/);
 });
 
 /**
@@ -255,14 +255,14 @@ test('the confirmation card sends the owner to the card in this conversation, no
   const [who] = card.split('\n\n').filter((para) => para.includes('HUMAN_ONLY'));
 
   assert.ok(who, 'the card says nothing about who may confirm');
-  assert.doesNotMatch(card, /网页上/);
-  assert.doesNotMatch(card, /项目页/);
-  assert.match(who, /这个会话里[^。]*确认卡上确认/);
-  assert.match(who, /网页、iOS、macOS/);
+  assert.doesNotMatch(card, /web page/);
+  assert.doesNotMatch(card, /project page/);
+  assert.match(who, /confirm on the confirmation card in this conversation/);
+  assert.match(who, /the web, iOS and macOS/);
   // Still the owner's act on the owner's credential: the card is where it is pressed, not a
   // reason for this conversation to press anything.
-  assert.match(who, /账号所有者自己的凭据/);
-  assert.doesNotMatch(who, /你来确认|由你确认|你去确认/);
+  assert.match(who, /the account owner’s own credential/);
+  assert.doesNotMatch(who, /you confirm|confirmed by you|you go and confirm/i);
 });
 
 /** One criterion, and the fact saying it is satisfied and landed, keyed as the producer keys it. */
@@ -332,13 +332,13 @@ test('a confirmed standard set the projection settles leaves the landed card not
     LANDED_ONE, '验收闭环', readingOf(standardSetConfirmationStanding(VERSION, CONFIRMATION)),
   );
 
-  assert.doesNotMatch(notice, /确认卡上确认/);
-  assert.doesNotMatch(notice, /请账号所有者/);
+  assert.doesNotMatch(notice, /confirm on the confirmation card/);
+  assert.doesNotMatch(notice, /ask the account owner/);
   assert.ok(notice.includes('2026-09-25T04:37:25.000Z'), 'the notice does not say when it was confirmed');
-  assert.match(notice, /记为 DONE/);
-  assert.match(notice, /无需任何动作/);
+  assert.match(notice, /recorded as DONE/);
+  assert.match(notice, /no action is needed/);
   assert.match(notice, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
-  assert.doesNotMatch(notice, /你应该|你需要|请先|接下来你/);
+  assert.doesNotMatch(notice, /you should|you need to|please first|next, you/i);
   assert.equal(notice.includes('PASS'), false);
 
   const card = buildCoordinatorDeliveryMessage(LANDED_ONE, '验收闭环');
@@ -368,23 +368,23 @@ test('a confirmed standard set the projection still holds back is not reported D
     readingOf(standardSetConfirmationStanding(VERSION, CONFIRMATION), ['DECLARATION_STALE']),
   );
 
-  assert.doesNotMatch(notice, /记为 DONE/);
-  assert.doesNotMatch(notice, /无需任何动作/);
-  assert.doesNotMatch(notice, /确认卡上确认/);
-  assert.doesNotMatch(notice, /请账号所有者/);
+  assert.doesNotMatch(notice, /recorded as DONE/);
+  assert.doesNotMatch(notice, /no action is needed/);
+  assert.doesNotMatch(notice, /confirm on the confirmation card/);
+  assert.doesNotMatch(notice, /ask the account owner/);
   assert.ok(notice.includes('2026-09-25T04:37:25.000Z'), 'the notice does not say when it was confirmed');
   // What is missing, clause by clause, on the criterion it is missing from.
-  assert.match(notice, /扣住它的是 CRITERION_UNSATISFIED/);
-  assert.match(notice, /「条件 ab12」[^\n]*CRITERION_UNSATISFIED[^\n]*unmet：DECLARATION_STALE/);
+  assert.match(notice, /what holds it back is CRITERION_UNSATISFIED/);
+  assert.match(notice, /“条件 ab12”[^\n]*CRITERION_UNSATISFIED[^\n]*unmet: DECLARATION_STALE/);
   // And where the rest of it is read.
   assert.match(notice, /project_get[^\n]*derivedDone/);
   assert.match(notice, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
-  assert.doesNotMatch(notice, /你应该|你需要|请先|接下来你/);
+  assert.doesNotMatch(notice, /you should|you need to|please first|next, you/i);
   assert.equal(notice.includes('PASS'), false);
 });
 
 test('a judgment session is filed under a different title from the conversation', () => {
-  assert.equal(judgmentSessionTitle('协调重做'), '判断：协调重做');
+  assert.equal(judgmentSessionTitle('协调重做'), 'Judgment: 协调重做');
   assert.ok(judgmentSessionTitle('x'.repeat(200)).length <= 80);
 });
 
@@ -397,10 +397,10 @@ test('a judgment session is filed under a different title from the conversation'
  */
 test('the conversation a person opens still opens the way 60dece5e restored it', () => {
   const conversational = buildCoordinatorOpening('协调重做', PROJECT, false);
-  assert.match(conversational, /没有任何自动的环会替你决定什么时候动/);
-  assert.match(conversational, /推进靠的是跟人对话/);
-  assert.match(conversational, /先读再说/);
-  assert.doesNotMatch(conversational, /发生了什么：/);
+  assert.match(conversational, /No automatic loop decides for you when to act/);
+  assert.match(conversational, /Progress comes from talking with people/);
+  assert.match(conversational, /Read first/);
+  assert.doesNotMatch(conversational, /What happened: /);
 });
 
 /** The reducer owns no clock; a separately supervised courier may re-deliver its durable fact. */
@@ -457,19 +457,19 @@ test('a project that looks finished is told why it is not done, and the two thin
 
   const message = buildCoordinatorDeliveryMessage(settled, '收尾', reading, { escalationSeconds: 7200 });
 
-  assert.match(message, /看起来做完了，但 Orbit 自己记不了 Done/);
+  assert.match(message, /looks finished, but Orbit cannot record it Done by itself/);
   // The one criterion Orbit cannot prove, named the way the coordinator files work against it.
-  assert.match(message, new RegExp(`「上线走查」（key ${criterionKeyOf(OFF)}）：NOTHING_TO_LAND——`));
-  assert.equal(message.includes('「条件 ab12」'), false, 'a criterion on main by its own work is no gap');
+  assert.match(message, new RegExp(`“上线走查” \\(key ${criterionKeyOf(OFF)}\\): NOTHING_TO_LAND — `));
+  assert.equal(message.includes('“条件 ab12”'), false, 'a criterion on main by its own work is no gap');
   assert.match(message, /CRITERION_UNLANDED/);
   // Counted once, by the projection: the line is its `counts`, not a second tally.
-  assert.match(message, /2 条验收标准 · 2 条已满足 · 1 条在 main 上 · 1 条 NOTHING_TO_LAND/);
+  assert.match(message, /2 acceptance criteria · 2 satisfied · 1 on main · 1 NOTHING_TO_LAND/);
   // The two things it may do, and what each means.
-  assert.match(message, /请求收尾：[^\n]*project_request_done/);
-  assert.match(message, /去干活：[^\n]*不要给它 criterionKey/);
-  assert.match(message, /零提交的任务不要靠 merge_receipt 补回执/);
+  assert.match(message, /Request done: [^\n]*project_request_done/);
+  assert.match(message, /Go and do the work: [^\n]*do not give it a criterionKey/);
+  assert.match(message, /Do not patch a receipt onto a zero-commit task with merge_receipt/);
   // And what happens when it does neither.
-  assert.match(message, /exceptionEscalationSeconds（现在是 7200 秒）还没有收尾请求/);
-  assert.match(message, /Needs you 里会出现 Record as done…/);
+  assert.match(message, /exceptionEscalationSeconds \(currently 7200 seconds\) pass after this message with no request to close/);
+  assert.match(message, /Record as done… appears in the account owner’s Needs you/);
   assert.match(message, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
 });

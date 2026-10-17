@@ -1,0 +1,15 @@
+
+Running 10 tests using 1 worker
+
+  ✓   1 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (7.2s)
+  ✓   2 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (10.4s)
+  ✓   3 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (11.3s)
+  ✓   4 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (4.1s)
+  ✓   5 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (9.0s)
+  ✓   6 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (14.7s)
+  ✓   7 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.7s)
+  ✓   8 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.0s)
+  ✓   9 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓  10 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+
+  10 passed (1.6m)

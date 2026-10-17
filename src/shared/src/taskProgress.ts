@@ -7,6 +7,8 @@
 export interface TaskProgressAgent {
   index: number;
   label: string;
+  /** The child Agent tool_use id containing this workflow agent's transcript. */
+  transcriptKey?: string;
   phaseIndex?: number;
   phaseTitle?: string;
   /** The CLI's own word: `start` (queued), `running`, `done`, `error`, … */
@@ -74,6 +76,7 @@ export function parseTaskProgress(payload: unknown): TaskProgress | null {
       .map((a) => ({
         index: num(a.index)!,
         label: str(a.label) ?? '',
+        transcriptKey: str(a.transcriptKey),
         phaseIndex: num(a.phaseIndex),
         phaseTitle: str(a.phaseTitle),
         state: str(a.state),

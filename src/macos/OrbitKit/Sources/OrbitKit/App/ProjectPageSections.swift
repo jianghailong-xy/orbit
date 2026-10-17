@@ -121,9 +121,36 @@ extension ProjectPage {
         case "COORDINATOR": tag = ("Coordinator", .brand)
         default: tag = ("System", .neutral)
         }
+        if blocker.kind == SessionRunStart.unresolvedBlockerKind {
+            // §10.3's one kind for eight codes. The kind is the routing word ("someone has to
+            // change configuration or land something first — retrying will not help"); what it is
+            // ABOUT is the code, which rides in the payload. The headline is the session card's,
+            // keyed by the same `fixAction`, so the project page and the run's own page cannot
+            // tell two stories about one refusal.
+            let prose = SessionRunStart.refusalProse(blocker.detail.fixAction)
+            return BlockerHeadline(tag: tag.0, tone: tag.1, title: prose.why)
+        }
         let words = blocker.kind.lowercased().split(separator: "_").joined(separator: " ")
         let title = words.isEmpty ? blocker.kind : words.prefix(1).uppercased() + words.dropFirst()
         return BlockerHeadline(tag: tag.0, tone: tag.1, title: title)
+    }
+
+    /// What a `SOURCE_UNRESOLVED` blocker is about, under the headline: the refusal's own code and
+    /// the ref that could not be resolved, then one line per task whose runs are refused while it
+    /// stands. Empty for every other kind, whose row draws its own subject and paths instead.
+    ///
+    /// `titleFor` names a task; a task the page does not hold is named by its id, which is what
+    /// the blocker itself carries.
+    public static func blockerSourceLines(_ blocker: ProjectBlocker,
+                                          titleFor: (String) -> String? = { _ in nil }) -> [String] {
+        guard blocker.kind == SessionRunStart.unresolvedBlockerKind else { return [] }
+        var lines: [String] = []
+        let facts = [blocker.detail.code, blocker.detail.ref].compactMap { $0 }.filter { !$0.isEmpty }
+        if !facts.isEmpty { lines.append(facts.joined(separator: " · ")) }
+        for id in blocker.detail.taskIds {
+            if let title = titleFor(id), !title.isEmpty { lines.append(title) } else { lines.append(id) }
+        }
+        return lines
     }
 
     /// The work a blocker is about, and for a moved standard, where that standard stands now.

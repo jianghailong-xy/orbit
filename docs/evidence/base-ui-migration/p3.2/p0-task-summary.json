@@ -1,0 +1,516 @@
+{
+ "totals": {
+  "screenshots": 48,
+  "identical": 11,
+  "antialias": 12,
+  "tests": {
+   "failed/None": 17,
+   "skipped/None": 11,
+   "passed/None": 76,
+   "passed/passed": 8
+  },
+  "traces": 0,
+  "tracesEqual": 0,
+  "capturesWithStyleDeltas": 20,
+  "captures": 40,
+  "beyondAntialias": 25
+ },
+ "screenshots": {
+  "task-action-focus": {
+   "environments": 8,
+   "identical": 3,
+   "antialias": 4,
+   "beyond": {
+    "chromium-light-phone": {
+     "pixels": 2,
+     "pixelsAtMost2": 1,
+     "maxChannelDiff": 3
+    }
+   }
+  },
+  "task-action-hover": {
+   "environments": 8,
+   "identical": 4,
+   "antialias": 4,
+   "beyond": {}
+  },
+  "task-action-menu": {
+   "environments": 8,
+   "identical": 0,
+   "antialias": 0,
+   "beyond": {
+    "chromium-dark-desktop": {
+     "pixels": 1466,
+     "pixelsAtMost2": 67,
+     "maxChannelDiff": 46
+    },
+    "chromium-dark-phone": {
+     "pixels": 1630,
+     "pixelsAtMost2": 135,
+     "maxChannelDiff": 46
+    },
+    "chromium-light-desktop": {
+     "pixels": 1479,
+     "pixelsAtMost2": 57,
+     "maxChannelDiff": 82
+    },
+    "chromium-light-phone": {
+     "pixels": 1575,
+     "pixelsAtMost2": 57,
+     "maxChannelDiff": 82
+    },
+    "webkit-dark-desktop": {
+     "pixels": 1498,
+     "pixelsAtMost2": 69,
+     "maxChannelDiff": 45
+    },
+    "webkit-dark-phone": {
+     "pixels": 1664,
+     "pixelsAtMost2": 139,
+     "maxChannelDiff": 45
+    },
+    "webkit-light-desktop": {
+     "pixels": 1507,
+     "pixelsAtMost2": 60,
+     "maxChannelDiff": 82
+    },
+    "webkit-light-phone": {
+     "pixels": 1604,
+     "pixelsAtMost2": 61,
+     "maxChannelDiff": 82
+    }
+   }
+  },
+  "task-detail": {
+   "environments": 8,
+   "identical": 4,
+   "antialias": 4,
+   "beyond": {}
+  },
+  "task-public-share": {
+   "environments": 8,
+   "identical": 0,
+   "antialias": 0,
+   "beyond": {
+    "chromium-dark-desktop": {
+     "missingInDelivery": true
+    },
+    "chromium-dark-phone": {
+     "missingInDelivery": true
+    },
+    "chromium-light-desktop": {
+     "missingInDelivery": true
+    },
+    "chromium-light-phone": {
+     "missingInDelivery": true
+    },
+    "webkit-dark-desktop": {
+     "missingInDelivery": true
+    },
+    "webkit-dark-phone": {
+     "missingInDelivery": true
+    },
+    "webkit-light-desktop": {
+     "missingInDelivery": true
+    },
+    "webkit-light-phone": {
+     "missingInDelivery": true
+    }
+   }
+  },
+  "task-share-dialog": {
+   "environments": 8,
+   "identical": 0,
+   "antialias": 0,
+   "beyond": {
+    "chromium-dark-desktop": {
+     "pixels": 1618,
+     "pixelsAtMost2": 7,
+     "maxChannelDiff": 186
+    },
+    "chromium-dark-phone": {
+     "pixels": 21183,
+     "pixelsAtMost2": 19572,
+     "maxChannelDiff": 186
+    },
+    "chromium-light-desktop": {
+     "pixels": 1228,
+     "pixelsAtMost2": 8,
+     "maxChannelDiff": 239
+    },
+    "chromium-light-phone": {
+     "pixels": 31309,
+     "pixelsAtMost2": 30089,
+     "maxChannelDiff": 239
+    },
+    "webkit-dark-desktop": {
+     "pixels": 1260,
+     "pixelsAtMost2": 21,
+     "maxChannelDiff": 138
+    },
+    "webkit-dark-phone": {
+     "pixels": 1257,
+     "pixelsAtMost2": 18,
+     "maxChannelDiff": 138
+    },
+    "webkit-light-desktop": {
+     "pixels": 1254,
+     "pixelsAtMost2": 14,
+     "maxChannelDiff": 163
+    },
+    "webkit-light-phone": {
+     "pixels": 1254,
+     "pixelsAtMost2": 14,
+     "maxChannelDiff": 163
+    }
+   }
+  }
+ },
+ "traces": {},
+ "styles": {
+  "chromium-dark-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-dark-desktop/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-dark-phone/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-light-desktop/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-light-phone/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-dark-phone/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-light-desktop/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-light-phone/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  }
+ }
+}

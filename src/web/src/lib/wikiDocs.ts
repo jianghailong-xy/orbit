@@ -37,7 +37,7 @@ import {
   shortSha,
   type WikiEntry,
 } from './wiki';
-import { wikiCount, wikiIndexInitial, wikiPinyinCollator, WIKI_INDEX_LETTERS } from './wikiArticles';
+import { wikiArticleCount, wikiCount, wikiIndexInitial, wikiPinyinCollator, WIKI_INDEX_LETTERS } from './wikiArticles';
 import { wikiMonthDay } from './wikiReviewMode';
 
 export type {
@@ -106,6 +106,8 @@ export const WIKI_DOC_SECTION_NOT_WRITTEN = 'Not written yet — Wiki maintenanc
 
 /** The footnote card (mock 23 ⑥) and the footnotes under the text (mock 23 ⑦). */
 export const WIKI_DOC_FOOTNOTES = 'Footnotes';
+/** Whose words a person's comment is, on a public wiki link's card: the Owner's (share-links §6). */
+export const WIKI_OWNER_COMMENT = 'Owner’s comment';
 export const WIKI_VIA_ENTRY = 'Via entry';
 export const WIKI_NO_QUOTE_GIVEN = '— no quote given';
 /** The entries under the document (mock 23 ⑧): the ones its quotes came through. */
@@ -123,6 +125,13 @@ export const WIKI_DOC_GROUP_SHOWN_PHONE = 3;
 export const WIKI_BROWSE_SECTIONS_SHOWN_PHONE = 6;
 
 const plural = (count: number, one: string, many: string): string => `${wikiCount(count)} ${count === 1 ? one : many}`;
+
+/**
+ * A space's documents, as the native space picker says them under its repository (design §12.3.4, mock
+ * 31 ④): how many its confirmed plan has — or, with none, `WIKI_NO_DOCUMENTS`. The web's select names the
+ * spaces alone; the words are kept here with the documents' others so OrbitKit's `WikiCopy` says the same.
+ */
+export const wikiDocumentCount = (count: number): string => plural(count, 'document', 'documents');
 
 export const wikiMoreLines = (count: number): string => `… ${plural(count, 'more line', 'more lines')}`;
 export const wikiMoreSections = (count: number): string => plural(count, 'more section', 'more sections');
@@ -170,7 +179,7 @@ export function wikiQuoteCounts(footnotes: ReadonlyArray<Pick<WikiDocFootnoteVie
  * The tags after the category (mock 23 ②): its sections, its footnotes, and what the footnotes quote —
  * `9 sections · 45 footnotes · 14 session quotes · 30 code & doc quotes · 1 note`.
  */
-export function wikiDocTags(doc: Pick<WikiDocView, 'sections' | 'footnotes'>): string[] {
+export function wikiDocTags(doc: { sections: readonly unknown[]; footnotes: ReadonlyArray<Pick<WikiDocFootnoteView, 'kind'>> }): string[] {
   const tags = [plural(doc.sections.length, 'section', 'sections')];
   if (doc.footnotes.length > 0) tags.push(plural(doc.footnotes.length, 'footnote', 'footnotes'), ...wikiQuoteCounts(doc.footnotes));
   return tags;
@@ -829,3 +838,82 @@ export const wikiDocsIndexPath = (spaceSlug: string, item: WikiDocsIndexItem): s
   item.kind === 'section' && item.sectionKey
     ? wikiDocSectionPath(spaceSlug, item.docSlug, item.sectionKey)
     : wikiDocPath(spaceSlug, item.docSlug);
+
+// ── The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥) ──────────────────────────
+
+/** The line under the home's head once a plan is confirmed (`docs.total`, `docs.written`): `35 documents · 5 written`. */
+export const wikiDocsWritten = (total: number, written: number): string =>
+  `${plural(total, 'document', 'documents')} · ${wikiCount(written)} written`;
+/** The same line while there is nothing to read: no plan confirmed and no topic article. */
+export const WIKI_NO_DOCUMENTS = 'No documents yet';
+/** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_PLAN_SET_UP`). */
+export const WIKI_NO_DOCUMENTS_NOTE =
+  'This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.';
+/** A category's documents not written yet, folded into one row under its written ones: `+3 not written yet`. */
+export const wikiNotWrittenYet = (count: number): string => `+${wikiCount(count)} not written yet`;
+/** A category none of whose documents is written yet, as its one row: `3 documents · Not written yet`. */
+export const wikiDocsNotWrittenYet = (count: number): string =>
+  `${plural(count, 'document', 'documents')} · ${WIKI_DOC_NOT_WRITTEN_SHORT}`;
+
+/**
+ * The line under the home's head: the confirmed plan's documents and how many are written; before a plan, the
+ * topic articles the home lists in its place (`wikiArticleCount`); with neither, `No documents yet`.
+ */
+export function wikiHomeLine(directory: WikiDocsDirectory | null | undefined, articles: number): string {
+  if (directory && wikiReadsByDocs(directory)) return wikiDocsWritten(directory.docs.total, directory.docs.written);
+  return articles > 0 ? wikiArticleCount(articles) : WIKI_NO_DOCUMENTS;
+}
+
+/** A written document on the home: its number, title and lead, and whether it is new to the reader. */
+export interface WikiHomeDoc {
+  slug: string;
+  number: string;
+  title: string;
+  /** Its two lines (`WIKI_DOC_LEAD_RULES`); null when the read carries none. */
+  lead: string | null;
+  /** A blue dot: written after the reader last looked at the home. */
+  fresh: boolean;
+}
+
+/** One category of the home: its written documents, then the ones not written yet, which fold into one row. */
+export interface WikiHomeCategory {
+  key: string;
+  number: number;
+  title: string;
+  written: WikiHomeDoc[];
+  notWritten: Array<{ slug: string; number: string; title: string }>;
+}
+
+/**
+ * The home's documents (design §12.3.1): the confirmed plan's categories in its order — a category with no
+ * document left out, as the directory leaves it — each with its documents in the plan's order, the written
+ * ones first. `seen` is when the reader last looked at the home (`wikiSeenKey(space, 'home')`): a document
+ * written after it is new, and every written one is to a reader who has not looked before.
+ */
+export function wikiHomeCategories(directory: WikiDocsDirectory, seen: number): WikiHomeCategory[] {
+  return directory.categories
+    .filter((category) => category.docs.length > 0)
+    .map((category) => ({
+      key: category.key,
+      number: category.number,
+      title: category.title || category.key,
+      written: category.docs
+        .filter((doc) => doc.written)
+        .map((doc) => ({
+          slug: doc.slug,
+          number: doc.number,
+          title: doc.title || doc.slug,
+          lead: doc.lead ?? null,
+          fresh: seen <= 0 || (doc.updatedAt !== null && Date.parse(doc.updatedAt) > seen),
+        })),
+      notWritten: category.docs
+        .filter((doc) => !doc.written)
+        .map((doc) => ({ slug: doc.slug, number: doc.number, title: doc.title || doc.slug })),
+    }));
+}
+
+/** A category's folded row: `+3 not written yet` under written ones, `3 documents · Not written yet` alone; none when all are written. */
+export function wikiNotWrittenRow(category: Pick<WikiHomeCategory, 'written' | 'notWritten'>): string | null {
+  if (category.notWritten.length === 0) return null;
+  return category.written.length > 0 ? wikiNotWrittenYet(category.notWritten.length) : wikiDocsNotWrittenYet(category.notWritten.length);
+}

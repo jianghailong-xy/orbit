@@ -1,0 +1,10 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (6.7s)
+  ✓  2 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (4.3s)
+  ✓  3 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (7.8s)
+  ✓  4 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (5.4s)
+  ✓  5 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (8.9s)
+
+  5 passed (47.9s)

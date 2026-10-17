@@ -1,0 +1,182 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:05:23.800Z",
+    "duration": 18772.704999999998,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1816
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1317
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1258
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1323
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1109
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1302
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1240
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1286
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1599
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1805
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--menu-arrows-disabled-items-submenu-checkbox-and-focus-return-work--keyboard-menu.json",
+          "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+        }
+      ]
+    }
+  ]
+}

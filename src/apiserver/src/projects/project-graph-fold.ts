@@ -1,4 +1,4 @@
-import { TaskStatus } from '@prisma/client';
+import { TaskStatus, type TaskCompletionCriterion } from '@prisma/client';
 import type { TaskRunReason } from '@orbit/shared';
 import type {
   ProjectTaskVerificationState,
@@ -74,6 +74,11 @@ export interface FoldTask {
   /** Canonical project work lane; never recomputed from graph indegree by the client. */
   workState?: ProjectTaskWorkState;
   verificationState?: ProjectTaskVerificationState | null;
+  /** How the task is settled, and whether Orbit starts it once it is ready: what the start card
+   *  reads to say which of the plan's work comes to the owner (`completionCriterion`) and which of
+   *  it starts the moment the project does (`autoRunWhenReady`). */
+  completionCriterion?: TaskCompletionCriterion;
+  autoRunWhenReady?: boolean;
 }
 
 /** The live half of a task, carried onto every mark that names one. */
@@ -102,6 +107,8 @@ export interface TaskMark extends LiveTaskState {
   parentTaskId: string | null;
   workState?: ProjectTaskWorkState;
   verificationState?: ProjectTaskVerificationState | null;
+  completionCriterion?: TaskCompletionCriterion;
+  autoRunWhenReady?: boolean;
 }
 
 /** A straight run of tasks, drawn as one mark. `members` is the run in order. */
@@ -509,6 +516,8 @@ function taskMark(task: FoldTask): TaskMark {
     parentTaskId: task.parentTaskId,
     workState: task.workState,
     verificationState: task.verificationState,
+    completionCriterion: task.completionCriterion,
+    autoRunWhenReady: task.autoRunWhenReady,
     ...live(task),
   };
 }

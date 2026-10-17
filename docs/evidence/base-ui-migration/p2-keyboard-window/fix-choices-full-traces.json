@@ -1,0 +1,82 @@
+[
+ {
+  "trace": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--trace.zip",
+  "moduleRequests": 136,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=4186d26b",
+    "status": 200,
+    "failure": null,
+    "ms": 81.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=4186d26b",
+    "status": 200,
+    "failure": null,
+    "ms": 72.0
+   },
+   {
+    "url": ":4177/src/components/ui/Button.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 60.4
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 57.5
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 56.6
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "goto",
+    "title": null,
+    "start": 1179468.403,
+    "error": null
+   },
+   {
+    "api": "tap",
+    "title": null,
+    "start": 1180874.47,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toBeVisible\"",
+    "start": 1181867.887,
+    "error": null
+   },
+   {
+    "api": "waitForSelector",
+    "title": "Evaluate",
+    "start": 1181873.982,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 1181982.653,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveAttribute\"",
+    "start": 1182341.929,
+    "error": null
+   }
+  ]
+ }
+]

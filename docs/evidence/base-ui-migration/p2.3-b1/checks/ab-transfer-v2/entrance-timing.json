@@ -1,0 +1,322 @@
+{
+ "chromium-dark-desktop": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 96.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 97,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 96,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 91.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 98,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 84,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "chromium-dark-phone": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 88.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 80,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 96,
+     "opacity": 0.886,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 86.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 81,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 92,
+     "opacity": 0.804,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "chromium-light-desktop": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 90.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 80,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 100,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 94.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 99,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 89,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "chromium-light-phone": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 97.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 92,
+     "opacity": 0.65,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 102,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 91.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 79,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 103,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-dark-desktop": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 155.0,
+   "failed": 1,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.971,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 198,
+     "opacity": 1,
+     "status": "failed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 147.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 115,
+     "opacity": 0.973,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 180,
+     "opacity": 1.0,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-dark-phone": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 177.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 176,
+     "opacity": 1.0,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 179,
+     "opacity": 1.0,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 140.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 139,
+     "opacity": 0.991,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 141,
+     "opacity": 0.992,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-light-desktop": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 143.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 154,
+     "opacity": 0.996,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 132,
+     "opacity": 0.987,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 143.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 156,
+     "opacity": 0.996,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 130,
+     "opacity": 0.984,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-light-phone": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 215.5,
+   "failed": 1,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 167,
+     "opacity": 0.999,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 264,
+     "opacity": 1,
+     "status": "failed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 203.0,
+   "failed": 1,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 159,
+     "opacity": 0.997,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 247,
+     "opacity": 1,
+     "status": "failed"
+    }
+   ]
+  }
+ }
+}

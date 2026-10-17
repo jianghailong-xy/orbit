@@ -17,7 +17,11 @@
  *       START_REQUEST_NOT_READY and files nothing, and one request can be refused by several at
  *       once, every finding in the one answer;
  *   (2) the two warnings — tasks set to start by hand, listed by id and title, and Automatic on a
- *       project branch with no merge check — do not refuse: the request is filed and carries them.
+ *       project branch with no merge check — do not refuse: the request is filed, and they come back
+ *       to the coordinator in the answer. They are not filed WITH it (the owner, 2026-10-07): they
+ *       are about how the plan is written, which only the coordinator can change, so the stored
+ *       request — what the owner's card is drawn from — carries none. Automatic left out is
+ *       suggested on, the way the owner's card opens.
  *       The third, a criterion served only by work that looks codeless and does not declare it
  *       (0346), is held to its cases in `criterion-landing-codeless.pg.spec.ts`; every plan here is
  *       EXECUTABLE work, so the exact warning lists below are also its control — code work is not
@@ -30,7 +34,15 @@
  *       owner's read no longer draws it;
  *   (7) the start door answers the request: it is resolved APPROVED, and what the start records as
  *       asked for is the coordinator's suggestion, so the owner's change is the difference marked;
- *   (8) ask_owner works before the start, with the Automatic switch off, and the answer comes back.
+ *   (8) ask_owner works before the start, with the Automatic switch off, and the answer comes back;
+ *   (9) an open start request is an item waiting on the owner, so the coordinator cannot ask to record
+ *       the project done over it (`project_request_done`); the start answers it, and it holds
+ *       nothing back after;
+ *  (10) the merge check's BUDGET travels the whole way: the seconds the coordinator suggests are on
+ *       the request, the number the owner starts with lands on `project_codebase`, and the relay
+ *       hands the claimed landing's MERGE_CHECK that same number — the one-hour default when the
+ *       start names none, the binding's own when the start does not name the field at all, and NULL
+ *       when it says so.
  *
  * Every fact is produced the way the product produces it — criteria through `ProjectsService.update`,
  * requests through the runner controller, starts through `ProjectAcceptanceService.startProject` —
@@ -65,6 +77,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
+import { dispatchIntegrationJobs } from '../runner-api/integration-job-relay';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -72,6 +85,10 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import {
+  DEFAULT_CHECK_TIMEOUT_SECONDS,
+  INTEGRATION_JOB_CLAIM,
+} from './project-integration-job';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
 
@@ -259,6 +276,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assigneeId: string | null;
     criterionDefinitionId?: string | null;
     autoRunWhenReady?: boolean;
+    status?: TaskStatus;
   }): Promise<string> {
     const id = randomUUID();
     await prisma.task.create({
@@ -270,7 +288,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
         creatorType: CreatorType.USER,
         creatorId: ownerId,
         assigneeId: options.assigneeId,
-        status: TaskStatus.OPEN,
+        status: options.status ?? TaskStatus.OPEN,
         completionCriterion: 'EXECUTABLE',
         acceptanceCommand: 'true',
         acceptanceExpectedExitCode: 0,
@@ -360,6 +378,97 @@ test('a coordinator asks its owner to start the project, and the plan is checked
 
   async function seal(projectId: string): Promise<string> {
     return (await acceptance.standardSetConfirmation(ownerId, projectId)).currentVersion.digest;
+  }
+
+  /** What the project's binding says the merge check's budget is. */
+  async function storedBudget(projectId: string): Promise<number | null> {
+    const [row] = (await sql.query<{ seconds: number | null }>(
+      `SELECT "merge_check_timeout_seconds" AS "seconds" FROM "project_codebase"
+        WHERE "project_id" = $1::uuid AND "slot" = 'primary'`,
+      [projectId],
+    )).rows;
+    return row?.seconds ?? null;
+  }
+
+  /** One queued landing on the project's own branch, as the queue writes it: the row the relay
+   *  claims on a runner's next heartbeat. It is the landing of a task whose work FINISHED in a
+   *  checkout — a LAND_TASK names its task, the runner works in the session's workspace, and the
+   *  claim holds a landing back while the work it carries can still move (J-T1a). */
+  async function queuedLanding(projectId: string, label: string): Promise<string> {
+    const [codebase] = (await sql.query<{ id: string }>(
+      `SELECT "id" FROM "project_codebase" WHERE "project_id" = $1::uuid AND "slot" = 'primary'`,
+      [projectId],
+    )).rows;
+    assert.ok(codebase, 'a landing is queued only for a project that is bound');
+    const workspaceId = randomUUID();
+    await prisma.workspace.create({
+      data: {
+        id: workspaceId, ownerId, runnerId, name: `${label}-checkout`, enabled: true,
+        repoUrl: REPO, workDir: `/srv/${label}`,
+      },
+    });
+    const taskId = await task(projectId, `${label} · the work`, {
+      assigneeId: workspaceId,
+      status: TaskStatus.DONE,
+    });
+    const sessionId = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: sessionId,
+        ownerId,
+        creatorId: ownerId,
+        taskId,
+        workspaceId,
+        assignedRunnerId: runnerId,
+        startsTaskWork: true,
+        title: `${label} · the landing's session`,
+        prompt: label,
+        provider: 'claude',
+        branch: `orbit/${label}`,
+        isolationStatus: 'worktree',
+        status: RunStatus.SUCCEEDED,
+        finishedAt: new Date(Date.now() - 60_000),
+      },
+    });
+    const id = randomUUID();
+    const target = `refs/heads/project/${projectId}`;
+    await prisma.projectIntegrationJob.create({
+      data: {
+        id, projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', state: 'QUEUED',
+        taskId, sessionId,
+        serialKey: `${projectId}:${target}`, targetRef: target, upstreamRef: 'refs/heads/main',
+        sourceRef: `refs/heads/orbit/${label}`,
+        idempotencyKey: `ij:v1:test:${projectId}:${label}`,
+      },
+    });
+    return id;
+  }
+
+  /** The command the relay hands the runner for one job — the real claim, over the real rows. */
+  async function claimed(jobId: string) {
+    const commands = await dispatchIntegrationJobs(
+      db,
+      {
+        runnerId, leaseOwner: `lease-of-${jobId}`, draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      },
+      { warn: () => undefined, log: () => undefined } as never,
+    );
+    const command = commands.find((each) => each.jobId === jobId);
+    assert.ok(command, `the relay handed over ${commands.map((each) => each.jobId).join(', ') || 'nothing'}`);
+    return command;
+  }
+
+  /** What the claim hands the runner for the project's merge check, by its budget. */
+  const claimedBudget = async (jobId: string): Promise<number | undefined> =>
+    (await claimed(jobId)).checks.find((check) => check.name === 'MERGE_CHECK')?.timeoutSeconds;
+
+  /** The owner's own write of the merge check, at a terminal (`PATCH /projects/:id/integration`):
+   *  how a project comes to have a budget before it is started. */
+  async function setBudget(projectId: string, seconds: number): Promise<void> {
+    await projects.update(ownerId, projectId, {
+      integration: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: seconds },
+    } as never);
   }
 
   const codes = (findings: readonly ProjectStartFinding[] | undefined) =>
@@ -458,7 +567,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(await requests(project.id), []);
   });
 
-  // ═══ (2) the two warnings: filed, and carried ═════════════════════════════════════════════════
+  // ═══ (2) the two warnings: returned to the coordinator, not filed for the owner ═══════════════
 
   await t.test('(2) tasks started by hand and a missing merge check warn, and the request is filed', async () => {
     const project = await planned('warnings', { byHand: true });
@@ -483,7 +592,8 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.equal(stored.dedupe_key, 'START_REQUEST');
     assert.equal(stored.title, 'Start this project?');
     assert.equal(stored.escalate_at, null, 'already the owner’s: nowhere to escalate to');
-    assert.deepEqual(stored.payload.warnings, filed.warnings, 'the warnings are filed with it');
+    assert.deepEqual(stored.payload.warnings, [],
+      'the warnings are the coordinator’s: answered, and not filed for the owner’s card');
     assert.equal(stored.payload.why, SUGGESTED.why);
     assert.equal(stored.payload.criteriaDigest, await seal(project.id),
       'it names the seal the start door will confirm');
@@ -494,6 +604,14 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     // leave a request with none.
     const clean = await planned('no-warnings');
     assert.deepEqual((await ask(clean.id, clean.sessionId)).warnings, []);
+
+    // Automatic left out is suggested on, which is how the owner's card opens whatever is sent.
+    const unsaid = await planned('automatic-unsaid');
+    const { automatic: _left, ...withoutAutomatic } = SUGGESTED;
+    const suggestedOn = await ask(unsaid.id, unsaid.sessionId, withoutAutomatic as ProjectStartRequestBody);
+    assert.equal(suggestedOn.settings.automatic, true);
+    const [unsaidStored] = await requests(unsaid.id);
+    assert.equal(unsaidStored.payload.settings.automatic, true);
 
     // The owner reads it beside the exceptions rather than among them: a client that predates the
     // kind would draw every `needsYou` row it cannot name as an exception escalated to them.
@@ -507,6 +625,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(view.startRequest?.actions, []);
     assert.deepEqual(view.needsYou, [], 'not among the exceptions');
     assert.deepEqual(view.withCoordinator, []);
+    assert.equal(view.doneRequest, null, 'and a request to start is not one to record the project done');
   });
 
   // ═══ (3) who may ask ═══════════════════════════════════════════════════════════════════════════
@@ -713,5 +832,146 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(turns.map((turn) => turn.client_turn_id),
       [`owner-answer:v1:${asked.itemId}:${project.sessionId}`]);
     assert.ok(turns[0].content.includes('Wait for A'), 'carrying what the owner chose');
+  });
+
+  // ═══ (9) a start request and a done request ═══════════════════════════════════════════════════
+
+  await t.test('(9) an open start request holds back a request to record the project done', async () => {
+    const project = await planned('start-before-done');
+    const filed = await ask(project.id, project.sessionId);
+    /** What `project_request_done` is refused for, by code, and the owner items it names. */
+    const doneRefusal = async () => {
+      const refusal = await refused(() => door.requestDone(runner, project.sessionId, project.id, {
+        judgment: 'Everything is done.',
+        gaps: [],
+      } as never));
+      assert.equal(refusal.status, 409);
+      assert.equal(refusal.body.code, 'DONE_REQUEST_NOT_READY');
+      const findings = (refusal.body as unknown as {
+        findings: Array<{ code: string; items: Array<{ itemId: string; kind: string }> }>;
+      }).findings;
+      return findings.find((finding) => finding.code === 'DONE_OWNER_ITEMS_OPEN')?.items ?? [];
+    };
+    assert.deepEqual(
+      (await doneRefusal()).map((item) => `${item.kind} ${item.itemId}`),
+      [`START_REQUEST ${filed.itemId}`],
+      'the start the owner has not answered is an item waiting on them',
+    );
+
+    await acceptance.startProject(ownerId, project.id, {
+      criteriaDigest: await seal(project.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'npm test',
+      requestId: filed.itemId,
+    });
+    assert.deepEqual(await doneRefusal(), [],
+      'answered by the start, it holds nothing back — the plan’s unfinished work still does');
+  });
+
+  // ═══ (10) the merge check's budget ═══════════════════════════════════════════════════════════
+
+  await t.test('(10a) the budget the card set is written by the start, and handed to the runner', async () => {
+    const project = await planned('check-budget');
+    // A budget the project already carries, so the start's number is seen to win rather than to agree.
+    await setBudget(project.id, 600);
+
+    const filed = await ask(project.id, project.sessionId, { ...SUGGESTED, mergeCheckTimeoutSeconds: 90 });
+    assert.equal(filed.settings.mergeCheckTimeoutSeconds, 90,
+      'the coordinator’s budget is on the request the owner’s card is drawn from');
+    assert.equal((await requests(project.id))[0].payload.settings.mergeCheckTimeoutSeconds, 90,
+      'and on the row the card is read off, not only in the answer');
+    assert.equal(await storedBudget(project.id), 600, 'the request writes nothing to the binding');
+
+    // The owner presses Start on that card. What the press sends is what the card showed — the
+    // suggestion, which they may have changed — so the start names the budget it is pressed with
+    // (`startBody` in the web card, and the same field on the door).
+    await acceptance.startProject(ownerId, project.id, {
+      criteriaDigest: await seal(project.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'npm test',
+      mergeCheckTimeoutSeconds: 90,
+      requestId: filed.itemId,
+    });
+    assert.equal(await storedBudget(project.id), 90, 'the binding holds the budget the card set');
+    assert.equal((await projects.integration(ownerId, project.id)).mergeCheckTimeoutSeconds, 90,
+      'and the project read a reader asks for it shows the same number');
+
+    // The relay hands the landing over with that budget on the project's check — and the task's own
+    // acceptance, whose budget the start says nothing about, still on the default hour.
+    const landing = await queuedLanding(project.id, 'check-budget');
+    assert.deepEqual((await claimed(landing)).checks, [
+      {
+        name: 'TASK_ACCEPTANCE', command: 'true', expectedExitCode: 0,
+        timeoutSeconds: DEFAULT_CHECK_TIMEOUT_SECONDS,
+      },
+      { name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, timeoutSeconds: 90 },
+    ]);
+  });
+
+  await t.test('(10b) a start that names no budget leaves the check on the default hour', async () => {
+    const project = await planned('check-default');
+    const filed = await ask(project.id, project.sessionId);
+    assert.equal(filed.settings.mergeCheckTimeoutSeconds, undefined, 'no budget was suggested');
+
+    await acceptance.startProject(ownerId, project.id, {
+      criteriaDigest: await seal(project.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'npm test',
+      requestId: filed.itemId,
+    });
+    assert.equal(await storedBudget(project.id), null, 'a start that names no budget writes none');
+
+    const landing = await queuedLanding(project.id, 'check-default');
+    assert.equal(await claimedBudget(landing), DEFAULT_CHECK_TIMEOUT_SECONDS,
+      'and the claim hands the check the one-hour default');
+  });
+
+  await t.test('(10c) unnamed keeps the binding’s budget; null is the naming that clears it', async () => {
+    // A client that does not know the field — an older native start card — sends no such thing, and
+    // a start that read that as "no budget" would clear one its owner never saw.
+    const unnamed = await planned('check-unnamed');
+    await setBudget(unnamed.id, 600);
+    await acceptance.startProject(ownerId, unnamed.id, {
+      criteriaDigest: await seal(unnamed.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'npm test',
+    });
+    assert.equal(await storedBudget(unnamed.id), 600, 'the budget the binding had stands');
+
+    // Same binding, and this time the start says "no budget of its own": the box was left empty.
+    const cleared = await planned('check-cleared');
+    await setBudget(cleared.id, 600);
+    await acceptance.startProject(ownerId, cleared.id, {
+      criteriaDigest: await seal(cleared.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'npm test',
+      mergeCheckTimeoutSeconds: null,
+    });
+    assert.equal(await storedBudget(cleared.id), null, 'null is the naming that clears it');
+    const landing = await queuedLanding(cleared.id, 'check-cleared');
+    assert.equal(await claimedBudget(landing), DEFAULT_CHECK_TIMEOUT_SECONDS);
+  });
+
+  await t.test('(10d) a budget with no repository is refused with the check it belongs to', async () => {
+    // A budget is a merge check setting, and this project names no repository to record one on: the
+    // plan is refused before the owner's card is filed, rather than starting a project whose check
+    // the start would then have to drop.
+    const project = await planned('budget-no-repo', { repoUrl: null });
+    const refusal = await refused(() => ask(project.id, project.sessionId, {
+      ...SUGGESTED, line: 'MAIN', mergeCheckCommand: undefined, mergeCheckTimeoutSeconds: 900,
+    }));
+    assert.equal(refusal.status, 409);
+    assert.deepEqual(codes(refusal.body.findings), ['REFUSE START_REPOSITORY_UNKNOWN']);
+    assert.deepEqual(await requests(project.id), [], 'and nothing was filed');
   });
 });

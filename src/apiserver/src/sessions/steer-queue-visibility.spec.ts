@@ -86,6 +86,8 @@ const ITEM_CARD = {
     limit: 3,
   },
   actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  requiredAction: 'The coordinator must get this task past its failure — retry it, file a repair task, or close it.',
+  primaryAction: 'RETRY',
   landing: {
     receipts: 0,
     state: 'NOT_KNOWN',
@@ -102,6 +104,8 @@ function makeService(
   deleteCounts: number[] = [],
   /** The exception item one of those turns is a delivery of, when one of them is one. */
   openItem: Record<string, unknown> | null = null,
+  /** The account that item is filed under. Default: the session's own. */
+  itemOwnerId: string = OWNER_ID,
 ) {
   let deletes = 0;
   const filters: Record<string, unknown>[] = [];
@@ -166,9 +170,9 @@ function makeService(
     // `readOpenItemDeliveryCard`): the item's own row, the task it is about with its merge receipts,
     // and the project's landing branches.
     projectOpenItem: {
-      findUnique: async ({ where }: { where: { id: string } }) => {
+      findFirst: async ({ where }: { where: { id: string; ownerId: string } }) => {
         itemReads.push(where.id);
-        return openItem && openItem.id === where.id ? openItem : null;
+        return openItem && openItem.id === where.id && where.ownerId === itemOwnerId ? openItem : null;
       },
     },
     task: {
@@ -183,6 +187,9 @@ function makeService(
         integrationRef: `refs/heads/project/${PROJECT_ID}`,
       }),
     },
+    // The outcomes riding on any of these turns (session-request.ts `readSessionReplyCards`, read for
+    // every listed turn as the echo reads them): none here.
+    sessionRequest: { findMany: async () => [] },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(
@@ -607,6 +614,26 @@ test("an exception item's delivery carries its card in the active projection", a
   assert.equal(wire.placement, 'accepted');
   assert.deepEqual(wire.openItemDelivery, ITEM_CARD, 'the client has nothing to draw a card from');
   assert.deepEqual(h.itemReads, [ITEM_ID], 'read once, for the turn that is one');
+});
+
+test("a turn keyed to another account's item draws none of that item", async () => {
+  // Only the server keys a turn `open-item:v1:` — every door refuses the namespace
+  // (sessions/watch-turn-key.ts) — and the card is read among the session owner's items only. A
+  // card found by the key's id alone drew another account's item — its title, its task, its
+  // project's branches — on this queue.
+  const h = makeService(
+    [row('item-turn', 'message', ITEM_MESSAGE, { clientTurnId: ITEM_TURN })],
+    [],
+    [],
+    [],
+    ITEM_ROW,
+    '77777777-7777-4777-8777-777777777777',
+  );
+
+  const [wire] = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'));
+
+  assert.equal(wire.content, ITEM_MESSAGE);
+  assert.equal(wire.openItemDelivery, undefined, 'a card was drawn from an item of another account');
 });
 
 test("a delivery still waiting behind a running turn carries its card too", async () => {

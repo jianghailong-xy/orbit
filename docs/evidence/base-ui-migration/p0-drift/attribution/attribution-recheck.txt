@@ -1,0 +1,7 @@
+A1: a-main 28 screenshots, checks OK: m1-293e12a85->m1-918034e72 changed 24; full-293e12a85->full-918034e72 changed 28
+A2: a-main 28 screenshots, checks OK: m2-2c97b6b63->m2-e3988ad7b changed 24; m2-6e5ba7544->m2-f5bdd7fd3 changed 24; full-6e5ba7544->full2-f5bdd7fd3 changed 28
+A3: a-main 28 screenshots, checks OK: m3-06400e8ea->m3-93d3ec580 changed 20; full2-06400e8ea->full2-93d3ec580 changed 28
+A4: a-main 64 screenshots, checks OK: p22-9ccb09e86->p22-38947755e changed 56; m4-14e64870f->m4-4088d37e6 changed 56; full3-14e64870f->full2-4088d37e6 changed 60
+A5: a-main 1 screenshots, checks OK: w22-9ccb09e86->w22-38947755e changed 1; m5-5bc8c9d63->m5-e64d0c72a changed 1
+B1: b-migration 10 screenshots, checks OK: e361ee373->57f792135 changed 10
+regenerated attribution.json is byte-identical to the committed one

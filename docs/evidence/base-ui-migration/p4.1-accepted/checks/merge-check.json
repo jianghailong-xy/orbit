@@ -1,0 +1,25 @@
+{
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "job": "bgj_468a376bf402",
+ "header": [
+  "# HEAD 5630745035af26a97746291a2c6453c57e4e02b1; tracked changes: []; untracked: [?? docs/evidence/base-ui-migration/p4.1-accepted/ ]",
+  "# argv: npm run build -w @orbit/web && npm run test -w @orbit/web",
+  "# started 2026-10-07T16:54:11Z"
+ ],
+ "finished": "# finished 2026-10-07T16:58:46Z exit 0",
+ "testFiles": {
+  "passed": 350,
+  "total": 350
+ },
+ "tests": {
+  "passed": 4445,
+  "total": 4445
+ },
+ "fullOutput": {
+  "path": "/var/tmp/p41acc/merge-check.log",
+  "lines": 14426,
+  "bytes": 1124823,
+  "sha256": "3b4ec9e8139ccc9612fac168181baf83e152fb73a4b9de6f8f43a6feddcb8f28"
+ },
+ "filtered": "merge-check.txt (filter-merge-check.py from p3.2-accepted/tools, plus the closing line)"
+}

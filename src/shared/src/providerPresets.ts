@@ -49,20 +49,24 @@ export interface ProviderPreset {
   models: ProviderPresetModel[];
   defaultModel: string;
   /**
-   * Runtime the provider borrows: `claude` for Anthropic-compatible endpoints (default),
-   * `codex` for endpoints that serve the OpenAI Responses API (OpenAI itself) — codex has no other
-   * dialect since it dropped Chat Completions in February 2026 — `kimi` for Moonshot's own API,
-   * which the Kimi CLI speaks natively, so a Kimi key runs on Kimi, and `antigravity` for Google's
-   * Gemini API, which the Antigravity CLI (agy) speaks natively, so a Gemini key runs on agy.
+   * The protocol the vendor's endpoint speaks, named by the engine that speaks it natively (the
+   * key's `runtime` column, openCodeKeys.ts keyDialect): `claude` for Anthropic-compatible endpoints
+   * (default), `codex` for endpoints that serve the OpenAI Responses API (OpenAI itself) — codex has
+   * no other dialect since it dropped Chat Completions in February 2026 — `kimi` for Moonshot's own
+   * API, and `antigravity` for Google's Gemini API. Which engines a key then runs on is the
+   * compatibility table's (providerEngines.ts): that native one, OpenCode, and — for a DeepSeek
+   * key — DeepSeek Harness. `dsh` is only the retired `deepseek-harness` preset's, kept until every
+   * deployment has folded those rows into DeepSeek keys.
    */
-  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity';
+  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity' | 'dsh';
   /**
    * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
    * for `codex`, Gemini for `antigravity`. The runner probes those CLIs for their live model list
    * (see the runner's claude_models.go / codex_models.go / antigravity_models.go), so the picker
    * follows the installed CLI and nobody has to maintain a list that goes stale the day a model
    * ships. `models` below stays as the fallback for a runner whose probe hasn't landed yet, but it
-   * is not editable in the UI.
+   * is not editable in the UI. (DeepSeek Harness, the engine, reads its opaque ACP model values and
+   * unknown context windows from its own runtime catalogue, whatever DeepSeek key it runs on.)
    *
    * A third-party Anthropic-compatible endpoint (DeepSeek, Moonshot, GLM…) is NOT this: the
    * runner's probe reports what its own CLI offers, which says nothing about what that vendor
@@ -160,6 +164,21 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'deepseek-v4-pro',
     catalog: { source: 'deepseek', match: /^deepseek-/ },
+    brand: { mono: 'D', from: '#5b7cff', to: '#3a57e8' },
+    keyUrl: 'https://platform.deepseek.com',
+  },
+  {
+    // Retired: DeepSeek Harness is an engine, and runs on a DeepSeek key (`deepseek` above). Kept so a
+    // row made from it before the split still reads as a DeepSeek key, until every deployment has
+    // folded those rows in (docs/provider-engine-contract.md §1.4); a new one is stored as `deepseek`.
+    slug: 'deepseek-harness',
+    label: 'DeepSeek Harness',
+    runtime: 'dsh',
+    // The official API Key adapter speaks Messages, not Chat Completions (P0 contract §2).
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    models: [],
+    defaultModel: '',
+    modelsFromRuntime: true,
     brand: { mono: 'D', from: '#5b7cff', to: '#3a57e8' },
     keyUrl: 'https://platform.deepseek.com',
   },

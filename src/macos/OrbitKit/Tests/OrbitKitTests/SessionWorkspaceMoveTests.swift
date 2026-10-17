@@ -325,15 +325,17 @@ final class SessionWorkspaceMoveTests: XCTestCase {
         XCTAssertEqual(steps.log, ["phase:ending", "end", "status", "sleep 1.0", "status", "phase:moving", "move"])
     }
 
-    /// The move refused (409) says the server's own reason as it is; anything else says the move
-    /// didn't happen, and why.
+    /// The move's second line says only why it failed; a refusal keeps the server's sentence.
     func testARefusedMoveSaysTheServersReason() async {
         let refused = Steps(moveError: APIError.http(status: 409, body: #"{"message":"Stop the session first.","statusCode":409}"#))
         let outcome = await refused.run(endingFirst: false)
         XCTAssertEqual(outcome, .failed("Stop the session first."))
+        XCTAssertEqual(SessionMoveCopy.couldNotMove, "Couldn't move the session")
+        XCTAssertEqual(SessionMoveCopy.moveFailed(APIError.http(status: 403, body: #"{"message":"Permission denied."}"#)),
+                       "Permission denied.")
 
         let dropped = Steps(moveError: URLError(.networkConnectionLost))
         let lost = await dropped.run(endingFirst: false)
-        XCTAssertEqual(lost, .failed("The session couldn’t be moved: the connection dropped."))
+        XCTAssertEqual(lost, .failed("the connection dropped"))
     }
 }

@@ -1,0 +1,159 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<!-- 2026-10-07 · 作业清单第 2 版：卡住的作业写明超时，可以重试。外壳与部件沿用 project-merge-sessions-page 的 kit，
+     落地行与清单的样式同 01-jobs-sheet.html。 -->
+<link rel="stylesheet" href="../project-merge-sessions-page/kit.css">
+<script src="../project-merge-sessions-page/kit.js"></script>
+<style>
+  @font-face { font-family: "Inter"; src: url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "Noto Sans SC"; src: url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  body { font-family: -apple-system, "Inter", "Noto Sans SC", sans-serif; }
+
+  /* 进度卡里的落地行（ProjectLandingRow + 右侧箭头） */
+  .lj-card { background: rgba(120,120,128,.1); border-radius: 13px; margin-top: 8px; }
+  .lj-card .prog { padding: 13px 13px 12px; }
+  .lj-div { height: .5px; background: rgba(60,60,67,.18); margin-left: 12px; }
+  .lj-lw { display: flex; align-items: center; gap: 8px; padding: 9px 12px 10px; }
+  .lj-lr { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+  .lj-l1 { display: flex; align-items: center; gap: 8px; }
+  .lj-l1 b { font-size: 15px; font-weight: 600; color: var(--l2); }
+  .lj-l1 .st { margin-left: auto; font-size: 13px; color: var(--l2); white-space: nowrap; }
+  .lj-w { font-size: 15px; line-height: 1.38; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .lj-l3 { display: flex; font-size: 13px; color: var(--l2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lj-l3 b { font-weight: 650; color: var(--l2); margin-left: 4px; }
+  .lj-l3 .u { margin-left: auto; }
+  .lj-x { font-size: 13px; color: var(--l2); line-height: 1.42; margin-top: -2px; }
+  .lj-nochev { width: 14px; flex: none; }
+  .lj-act { margin-top: 2px; }
+  .lj-act .btn { display: block; padding: 7px 16px; font-size: 15px; }
+  /* 三种语气：等待（灰）、在跑（蓝）、超时（琥珀） */
+  .run .lj-l1 b, .run .lj-l3 b { color: var(--tint); }
+  .warn .lj-l1 b, .warn .lj-l1 .st, .warn .lj-l3 b { color: var(--amber-ink); }
+
+  /* 合入卡 · 排队中（与截图同一张） */
+  .lj-mq { border-radius: 16px; margin-top: 12px; padding: 13px 14px 12px; background: #F2F5FE; box-shadow: inset 0 0 0 1px rgba(62,105,246,.22); }
+  .lj-mq .mh { display: flex; align-items: center; gap: 9px; }
+  .lj-mq .tile { width: 28px; height: 28px; border-radius: 8px; background: rgba(62,105,246,.14); display: flex; align-items: center; justify-content: center; flex: none; }
+  .lj-mq .mh b { font-size: 17px; font-weight: 650; color: var(--tint); letter-spacing: -.01em; }
+  .lj-mq .s1 { font-size: 15px; margin-top: 8px; }
+  .lj-mq .s2 { font-size: 13px; color: var(--l2); margin-top: 6px; line-height: 1.42; }
+  .lj-mq .ft { display: flex; justify-content: flex-end; margin-top: 9px; }
+  .lj-mq .ft span { font-size: 15px; font-weight: 600; color: var(--tint); background: rgba(62,105,246,.12); border-radius: 999px; padding: 6px 15px; }
+
+  /* sheet 里的作业清单 */
+  .lj-sh { padding: 0 16px; }
+  .lj-list { background: rgba(120,120,128,.08); border-radius: 13px; }
+  .lj-list .lj-lw { padding: 11px 12px 12px; }
+  .lj-list .lj-div { margin-left: 33px; }
+
+  /* 右侧说明栏 */
+  .lj-notes { width: 600px; flex: none; }
+  .lj-notes .panel { padding: 20px 24px 18px; margin-bottom: 18px; }
+  .lj-notes .panel h2 { font-size: 16.5px; margin-bottom: 8px; }
+  .lj-notes .panel ol, .lj-notes .panel ul { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.62; color: #3c3c44; }
+  .lj-notes .panel li { margin: 4px 0; }
+  .lj-notes .panel li b { color: #16161a; }
+  .lj-var { display: flex; gap: 16px; align-items: flex-start; margin-top: 12px; }
+  .lj-var .smp { width: 330px; flex: none; background: #fff; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.07); }
+  .lj-var .smp .lj-lw { padding: 11px 12px 12px; }
+  .lj-var .cap { font-size: 13px; line-height: 1.6; color: #3c3c44; }
+  .lj-var .cap b { color: #16161a; display: block; font-size: 13.5px; margin-bottom: 2px; }
+</style>
+<body>
+<h1>Landing · 卡住时：写明超时，可以重试（第 2 版）</h1>
+<p class="lede" style="max-width:1920px">第 1 版里卡住的作业只写 “Update unavailable · Elapsed 0m 0s · Updated 110m ago”，看不出这是卡住了，也没有办法让它重新跑。<br>
+这一版：<b>runner 超过时限没回报，就明写 “Timed out” 和时限；超时的作业带一个 Retry，按下后从头再落一次。</b>数据仍是你 21:57 那一屏，按 Retry 之后的时刻是示意。</p>
+<div class="row" id="figs"></div>
+<script>
+IC.grid = '<rect x="4" y="4" width="6.6" height="6.6" rx="1.7"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.7"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.7"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.7"/>';
+const TITLE = 'Kubernetes 托管默认 Runner 与跨节点持久存储';
+const C5 = 'C5 · 登录后开通默认托管 runner 与 workspace（假实现验证）';
+const RUNNER = 'workstation-gpu';
+const nav = () => `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div>
+<div class="ttl"><b>${TITLE}</b><span>Project · 14 sessions</span></div><div class="circ">${ic('grid', 23, '#000', 1.7)}</div></div>`;
+
+// 落地行：tone = idle（灰环，等待）| run（蓝环，在跑）| warn（琥珀三角，超时）
+const GLYPH = { idle: ic('ring', 14, 'var(--l2)', 2.3), run: ic('ring', 14, 'var(--tint)', 2.3), warn: ic('warn', 15, 'var(--orange)', 2.2) };
+const landRow = ({ tone = 'idle', word, state, what, label, clock, right = '', extra = '', action = '', chevron = true }) => `<div class="lj-lw ${tone}"><div class="lj-lr">
+<div class="lj-l1">${GLYPH[tone]}<b>${word}</b><span class="st">${state}</span></div>
+${what ? `<div class="lj-w">${what}</div>` : ''}
+<div class="lj-l3"><span>${label}</span><b>${clock}</b><span class="u">${right}</span></div>
+${extra ? `<div class="lj-x">${extra}</div>` : ''}${action ? `<div class="lj-act">${action}</div>` : ''}</div>
+${chevron ? chev('var(--l3)', 14) : '<span class="lj-nochev"></span>'}</div>`;
+const retry = `<span class="btn pri">Retry</span>`;
+
+const OUT_TIMED = { tone: 'warn', word: 'Landing', state: 'Timed out', what: '2 jobs · 1 timed out', label: 'No report for', clock: '110m', right: 'limit 10m' };
+const OUT_RUN = { tone: 'run', word: 'Landing', state: 'fetching', what: '2 jobs', label: 'Elapsed', clock: '0m 12s', right: 'Updated just now' };
+const JOB_TIMED = { tone: 'warn', word: 'Landing', state: 'Timed out', what: C5, label: 'No report for', clock: '110m', right: 'limit 10m',
+  extra: `Runner ${RUNNER} took it at 20:07 · stopped at fetching · nothing was pushed`, action: retry };
+const JOB_RETRIED = { tone: 'run', word: 'Landing', state: 'fetching', what: C5, label: 'Elapsed', clock: '0m 12s', right: 'Updated just now',
+  extra: 'Generation 2 · retried by you at 22:15' };
+const JOB_MERGE = { word: 'Merge to main', state: 'queued', label: 'Queued for', clock: '41m 08s', right: 'Updated just now', chevron: false };
+
+const progLanding = (landing) => `<div class="lj-card"><div class="prog"><span class="meter"><i style="width:${7 / 17 * 100}%;background:var(--green)"></i><i style="width:${2 / 17 * 100}%;background:var(--red)"></i></span><span class="pmeta">7/17 done · 0 running</span></div>
+<div class="lj-div"></div>${landing}</div>`;
+const mergeQueued = () => `<div class="lj-mq"><div class="mh"><span class="tile">${ic('merge', 17, 'var(--tint)', 2.3)}</span><b>Merge into main queued</b></div>
+<div class="s1">confirmed — queued to merge into main</div>
+<div class="s2">Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t.</div>
+<div class="ft"><span>Cancel</span></div></div>`;
+const coord = () => sessRow({ t: TITLE, tm: '1h ago', chip: 'Coordinator', eye: true, sub: 'Watching C2b · 托管 runner 单活保护：实例代际鉴权…' });
+const today = () => [
+  { t: `执行任务：${C5}`, tm: '1h ago', sub: '第 2 版证据已提交，新版本号是 2，evidence id 5DV…' },
+  { t: '执行任务：同步项目线与 main：解开迁移台账冲突（0393/0394）', tm: '2h ago', sub: '项目线已和 main 同步，完成证据已提交，等协调会话审阅。' },
+  { t: '执行任务：C2b · 托管 runner 单活保护：实例代际鉴权、单 Pod 准入与 fencing 门', tm: '6h ago', sub: '正在补 fencing 门的单测…' },
+].map(sessRow).join('');
+const page = (at, landing) => `${statusBar(at, 46)}${nav()}<div class="list">${landing}${mergeQueued()}${sh('Coordinator')}${coord()}${sh('Today')}${today()}</div>`;
+const sheetOf = (rows) => sheet({ title: '2 jobs in flight', body: `<div class="lj-sh"><div class="lj-list">${rows}</div></div>` })
+  .replace('class="sheet"', 'class="sheet" style="top:388px"');
+
+// a · 超时：外面那一行
+const a = phone(page('9:57', progLanding(mk(landRow(OUT_TIMED), 1, 'margin:2px 4px;border-radius:10px'))));
+// b · 点开：超时的那一行带 Retry
+const b = phone(`${page('9:57', progLanding(landRow(OUT_TIMED)))}${sheetOf(
+  `${mk(landRow({ ...JOB_TIMED, action: mk(retry, 2, 'border-radius:999px') }), 1, 'border-radius:12px')}<div class="lj-div"></div>${landRow(JOB_MERGE)}`)}`);
+// c · 按下 Retry 之后
+const c = phone(`${page('10:15', progLanding(landRow(OUT_RUN)))}${sheetOf(
+  `${mk(landRow(JOB_RETRIED), 1, 'border-radius:12px')}<div class="lj-div"></div>${landRow(JOB_MERGE)}`)}`);
+
+// 说明栏里的两个变体
+const PUSHED = { tone: 'warn', word: 'Merge to main', state: 'Timed out', label: 'No report for', clock: '25m', right: 'limit 10m',
+  extra: `Runner ${RUNNER} took it at 21:30 · stopped at pushing · may have been pushed`, action: retry, chevron: false };
+const OFFLINE = { word: 'Landing', state: 'queued', what: C5, label: 'Queued for', clock: '3m 10s', right: '',
+  extra: `Waiting for runner ${RUNNER} — offline since 22:12` };
+
+document.getElementById('figs').innerHTML = [
+  fig('after', '方案 · 超时时的项目 sessions 页（21:57）', a, `<b>外面那一行先说清楚</b><ol>
+<li>${n(1)}图标换成琥珀色的三角，右上角写 <b>Timed out</b>。第二行写 “2 jobs · 1 timed out”，只有一个作业时照旧写任务名。第三行写多久没回报、时限是多少：“No report for 110m · limit 10m”。</li>
+<li>不再写 “Elapsed 0m 0s”。秒表停在领取那一刻，读起来像刚开始。</li>
+<li>点这一行，弹出同一张作业清单。</li></ol>`),
+  fig('after', '方案 · 点开清单', b, `<b>超时的那一行带 Retry</b><ol>
+<li>${n(1)}写明哪个 runner、几点拿走、停在哪一步、有没有推送。这里是 “nothing was pushed”，重跑是安全的。</li>
+<li>${n(2)}<b>Retry</b> 只出现在超时的作业上。正在跑的、在排队的、检查还在预算内的，都没有这个按钮。</li>
+<li>合入 main 那一行照旧在排队，见右边。</li></ol>`),
+  fig('after', '方案 · 按下 Retry 之后（22:15）', c, `<b>回到一次正常的落地</b><ol>
+<li>${n(1)}这一行先变成 queued，几秒后被 runner 领走，变成蓝色的 fetching，时钟从 0 开始走。下面写 “Generation 2 · retried by you at 22:15”。</li>
+<li>外面那一行同时回到蓝色的 Landing · fetching。</li>
+<li>超时的第 1 代留在任务页的落地记录里，写作 ERROR · RUNNER_LOST · stopped at fetching。</li></ol>`),
+  `<div class="lj-notes">
+<div class="panel"><h2>超时怎么算</h2><ul>
+<li>服务端在读数据时判断，不改作业状态，只给每个作业多带三项：是否超时、时限、哪个 runner。</li>
+<li><b>git 步骤</b>（fetching、syncing main、rebasing、merging、verifying、pushing）10 分钟没回报就算超时，正好是现有的领取租约。</li>
+<li><b>checking</b>：runner 只在每一步开始时回报，健康的长检查本来就会一直安静到检查预算（默认 60 分钟）。所以检查的时限是预算再加 10 分钟，例如 “limit 70m”。</li>
+<li>“Update unavailable” 以后只表示 App 读不到服务端，不再兼做 “runner 没回报”。</li>
+</ul></div>
+<div class="panel"><h2>Retry 做什么</h2><ul>
+<li>在一次提交里，把超时的这一代记为 <code>ERROR · RUNNER_LOST</code>，写明停在哪一步、有没有推送，再排上新的一代。走的就是现有 <code>integration_retry</code> 重跑失败落地的那条路，只是多认一种 “超时”。今天这条路会以 <code>INTEGRATION_RETRY_IN_FLIGHT</code> 拒绝还挂着 RUNNING 的落地，C5 就卡在这里。</li>
+<li>旧那一代已经结束，它迟到的回报会被拒，不会和新一代打架。</li>
+<li><b>不会推两次</b>：如果上一次其实已经推上去了，重跑会发现目标里已有这些提交，记为 <code>ALREADY_LANDED</code>，不再推。</li>
+<li>你在 App 里按，协调会话用 <code>integration_retry</code>。平台不会自己重跑，J5 不变。</li>
+</ul></div>
+<div class="panel"><h2>另两种情况</h2>
+<div class="lj-var"><div class="smp">${landRow(PUSHED)}</div><div class="cap"><b>停在推送时超时</b>写 “may have been pushed”。Retry 照样给：重跑先看 main 里有没有这些提交，有就记为已合入。</div></div>
+<div class="lj-var"><div class="smp">${landRow(OFFLINE)}</div><div class="cap"><b>Retry 之后 runner 不在线</b>只有这个 workspace 的 runner 能领。照实写在等谁，不再算超时，等 runner 回来就会自己开始。</div></div>
+</div>
+<div class="panel"><h2>C5 这一次另外修</h2><ul>
+<li>C5 是心跳的回包丢了：服务端以为已经派出去，runner 根本没收到。这应该在服务端修：一个领取后从没回报过的作业，在同一个 runner 的下一次心跳里再发一次。</li>
+<li>修好以后，这种情况会自己恢复，用不着按 Retry。超时和 Retry 留给 runner 真的掉线、卡死的情况。</li>
+</ul></div>
+</div>`,
+].join('');
+</script>

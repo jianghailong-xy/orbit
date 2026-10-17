@@ -1,0 +1,32 @@
+{
+  "runtimeFilesUnchanged": 609,
+  "historicalEvidenceFilesUnchanged": 13094,
+  "discovery": 520,
+  "runs": {
+    "final-entry": {
+      "startTime": "2026-10-04T12:23:00.595Z",
+      "duration": 77137.08099999999,
+      "expected": 32,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "final-lifecycle-repeat": {
+      "startTime": "2026-10-04T12:25:35.790Z",
+      "duration": 183753.402,
+      "expected": 80,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "lifecycle-controls": {
+      "startTime": "2026-10-04T12:24:49.091Z",
+      "duration": 16876.106,
+      "expected": 24,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "artifactsVerified": 456
+}

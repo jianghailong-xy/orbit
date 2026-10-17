@@ -1,0 +1,39 @@
+{
+  "command": "bash scripts/test-dsh-mcp-timeout.sh",
+  "cliVersion": "0.2.0-rc.2",
+  "cliSha256": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
+  "canonicalP0LockSha256": "dbec679507e76e3591fe875b7b8e7c59f24f275f9af88058797891fbe0d10c85",
+  "goScenarios": [
+    "TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline",
+    "TestMCPOwnerWaitIsRefusedWithoutAJobService",
+    "TestMCPOwnerWaitBlocksInTheCallWithoutAnEngineDeadline",
+    "TestMCPInlineWaitsEndBeforeAnEngineDeadline",
+    "TestDshMCPServers",
+    "TestDshMCPServers/orbit-server-and-session-identity",
+    "TestMCPTaskCreateBatchAsksBeforeWriting",
+    "TestMCPTaskCreateBatchWritesNothingWhenDenied",
+    "TestMCPTaskCreateBatchHeadlessDoesNotAsk",
+    "TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost",
+    "TestDshRealMCPTimeoutCancelsTheCall",
+    "TestDshRealOrbitMCPConfirmationOutlastsTimeout",
+    "TestDshRealOrbitMCPAndAgentInstructions"
+  ],
+  "realScenarios": [
+    "TestDshRealMCPTimeoutCancelsTheCall",
+    "TestDshRealOrbitMCPConfirmationOutlastsTimeout",
+    "TestDshRealOrbitMCPAndAgentInstructions"
+  ],
+  "raceScenarios": [
+    "TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline",
+    "TestMCPOwnerWaitIsRefusedWithoutAJobService",
+    "TestMCPOwnerWaitBlocksInTheCallWithoutAnEngineDeadline",
+    "TestMCPInlineWaitsEndBeforeAnEngineDeadline",
+    "TestDshMCPServers",
+    "TestDshMCPServers/orbit-server-and-session-identity",
+    "TestMCPTaskCreateBatchAsksBeforeWriting",
+    "TestMCPTaskCreateBatchWritesNothingWhenDenied",
+    "TestMCPTaskCreateBatchHeadlessDoesNotAsk",
+    "TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost"
+  ],
+  "raceDetector": "clean"
+}

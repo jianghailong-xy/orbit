@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel } from './ApprovalPanel';
-import { Transcript, type RunEvent } from './Transcript';
+import { ExportCtx, Transcript, type RunEvent } from './Transcript';
 import type { ApprovalInfo } from '../api';
 
 /**
@@ -114,14 +114,21 @@ describe('a multi-line AskUserQuestion in the generic form', () => {
 
 describe('the same question read back in the transcript', () => {
   it('keeps its line breaks there too, off the same class', () => {
-    // The historical card is a second renderer of the same text (`Questions` in `Transcript.tsx`),
-    // and it reaches the same stylesheet rule — so it is fixed by the same declaration and would
-    // break with it. Asserting it here is what makes that a checked claim rather than a guess.
+    // The historical card is a second renderer of the same text (`QuestionReplay` in
+    // `Transcript.tsx`), and it reaches the same stylesheet rule — so it is fixed by the same
+    // declaration and would break with it. Asserting it here is what makes that a checked claim
+    // rather than a guess. The full question is on the card once it is open (folded, the card leads
+    // with its opening on one line); a static render has no click, so the export opens it, as it
+    // does every card in a saved transcript.
     const events: RunEvent[] = [
       { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'AskUserQuestion', input: { questions: QUESTIONS } } },
-      { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: 'The user answered: "Branch"="main".' } },
+      { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: `The user answered: "${QUESTION}"="main".` } },
     ];
-    const html = renderToStaticMarkup(<Transcript events={events} />);
+    const html = renderToStaticMarkup(
+      <ExportCtx.Provider value={{ images: new Map() }}>
+        <Transcript events={events} />
+      </ExportCtx.Provider>,
+    );
 
     const shown = asShown(html, QUESTION);
 
@@ -129,3 +136,6 @@ describe('the same question read back in the transcript', () => {
     expect(PRESERVES_BREAKS).toContain(shown.whiteSpace);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

@@ -83,11 +83,16 @@ type integrationResult struct {
 	// ancestor of the upstream tip this job fetched (migration 0346). It is the one fact the control
 	// plane lets such an answer out of a criterion's landing on — see J-S3 below.
 	SourceOnUpstream *bool
-	FilesChanged     *int
-	Checks           []IntegrationCheckResult
-	Conflicts        []string
-	ErrorCode        string
-	ErrorDetail      map[string]any
+	// SourceFullyApplied is set with NOTHING_TO_LAND too, and only there: true when the branch carried
+	// commits of its own and the base already had every one of them, false when it carried none
+	// (migration 0410). The two answers both push nothing, and the control plane has to be able to
+	// tell them apart — see J-S4 below.
+	SourceFullyApplied *bool
+	FilesChanged       *int
+	Checks             []IntegrationCheckResult
+	Conflicts          []string
+	ErrorCode          string
+	ErrorDetail        map[string]any
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
@@ -207,6 +212,11 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S2 MAIN_SYNC ────────────────────────────────────────────────────────────────────────
 	// Only a project branch absorbs upstream: on a MAIN line the target IS upstream.
 	base := targetSha
+	// What J-S3 measures "already contained" against. Normally the same as `base` — the target
+	// after J-S2's own absorb — but not when the absorb went onto the SOURCE (below): there the
+	// target still is what it was, and a base that already contains the source would answer
+	// ALREADY_LANDED for work nobody has pushed anywhere.
+	containedIn := targetSha
 	absorbedBySource := false
 	if cmd.TargetRef != cmd.UpstreamRef && !isAncestor(scratch, upstreamSha, targetSha) {
 		if sourceCarriesTheAbsorb(scratch, sourceSha, targetSha, upstreamSha) {
@@ -214,6 +224,29 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			// Making it again on the target's tip asks git for that resolution a second time, and
 			// conflicts where the source already answered — so nothing is merged here, and J-S4
 			// lands the source as it is.
+			absorbedBySource = true
+		} else if sourceCarriesAnEarlierAbsorb(scratch, sourceSha, targetSha, upstreamSha) {
+			// The source absorbed an upstream that has moved on since, and carries the resolution
+			// the target does not have (the sync-task door, and the absorb of a reworked task).
+			// Absorbing the current upstream on the TARGET's tip would meet the conflicts the
+			// source already resolved and stop at MAIN_SYNC again, so the absorb goes onto the
+			// SOURCE instead — the branch that holds the resolution. A clean absorb is landed by
+			// J-S4's MERGE below; a conflict here is U′..U touching the very place the resolution
+			// did, and is reported as the MAIN_SYNC conflict it is.
+			report("MAIN_SYNC", nil)
+			if _, err := git(scratch, "checkout", "--detach", sourceSha); err != nil {
+				result.State, result.Phase, result.ErrorCode = "ERROR", "MAIN_SYNC", "SOURCE_BRANCH_MISSING"
+				result.ErrorDetail = map[string]any{"ref": cmd.SourceRef, "detail": errText(err)}
+				return result
+			}
+			merged, conflicts, err := integrationMerge(scratch, upstreamSha,
+				fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.SourceRef))
+			if err != nil {
+				result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
+				return result
+			}
+			result.MainSyncSha = merged
+			base = merged
 			absorbedBySource = true
 		} else {
 			report("MAIN_SYNC", nil)
@@ -225,11 +258,12 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			}
 			result.MainSyncSha = merged
 			base = merged
+			containedIn = merged
 		}
 	}
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
-	if isAncestor(scratch, sourceSha, base) {
+	if isAncestor(scratch, sourceSha, containedIn) {
 		// THE EMPTY BRANCH FIRST, because "already contained" is trivially true of one: its tip is
 		// the commit it forked at, and every fork point is in the target it forked from. A branch
 		// whose tip IS the commit its session started at carries nothing of the task's own, and
@@ -254,6 +288,9 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			// with no commit, on a line ahead of main, held its criterion off LANDED for ever).
 			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
 			result.SourceOnUpstream = &onUpstream
+			// The branch carried no commit of its own, so none of it was applied anywhere (J-S4).
+			fullyApplied := false
+			result.SourceFullyApplied = &fullyApplied
 			return result
 		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
@@ -270,7 +307,9 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		// A source that contains merge commits carries somebody's conflict resolutions inside
 		// them. A rebase would replay the sides and ask for those resolutions again; a merge keeps
 		// them (§2.4 J-S4). A source that absorbed the upstream itself always comes this way: the
-		// target's tip is its ancestor, so the merge is exactly the source's tree.
+		// target's tip is its ancestor, so the merge is exactly the source's tree — and so does a
+		// source J-S2 absorbed the CURRENT upstream into: the source is the base's ancestor, so
+		// the merge is exactly the base's tree, the source plus what upstream gained since.
 		report("MERGE", nil)
 		merged, conflicts, err := integrationMerge(scratch, sourceSha,
 			fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.TargetRef))
@@ -287,9 +326,37 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
+		// Counted before the replay: afterwards the range is all that tells the two empty results
+		// below apart.
+		replayed := countCommits(scratch, onto, sourceSha)
 		rebased, conflicts, err := integrationRebase(scratch, base, onto, sourceSha)
 		if err != nil {
 			result.State, result.Phase, result.Conflicts = "CONFLICT", "REBASE", conflicts
+			return result
+		}
+		if rebased == base {
+			// THE REPLAY CAME BACK AT THE BASE, so there is nothing to push: the push would be a no-op
+			// and VERIFY would pass on it. That is what wrote a LANDED receipt for every task of a
+			// line rebuilt from main's tip after main had taken the project's work in by another
+			// route (2026-10-09, project 34PBlWiEZytRLTcPufJht). Each branch carried commits, git
+			// dropped every one as "patch contents already upstream", and the line never moved.
+			//
+			// Two branches come back here, and the control plane must not read them as one. One
+			// carried commits, and the base already had every one of them (`sourceFullyApplied`):
+			// the work is on the target, as copies rather than as these commits. The other carried
+			// none, because the session started on a commit the target does not have and made
+			// nothing, so J-S3 never saw an empty tip. That one is J-S3's empty branch, measured
+			// the same way (0300, 0346).
+			//
+			// Only on this path. A MERGE comes back at the base only when the source is already in
+			// it, and J-S4 merges such a source only after J-S2 absorbed the current upstream into the
+			// source itself. There the base is that absorb, a commit the target does not have yet,
+			// and pushing it is the landing.
+			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
+			result.SourceOnUpstream = &onUpstream
+			fullyApplied := replayed > 0
+			result.SourceFullyApplied = &fullyApplied
 			return result
 		}
 		tested = rebased
@@ -409,6 +476,32 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 func sourceCarriesTheAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
 	return sourceSha != upstreamSha &&
 		isAncestor(dir, upstreamSha, sourceSha) && isAncestor(dir, targetSha, sourceSha)
+}
+
+// sourceCarriesAnEarlierAbsorb reports a source that absorbed the upstream at an EARLIER tip and
+// carries the resolution on top: it contains the target tip, its newest commit shared with the
+// upstream tip this job fetched — the upstream commit it absorbed, U′ — is one the target does not
+// have, and its own tip is past U′. J-S2 then merges the CURRENT upstream into such a source rather
+// than into the target's tip: the branch that holds the resolution between the project work and U′,
+// which a merge into the target would throw away and meet again as the same conflict.
+//
+// A source whose shared tip is in the target absorbed nothing the target does not know, and one
+// whose tip IS the shared tip is an upstream commit itself — nothing of its own to land, whose
+// NOTHING_TO_LAND must not be turned into a bare main sync (the same reason sourceCarriesTheAbsorb
+// excludes the upstream tip itself). Both stay on J-S2's old path.
+func sourceCarriesAnEarlierAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
+	if !isAncestor(dir, targetSha, sourceSha) || isAncestor(dir, upstreamSha, sourceSha) {
+		return false
+	}
+	shared, err := git(dir, "merge-base", sourceSha, upstreamSha)
+	if err != nil {
+		return false
+	}
+	shared = strings.TrimSpace(shared)
+	if shared == "" || shared == sourceSha || isAncestor(dir, shared, targetSha) {
+		return false
+	}
+	return true
 }
 
 // promoteOnce is one pass at merging a project's finished work into its upstream
@@ -870,12 +963,19 @@ func removeIntegrationWorktree(repoRoot, scratch string) {
 // on by going to look at the branch — and the promotion it was a step of went BLOCKED over a race
 // it would have won a moment later.
 func integrationFetch(repoRoot, remote, ref string) error {
+	return fetchRetryingRefLock(repoRoot, remote, ref)
+}
+
+// fetchRetryingRefLock runs `git fetch <args>` in dir, trying again while the only thing in the way
+// was another process holding a ref this fetch writes. Shared with the SOURCE resolution
+// (source.go), whose fetch moves the same remote-tracking refs.
+func fetchRetryingRefLock(dir string, args ...string) error {
 	var err error
 	for attempt := 0; attempt < integrationFetchLockAttempts; attempt++ {
 		if attempt > 0 {
 			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 		}
-		if _, err = git(repoRoot, "fetch", remote, ref); err == nil || !isRefLockConflict(err) {
+		if _, err = git(dir, append([]string{"fetch"}, args...)...); err == nil || !isRefLockConflict(err) {
 			return err
 		}
 	}
@@ -963,11 +1063,14 @@ func tailOf(s string, n int) string {
 
 // runIntegrationJobAndReport does one job and tells the control plane what it came to.
 //
-// The report is the only thing that matters here, so it is retried: a job that did the work and
-// could not say so would be re-claimed after its lease expired and would do the whole thing again,
-// including an hour of checks. A 4xx is NOT retried — that is the control plane saying this
-// process's claim moved on, and the right answer to that is to stop.
-func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
+// The report is the only thing that matters here, so it is retried — with capped backoff, for as long
+// as this process lives, and over a copy on disk that survives it — until the control plane takes it
+// or refuses it for good (integration_result_spool.go). A job that did the work and could not say so
+// would be re-claimed after its lease expired and would do the whole thing again, including an hour of
+// checks; and one the control plane cannot be told about at all is held RUNNING by it for a lease
+// owner that never comes back. ctx is the run loop's: a runner that is stopping leaves the report
+// spooled rather than pretending the send was the last word.
+func runIntegrationJobAndReport(ctx context.Context, t *Transport, job IntegrationJobCommand) {
 	logln("integration job", job.JobID, job.Kind, job.SourceRef, "->", job.TargetRef)
 	result := runIntegrationJob(job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
@@ -982,39 +1085,26 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 		})
 	})
 	body := IntegrationJobResultRequest{
-		ClaimGeneration:  job.ClaimGeneration,
-		LeaseOwner:       job.LeaseOwner,
-		State:            result.State,
-		Phase:            result.Phase,
-		SourceSha:        result.SourceSha,
-		TargetShaBefore:  result.TargetShaBefore,
-		UpstreamSha:      result.UpstreamSha,
-		MainSyncSha:      result.MainSyncSha,
-		TestedSha:        result.TestedSha,
-		TestedTreeSha:    result.TestedTreeSha,
-		LandedSha:        result.LandedSha,
-		LandedTreeSha:    result.LandedTreeSha,
-		AheadOfUpstream:  result.AheadOfUpstream,
-		SourceOnUpstream: result.SourceOnUpstream,
-		FilesChanged:     result.FilesChanged,
-		Checks:           result.Checks,
-		Conflicts:        result.Conflicts,
-		ErrorCode:        result.ErrorCode,
-		ErrorDetail:      result.ErrorDetail,
+		ClaimGeneration:    job.ClaimGeneration,
+		LeaseOwner:         job.LeaseOwner,
+		State:              result.State,
+		Phase:              result.Phase,
+		SourceSha:          result.SourceSha,
+		TargetShaBefore:    result.TargetShaBefore,
+		UpstreamSha:        result.UpstreamSha,
+		MainSyncSha:        result.MainSyncSha,
+		TestedSha:          result.TestedSha,
+		TestedTreeSha:      result.TestedTreeSha,
+		LandedSha:          result.LandedSha,
+		LandedTreeSha:      result.LandedTreeSha,
+		AheadOfUpstream:    result.AheadOfUpstream,
+		SourceOnUpstream:   result.SourceOnUpstream,
+		SourceFullyApplied: result.SourceFullyApplied,
+		FilesChanged:       result.FilesChanged,
+		Checks:             result.Checks,
+		Conflicts:          result.Conflicts,
+		ErrorCode:          result.ErrorCode,
+		ErrorDetail:        result.ErrorDetail,
 	}
-	for attempt := 0; attempt < 5; attempt++ {
-		answer, err := t.integrationJobResult(job.JobID, body)
-		if err == nil {
-			logln("integration job", job.JobID, "reported", result.State,
-				fmt.Sprintf("accepted=%v receipts=%d", answer.Accepted, len(answer.ReceiptIDs)))
-			return
-		}
-		var httpErr *transportHTTPError
-		if errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500 {
-			logln("integration job", job.JobID, "result refused:", err)
-			return
-		}
-		logln("integration job", job.JobID, "result not delivered, retrying:", err)
-		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
-	}
+	deliverIntegrationResult(ctx, t, job.JobID, body)
 }

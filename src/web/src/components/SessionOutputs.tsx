@@ -1,6 +1,4 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
-import type { MenuProps } from 'antd';
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
@@ -11,6 +9,11 @@ import { copyText } from '../lib/clipboard';
 import { commitFailureCopy } from '../lib/commitFailure';
 import { sessionDiffQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { Drawer } from './ui/Drawer';
+import { Input } from './ui/Input';
+import { Menu, type MenuItem } from './ui/Menu';
+import { Segmented } from './ui/Segmented';
+import { Tooltip } from './ui/Tooltip';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -168,6 +171,11 @@ export function SessionOutputs({
   if (iso !== 'worktree' || !detail?.branch) return wedge;
 
   const branch = detail.branch;
+  // A coordinator's bar names the project's integration line while its worktree actions keep
+  // using the session branch underneath. Task bars continue to show their own isolated branch.
+  const displayBranch = detail.projectMembership?.role === 'COORDINATOR'
+    ? (detail.projectIntegrationRef ?? branch)
+    : branch;
   const mergeTargetName = detail.mergeTarget || 'main';
   // By-hand equivalent of the runner's rebase merge, as two commands because they run in two
   // places: Orbit's layout has the branch checked out in the session's worktree and the target in
@@ -224,11 +232,11 @@ export function SessionOutputs({
           title="Copy branch name"
           onClick={(e) => {
             e.stopPropagation();
-            copy(branch, 'branch');
+            copy(displayBranch, 'branch');
           }}
         >
           <span className="wt-branch-ico">⎇</span>
-          <BranchLabel branch={branch} />
+          <BranchLabel branch={displayBranch} />
         </button>
         <span className="wt-stat">
           <span className="wt-add">+{add}</span>
@@ -329,7 +337,7 @@ export function SessionOutputs({
       <WorktreeDiffDrawer
         sessionId={detail.id}
         files={files}
-        branch={branch}
+        branch={displayBranch}
         committed={committed}
         openPath={openFile}
         onSelect={setOpenFile}
@@ -422,7 +430,7 @@ function AdoptButton({
   return (
     <span className="wt-diverged">
       <Tooltip
-        title={`This worktree is on "${worktreeBranch}", which Orbit isn't tracking — the session tracks "${trackedBranch}". Adopt it to merge and diff the work on this branch.`}
+        content={`This worktree is on "${worktreeBranch}", which Orbit isn't tracking — the session tracks "${trackedBranch}". Adopt it to merge and diff the work on this branch.`}
       >
         <span className="wt-diverged-label">⚠ On {worktreeBranch}</span>
       </Tooltip>
@@ -443,8 +451,9 @@ function AdoptButton({
   );
 }
 
-/** Compact "Merge to main" control on the worktree bar — a split button once the work is
- *  committed: the left segment merges into the default target (main, else master), and a caret
+/** Compact Merge control on the worktree bar — a split button once the work is committed: the
+ *  left segment merges into the server-resolved target (a project integration line for code tasks,
+ *  otherwise the workspace/runner default), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
  *  off the server-reported mergeStatus: idle → the split button; pending → "Merging…"; merged →
  *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the workspace rebases the
@@ -471,11 +480,11 @@ function MergeButton({
   busy?: boolean;
   /** Candidate target branches reported by the runner (empty for older runners). */
   targets: string[];
-  /** The branch the last merge targeted (null = the auto-detected default). */
+  /** The server-resolved merge target: an explicit target, project integration line, or workspace
+   *  default. */
   mergeTarget?: string | null;
-  /** The workspace's remembered default target (set when the user last switched in the dropdown).
-   *  Wins over main/master as the left-segment default — but only while it's still a reported
-   *  target, so a renamed/deleted branch falls back cleanly. */
+  /** The workspace's remembered target (set when the user last switched in the dropdown), used
+   *  when the server has no resolved session/project target. */
   workspaceDefaultTarget?: string | null;
   /** The branch tip is already in the default target (the runner's is-ancestor check). With no
    *  Orbit merge in flight (idle status) this shows a quiet "✓ In main" chip instead of a Merge
@@ -485,14 +494,12 @@ function MergeButton({
   onResolveInSession?: (target: string) => void;
   resolving?: boolean;
 }) {
-  // Local filter text for the merge-target dropdown; antd theme tokens style the custom popup panel
-  // so it tracks the app's light/dark surface. Declared before the early returns below to keep hook
-  // order stable across the different button states.
+  // Local filter text for the merge-target dropdown. Declared before the early returns below to keep
+  // hook order stable across the different button states.
   const [targetQuery, setTargetQuery] = useState('');
   // The branch the user picked in the caret dropdown — it only re-points the primary button's target;
   // the merge doesn't run until they click the primary button (picking no longer merges immediately).
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
-  const { token } = theme.useToken();
   if (status === 'merged') {
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
@@ -516,13 +523,12 @@ function MergeButton({
       </span>
     );
   }
-  // The left-segment default: the workspace's remembered target if it's still on offer, else main,
-  // else master, else the first reported branch; undefined means "let the runner auto-detect"
-  // (the original behavior, and the older-runner case where `targets` is empty). Retry re-runs
-  // the SAME target that failed; a fresh merge uses the default.
+  // The server's resolved target includes a project task's integration line. Fall back to the
+  // workspace's remembered target and the runner's historical main/master order for old servers.
+  // Retry re-runs the SAME target that failed; a fresh merge uses the resolved default.
   const remembered = workspaceDefaultTarget && targets.includes(workspaceDefaultTarget) ? workspaceDefaultTarget : undefined;
   const defaultTarget =
-    remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
+    mergeTarget ?? remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
   const failed = status === 'conflict' || status === 'error';
   // The reason a failed merge shows on hover: the runner's precondition message for an 'error'
   // (e.g. "develop has uncommitted changes…"), or a fixed note for a 'conflict' (mirroring the
@@ -544,8 +550,8 @@ function MergeButton({
   if (status === 'conflict' && onResolveInSession) {
     return (
       <Tooltip
-        placement="top"
-        title={
+        side="top"
+        content={
           <>
             {failureHint}
             <br />
@@ -596,10 +602,10 @@ function MergeButton({
       {primaryLabel}
     </button>
   );
-  // On failure, hover surfaces the real reason via an antd Tooltip (native title cleared above);
-  // otherwise the plain button with its native title is enough.
+  // On failure, hover surfaces the real reason via a Tooltip (native title cleared above); otherwise
+  // the plain button with its native title is enough.
   const mainBtnEl = failed ? (
-    <Tooltip title={failureHint} placement="top">
+    <Tooltip content={failureHint} side="top">
       {mainBtn}
     </Tooltip>
   ) : (
@@ -614,7 +620,7 @@ function MergeButton({
   const showSearch = targets.length > 8;
   const q = targetQuery.trim().toLowerCase();
   const visible = q ? targets.filter((b) => b.toLowerCase().includes(q)) : targets;
-  const items: MenuProps['items'] = visible.map((b) => ({
+  const items: MenuItem[] = visible.map((b) => ({
     key: b,
     label: (
       <span className="wt-merge-target">
@@ -622,63 +628,56 @@ function MergeButton({
         {b === effectiveTarget && <span className="wt-merge-target-tag">selected</span>}
       </span>
     ),
+    textValue: b,
     // Picking only re-points the primary button (setSelectedTarget) — it no longer merges immediately.
-    onClick: () => setSelectedTarget(b),
+    onSelect: () => setSelectedTarget(b),
   }));
 
   return (
     <span className="wt-merge-split-wrap" onClick={(e) => e.stopPropagation()}>
       {mainBtnEl}
-      <Dropdown
-        trigger={['click']}
-        placement="topRight"
-        menu={{ items, className: 'wt-merge-menu-list' }}
+      <Menu
+        side="top"
+        align="end"
+        popupClassName="wt-merge-menu"
+        items={items}
         onOpenChange={(open) => {
           if (!open) setTargetQuery('');
         }}
-        dropdownRender={(menu) => (
-          <div
-            className="wt-merge-menu-panel"
-            style={{
-              background: token.colorBgElevated,
-              borderRadius: token.borderRadiusLG,
-              boxShadow: token.boxShadowSecondary,
-            }}
+        // Search sits at the BOTTOM of the panel: this dropdown opens upward from the worktree bar, so
+        // the bottom edge is the one nearest the caret the user just clicked.
+        footer={
+          visible.length > 0 && !showSearch ? undefined : (
+            <>
+              {visible.length === 0 && <div className="wt-merge-menu-empty">No matching branches</div>}
+              {showSearch && (
+                <div className="wt-merge-menu-search">
+                  <Input
+                    size="small"
+                    autoFocus
+                    allowClear
+                    onClear={() => setTargetQuery('')}
+                    placeholder="Search branches…"
+                    value={targetQuery}
+                    onChange={(e) => setTargetQuery(e.target.value)}
+                  />
+                </div>
+              )}
+            </>
+          )
+        }
+        trigger={
+          <button
+            type="button"
+            className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
+            aria-label="Choose a branch to merge into"
+            title="Merge into another branch"
+            onClick={(e) => e.stopPropagation()}
           >
-            {visible.length > 0 ? (
-              menu
-            ) : (
-              <div className="wt-merge-menu-empty" style={{ color: token.colorTextTertiary }}>
-                No matching branches
-              </div>
-            )}
-            {/* Search sits at the BOTTOM of the panel: this dropdown opens upward from the worktree
-                bar, so the bottom edge is the one nearest the caret the user just clicked. */}
-            {showSearch && (
-              <div className="wt-merge-menu-search" style={{ borderTop: `1px solid ${token.colorBorderSecondary}` }}>
-                <Input
-                  size="small"
-                  autoFocus
-                  allowClear
-                  placeholder="Search branches…"
-                  value={targetQuery}
-                  onChange={(e) => setTargetQuery(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      >
-        <button
-          type="button"
-          className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
-          aria-label="Choose a branch to merge into"
-          title="Merge into another branch"
-          onClick={(e) => e.stopPropagation()}
-        >
-          ▾
-        </button>
-      </Dropdown>
+            ▾
+          </button>
+        }
+      />
     </span>
   );
 }
@@ -1191,7 +1190,7 @@ function WorktreeDiffDrawer({
           <span className="wt-diff-head-sub">{committed ? 'committed' : 'working changes'}</span>
         </span>
       }
-      extra={
+      headerActions={
         <button
           type="button"
           className="wt-diff-max-btn"
@@ -1284,8 +1283,9 @@ function DiffPane({
             </span>
             <Segmented
               size="small"
+              aria-label="Diff view"
               value={viewMode}
-              onChange={(v) => onViewMode(v as 'unified' | 'split')}
+              onValueChange={onViewMode}
               options={[
                 { label: 'Unified', value: 'unified' },
                 { label: 'Split', value: 'split' },

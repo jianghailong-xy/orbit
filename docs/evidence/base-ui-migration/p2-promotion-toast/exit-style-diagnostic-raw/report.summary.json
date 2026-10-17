@@ -1,0 +1,287 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/toasts.config.mjs",
+   "toasts-promotion.browser.mjs",
+   "--grep",
+   "exit keeps.*no-preference",
+   "--project",
+   "chromium-light-desktop"
+  ],
+  "configFile": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-promotion.browser.mjs",
+   "file": "toasts-promotion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1880,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n    at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:60:117",
+          "location": {
+           "file": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs",
+           "column": 117,
+           "line": 60
+          },
+          "snippet": "  58 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);\n  59 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);\n> 60 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);\n     |                                                                                                                     ^\n  61 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);\n  62 |     for (let i = 1; i < connected.length; i++) {\n  63 |       expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs",
+            "column": 117,
+            "line": 60
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\n  58 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);\n  59 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);\n> 60 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);\n     |                                                                                                                     ^\n  61 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);\n  62 |     for (let i = 1; i < connected.length; i++) {\n  63 |       expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);\n    at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:60:117"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:46:57.027Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs",
+          "column": 117,
+          "line": 60
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-20c25e4693be43ff1d9c",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:46:56.286Z",
+  "duration": 2776.495,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 1,
+  "flaky": 0
+ }
+}

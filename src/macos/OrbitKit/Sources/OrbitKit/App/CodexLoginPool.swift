@@ -62,6 +62,16 @@ public enum CodexLoginPool {
         return spentUntil(login, now: now) == nil ? .available : .spent
     }
 
+    /// The member of `pool` a session's detail names as the account it runs on (its
+    /// `poolCodexLogin`, the masked view the session DTO carries — web's `poolSessionLoginMember`):
+    /// the pool's member with that account, whatever its state — a spent one still renders. Nil when
+    /// the session names none, or names an account the pool no longer holds (the next claim chooses
+    /// again, and naming anyone until then would be a guess).
+    public static func sessionMember(in pool: ProviderPool, login: CodexLogin?) -> PoolMember? {
+        guard let login else { return nil }
+        return pool.members.first { $0.login?.fingerprint == login.fingerprint }
+    }
+
     /// Until when a spent account waits: `.some(latest reset)` of the windows it used up — `.some(nil)`
     /// for a spent window that named no reset — and nil while none is spent. A reset already behind
     /// `now` is a reading from before its window turned over: it runs again.

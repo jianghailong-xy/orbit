@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { WikiPlans } from './wiki-plan';
@@ -26,6 +27,7 @@ type Headers = { headers: Record<string, string | string[] | undefined> };
  * 404 every tenancy check answers. `plan/versions` is declared before `plan/versions/:version`.
  */
 @UseGuards(JwtAuthGuard, WikiRolloutGuard)
+@PatForbidden('OWNER_INTERACTIVE')
 @Controller('wiki')
 export class WikiPlanController {
   constructor(private readonly plans: WikiPlans) {}

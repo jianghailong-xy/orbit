@@ -18,6 +18,14 @@ describe('PROVIDER_PRESETS', () => {
 
   it('offers at least one model, and defaults to one of them', () => {
     for (const p of PROVIDER_PRESETS) {
+      // Harness choices are opaque ACP values that must come from configOptions. It has no
+      // static model/default/window fallback (docs/deepseek-harness-runtime-contract.md §4).
+      if (p.runtime === AgentProvider.DSH) {
+        expect(p.modelsFromRuntime).toBe(true);
+        expect(p.models).toEqual([]);
+        expect(p.defaultModel).toBe('');
+        continue;
+      }
       expect(p.models.length).toBeGreaterThan(0);
       // A default outside the list would leave the picker showing one model and the runner
       // launching another.

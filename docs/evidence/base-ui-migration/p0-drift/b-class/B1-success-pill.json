@@ -1,0 +1,4357 @@
+{
+ "change": "B1",
+ "commit": "57f792135ff215c9bc0f70ead3150f7c0e535714",
+ "task": "P2.3 (orbit-task:34Za3974yqnhjQsRBl0R3), revision-2 notification lifecycle repair",
+ "pixels_e361ee373_to_57f792135": {
+  "chromium-dark-desktop/profile-validation.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 508,
+   "maxChannelDelta": 88,
+   "box": [
+    527,
+    28,
+    720,
+    689
+   ],
+   "p0Comparator": "18 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 97,
+   "maxChannelDelta": 49,
+   "box": [
+    1195,
+    31,
+    36,
+    11
+   ],
+   "p0Comparator": "match"
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 313,
+   "maxChannelDelta": 48,
+   "box": [
+    43,
+    69,
+    326,
+    379
+   ],
+   "p0Comparator": "match"
+  },
+  "chromium-dark-phone/settings-saved.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 1309,
+   "maxChannelDelta": 90,
+   "box": [
+    159,
+    39,
+    151,
+    619
+   ],
+   "p0Comparator": "95 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 495,
+   "maxChannelDelta": 113,
+   "box": [
+    1165,
+    28,
+    82,
+    11
+   ],
+   "p0Comparator": "83 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "chromium-light-desktop/settings-saved.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 97,
+   "maxChannelDelta": 59,
+   "box": [
+    1195,
+    31,
+    36,
+    11
+   ],
+   "p0Comparator": "10 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 316,
+   "maxChannelDelta": 60,
+   "box": [
+    43,
+    69,
+    306,
+    243
+   ],
+   "p0Comparator": "22 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "chromium-light-phone/settings-saved.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 1418,
+   "maxChannelDelta": 113,
+   "box": [
+    159,
+    44,
+    126,
+    76
+   ],
+   "p0Comparator": "135 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 3994,
+   "maxChannelDelta": 167,
+   "box": [
+    106,
+    44,
+    174,
+    81
+   ],
+   "p0Comparator": "339 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "from": "e361ee373",
+   "at": "57f792135",
+   "pixels": 4863,
+   "maxChannelDelta": 224,
+   "box": [
+    104,
+    42,
+    178,
+    80
+   ],
+   "p0Comparator": "376 pixels (ratio 0.01 of all image pixels) are different."
+  }
+ },
+ "computedStyles": {
+  "chromium-light-desktop/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1118.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1118.96875
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1155.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1155.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1118.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1118.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1155.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1155.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1118.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1118.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1155.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1155.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   }
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1165.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1165.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1165.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1165.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1165.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1165.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   }
+  },
+  "chromium-light-phone/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1118.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1118.96875
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1155.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1155.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1118.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1118.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1155.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1155.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1118.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1118.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1155.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1155.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   }
+  },
+  "chromium-dark-desktop/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1165.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1165.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1165.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1165.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1165.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1247,
+      "bottom": 44,
+      "left": 1165.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "style": {
+      "position": "fixed",
+      "left": "904px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1280
+    }
+   }
+  },
+  "chromium-dark-phone/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.031px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.719px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "webkit-light-desktop/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1110.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1110.96875
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1147.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1147.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1110.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1110.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1147.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1147.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1110.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1110.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1147.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1147.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   }
+  },
+  "webkit-light-desktop/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1120.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1120.28125
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1157.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1157.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1120.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1120.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1157.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1157.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1120.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1120.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1157.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1157.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   }
+  },
+  "webkit-light-phone/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 123.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 258.859375,
+      "bottom": 92,
+      "left": 123.140625
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 160.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 241.859375,
+      "bottom": 84,
+      "left": 160.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 350,
+      "height": 36,
+      "top": 56,
+      "right": 366,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "350px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(31, 35, 41)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "webkit-dark-desktop/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1110.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1110.96875
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1147.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1147.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1110.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1110.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1147.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1147.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1110.96875,
+      "y": 16,
+      "width": 145.03125,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1110.96875
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1147.96875,
+      "y": 24,
+      "width": 91.03125,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1147.96875
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   }
+  },
+  "webkit-dark-desktop/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1120.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1120.28125
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1157.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1157.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": null,
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1120.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1120.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1157.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1157.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 1120.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 1120.28125
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 1157.28125,
+      "y": 24,
+      "width": 81.71875,
+      "height": 20,
+      "top": 24,
+      "right": 1239,
+      "bottom": 44,
+      "left": 1157.28125
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport",
+     "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+     "rect": {
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1256,
+      "bottom": 52,
+      "left": 896
+     },
+     "style": {
+      "position": "fixed",
+      "left": "896px",
+      "right": "16px",
+      "top": "16px",
+      "width": "360px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 1280,
+     "clientWidth": 1272
+    }
+   }
+  },
+  "webkit-dark-phone/settings-saved.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 122.484375,
+      "y": 56,
+      "width": 145.03125,
+      "height": 36,
+      "top": 56,
+      "right": 267.515625,
+      "bottom": 92,
+      "left": 122.484375
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "145.03125px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 159.484375,
+      "y": 64,
+      "width": 91.03125,
+      "height": 20,
+      "top": 64,
+      "right": 250.515625,
+      "bottom": 84,
+      "left": 159.484375
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "e361ee373": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 123.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 258.859375,
+      "bottom": 92,
+      "left": 123.140625
+     },
+     "style": {
+      "willChange": "auto",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 160.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 241.859375,
+      "bottom": 84,
+      "left": 160.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": null,
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 350,
+      "height": 36,
+      "top": 56,
+      "right": 366,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "350px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "BODY",
+     "className": "",
+     "popover": null,
+     "topLayer": false,
+     "parent": "HTML"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "57f792135": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "orbit-toast-drop",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   },
+   "da13423d3": {
+    "card": {
+     "className": "toast toast--pill",
+     "rect": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "style": {
+      "willChange": "transform",
+      "transform": "none",
+      "position": "static",
+      "left": "auto",
+      "right": "auto",
+      "width": "135.71875px",
+      "height": "36px",
+      "borderRadius": "999px",
+      "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+      "backgroundColor": "rgb(43, 43, 46)",
+      "opacity": "1",
+      "animationName": "none",
+      "animationDelay": "0s"
+     }
+    },
+    "text": {
+     "rect": {
+      "x": 164.140625,
+      "y": 64,
+      "width": 81.71875,
+      "height": 20,
+      "top": 64,
+      "right": 245.859375,
+      "bottom": 84,
+      "left": 164.140625
+     },
+     "style": {
+      "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "lineHeight": "20px",
+      "color": "rgb(201, 206, 213)"
+     }
+    },
+    "section": {
+     "className": "toast-viewport toast-viewport--narrow",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));",
+     "rect": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "style": {
+      "position": "fixed",
+      "left": "16px",
+      "right": "16px",
+      "top": "56px",
+      "width": "358px",
+      "zIndex": "2050",
+      "transform": "none"
+     }
+    },
+    "host": {
+     "tag": "DIV",
+     "className": "toast-layer",
+     "popover": "manual",
+     "topLayer": true,
+     "parent": "BODY"
+    },
+    "viewport": {
+     "innerWidth": 390,
+     "clientWidth": 390
+    }
+   }
+  }
+ },
+ "diagnosisExperiments": {
+  "exp-e1-no-will-change": {
+   "patch": "diff --git a/src/web/src/index.css b/src/web/src/index.css\nindex b492f4d82..1acd49129 100755\n--- a/src/web/src/index.css\n+++ b/src/web/src/index.css\n@@ -293,8 +293,6 @@ body {\n   font-size: 14px;\n   line-height: 20px;\n   text-align: start;\n-  /* Keep the original card's rasterization when its host enters the top layer. */\n-  will-change: transform;\n }\n :root[data-theme='dark'] .toast {\n   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);\n",
+   "profileValidation_vs_P02": {
+    "chromium-dark-desktop/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 5,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-dark-phone/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 7,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 45,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-desktop/profile-validation.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-phone/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 3994,
+     "maxChannelDelta": 167,
+     "p0Comparator": "339 pixels (ratio 0.01 of all image pixels) are different."
+    },
+    "webkit-light-desktop/profile-validation.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-phone/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 4863,
+     "maxChannelDelta": 224,
+     "p0Comparator": "376 pixels (ratio 0.01 of all image pixels) are different."
+    }
+   },
+   "settingsSaved_vs_mainReference_4088d37e6": {
+    "chromium-dark-desktop/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-dark-phone/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 33,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-desktop/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-phone/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 5,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-phone/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-desktop/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-phone/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    }
+   }
+  },
+  "exp-e2-no-width-override": {
+   "patch": "diff --git a/src/web/src/components/ToastViewport.tsx b/src/web/src/components/ToastViewport.tsx\nindex b637abd90..dd290ddf7 100644\n--- a/src/web/src/components/ToastViewport.tsx\n+++ b/src/web/src/components/ToastViewport.tsx\n@@ -143,7 +143,7 @@ export function ToastViewport() {\n         const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);\n         if (animation) toast.dataset.toastAnimationStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));\n       }}\n-      style={viewportWidth ? narrow\n+      style={portal && viewportWidth ? narrow\n         ? { width: `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` }\n         : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }\n         : undefined}>\ndiff --git a/src/web/src/index.css b/src/web/src/index.css\nindex b492f4d82..1acd49129 100755\n--- a/src/web/src/index.css\n+++ b/src/web/src/index.css\n@@ -293,8 +293,6 @@ body {\n   font-size: 14px;\n   line-height: 20px;\n   text-align: start;\n-  /* Keep the original card's rasterization when its host enters the top layer. */\n-  will-change: transform;\n }\n :root[data-theme='dark'] .toast {\n   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);\n",
+   "profileValidation_vs_P02": {
+    "chromium-dark-desktop/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 118,
+     "maxChannelDelta": 2,
+     "p0Comparator": "match"
+    },
+    "chromium-dark-phone/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 93,
+     "maxChannelDelta": 2,
+     "p0Comparator": "match"
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 19,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "bytesEqual": false,
+     "differentPixels": 26,
+     "maxChannelDelta": 2,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-desktop/profile-validation.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-phone/profile-validation.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-desktop/profile-validation.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-phone/profile-validation.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    }
+   },
+   "settingsSaved_vs_mainReference_4088d37e6": {
+    "chromium-dark-desktop/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-dark-phone/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 33,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-desktop/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "chromium-light-phone/settings-saved.png": {
+     "bytesEqual": false,
+     "differentPixels": 5,
+     "maxChannelDelta": 1,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-desktop/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-dark-phone/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-desktop/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    },
+    "webkit-light-phone/settings-saved.png": {
+     "bytesEqual": true,
+     "differentPixels": null,
+     "maxChannelDelta": null,
+     "p0Comparator": "match"
+    }
+   }
+  }
+ }
+}

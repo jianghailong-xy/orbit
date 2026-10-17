@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Cut a release of the Orbit clients. A release is one git tag — `vX.Y.Z` — and pushing it runs both
-# jobs of .github/workflows/release.yml from that same tag:
-#   • dmg        → signed + notarized DMG + GitHub Release + Sparkle appcast
-#   • testflight → signed .ipa uploaded to TestFlight (marketing version = X.Y.Z with any -beta.N
-#                  suffix stripped; build number = commit count)
+# Cut a release of the Orbit clients. A release is one git tag — `vX.Y.Z` — and pushing it runs every
+# job of .github/workflows/release.yml from that same tag:
+#   • dmg             → signed + notarized DMG + GitHub Release + Sparkle appcast
+#   • testflight      → signed .ipa uploaded to TestFlight (marketing version = X.Y.Z with any -beta.N
+#                       suffix stripped; build number = commit count)
+#   • android-build   → signed release APK (versionName = X.Y.Z[-beta.N]; versionCode = commit count)
+#   • android-publish → the APK, its .sha256 and android-update.json attached to dmg's GitHub Release
 # Run from anywhere; it resolves the repo root itself.
 #
 #   .claude/skills/release/release.sh 0.2.0          # or: v0.2.0
@@ -26,7 +28,10 @@ cd "$(git rev-parse --show-toplevel)"
 # counter on an unreleased 0.1.1 for 100 betas.
 if [ "$ver" = "next" ]; then
   # versionsort.suffix=-beta makes -beta.N sort below its stable; without it 0.1.1-beta.2 > 0.1.1.
-  latest="$(git -c versionsort.suffix=-beta tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
+  # --count=1, not `| head -1`: once there are enough tags, head closes the pipe before git is done
+  # writing, git dies of SIGPIPE, and pipefail ends the script silently with exit 141.
+  latest="$(git -c versionsort.suffix=-beta for-each-ref --count=1 --sort=-v:refname \
+    --format='%(refname:short)' 'refs/tags/v[0-9]*')"
   if [ -z "$latest" ]; then
     echo "✗ no v* tag found — pass an explicit version instead of 'next'" >&2
     exit 1
@@ -71,7 +76,7 @@ branch="$(git branch --show-current)"
 echo "▶ tagging $tag at $(git rev-parse --short HEAD) (branch: ${branch:-detached})"
 git tag -a "$tag" -m "Release $tag"
 git push origin "$tag"
-echo "✓ pushed $tag — release.yml is building the macOS DMG and the iOS TestFlight build from this one tag"
+echo "✓ pushed $tag — release.yml is building the macOS DMG, the iOS TestFlight build and the Android APK from this one tag"
 
 if command -v gh >/dev/null 2>&1; then
   url="$(gh repo view --json url -q .url 2>/dev/null || true)"

@@ -1,0 +1,44 @@
+argv: bash -c cd ../.. && node src/web/scripts/audit-antd.mjs --check-owners
+tree: fix
+head: 1243db2bba248ed8c597e5c16a5ae1048b80d62e
+uncommitted:
+load: 32.58 32.08 30.28 41/4012 3717628
+memory: 5670 MB available
+disk: / 8009M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T03:48:50Z
+
+{
+  "baseline": {
+    "commit": "1243db2bba248ed8c597e5c16a5ae1048b80d62e",
+    "scopeHash": "b45578c9f21df5ca307ebd4a6d798c6c4b04dd877516d9e2c731394fb6f313d0"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json",
+    "2026-10-09c.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/components/WorkspaceView.recapRow.test.tsx",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 95,
+    "P6": 42
+  }
+}
+Ownership gaps: 1 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.
+exit=1
+load: 32.58 32.08 30.28 21/3966 3717729
+ended: 2026-10-10T03:48:52Z

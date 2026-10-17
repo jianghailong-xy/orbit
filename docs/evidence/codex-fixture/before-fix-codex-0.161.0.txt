@@ -1,0 +1,12 @@
+=== RUN   TestRealCodexOnAChatGPTLogin
+=== PAUSE TestRealCodexOnAChatGPTLogin
+=== CONT  TestRealCodexOnAChatGPTLogin
+    codex_chatgpt_backend_recording_test.go:569: codex on rate_limit_exceeded: {TurnStatus:failed Requests:6 ErrorMessage:exceeded retry limit, last status: 429 Too Many Requests CodexErrorInfo:map[responseTooManyFailedAttempts:map[httpStatusCode:429]] WillRetry:true RateLimits:<nil>}
+--- FAIL: TestRealCodexOnAChatGPTLogin (11.32s)
+FAIL
+FAIL	orbit	11.320s
+FAIL
+
+real	0m18.662s
+user	0m24.889s
+sys	0m2.784s

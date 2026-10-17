@@ -1,0 +1,1712 @@
+{
+  "stats": {
+    "startTime": "2026-10-07T05:25:01.603Z",
+    "duration": 319026.182,
+    "expected": 100,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1847
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1861
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-1--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1914
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-2--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1651
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-3--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1600
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-4--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1590
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-5--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1841
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-6--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2114
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-7--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2137
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-8--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2263
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-9--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1884
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-10--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3598
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-11--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2153
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-12--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3465
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-13--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2300
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-14--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2543
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-15--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2238
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-16--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2754
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-17--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2953
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-18--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2219
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-19--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-20",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2727
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-20--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-21",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2100
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-21--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-22",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2187
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-22--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-23",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1879
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-23--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-24",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2146
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-24--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-25",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2146
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-25--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-26",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1860
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-26--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-27",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2597
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-27--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-28",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1950
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-28--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-29",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2064
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-29--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-30",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1962
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-30--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-31",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1982
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-31--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-32",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2527
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-32--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-33",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2258
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-33--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-34",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1873
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-34--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-35",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1844
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-35--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-36",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2113
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-36--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-37",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1798
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-37--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-38",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2225
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-38--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-39",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1917
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-39--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-40",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1902
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-40--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-41",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2236
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-41--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-42",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2243
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-42--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-43",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2705
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-43--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-44",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2104
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-44--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-45",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3349
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-45--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-46",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3893
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-46--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-47",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3003
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-47--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-48",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2846
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-48--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-49",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2849
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-49--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-50",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2846
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-50--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-51",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2345
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-51--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-52",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2064
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-52--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-53",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2397
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-53--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-54",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2290
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-54--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-55",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1972
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-55--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-56",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1838
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-56--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-57",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1631
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-57--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-58",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2075
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-58--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-59",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2050
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-59--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-60",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1968
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-60--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-61",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2347
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-61--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-62",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2801
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-62--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-63",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2767
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-63--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-64",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2902
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-64--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-65",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2665
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-65--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-66",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2847
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-66--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-67",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2822
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-67--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-68",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2936
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-68--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-69",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2521
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-69--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-70",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2275
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-70--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-71",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4633
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-71--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-72",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4119
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-72--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-73",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 8245
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-73--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-74",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3543
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-74--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-75",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3038
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-75--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-76",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2778
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-76--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-77",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2365
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-77--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-78",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2164
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-78--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-79",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2176
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-79--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-80",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2669
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-80--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-81",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2986
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-81--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-82",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2483
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-82--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-83",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2498
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-83--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-84",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2353
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-84--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-85",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2337
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-85--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-86",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3831
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-86--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-87",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4863
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-87--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-88",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3953
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-88--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-89",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2942
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-89--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-90",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2902
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-90--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-91",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2802
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-91--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-92",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5239
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-92--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-93",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5611
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-93--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-94",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3499
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-94--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-95",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5303
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-95--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-96",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2329
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-96--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-97",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3251
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-97--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-98",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2919
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-98--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-99",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2135
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-99--multi-dialog-and-row.json",
+          "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,882 @@
+{
+ "stats": {
+  "startTime": "2026-10-09T02:47:26.844Z",
+  "duration": 528219.147,
+  "expected": 93,
+  "skipped": 11,
+  "unexpected": 8,
+  "flaky": 0
+ },
+ "passed": 93,
+ "expectedFailures": 0,
+ "skipped": 11,
+ "unexpected": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 277
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 291
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 227
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 222
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "accepted",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 264
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 285
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "accepted",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 231
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "settings",
+   "file": "pages.browser.mjs",
+   "screenshot": "settings-saved.png",
+   "expectedLayer": "accepted",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "locator": null,
+   "differentPixels": 234
+  }
+ ],
+ "flaky": [],
+ "tests": [
+  {
+   "project": "chromium-light-desktop",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "breakpoints.browser.mjs",
+   "test": "both sides of existing 600, 640 and 960px rules",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "feedback-production.browser.mjs",
+   "test": "P2.3 production notification compatibility",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-1: task share Escape restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "known-failures.browser.mjs",
+   "test": "P0.2-FOCUS-2: task share Done restores focus",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "task",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "share",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "projects",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "wiki",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "settings",
+   "status": "unexpected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "profile",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "pages.browser.mjs",
+   "test": "session",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "performance.browser.mjs",
+   "test": "record browser performance baseline",
+   "status": "skipped",
+   "expectedStatus": "skipped"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "states.browser.mjs",
+   "test": "projects loading and release",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "file": "states.browser.mjs",
+   "test": "projects error and retry",
+   "status": "expected",
+   "expectedStatus": "passed"
+  }
+ ]
+}

@@ -1,0 +1,95 @@
+{
+  "claim": "恢复紧凑决策卡片引入后的六文件30项Web集成回归。保留原有业务断言及真实预览/portal组合，未改生产UI或P2.3通知实现。",
+  "criterion": {
+    "key": "5wbhutjez7Qv5GCTNLb0P7",
+    "text": "P7：完整迁移通过最终构建、行为与视觉回归，并有实测收益和可回退交付记录。"
+  },
+  "scope": "仅P7要求下本次集成基线修复子范围，非最终P7或整个迁移验收。",
+  "standardChecks": [
+    {
+      "name": "implementation",
+      "commit": "903b115fd11a898e393014a446d358a072eebcad",
+      "tree": "6fd5b5fcb4a243fc4c931f8a0b738a09c2b35510",
+      "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+      "env": {
+        "NO_COLOR": "1"
+      },
+      "job": "bgj_685967f243e3",
+      "exitCode": 0,
+      "filesPassed": 295,
+      "testsPassed": 3659,
+      "raw": "after/implementation-build-test.log"
+    },
+    {
+      "name": "candidate",
+      "commit": "2c511f64466dd4f2e58fd307861f63e17c15ee34",
+      "tree": "ecc5bd657558779733cecf032a704f3f8cf72bfc",
+      "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+      "env": {
+        "NO_COLOR": "1"
+      },
+      "job": "bgj_3a065e89b16f",
+      "exitCode": 0,
+      "filesPassed": 295,
+      "testsPassed": 3661,
+      "raw": "after/candidate-build-test.log"
+    }
+  ],
+  "targeted": {
+    "commit": "903b115fd11a898e393014a446d358a072eebcad",
+    "files": 21,
+    "passed": 336,
+    "failed": 0,
+    "types": "passed, including all seven changed suites and the browser fixture",
+    "raw": "after/targeted.json",
+    "log": "after/targeted-and-browser.log"
+  },
+  "browser": {
+    "implementation": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "matrix": [
+        "Chromium light desktop 1280x900",
+        "Chromium dark desktop 1280x900",
+        "Chromium light phone 393x844",
+        "Chromium dark phone 393x844"
+      ],
+      "behaviors": [
+        "actual portal open/close",
+        "Escape/close return focus",
+        "Tab and Shift+Tab remain in dialog",
+        "selected choices and typed drafts survive reopening",
+        "background shortcuts suspended; foreground confirmation works",
+        "scrolling long content preserves visible action row",
+        "popup/action geometry remains within phone and desktop viewport"
+      ],
+      "raw": "browser/report.json",
+      "screenshots": 8
+    },
+    "candidate": {
+      "commit": "2c511f64466dd4f2e58fd307861f63e17c15ee34",
+      "tree": "ecc5bd657558779733cecf032a704f3f8cf72bfc",
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "testTypes": "passed",
+      "raw": "candidate-browser/report.json",
+      "log": "after/candidate-browser.log",
+      "sourceCandidateScreenshotComparison": "browser-candidate-comparison.json"
+    }
+  },
+  "failureMap": "failure-map.json",
+  "patch": "repair.patch",
+  "sourceAndReproduction": "source.json",
+  "diagnosticIterations": [
+    "The first main-source reproduction failed all original 30 cases (6 files), with 17 remaining cases passing.",
+    "A first adapted promotion test clicked the still-rendered BLOCKED preview before its refreshed READY mount. The helper now waits for the target preview state, then clicks exactly once; no timeout change or repeated clicking.",
+    "The initial new browser probe queried the background trigger via an accessible role while the modal intentionally made the background inert. Corrected the locator to the same visible-preview DOM/text; no product change. That exploratory run was interrupted and is not counted as a full result."
+  ],
+  "gaps": [
+    "Await coordinator independent confirmation and platform landing before P2.3 integration_retry. This session does not establish actual landing or close the original exception.",
+    "Chromium emulation is not WebKit, real iOS soft-keyboard/IME/touch, full P7 visual/performance/dependency-removal acceptance, deployment or release."
+  ],
+  "deliveryNote": "The final implementation commit is fixed at 903b115fd. Subsequent evidence-only delivery commits add this directory and do not change tested source, dependencies or configuration."
+}

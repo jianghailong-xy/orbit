@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
+import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -27,12 +28,12 @@ export const POOL_GATEWAY_UPSTREAM = 'POOL_GATEWAY_UPSTREAM';
 export const POOL_GATEWAY_PATH = '/api/gw/codex';
 
 /**
- * What a session token may call, and nothing else, whichever upstream its session is on: what codex 0.158
- * was recorded calling through a configured provider (providers/fixtures/codex-gateway-recording.json) —
- * one POST of `/responses` per model request, the context compaction's included. Everything else codex
- * asks a ChatGPT backend for when it is signed in itself — the model list, workspace routing, plugins,
- * settings, analytics (providers/fixtures/codex-chatgpt-backend-recording.json) — goes to the backend it
- * was configured with, never through here, and a session token reaches none of it.
+ * What a session on one of a pool's API keys may call, and nothing else: what codex 0.158 was recorded
+ * calling through a configured provider (providers/fixtures/codex-gateway-recording.json) — one POST of
+ * `/responses` per model request, the context compaction's included. OpenAI's API has no other path codex
+ * asks it for. A session on one of a pool's ChatGPT accounts is the login gateway's, whose allowed paths
+ * are loginGatewayAllows (codex-login-gateway.ts): the turn, plus the ChatGPT backend calls the CLI makes
+ * for itself when signed in — routing, plugins, settings, analytics.
  */
 const ALLOWED = [{ method: 'POST', path: '/responses' }] as const;
 
@@ -45,14 +46,38 @@ export function gatewayAllows(method: string, path: string): boolean {
 const MAX_BODY_BYTES = 30 * 1024 * 1024;
 
 /**
- * A 429 that is a rate limit, not a spent budget, is waited out and sent again on the SAME key — never
- * moved to another one (design §2.3): at most RATE_LIMIT_ATTEMPTS sends, no single wait over
- * RATE_LIMIT_MAX_WAIT_MS and none that would take the waiting past RATE_LIMIT_BUDGET_MS, so the answer
- * leaves well inside the edge's 100-second limit. Codex 0.158 does not retry a 429 itself.
+ * A 429 that is a rate limit, not a spent budget, is waited out and sent again on the SAME credential:
+ * at most RATE_LIMIT_ATTEMPTS sends, no single wait over RATE_LIMIT_MAX_WAIT_MS and none that would take
+ * the waiting past RATE_LIMIT_BUDGET_MS, so the answer leaves well inside the edge's 100-second limit.
+ * Codex does not retry a 429 itself (measured on 0.160: one request, then the turn fails), so a limit
+ * that outlasts this wait does reach it — which is why the credential is marked `throttled_until` before
+ * that answer goes back (throttledUntil below): no claim picks it until the mark passes, and the retry
+ * the failed turn arms waits for that instead of a fixed ladder.
  */
 const RATE_LIMIT_ATTEMPTS = 4;
 const RATE_LIMIT_MAX_WAIT_MS = 20_000;
 const RATE_LIMIT_BUDGET_MS = 40_000;
+
+/**
+ * The shortest and the longest a credential is held out of new claims once a rate limit outlasted the
+ * wait above. The floor, because the answer only goes back at all when the upstream was still refusing
+ * after RATE_LIMIT_BUDGET_MS — a `retry-after` shorter than that is a reading from before it. The cap,
+ * so that a nonsense one cannot park a credential for hours.
+ */
+export const THROTTLE_MIN_MS = 60_000;
+export const THROTTLE_MAX_MS = 15 * 60_000;
+
+/**
+ * Until when a credential that just rate-limited this gateway is held out of new claims: what the upstream
+ * asked to be left alone for, inside the bounds above. Codex does not retry a 429 itself, so the turn ends
+ * — and without a mark the next claim would put the session back on the same credential and the retry
+ * would arm on a fixed ladder. With one, no claim chooses it until it passes (pool-login-select.ts
+ * loginCanRun, pool-key-select.ts keyCanRun) and the pool's own retry waits for that moment instead.
+ */
+export function throttledUntil(headers: IncomingHttpHeaders, body: Buffer | undefined, now: Date): Date {
+  const hint = rateLimitWait(headers, body, 1);
+  return new Date(now.getTime() + Math.min(THROTTLE_MAX_MS, Math.max(THROTTLE_MIN_MS, hint)));
+}
 
 /** An upstream stream that goes this long without a byte is given up on. */
 const UPSTREAM_IDLE_MS = 5 * 60_000;
@@ -118,6 +143,7 @@ interface GatewayKey {
   enabled: boolean;
   shareCap: number | null;
   spentUntil: Date | null;
+  throttledUntil: Date | null;
   pausedAt?: Date | null;
   pausedUntil?: Date | null;
   keyHint: string;
@@ -141,8 +167,9 @@ export interface Answer {
  * What it decides, and nothing more:
  * - WHO (`caller`, for a person's token, `orbit-gw-`): the token's hash names one (pool, person,
  *   session); a token revoked or expired, a session no longer open, a session moved to another provider,
- *   a person gone from the pool or a pool deleted — the last two delete the token row itself — is 401. The
- *   pool may be a shared one or one of somebody's own its owner added the person to (migration 0358).
+ *   a person gone from the pool or a pool deleted — the last two delete the token row itself — is 401. A
+ *   good token of an account an administrator disabled is 403 ACCOUNT_DISABLED, as its runner credential
+ *   is. The pool may be a shared one or one of somebody's own its owner added the person to (migration 0358).
  * - WHAT: only the ALLOWED paths; anything else is 403 (gatewayAllows, asked by the controller).
  * - WHICH KEY (`forward`): `session.pool_key_id`, as the claim chose it (QueueService.resolveSharedPool,
  *   and resolveLoginPool for an owner's session none of whose pool's accounts can run). The gateway
@@ -151,7 +178,8 @@ export interface Answer {
  *   refused here with the reason, and the session's next claim moves it.
  * - WHAT OPENAI SAID: `insufficient_quota` marks the key out of budget until it resets; a 401 marks it
  *   INVALID. Either way the turn ends, as any quota ends one, and the next claim moves the session. A rate
- *   limit is waited out on the same key.
+ *   limit is waited out on the same key; one that outlasts that wait is recorded as a short
+ *   `throttled_until` on the key before its 429 goes back, so no claim picks it until then.
  * - WHAT IT COST: the usage the response ends with, per person and per key, into PoolUsageLedger.
  *
  * No database connection is held while a response streams: every read is made before the request goes
@@ -224,6 +252,13 @@ export class PoolGatewayService {
       if (outcome.errorCode === 'insufficient_quota') {
         await this.pools.markKeySpent(key.id, spentUntil(answer.response.headers, now));
         this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: insufficient_quota — marked out of budget`);
+      } else if (status === 429 && !(outcome.errorCode && SPENT_ERROR_CODES.has(outcome.errorCode))) {
+        // A rate limit the wait above did not outlast — the one kind of 429 that reaches codex, which
+        // does not retry it. Marked before the answer goes back, so the claim the failed turn's retry
+        // makes already finds it out and moves the session, or waits for the moment it can run.
+        const until = throttledUntil(answer.response.headers, answer.body, now);
+        await this.pools.markKeyThrottled(key.id, until);
+        this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: rate limited — held out until ${until.toISOString()}`);
       }
       this.record(caller, key, outcome, now);
       relayHead(res, answer.response);
@@ -237,10 +272,12 @@ export class PoolGatewayService {
 
   /**
    * A person's token's (pool, person, session) and what the session runs on, when the token may still be
-   * used; null for every way it may not. The pool is a Codex pool the person is one of the people of — the
-   * token's own key says so — whether a shared one or one of somebody's own (migration 0358).
+   * used; ACCOUNT_DISABLED when it may but for its person's account, which an administrator disabled
+   * (docs/google-sign-in-design.md §5.5); null for every other way it may not. The pool is a Codex pool the
+   * person is one of the people of — the token's own key says so — whether a shared one or one of somebody's
+   * own (migration 0358).
    */
-  async caller(token: string | undefined): Promise<GatewayCaller | null> {
+  async caller(token: string | undefined): Promise<GatewayCaller | typeof ACCOUNT_DISABLED | null> {
     if (!token || !token.startsWith('orbit-gw-')) return null;
     const row = await this.prisma.poolGatewayToken.findUnique({
       where: { tokenHash: sha256(token) },
@@ -254,7 +291,7 @@ export class PoolGatewayService {
         session: {
           select: {
             status: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
-            completedAt: true, deletedAt: true,
+            completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
           },
         },
       },
@@ -270,18 +307,20 @@ export class PoolGatewayService {
       session.ownerId === row.userId &&
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
-    return current
-      ? {
-          poolId: row.poolId,
-          poolLabel: pool.label,
-          poolOwnerId: pool.ownerId,
-          userId: row.userId,
-          sessionId: row.sessionId,
-          sessionOwnerId: session.ownerId,
-          accountId: session.poolCodexAccountId,
-          keyId: session.poolKeyId,
-        }
-      : null;
+    if (!current) return null;
+    // The session's owner is the token's person (above). Asked last, as the runner credential asks it:
+    // the token itself is good, and works again once the account is enabled.
+    if (session.owner.disabledAt) return ACCOUNT_DISABLED;
+    return {
+      poolId: row.poolId,
+      poolLabel: pool.label,
+      poolOwnerId: pool.ownerId,
+      userId: row.userId,
+      sessionId: row.sessionId,
+      sessionOwnerId: session.ownerId,
+      accountId: session.poolCodexAccountId,
+      keyId: session.poolKeyId,
+    };
   }
 
   private keyOf(poolId: string, keyId: string): Promise<GatewayKey | null> {
@@ -289,6 +328,7 @@ export class PoolGatewayService {
       where: { id: keyId, poolId },
       select: {
         id: true, label: true, contributorId: true, state: true, enabled: true, shareCap: true, spentUntil: true,
+        throttledUntil: true,
         keyHint: true, secretEncrypted: true, pausedAt: true, pausedUntil: true,
       },
     });

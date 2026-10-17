@@ -1,0 +1,215 @@
+# tree /var/tmp/p23b1/trees/fixab commit 86db4c8862d18cfbecd678301690f12f3ff5dade status: ?? src/web/ui-migration/race.config.mjs ?? src/web/ui-migration/toasts-race.diag.mjs 
+# argv: NO_COLOR=1 npm run test:ui-toasts -w @orbit/web -- -g exit keeps its own native progress|entrance progress survives|notification card stays fixed through --repeat-each=2
+# started 2026-10-07T00:37:03Z
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs -g exit keeps its own native progress|entrance progress survives|notification card stays fixed through --repeat-each=2
+
+[WebServer] (node:2791317) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 96 tests using 1 worker
+
+(node:2791644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (4.0s)
+  ✓   2 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.4s)
+  ✓   3 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.4s)
+  ✓   4 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✓   5 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (3.0s)
+  ✓   6 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.6s)
+(node:2794396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.2s)
+  ✓   8 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.7s)
+  ✓   9 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.7s)
+  ✓  10 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✓  11 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓  12 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.6s)
+(node:2797719) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.2s)
+  ✓  14 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.2s)
+  ✓  15 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.0s)
+  ✓  16 [chromium-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  17 [chromium-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.8s)
+  ✓  18 [chromium-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.6s)
+(node:2801333) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.0s)
+  ✓  20 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.1s)
+  ✓  21 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.2s)
+  ✓  22 [chromium-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  23 [chromium-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓  24 [chromium-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.4s)
+(node:2803684) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.0s)
+  ✓  26 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.1s)
+  ✓  27 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.5s)
+  ✓  28 [chromium-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✓  29 [chromium-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.8s)
+  ✓  30 [chromium-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.5s)
+(node:2806238) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  31 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.1s)
+  ✓  32 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.3s)
+  ✓  33 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.1s)
+  ✓  34 [chromium-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✓  35 [chromium-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.0s)
+  ✓  36 [chromium-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.3s)
+(node:2808451) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  37 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.0s)
+  ✓  38 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.1s)
+  ✓  39 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.0s)
+  ✓  40 [chromium-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓  41 [chromium-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+  ✓  42 [chromium-dark-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.4s)
+(node:2810338) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  43 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.0s)
+  ✓  44 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.2s)
+  ✓  45 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.4s)
+  ✓  46 [chromium-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✓  47 [chromium-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+  ✓  48 [chromium-dark-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.9s)
+(node:2812909) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  49 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.4s)
+  ✓  50 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.7s)
+  ✓  51 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.8s)
+  ✓  52 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.7s)
+  ✓  53 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓  54 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.7s)
+(node:2816542) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  55 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.3s)
+  ✓  56 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.4s)
+  ✓  57 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.5s)
+  ✓  58 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✓  59 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+  ✓  60 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.5s)
+(node:2819447) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  61 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.9s)
+  ✓  62 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.3s)
+  ✓  63 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.3s)
+  ✓  64 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.5s)
+  ✓  65 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.3s)
+  ✓  66 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.5s)
+(node:2822637) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  67 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.2s)
+  ✓  68 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.4s)
+  ✓  69 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.1s)
+  ✓  70 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  71 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+  ✘  72 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.9s)
+(node:2825851) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  73 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.7s)
+  ✓  74 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.6s)
+  ✓  75 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.8s)
+  ✓  76 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (3.7s)
+  ✓  77 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (5.4s)
+  ✓  78 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.4s)
+(node:2829381) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  79 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.9s)
+  ✓  80 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.1s)
+  ✓  81 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.6s)
+  ✓  82 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (3.2s)
+  ✓  83 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (4.9s)
+  ✘  84 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.8s)
+(node:2833146) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  85 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (4.2s)
+  ✓  86 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (4.8s)
+  ✓  87 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.6s)
+  ✓  88 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.6s)
+  ✓  89 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+  ✓  90 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.4s)
+(node:2836478) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  91 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.2s)
+  ✓  92 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.3s)
+  ✓  93 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.4s)
+  ✓  94 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+  ✓  95 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓  96 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.3s)
+
+
+  1) [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      179 |   await attach(info, 'native-entrance-transfer', frames);
+      180 |   expect(frames.some((s) => s.opacity > 0 && s.opacity < 1)).toBe(true);
+    > 181 |   expect(frames.some((s) => s.owner && s.opacity > 0 && s.opacity < 1)).toBe(true);
+          |                                                                         ^
+      182 |   for (let i = 1; i < frames.length; i++) expect(frames[i].opacity).toBeGreaterThanOrEqual(frames[i - 1].opacity);
+      183 |   expect(frames.at(-1).opacity).toBe(1);
+      184 | });
+        at /var/tmp/p23b1/trees/fixab/src/web/ui-migration/toasts-promotion.browser.mjs:181:73
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat1/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      179 |   await attach(info, 'native-entrance-transfer', frames);
+      180 |   expect(frames.some((s) => s.opacity > 0 && s.opacity < 1)).toBe(true);
+    > 181 |   expect(frames.some((s) => s.owner && s.opacity > 0 && s.opacity < 1)).toBe(true);
+          |                                                                         ^
+      182 |   for (let i = 1; i < frames.length; i++) expect(frames[i].opacity).toBeGreaterThanOrEqual(frames[i - 1].opacity);
+      183 |   expect(frames.at(-1).opacity).toBe(1);
+      184 | });
+        at /var/tmp/p23b1/trees/fixab/src/web/ui-migration/toasts-promotion.browser.mjs:181:73
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-dark-desktop-repeat1/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-dark-desktop-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-dark-desktop-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+    [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+  94 passed (4.6m)
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /var/tmp/p23b1/trees/fixab/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /var/tmp/p23b1/trees/fixab/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs -g 'exit keeps its own native progress|entrance progress survives|notification card stays fixed through' --repeat-each=2
+# finished 2026-10-07T00:41:41Z exit 1

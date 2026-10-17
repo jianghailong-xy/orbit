@@ -1,0 +1,62 @@
+argv: env PROBE_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out PROBE_PORT=4531 npx playwright test --config ui-migration/probe-pages.config.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-10T01:49:30Z load: 58.95 53.65 45.90
+mem: 3046M available, swap 17361M free
+disk: / 20761M available
+cgroup: 0::/system.slice/run-p2310939-i60993827.scope
+
+Running 16 tests using 1 worker
+
+PROBE chromium-light-desktop rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE chromium-light-desktop choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓   1 [chromium-light-desktop] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (4.1s)
+PROBE chromium-light-desktop expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE chromium-light-desktop suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓   2 [chromium-light-desktop] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (3.2s)
+PROBE chromium-light-phone rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE chromium-light-phone choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓   3 [chromium-light-phone] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.1s)
+PROBE chromium-light-phone expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE chromium-light-phone suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓   4 [chromium-light-phone] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (2.6s)
+PROBE chromium-dark-desktop rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE chromium-dark-desktop choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓   5 [chromium-dark-desktop] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.0s)
+PROBE chromium-dark-desktop expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE chromium-dark-desktop suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓   6 [chromium-dark-desktop] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (2.7s)
+PROBE chromium-dark-phone rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE chromium-dark-phone choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓   7 [chromium-dark-phone] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.3s)
+PROBE chromium-dark-phone expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE chromium-dark-phone suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓   8 [chromium-dark-phone] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (3.0s)
+PROBE webkit-light-desktop rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE webkit-light-desktop choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓   9 [webkit-light-desktop] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.9s)
+PROBE webkit-light-desktop expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE webkit-light-desktop suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓  10 [webkit-light-desktop] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (3.4s)
+PROBE webkit-light-phone rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE webkit-light-phone choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓  11 [webkit-light-phone] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.5s)
+PROBE webkit-light-phone expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE webkit-light-phone suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓  12 [webkit-light-phone] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (3.0s)
+PROBE webkit-dark-desktop rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE webkit-dark-desktop choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓  13 [webkit-dark-desktop] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.6s)
+PROBE webkit-dark-desktop expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE webkit-dark-desktop suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓  14 [webkit-dark-desktop] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (3.1s)
+PROBE webkit-dark-phone rebind {"before":"Workspace","highlighted":["Orbit baseline (current)"],"afterEnter":"Orbit baseline (current)","listOpen":false}
+PROBE webkit-dark-phone choose {"before":"Workspace","highlighted":["Orbit baseline"],"afterEnter":"Orbit baseline","listOpen":false}
+  ✓  15 [webkit-dark-phone] › ui-migration/probe-pages.browser.mjs:34:1 › pages: the coordinator workspace pickers (2.4s)
+PROBE webkit-dark-phone expires-until {"before":"Until Oct 5","highlighted":["Never"],"afterEnter":"Never","listOpen":false}
+PROBE webkit-dark-phone suggested-none {"before":"No suggestion","highlighted":["No suggestionKeeps the agent's model, as today"],"afterEnter":"No suggestion","listOpen":false}
+  ✓  16 [webkit-dark-phone] › ui-migration/probe-pages.browser.mjs:55:1 › pages: a shared link that stops on a date, and a stopped task with no suggestion (3.1s)
+
+  16 passed (1.1m)
+end: 2026-10-10T01:51:10Z load: 52.37 52.91 46.43
+exit=0

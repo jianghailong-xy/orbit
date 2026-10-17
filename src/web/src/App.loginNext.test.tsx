@@ -2,7 +2,6 @@
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { App as AntApp } from 'antd';
 import { BrowserRouter, useParams } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -34,6 +33,8 @@ vi.mock('./components/AppShell', async () => {
 // The Tasks routes' element (TaskRoute reads the task to decide which page it opens over, and there
 // is no query client here to read it with).
 vi.mock('./pages/TaskRoute', () => ({ TaskRoute: () => <TaskPage /> }));
+// The page an `orbit login` link opens (it reads the request its code names, with no query client here).
+vi.mock('./pages/CliLoginPage', () => ({ CliLoginPage: () => <p>orbit login approval page</p> }));
 
 function TaskPage() {
   const { id } = useParams();
@@ -67,7 +68,7 @@ beforeEach(() => {
       });
     }),
   );
-  // antd's Form grid subscribes to breakpoints on mount and jsdom ships no matchMedia.
+  // The form's fields read prefers-reduced-motion, and jsdom ships no matchMedia.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -92,11 +93,10 @@ async function unmount(): Promise<void> {
   if (!root) return;
   const mounted = root;
   root = null;
-  // antd's Form debounces each field's error list on a timer it never clears (ErrorList's
-  // useDebounce, 10 ms for an empty list), so the last render's four outlived the unmount. After the
-  // file's last login they outlived its jsdom too, and set state with no `window` left: four
-  // "window is not defined", a red run with every test green (workstation-gpu, 2026-10-03). Let them
-  // fire while the page is still here — the timers due by then run before this one.
+  // Timers the page set while it was up fire while it is still here — the ones due by then run before
+  // this one. A timer that outlives the file's jsdom sets state with no `window` left: "window is not
+  // defined", a red run with every test green (workstation-gpu, 2026-10-03, when the login form's
+  // error list kept a 10 ms timer it never cleared).
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
   });
@@ -113,11 +113,9 @@ async function visit(path: string): Promise<void> {
   root = createRoot(container);
   await act(async () => {
     root!.render(
-      <AntApp>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </AntApp>,
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>,
     );
   });
   await settle();
@@ -174,9 +172,9 @@ async function logIn(): Promise<void> {
     type(password!, PASSWORD);
   });
   const submit = [...container.querySelectorAll('button')].find(
-    (button) => (button.textContent ?? '').trim() === 'Login',
+    (button) => (button.textContent ?? '').trim() === 'Sign In',
   );
-  expect(submit, 'the Login button').toBeTruthy();
+  expect(submit, 'the Sign In button').toBeTruthy();
   await act(async () => {
     submit!.click();
   });
@@ -217,6 +215,19 @@ describe('a signed-out visitor on an in-app page', () => {
     const sentTo = recordNavigation();
     await logIn();
     expect(sentTo).toEqual([listed]);
+  });
+
+  it('opening an orbit login link, is sent to log in and comes back to approve it, code and all', async () => {
+    const approval = '/cli-login?code=WXYZ4-8K2QP';
+    await visit(approval);
+    expect(addressBar()).toBe(`/login?next=${encodeURIComponent(approval)}`);
+
+    const sentTo = recordNavigation();
+    await logIn();
+    expect(sentTo).toEqual([approval]);
+    await visit(sentTo[0]);
+    expect(addressBar()).toBe(approval);
+    expect(container.textContent).toBe('orbit login approval page');
   });
 
   it('on the bare root gets the plain login page — the root is where login lands anyway', async () => {

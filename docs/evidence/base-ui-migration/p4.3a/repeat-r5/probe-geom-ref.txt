@@ -1,0 +1,67 @@
+tree: ref 9acb176da0acd9a4d829ec1892c2efb139457c61
+load: 16.16 18.06 23.61 9/5645 2684749
+started: 2026-10-09T03:55:44Z
+
+Running 8 tests using 1 worker
+
+KEYS-GEOM webkit-dark-desktop 0 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✘  1 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 0 (1.5s)
+KEYS-GEOM webkit-dark-desktop 1 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✓  2 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 1 (1.2s)
+KEYS-GEOM webkit-dark-desktop 2 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✓  3 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 2 (1.1s)
+KEYS-GEOM webkit-dark-desktop 3 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✓  4 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 3 (1.1s)
+KEYS-GEOM webkit-dark-desktop 4 {"heads":[186.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[185.8,690.2],"scrollTop":0,"clientHeight":682,"scrollHeight":682},"above":["div.tasks-header@24+161.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+34","div.tasks-bulkbar@143.8+42","div.tasks-body@185.8+690.2","div.orbit-tasklist.no-assignee@185.8+347"]}
+  ✓  5 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 4 (1.1s)
+KEYS-GEOM webkit-dark-desktop 5 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✓  6 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 5 (1.1s)
+KEYS-GEOM webkit-dark-desktop 6 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✓  7 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 6 (1.0s)
+KEYS-GEOM webkit-dark-desktop 7 {"heads":[194.8,38],"bar":{"box":[143.8,42],"offsetHeight":42,"clientHeight":32,"scrollWidth":497,"clientWidth":268},"body":{"box":[193.8,682.2],"scrollTop":0,"clientHeight":674,"scrollHeight":674},"above":["div.tasks-header@24+169.8","div.tasks-title-row@24+35.4","h1.page-title@24+35.4","button.ant-dropdown-trigger.tasks-scope-trigger@24+35.4","span.anticon.anticon-caret-down.tasks-scope-caret@35.7+12","svg.@35.7+12","path.@39.2+5","div.ant-segmented.tasks-viewswitch.ant-segmented-sm.css-oc1rc0.css-var-_r_0_@69.4+24","div.ant-segmented-group@71.4+20","label.ant-segmented-item.ant-segmented-item-selected.ant-segmented-item-selected-text@71.4+20","div.ant-segmented-item-label@71.4+20","label.ant-segmented-item@71.4+20","div.ant-segmented-item-label@71.4+20","div.task-progress@107.4+20.4","div.task-progress-track@113.6+8","span.task-progress-seg.done@113.6+8","span.task-progress-seg.ongoing@113.6+8","div.task-progress-text@107.4+20.4","b.@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","span.sep@110.1+15","div.tasks-toolbar@143.8+42","div.tasks-bulkbar@143.8+42","div.tasks-body@193.8+682.2","div.orbit-tasklist.no-assignee@193.8+347"]}
+  ✓  8 [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 7 (1.1s)
+
+
+  1) [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 0 ──
+
+    Error: No unhandled errors in the real application
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+       at harness.mjs:88
+
+      86 |       await use({ page, expect, capture, measure, api, measurements });
+      87 |       api.assertHandled();
+    > 88 |       expect(pageErrors, 'No unhandled errors in the real application').toEqual([]);
+         |                                                                         ^
+      89 |     } finally {
+      90 |       const path = testInfo.outputPath('evidence.json');
+      91 |       writeFileSync(path, JSON.stringify({ ...measurements, requests: api.requests, unhandled: api.unhandled, pageErrors }, null, 2) + '\n');
+        at Object.evidence (/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/ref/src/web/ui-migration/harness.mjs:88:73)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../probe-geom/ref/out/p43a-keys-geom-probe.browser.mjs-keys-geometry-0-webkit-dark-desktop/attachments/computed-styles-and-timings-548d228d664e89bfc9b8fae6963d3800b39b0c96.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../probe-geom/ref/out/p43a-keys-geom-probe.browser.mjs-keys-geometry-0-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../probe-geom/ref/out/p43a-keys-geom-probe.browser.mjs-keys-geometry-0-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../probe-geom/ref/out/p43a-keys-geom-probe.browser.mjs-keys-geometry-0-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-desktop] › ui-migration/p43a-keys-geom-probe.browser.mjs:11:3 › keys geometry 0 ───
+  7 passed (13.7s)
+exit=1

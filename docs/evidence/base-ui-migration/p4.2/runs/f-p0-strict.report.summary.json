@@ -1,0 +1,5129 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p32-reference.config.mjs",
+   "--update-snapshots=none"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/p32-reference.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs",
+     "p42*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "breakpoints.browser.mjs",
+   "file": "breakpoints.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9206,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:31.935Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/attachments/computed-styles-and-timings-836784cd5263197bcc36fdefc14d65b02bb2ecec.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-1b7cd70f9c8706de66af",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+          "line": 5,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 174,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:21.897Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+            "line": 5,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-phone/attachments/computed-styles-and-timings-032e7eba742b11ae4d01131ba6f364b3c33d9af6.json"
+          }
+         ]
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-eaa6328b99ab1a936e29",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7564,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:41.766Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/attachments/computed-styles-and-timings-c33ee6ed60696e6bb22146639a62d4b800646133.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-92aeb4368a82b2586d22",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+          "line": 5,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 166,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:11.257Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+            "line": 5,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-phone/attachments/computed-styles-and-timings-73b40d559a75d51ffd6d01bc4cc3e0a387adc8a0.json"
+          }
+         ]
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-43fdd16dfb218c6f3e01",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8801,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:36.041Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/attachments/computed-styles-and-timings-0d9a5cba8c12ea80c8ef3b16db0d3ff5798c8f2d.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-0997562919deabf929c4",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+          "line": 5,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 157,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:12.325Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+            "line": 5,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-phone/attachments/computed-styles-and-timings-2cd84a6594d1b256d0d3b29c639659e634fa13b4.json"
+          }
+         ]
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-0695f5cc0cfd0388ca69",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8638,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:38.051Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/attachments/computed-styles-and-timings-a883f3059d0a7239ef798299b4cd52d5571095fb.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-f66c45f030dfdf5da0df",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+          "line": 5,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 474,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:29.484Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/breakpoints.browser.mjs",
+            "line": 5,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-phone/attachments/computed-styles-and-timings-9c399f3e0b6d6bd95d15559b4f8c3a1b22297a23.json"
+          }
+         ]
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-fc918cfc93eb2f5f0e35",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "feedback-production.browser.mjs",
+   "file": "feedback-production.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2628,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:41.393Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-desktop/attachments/computed-styles-and-timings-349591619e2a4c0c73e54367864a905c50fd5ca4.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-21aea15b7ca4951083af",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2728,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:22.218Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-phone/attachments/computed-styles-and-timings-ec0deb26967e110359388ae6d783ad434d439cb6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-3825183ae12a4f0a4069",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2423,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:49.487Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-desktop/attachments/computed-styles-and-timings-5321851f598d3b2778b041eba39413872a5282de.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-587ddd86bf223773c0ed",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2751,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:11.582Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-phone/attachments/computed-styles-and-timings-cd649b3802f98ce8ecf2ba7bec2d6560abf6171a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-a767825deababd2dd849",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4475,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:45.046Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-desktop/attachments/computed-styles-and-timings-11791424dab394e51049717c1d4d70e80ef86112.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-c6b6a32c4894227128cf",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3054,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:12.580Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-phone/attachments/computed-styles-and-timings-a816147afda5b22090390937c2501343c46818bf.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-0d87c810920dba29e601",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3591,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:46.914Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-desktop/attachments/computed-styles-and-timings-98bcdb27dcb39fc5ea37fe9595a4ca7c56148ff7.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-6a7d1fe8396ba8b5ce5b",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    },
+    {
+     "title": "P2.3 production notification compatibility",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3276,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:30.092Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "notification-appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "production-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-phone/attachments/computed-styles-and-timings-560af367de934575c645b68c59127177884dc915.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "cf7705c158083d075b13-df23fa2a02d8c0ca71be",
+     "file": "feedback-production.browser.mjs",
+     "line": 7,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "known-failures.browser.mjs",
+   "file": "known-failures.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 893,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:44.067Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-light-desktop/attachments/computed-styles-and-timings-bc8735b965138f77489fa39ca076ab6cf595314c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-e7cc947368bc9d293d91",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 921,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:44.965Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-light-desktop/attachments/computed-styles-and-timings-8b3195cfe349c57a905c0c1fbf2a3b1ce93cf43d.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-dc364c4cce37abb94eb7",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 884,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:25.001Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-light-phone/attachments/computed-styles-and-timings-b89a3cd2ef125bcaa1e54bfca54bf094d9d66dc5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-bae51bef322ddc806269",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 899,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:25.890Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-light-phone/attachments/computed-styles-and-timings-0ed1765a541443f0711d19a35f11e56e080f080b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-9c0d9e08e18f3a49a295",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 740,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:51.929Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-dark-desktop/attachments/computed-styles-and-timings-01f77d8557810c24a138731d667b2ba31a7baab5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-5f44acbd1efa99b302aa",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 979,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:52.673Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-dark-desktop/attachments/computed-styles-and-timings-7950411a640f4578a1c65e6713747be6944592a8.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-47b384908ba8e92fe40a",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1105,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:14.378Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-dark-phone/attachments/computed-styles-and-timings-67715de239faef5623f2d962d4224dea86a74207.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-1d0847a9f8ebf4ac18c3",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1318,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:15.487Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-dark-phone/attachments/computed-styles-and-timings-42d1f2da24eb48c7e99bc57a3956305d36b8ab57.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-996228461f9e13cad503",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1388,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:49.570Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-light-desktop/attachments/computed-styles-and-timings-b538231b3fc7578e7b0a6185c0d650c0b9ba6037.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-bd83a306cd6eec161339",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1251,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:50.962Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-light-desktop/attachments/computed-styles-and-timings-ed1f28ae944a4d94e47eed97f200a0f078909ede.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-2866f042dc4ef76af736",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1318,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:15.687Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-light-phone/attachments/computed-styles-and-timings-e87bc365889978a17e8c78eb3bbeb3811f14222c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-fdcb3c245596681fadb9",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1247,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:17.010Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-light-phone/attachments/computed-styles-and-timings-5bd6b38f94514f5500cf4fe4fa913c23d26ffecb.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-bd22ecbfc5cb2d857e72",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1768,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:50.572Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-dark-desktop/attachments/computed-styles-and-timings-9bd03edd09fd43a17a2401fc0c92ca1ca1b2ef76.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-327bca9c4bb524a686bd",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1638,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:52.353Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-dark-desktop/attachments/computed-styles-and-timings-edb57a00b385df8082ee841d2726e77ce97fa900.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-349aaa8dd4cf89642316",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-1: task share Escape restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1316,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:33.379Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-dark-phone/attachments/computed-styles-and-timings-8d4b8693691efad2f90ae6d8cada5dcdde11dce4.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-b7b7bc5bad4d760862f0",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    },
+    {
+     "title": "P0.2-FOCUS-2: task share Done restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1235,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:34.700Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "known-focus-failure",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-dark-phone/attachments/computed-styles-and-timings-cabf2a19223a1a1d6a7b992359561ee30333071c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f3788835f5932959b9a4-c821ded176a44b08be30",
+     "file": "known-failures.browser.mjs",
+     "line": 12,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "pages.browser.mjs",
+   "file": "pages.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2740,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:45.896Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-chromium-light-desktop/attachments/computed-styles-and-timings-fd7db7f2c390515a598bce586e48b07a7e3ced04.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-83280aff58d25ac924a5",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 845,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:48.639Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-chromium-light-desktop/attachments/computed-styles-and-timings-f8a29724e5e963ed818d6d0d787545280263f2b4.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-556ce5824ef783579336",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2762,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:49.488Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-chromium-light-desktop/attachments/computed-styles-and-timings-2b9ba32331858e5c88528d64a3b8bf3ec7997ab6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-697af9b63c024aa55aab",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1554,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:52.255Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-chromium-light-desktop/attachments/computed-styles-and-timings-9ba41c042167b00cdadfd9bc7fda9bfe829021df.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-1ed7ea1b8568c8bef7bd",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 704,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:53.814Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-chromium-light-desktop/attachments/computed-styles-and-timings-298030af08be449452d77a465529ce83a52afa7e.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-c3789c5ae3056d1840d8",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 763,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:54.522Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-chromium-light-desktop/attachments/computed-styles-and-timings-8065bd674f9b118221b2b7d1b5b9059473c199f7.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-1831e83a57440ce4ab4a",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3744,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:55.289Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-chromium-light-desktop/attachments/computed-styles-and-timings-75091cae20c2d0191950a0954c58e2b9bcbc07ee.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-8d9bcf762f7f35271de0",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2211,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:26.830Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-91e388fa1c17c847db071e2fe44d56de32964694.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d72b333ee0e52bfd484c",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 598,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:29.045Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-chromium-light-phone/attachments/computed-styles-and-timings-831b1adc3c4242863fef4adcbc49e99e57b95a07.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-596a78d264517daf6dde",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2554,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:29.647Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-chromium-light-phone/attachments/computed-styles-and-timings-473be32bcdd68ac5b05a8bbc8b9e75e1f32222f6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d0d0f8821542f4d59076",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1375,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:32.205Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-chromium-light-phone/attachments/computed-styles-and-timings-f9ff5bcbd54096ab4224ed1040de69cf54f7ffbb.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-3b372dd083cbb0db5a2e",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 763,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:33.584Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-chromium-light-phone/attachments/computed-styles-and-timings-f0f494e3536fd4edfe6974e649632caa01a65682.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-23e1cb7dbe799d465373",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 747,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:34.351Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-chromium-light-phone/attachments/computed-styles-and-timings-4206a78f070552eea1f2aa971069c1940c195107.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-46f18d1e6474cc846201",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3494,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:35.102Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-chromium-light-phone/attachments/computed-styles-and-timings-93ee444423746a070cf9d430f2ded735362ab619.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-9fb17618a5a24aeb473f",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2216,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:53.719Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-496a279bfb2a09d763234d16390a771ce35a8b0a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-dfa74c73a5977d977265",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 481,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:55.939Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-chromium-dark-desktop/attachments/computed-styles-and-timings-92651adc05628403015e976fc28911000da2a42d.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-7459a2c8b6b22bf02fe4",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2819,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:56.424Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-chromium-dark-desktop/attachments/computed-styles-and-timings-73427903d453b2621fa80b523cff70630a8b74eb.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-1df4edc4c9ec22126ed5",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1144,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:59.247Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-chromium-dark-desktop/attachments/computed-styles-and-timings-2ef0b7b8031d8b92412616363113c438e27dc646.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-0bba0e95c079379e6f79",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1143,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:00.397Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-chromium-dark-desktop/attachments/computed-styles-and-timings-d285dbd9021c0fb6933fe58ed47353a4a1095f30.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d0acb1d98c4af7c80461",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1009,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:01.544Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-chromium-dark-desktop/attachments/computed-styles-and-timings-79960e378a3e43f5467a1b30cbee28d2f303abc9.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-f11ad2550fd246e2cbed",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4271,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:02.558Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-chromium-dark-desktop/attachments/computed-styles-and-timings-bbae42b6830514436eef5eaaff0d74364b3fb8fe.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-c7b1f7dfd251f318f89b",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1997,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:16.903Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-chromium-dark-phone/attachments/computed-styles-and-timings-09c062805ff461535aca886b58bd459bcb8d9880.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-9dfd25a76409c8faae4a",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 430,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:18.904Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-chromium-dark-phone/attachments/computed-styles-and-timings-318ff8a4436bc455c9b0ada03676066c12f04609.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-76e9c9e80efce937353c",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3198,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:19.338Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-chromium-dark-phone/attachments/computed-styles-and-timings-438e860b2a9de6d01f5e5a1c692c3d7170a84ff5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-6ffb63829e401f27b49b",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4796,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:22.540Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-chromium-dark-phone/attachments/computed-styles-and-timings-e56ee0f46c4c3e2b958ee10936289e198573df46.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d421fb23e19fbcd482d2",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 830,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:27.340Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-chromium-dark-phone/attachments/computed-styles-and-timings-5f097151ff21ee21ef1dc23b4f9b06a3bee3bcc3.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-f1aa95681f834f00dc52",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 762,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:28.174Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-chromium-dark-phone/attachments/computed-styles-and-timings-d8a49c0abd9fbc30146608cbccba319ec4f93c01.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-32035438fc846327bb1e",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3477,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:28.941Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-chromium-dark-phone/attachments/computed-styles-and-timings-09f5720a489451c47466a8f440de4e8d252989f2.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-f4043d10471cb4b1ed89",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2597,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:52.270Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-webkit-light-desktop/attachments/computed-styles-and-timings-173f3dc8804a6740087d5a4747de04a9eace9625.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d6b654133c79a094431a",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 612,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:54.871Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-webkit-light-desktop/attachments/computed-styles-and-timings-d082be5ff1f1b3d542ad6c22741296813e559f72.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-427764c81c7b7f09471d",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3601,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:55.487Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-webkit-light-desktop/attachments/computed-styles-and-timings-9c9728bc271f7b2344dd15f1c74de050a0ec7c28.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-1a20bd98afada8ef2944",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1626,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:59.093Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-webkit-light-desktop/attachments/computed-styles-and-timings-b5f699df2e811a1416748c59f5fefa1dec38d251.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-10a79af1a8171ac72f67",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 976,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:00.724Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-be7c4d0d3ffa6ac34e50ffa6603c9c99d516a2c1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-e1a6db0e57d7a15c2205",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1095,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:01.705Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-webkit-light-desktop/attachments/computed-styles-and-timings-6a4a35c800eb51e70479a9b39de4be9d5e01bf99.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-7c2a597b6c584b9890b6",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4537,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:02.804Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-webkit-light-desktop/attachments/computed-styles-and-timings-2b8ed8631584561460fba1871bd7ceabc172ab9e.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-202d8596d4c36ea8910b",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2456,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:18.283Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-webkit-light-phone/attachments/computed-styles-and-timings-abf972e545d7f6f4a9becf7758387ccc806bad89.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-c5af1ff960fd09016293",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 661,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:20.743Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-webkit-light-phone/attachments/computed-styles-and-timings-01cc83f2115e4db6790ecb16df7aca11ce8a1134.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-24793270f39d0be86e80",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3112,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:21.408Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-webkit-light-phone/attachments/computed-styles-and-timings-12e27835de3a4ec66c8152a1b5230898305c877a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-cf34da5153000e60fa9d",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1581,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:24.525Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-webkit-light-phone/attachments/computed-styles-and-timings-3e891ca658a6e636e0506ae6485f89dcb12c602c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-62fdac0a816e9315d694",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 993,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:26.111Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-webkit-light-phone/attachments/computed-styles-and-timings-403177f734193a71c9eea12dbd2a69e4f7b771a3.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-0fc874f710e318d2e36d",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1115,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:27.109Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-webkit-light-phone/attachments/computed-styles-and-timings-cc3bd3a804f04a8452ea0f757d468333ce05ecad.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-fd30d561b1a90ee73e30",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4694,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:28.229Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-webkit-light-phone/attachments/computed-styles-and-timings-3253cac1fa39c38a6b8cc70b77df9389daf1ba6f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-e022e48d024530785eee",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2839,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:54.072Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-webkit-dark-desktop/attachments/computed-styles-and-timings-8fb5f1af799c4c50ede5e427db0e1a315b9879a6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d1f0c8f804c501e9e867",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 751,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:56.915Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-webkit-dark-desktop/attachments/computed-styles-and-timings-3357c7efd03093d05f09e0c95394bda73bae5cda.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-73e452bdf0678a6c1ce2",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12688,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:57.671Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-webkit-dark-desktop/attachments/computed-styles-and-timings-a66de749db1c3ee8dac438db5616cc33d913ab89.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-3e6474d90dded1d52e4d",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6328,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:10.363Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-webkit-dark-desktop/attachments/computed-styles-and-timings-f7e0eab343291edcb0d195ae7898eed6207e7dfa.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-f3b8174adac27296b259",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1059,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:16.704Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-fe602bc1db859bca304abcf1ededdcad24cec2d1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-1fe298bd2b03890efcd1",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1247,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:17.767Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-webkit-dark-desktop/attachments/computed-styles-and-timings-43b04866054a3b7c454af1edde270a2aa35c69a8.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-6468391d8b9a0185657b",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4980,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:19.018Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-webkit-dark-desktop/attachments/computed-styles-and-timings-39c72fc2bcb975dea2d1a4ef744e35c7d6c20662.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-40fb843cff8dbc67faf0",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2565,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:36.172Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-task-webkit-dark-phone/attachments/computed-styles-and-timings-b44d58897009eb9ed933da496eda7e0526b84c2a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-95e8bbbc05fa9f71f767",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "share",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 781,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:38.742Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-share-webkit-dark-phone/attachments/computed-styles-and-timings-79d3fb308d0636a61231a6a434775a112a9331e1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-a918845d613e6a661b01",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "projects",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3105,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:39.527Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-projects-webkit-dark-phone/attachments/computed-styles-and-timings-ac7d6101e6a15a62f6ceb06fb4d4b802bcb143a1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-012c365759f3b59e862c",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "wiki",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1903,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:42.637Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-wiki-webkit-dark-phone/attachments/computed-styles-and-timings-9b6257e96eede199e1c9e1e3ca34db834e277b1b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-3b762ae62774e40f35f1",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "settings",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 906,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:44.545Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-ea7f3ec189fa890bb2a43575481c9047306a734d.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-e5b310b8c10d6e70833e",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "profile",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1259,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:45.456Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-profile-webkit-dark-phone/attachments/computed-styles-and-timings-221bf53de588fe8fbdcb471127fe76c555dcb0b4.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-63d895663e7951d188f1",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "session",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5564,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:46.719Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/pages.browser.mjs-session-webkit-dark-phone/attachments/computed-styles-and-timings-4e7725268f086a28dae5922204679be5c7361a44.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-f2f2f7d768a513ff7f0e",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "performance.browser.mjs",
+   "file": "performance.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 19492,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:08:59.103Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "browser-performance-samples",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/attachments/browser-performance-samples-a84bdaceeb0c1054ff472699012d0aff0227a667.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-e2da493b84efb9d6af7a",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 0,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:09:38.692Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-1a0a9544f392e5fbeb38",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 0,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:06.838Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-db87ca7389270ee4695f",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 0,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:10:32.480Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-5b0731c7075324a7c74c",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 1,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:07.431Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-cbf5da9d15a66cf8d4b7",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 0,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:11:33.037Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-cb0863d516df648be79f",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 1,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:24.083Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-725cacba0c946e022bc2",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    },
+    {
+     "title": "record browser performance baseline",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Performance samples use one fixed browser/theme/viewport.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+          "line": 17,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 1,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T11:12:52.383Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Performance samples use one fixed browser/theme/viewport.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/performance.browser.mjs",
+            "line": 17,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "8f58817d8ae523f5bb9e-83e4c4122ac3df97fd62",
+     "file": "performance.browser.mjs",
+     "line": 16,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "states.browser.mjs",
+   "file": "states.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "controlled loading",
+     "file": "states.browser.mjs",
+     "line": 4,
+     "column": 6,
+     "specs": [
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 709,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:09:18.670Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop/attachments/computed-styles-and-timings-a7572f44f16df3df5c21651fac7685bf5306848f.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-2629aafe202ccb765c0a",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 515,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:09:38.749Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone/attachments/computed-styles-and-timings-2f98d0b7435bb7704744cb3ddb3fbefe4efd3143.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-a21096f53289a2dcc8c9",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 515,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:10:06.845Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop/attachments/computed-styles-and-timings-c0c726a4a20eec9a9ee02788edf53df87e7643bd.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-25f71c3799d4e3d3e11f",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 545,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:10:32.487Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone/attachments/computed-styles-and-timings-18075ca7f4f84be0096b573c75b78b9deec0da63.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-b6bab1cc773c9518765d",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 832,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:11:07.440Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop/attachments/computed-styles-and-timings-887da34560c91287218f42e7f47e42dfd8d50238.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-fac1990c4f459583760b",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 852,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:11:33.046Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone/attachments/computed-styles-and-timings-30fce239518c8562768e90c0ded21814612a1e05.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-f4a72096957e01c0041d",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1000,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:12:24.104Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop/attachments/computed-styles-and-timings-9f03eba4608a8864501834a511b22270d1f2a022.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-c9aaddd0feabbe23f198",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      },
+      {
+       "title": "projects loading and release",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1165,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:12:52.406Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone/attachments/computed-styles-and-timings-fbace1ad3118e6a0f7aad60e81a29d6f92800215.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-79716c00233d294cfd95",
+       "file": "states.browser.mjs",
+       "line": 6,
+       "column": 3
+      }
+     ]
+    },
+    {
+     "title": "controlled error",
+     "file": "states.browser.mjs",
+     "line": 20,
+     "column": 6,
+     "specs": [
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1838,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:09:19.384Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-desktop/attachments/computed-styles-and-timings-dbf21c07c2ac42d58d6afeb6f37fdac2ed20eb2e.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-714e14a2373ea37c21e8",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1802,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:09:39.269Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-phone/attachments/computed-styles-and-timings-7720ed9778b723868611ee67387ea3f2cf498f18.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-90baeb16d8a0e29dc133",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3095,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:10:07.364Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-desktop/attachments/computed-styles-and-timings-f7f3ecec6e504822190283a1707777cc9cb52879.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-8f5eb80e33ea902b2f3f",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1848,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:10:33.037Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-phone/attachments/computed-styles-and-timings-7e546eb1e12b50a0f06500f5f22b577ea272cc4c.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-c3e2fade6bfe9d66f4d9",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3333,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:11:08.276Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-desktop/attachments/computed-styles-and-timings-9048153a03f5bd7488408c1e74bb364e72f0f995.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-cac916c497fb8b2f6699",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3447,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:11:33.902Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-phone/attachments/computed-styles-and-timings-77b908d5600bdc032bff3aeefcf594a5187d695a.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-3e74b83864f1a1403ae3",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3502,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:12:25.110Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-desktop/attachments/computed-styles-and-timings-c01c169ba0738aae014320499d6505e6111c5b03.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-f8c5091c5da719bfea56",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      },
+      {
+       "title": "projects error and retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3442,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T11:12:53.577Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p0-strict-out/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-phone/attachments/computed-styles-and-timings-1929d2192df87df521a0af071f27fc6508b34a77.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "13fd122ea4d0c1bf558c-0ec96fbc543b206447d5",
+       "file": "states.browser.mjs",
+       "line": 22,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-08T11:08:29.231Z",
+  "duration": 268099.101,
+  "expected": 101,
+  "skipped": 11,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

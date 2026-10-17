@@ -266,12 +266,10 @@ export const moveConfirmParagraphs = (
 export const moveConfirmAction = (answer: SessionMoveTargets): string =>
   answer.needsEnd ? 'End and Move' : 'Move';
 
-/** Why a move didn't happen. A refusal (409) is the server's own sentence for what stands in the way
- *  now, shown as it is; anything else says the move didn't happen, and why. */
+/** The move's reason goes below the failed-action title. A refusal (409) is the server's own
+ *  sentence, shown as it is; other failures also show only their reason. */
 export const moveFailureText = (error: unknown): string =>
-  isConflict(error) && error instanceof Error && error.message.trim()
-    ? error.message.trim()
-    : `The session couldn’t be moved: ${failureReason(error)}.`;
+  (error instanceof Error && error.message.trim()) || 'something went wrong';
 
 export const endFailureText = (error: unknown): string =>
   `The session couldn’t be ended, so it wasn’t moved: ${failureReason(error)}.`;

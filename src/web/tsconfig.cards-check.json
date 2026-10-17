@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/components/CriteriaDecisionCard.receipt.test.tsx",
+    "src/components/CriteriaDecisionCard.sessionSwitch.test.tsx",
+    "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+    "src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+    "src/components/WorkspaceView.promotionPlacement.test.tsx",
+    "src/components/WorkspaceView.settlementPointer.test.tsx",
+    "src/components/ReviewCard.test.tsx",
+    "ui-migration/reviews.tsx"
+  ],
+  "exclude": [],
+  "compilerOptions": {
+    "types": [
+      "vite/client",
+      "node"
+    ]
+  }
+}

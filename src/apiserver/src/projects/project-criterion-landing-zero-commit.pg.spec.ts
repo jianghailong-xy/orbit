@@ -455,14 +455,19 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
 
   /** What the table holds about one task — so each case is shown to be the shape it claims. */
   async function recordOf(taskId: string) {
-    const [taskRow, newest] = await Promise.all([
+    const [taskRow, jobs, newest] = await Promise.all([
       prisma.task.findUniqueOrThrow({
         where: { id: taskId },
         select: {
           codeless: true,
           mergeReceipts: { select: { result: true, targetBranch: true } },
-          integrationJobs: { select: { state: true, targetShaBefore: true, upstreamSha: true, mainSyncSha: true } },
         },
+      }),
+      // Beside the task rather than below it: `task_id` is a history reference with no foreign key
+      // (0423), so there is no `task.integrationJobs` relation to select through.
+      prisma.projectIntegrationJob.findMany({
+        where: { taskId },
+        select: { state: true, targetShaBefore: true, upstreamSha: true, mainSyncSha: true },
       }),
       prisma.session.findFirst({
         where: { taskId, startsTaskWork: true, deletedAt: null },
@@ -470,7 +475,7 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
         select: { branch: true, isolationStatus: true },
       }),
     ]);
-    return { ...taskRow, newestWorkSession: newest };
+    return { ...taskRow, integrationJobs: jobs, newestWorkSession: newest };
   }
 
   const stated = await detail();

@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && npm run test:ui-choices -w @orbit/web -- --list",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_22bbafd31b46",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "89256103213431815c02a5e5d4dc8456ef5015c6",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T13:36:00.357268+00:00",
+ "exitCode": 0,
+ "outputSha256": "268e5a6852af4bde4960c128c3b968ace4a6df1467ac562685f0ce532f13a1d1",
+ "outputBytes": 66460,
+ "note": "Total: 520 tests in 4 files. Its listing (checks/list-choices.txt, the lines from \"Listing tests:\" on) is byte-identical to ../p2-select-keys/checks/list-choices.txt (sha256 869171286b2f...): no case was added, removed or renamed."
+}

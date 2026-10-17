@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- Design mock: folding a runner engine's accounts on the Providers page ("On your runners").
+     01a–01i are screenshots of the real web console (vite dev on this branch, synthetic runner data
+     shaped like the owner's HPC screenshot, 2026-10-07 22:40 Asia/Shanghai). The fold itself (the
+     chevron, the folded head's status and quota, the numbered marks) is injected into that real page
+     with the classes an implementation would use. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Providers · fold a runner engine's accounts</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; align-items: start; }
+  .edge { display: grid; grid-template-columns: minmax(0, 1fr) 540px; gap: 34px; align-items: start; }
+  .edge-list { display: flex; flex-direction: column; gap: 22px; }
+  .edge-item { display: grid; grid-template-columns: 896px minmax(0, 1fr); gap: 22px; align-items: start; }
+  .edge-item .m-cap { margin-top: 22px; }
+  .shot { display: block; width: 100%; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+  .phones { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ph-l { font-size: 12px; font-weight: 600; color: var(--text-3); margin: 0 0 6px 2px; }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap .n { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px;
+              margin: 0 3px 0 1px; border-radius: 50%; background: var(--warning-solid); color: #fff;
+              font: 700 10.5px/1 -apple-system, sans-serif; vertical-align: 1px; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { white-space: nowrap; font-weight: 600; color: var(--text-1); }
+  .rules td.why { color: var(--text-3); }
+  .rules code, .files code { font-size: 11.5px; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.75; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Providers · 一台机器上多个账号：展开 / 收起</h1>
+  <p class="m-sub zh">同一个引擎在一台机器上登录了两个以上账号时，Providers 页「On your runners」里每个账号占一整行，每行两到四条额度——HPC 的 Claude Code 有 3 个账号，一组就占了大半张卡。这张图让这一组能收起：点引擎名那一块，账号行收起，引擎这一行改为写<b>新会话会用的那个账号（NEXT）和它最紧的一条额度</b>，和运行器页、iOS 运行器页、Account pools 卡头是同一句话。截图来自真实 web 控制台（vite dev，本分支，模拟数据照 HPC 的截图造，2026-10-07 22:40 Asia/Shanghai）；箭头、收起后的状态和额度、编号框是用页面自己的样式注入的。</p>
+
+  <div class="m-stage">
+    <div class="row3">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>没有收起的办法</div>
+        <img class="shot" src="01a-today.png" alt="">
+        <p class="m-cap zh">3 个账号各两条额度，Claude Code 一组占了整张卡的将近一半（415 / 948px）；要看下面的 Codex、Antigravity、Kimi，得先滚过它。卡片本身能收起（右上 ⌄），但那是整台机器一起收。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>收起 Claude Code 的账号</div>
+        <img class="shot" src="01b-folded.png" alt="">
+        <p class="m-cap zh"><span class="n">1</span>点「Claude Code ›」那一块收起：图标、名字、版本行都能点，键盘 Tab 到它按 Enter / Space。「Add account」还是独立按钮，不在这块里。<span class="n">2</span>状态列：NEXT 账号自己的状态（这里是 Available）。<span class="n">3</span>额度列：「Next: 账号」加这个账号最接近上限的一条（周额度 89%）。于是这一行和下面 Codex、Antigravity 一样四列对齐；版本行换行，「checked 7m ago」另起一行，不截断。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>展开</div>
+        <img class="shot" src="01c-open.png" alt="">
+        <p class="m-cap zh"><span class="n">1</span>展开时箭头转成 ⌄。账号行和现在一模一样，引擎这一行也回到现在的样子——账号行里已经标了 NEXT，不再重复 Next 那一条。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">边界</span>收起时遇到的几种情况</div>
+    <div class="edge">
+      <div class="edge-list">
+        <div class="edge-item">
+          <div>
+            <div class="ph-l zh">a · 有一个账号掉线（jianghailong.orbit），收起时</div>
+            <img class="shot" src="01d-signed-out.png" alt="">
+          </div>
+          <p class="m-cap zh"><span class="n">4</span>有账号要重新登录时，状态列改成橙色「1 signed out」，优先于 NEXT 的状态——收起不会把需要你处理的事藏起来。Next 照样从还登录着的账号里选（rd）。展开后那个账号的行照旧有 Sign in。</p>
+        </div>
+        <div class="edge-item">
+          <div>
+            <div class="ph-l zh">b · 三个账号都用完，收起时</div>
+            <img class="shot" src="01e-all-spent.png" alt="">
+          </div>
+          <p class="m-cap zh">Next 是最早恢复的那个（orbit，23:20），状态「Spent · resets 23:20」，挂它用完的那条，橙色。和运行器页、iOS 的同一情况（antigravity-accounts/07 图 b）一致。</p>
+        </div>
+        <div class="edge-item">
+          <div class="stack">
+            <div>
+              <div class="ph-l zh">c · 悬停</div>
+              <img class="shot" src="01f-hover.png" alt="">
+            </div>
+            <div>
+              <div class="ph-l zh">d · 键盘焦点</div>
+              <img class="shot" src="01g-focus.png" alt="">
+            </div>
+          </div>
+          <p class="m-cap zh">悬停时箭头变蓝，和卡片标题的箭头一样；键盘焦点框住整块身份区（图标、名字、版本行）。按钮带 aria-expanded，读屏读「Claude Code, collapsed / expanded」。</p>
+        </div>
+      </div>
+      <div>
+        <div class="ph-l zh">e · 手机（390pt）：收起 / 展开</div>
+        <div class="phones">
+          <img class="shot" src="01h-phone-folded.png" alt="">
+          <img class="shot" src="01i-phone-open.png" alt="">
+        </div>
+        <p class="m-cap zh"><span class="n">1</span>手机上收起后，引擎行和单账号行一样分三行：名字和 Add account、状态、Next 加一条额度。默认收起（见下表「默认」）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">规则</span>什么时候收、收起写什么、记不记得</div>
+    <div class="grid-bottom">
+      <table class="rules zh">
+        <tr><th>项</th><th>做法</th><th>依据</th></tr>
+        <tr><td>哪些行能收起</td><td>有两个以上账号的引擎——现在写「N of M accounts available」的那一行（Claude Code、Codex、Antigravity 都可能）。单账号的行不变。</td><td class="why">只有多账号才有一组行可收</td></tr>
+        <tr><td>怎么切换</td><td>点引擎图标 / 名字 / 版本行，或名字后的箭头；Tab + Enter / Space。</td><td class="why">同运行器卡片标题：整块是一个按钮，旁边的链接独立</td></tr>
+        <tr><td>收起时写什么</td><td>版本 · N of M accounts available（不变）；状态 = NEXT 账号的状态；额度 = Next: 账号 + 它最紧的一条。有账号掉线 → 橙色「N signed out」。都没登录 → Signed out / Sign in to see quota（登录是每个账号自己的，要先展开）。</td><td class="why">运行器页、iOS 运行器页的多账号行（antigravity-accounts/07）；Account pools 卡头的「Next: …」</td></tr>
+        <tr><td>默认</td><td>一律收起（电脑、手机都是）；打开过的记住，按「机器 + 引擎」存在这个浏览器里（orbit:providers-open-accounts）。</td><td class="why">同运行器卡片：默认收起，记住打开的那些（2026-10-07 定）</td></tr>
+        <tr><td>自动展开</td><td>从新建会话里的「Not signed in」、或运行器页的引擎行（都是 ?runner=…&amp;engine=…）进来时，展开那一组；在收起的组上点「Add account」时展开，好让新账号那一行出现。展开会被记住。</td><td class="why">同运行器卡片：深链进来会展开那张卡并记住</td></tr>
+        <tr><td>正在登录的账号</td><td>收起只是不显示那几行，机器上的登录照常进行；再展开时登录面板还在。</td><td class="why">同收起整张运行器卡片</td></tr>
+      </table>
+      <div>
+        <ul class="files zh">
+          <li><b>src/web/src/components/RunnerEngines.tsx</b> — <code>EngineRow</code>：多账号时 <code>.re-id</code> 换成 button（aria-expanded），名字后加箭头；收起时画 NEXT 账号的状态和一条额度（<code>accountToStartOn</code>、<code>bindingPlanUsageRow</code>、<code>statusOf</code> 现成）。<code>RunnerEngineCard</code>：收起的组不画 <code>AccountRow</code>，读写 <code>orbit:providers-open-accounts</code>。<code>RunnerEngines</code>：深链展开那一组。</li>
+          <li><b>src/web/src/index.css</b> — <code>.re-grp-toggle</code>、<code>.re-grp-chev</code>、<code>.re-grp.folded</code>（收起时用普通行的四列）。</li>
+          <li><b>测试</b> — <code>RunnerEngines.*.test.tsx</code>：收起 / 展开、记住、深链展开、Add account 展开、掉线时「1 signed out」、全用完时的 Next。</li>
+          <li><b>只改 web</b>。iOS / macOS 的运行器页本来就是一个引擎一行，点进引擎页才列账号，不受影响。</li>
+        </ul>
+        <div class="ask zh"><b>已定（2026-10-07）：一律默认收起。</b>页面最短；收起时引擎行照样写出掉线的账号（「1 signed out」）和下一个会用的账号，新加的账号会自动展开那一组。</div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

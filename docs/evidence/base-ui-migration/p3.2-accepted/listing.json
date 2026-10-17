@@ -1,0 +1,4328 @@
+{
+ "rows": [
+  {
+   "screenshot": "chromium-dark-desktop/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "fe9a650f2062b605980ddc8612ac9e5b87a02fe7eb38cbd379047bfc8c1806cc",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 466,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 312,
+      "y": 14,
+      "width": 920,
+      "height": 163
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 466,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 312,
+      "y": 14,
+      "width": 920,
+      "height": 163
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 466,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 312,
+      "y": 14,
+      "width": 920,
+      "height": 163
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 45,
+     "pixels": 466,
+     "pixelsAtMost2": 21
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1618,
+     "maxChannelDelta": 186,
+     "box": {
+      "x": 438,
+      "y": 108,
+      "width": 454,
+      "height": 72
+     },
+     "p0Comparator": "722 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 1618,
+     "maxChannelDelta": 186,
+     "box": {
+      "x": 438,
+      "y": 108,
+      "width": 454,
+      "height": 72
+     },
+     "p0Comparator": "722 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 1618,
+     "maxChannelDelta": 186,
+     "box": {
+      "x": 438,
+      "y": 108,
+      "width": 454,
+      "height": 72
+     },
+     "p0Comparator": "722 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 186,
+     "pixels": 1618,
+     "pixelsAtMost2": 7
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "576c9b73f78356ac8f27f52e0aa76eaf0096267743998f7d1507df6ecedaef87",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "576c9b73f78356ac8f27f52e0aa76eaf0096267743998f7d1507df6ecedaef87",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "feddbad5d9380c31a61900e5d4db4934220384b9179e12bba1816c12f0d90cea",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 2,
+     "pixels": 68,
+     "pixelsAtMost2": 68
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "3e47867e4cdf3710a16b92938ac20ef59aa94ade1de5f703e7e3378142011a44",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "3e47867e4cdf3710a16b92938ac20ef59aa94ade1de5f703e7e3378142011a44",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "832020df658d2d727559043faeee4c6680f6a2d799835bac100329298c638256",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 2,
+     "pixels": 68,
+     "pixelsAtMost2": 68
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "9097e69a0f389aacfd7f25db4e7cbbaa9413a5fcc8c3f47c6642974e23858cf0",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "928e2aa3ba9a7a94bfb78121544b866bc55ba0ede54ee70c56fd8e24c4020c6a",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 286,
+      "y": 23,
+      "width": 1,
+      "height": 1
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "after": {
+    "sha256": "b84799263fee89ccf7f8088fc99d7fa125327d5d896f255d662977588ad0d17c",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 69,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 286,
+      "y": 23,
+      "width": 72,
+      "height": 268
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 68,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 346,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 2,
+     "pixels": 68,
+     "pixelsAtMost2": 68
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "e77181cf1e960d5963338baf99832793b2ce71c21bebcb5e4b4c04427eea4396",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "e77181cf1e960d5963338baf99832793b2ce71c21bebcb5e4b4c04427eea4396",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "e5bbd20d11e74d07e03df024cf8cfe4a6c539dbfae711a810a8446551b530830",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 627,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 202,
+      "height": 277
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 627,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 202,
+      "height": 277
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 627,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 202,
+      "height": 277
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 45,
+     "pixels": 627,
+     "pixelsAtMost2": 86
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 21183,
+     "maxChannelDelta": 186,
+     "box": {
+      "x": 0,
+      "y": 103,
+      "width": 390,
+      "height": 607
+     },
+     "p0Comparator": "722 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 21183,
+     "maxChannelDelta": 186,
+     "box": {
+      "x": 0,
+      "y": 103,
+      "width": 390,
+      "height": 607
+     },
+     "p0Comparator": "722 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 21183,
+     "maxChannelDelta": 186,
+     "box": {
+      "x": 0,
+      "y": 103,
+      "width": 390,
+      "height": 607
+     },
+     "p0Comparator": "722 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 186,
+     "pixels": 21183,
+     "pixelsAtMost2": 19572
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 466,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 312,
+      "y": 14,
+      "width": 920,
+      "height": 163
+     },
+     "p0Comparator": "326 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 466,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 312,
+      "y": 14,
+      "width": 920,
+      "height": 163
+     },
+     "p0Comparator": "326 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 466,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 312,
+      "y": 14,
+      "width": 920,
+      "height": 163
+     },
+     "p0Comparator": "326 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 82,
+     "pixels": 466,
+     "pixelsAtMost2": 16
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1228,
+     "maxChannelDelta": 239,
+     "box": {
+      "x": 439,
+      "y": 108,
+      "width": 453,
+      "height": 71
+     },
+     "p0Comparator": "1071 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 1228,
+     "maxChannelDelta": 239,
+     "box": {
+      "x": 439,
+      "y": 108,
+      "width": 453,
+      "height": 71
+     },
+     "p0Comparator": "1071 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 1228,
+     "maxChannelDelta": 239,
+     "box": {
+      "x": 439,
+      "y": 108,
+      "width": 453,
+      "height": 71
+     },
+     "p0Comparator": "1071 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 239,
+     "pixels": 1228,
+     "pixelsAtMost2": 8
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "33 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "33 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "chromium-light-phone/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 557,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 178,
+      "height": 150
+     },
+     "p0Comparator": "422 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 557,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 178,
+      "height": 150
+     },
+     "p0Comparator": "422 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 557,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 178,
+      "height": 150
+     },
+     "p0Comparator": "422 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 82,
+     "pixels": 557,
+     "pixelsAtMost2": 11
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "chromium-light-phone/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 31309,
+     "maxChannelDelta": 239,
+     "box": {
+      "x": 0,
+      "y": 89,
+      "width": 390,
+      "height": 635
+     },
+     "p0Comparator": "1071 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 31309,
+     "maxChannelDelta": 239,
+     "box": {
+      "x": 0,
+      "y": 89,
+      "width": 390,
+      "height": 635
+     },
+     "p0Comparator": "1071 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 31309,
+     "maxChannelDelta": 239,
+     "box": {
+      "x": 0,
+      "y": 89,
+      "width": 390,
+      "height": 635
+     },
+     "p0Comparator": "1071 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 239,
+     "pixels": 31309,
+     "pixelsAtMost2": 30089
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "33 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 135,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "33 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "4bef0aae71a0d09bafe2ec12b6f24d3adda32c331823a09e8b8cdb05b219ec34",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 489,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 1054,
+      "y": 14,
+      "width": 178,
+      "height": 142
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 489,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 1054,
+      "y": 14,
+      "width": 178,
+      "height": 142
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 489,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 1054,
+      "y": 14,
+      "width": 178,
+      "height": 142
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 45,
+     "pixels": 489,
+     "pixelsAtMost2": 23
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1260,
+     "maxChannelDelta": 138,
+     "box": {
+      "x": 380,
+      "y": 101,
+      "width": 520,
+      "height": 497
+     },
+     "p0Comparator": "706 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 1260,
+     "maxChannelDelta": 138,
+     "box": {
+      "x": 380,
+      "y": 101,
+      "width": 520,
+      "height": 497
+     },
+     "p0Comparator": "706 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 1260,
+     "maxChannelDelta": 138,
+     "box": {
+      "x": 380,
+      "y": 101,
+      "width": 520,
+      "height": 497
+     },
+     "p0Comparator": "706 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 138,
+     "pixels": 1260,
+     "pixelsAtMost2": 21
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 140,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "26 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 140,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "26 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "2f4e3bf6e61142a194da499676fe95fa2eb51a3a83133220f329b928e231c982",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "2f4e3bf6e61142a194da499676fe95fa2eb51a3a83133220f329b928e231c982",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "1a41a568778acba3a00e435f20732406d55b240f641043ddeabb16cf05510044",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 1,
+     "pixels": 66,
+     "pixelsAtMost2": 66
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "e9220c872625dbd51f7ab7b37c71601a6bd11feff91e9723b00ecbfe10afbd71",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "e9220c872625dbd51f7ab7b37c71601a6bd11feff91e9723b00ecbfe10afbd71",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "f02a4c45316f9edda3043baaad3cb35aac7a2589adb65d6eb4f836ed5a5b9b75",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 1,
+     "pixels": 66,
+     "pixelsAtMost2": 66
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "13ca053623da6f62927955f55fa180f6107e1e979c2270e7bc7d14c9558cd3a1",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "13ca053623da6f62927955f55fa180f6107e1e979c2270e7bc7d14c9558cd3a1",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "b9edf27f85d9304718043b232450b4d9ff3ced817e0f0bd828d7aea23337cc1f",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 66,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 338,
+      "y": 246,
+      "width": 12,
+      "height": 45
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 1,
+     "pixels": 66,
+     "pixelsAtMost2": 66
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "14491174b4c4c8a2cf0d58d529486f5e0f3c611cf5a25a75dfdeab2bc14334cd",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "14491174b4c4c8a2cf0d58d529486f5e0f3c611cf5a25a75dfdeab2bc14334cd",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "213ec5ec43e0851f2ada09159bfeace4effe72f365472a86a63dd6eda271ba30",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 655,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 194,
+      "height": 277
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 655,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 194,
+      "height": 277
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 655,
+     "maxChannelDelta": 45,
+     "box": {
+      "x": 156,
+      "y": 14,
+      "width": 194,
+      "height": 277
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 45,
+     "pixels": 655,
+     "pixelsAtMost2": 93
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1257,
+     "maxChannelDelta": 138,
+     "box": {
+      "x": 8,
+      "y": 113,
+      "width": 374,
+      "height": 573
+     },
+     "p0Comparator": "706 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 1257,
+     "maxChannelDelta": 138,
+     "box": {
+      "x": 8,
+      "y": 113,
+      "width": 374,
+      "height": 573
+     },
+     "p0Comparator": "706 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 1257,
+     "maxChannelDelta": 138,
+     "box": {
+      "x": 8,
+      "y": 113,
+      "width": 374,
+      "height": 573
+     },
+     "p0Comparator": "706 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 138,
+     "pixels": 1257,
+     "pixelsAtMost2": 18
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 140,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "26 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 140,
+     "maxChannelDelta": 187,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "26 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 489,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 1056,
+      "y": 14,
+      "width": 176,
+      "height": 142
+     },
+     "p0Comparator": "330 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 489,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 1056,
+      "y": 14,
+      "width": 176,
+      "height": 142
+     },
+     "p0Comparator": "330 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 489,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 1056,
+      "y": 14,
+      "width": 176,
+      "height": 142
+     },
+     "p0Comparator": "330 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 82,
+     "pixels": 489,
+     "pixelsAtMost2": 16
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1254,
+     "maxChannelDelta": 163,
+     "box": {
+      "x": 382,
+      "y": 101,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "1077 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 1254,
+     "maxChannelDelta": 163,
+     "box": {
+      "x": 382,
+      "y": 101,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "1077 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 1254,
+     "maxChannelDelta": 163,
+     "box": {
+      "x": 382,
+      "y": 101,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "1077 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 163,
+     "pixels": 1254,
+     "pixelsAtMost2": 14
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 141,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 141,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 551,
+      "y": 223,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "webkit-light-phone/task-detail.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-hover.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-focus.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": true
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-menu.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 586,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 157,
+      "y": 14,
+      "width": 177,
+      "height": 150
+     },
+     "p0Comparator": "426 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 586,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 157,
+      "y": 14,
+      "width": 177,
+      "height": 150
+     },
+     "p0Comparator": "426 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 586,
+     "maxChannelDelta": 82,
+     "box": {
+      "x": 157,
+      "y": 14,
+      "width": 177,
+      "height": 150
+     },
+     "p0Comparator": "426 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 82,
+     "pixels": 586,
+     "pixelsAtMost2": 17
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "webkit-light-phone/task-share-dialog.png",
+   "scope": "task",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 1254,
+     "maxChannelDelta": 163,
+     "box": {
+      "x": 10,
+      "y": 109,
+      "width": 372,
+      "height": 577
+     },
+     "p0Comparator": "1077 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 1254,
+     "maxChannelDelta": 163,
+     "box": {
+      "x": 10,
+      "y": 109,
+      "width": 372,
+      "height": 577
+     },
+     "p0Comparator": "1077 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 1254,
+     "maxChannelDelta": 163,
+     "box": {
+      "x": 10,
+      "y": 109,
+      "width": 372,
+      "height": 577
+     },
+     "p0Comparator": "1077 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": {
+     "equal": false,
+     "maxChannelDiff": 163,
+     "pixels": 1254,
+     "pixelsAtMost2": 14
+    },
+    "r2cReferenceVsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 141,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "r2cDeliveryVsAfter": {
+     "bytesEqual": false,
+     "differentPixels": 141,
+     "maxChannelDelta": 216,
+     "box": {
+      "x": 179,
+      "y": 250,
+      "width": 22,
+      "height": 9
+     },
+     "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": true,
+   "registrable": true
+  },
+  {
+   "screenshot": "chromium-dark-desktop/breakpoint-599-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "a8d4c1687cfd60124091621fd0e8c145174237323c52e66d98e00065b9a80a04",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "f60ede5c1b84713ae96e818017231782557807d18dd6698314118235bff4566d",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 13,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 364,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "after": {
+    "sha256": "a8d4c1687cfd60124091621fd0e8c145174237323c52e66d98e00065b9a80a04",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 13,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 364,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 13,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 364,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-dark-desktop/breakpoint-601-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "2a1f94c39e54e2fd22a5875296d5a37d9bbeeae9dfe9613a2f81532c7833ba96",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "6b74816d0f24d668d7b7b3f0ae7464ef29cb352bb79287c7cc1f3d91068eff3c",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 13,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 365,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "after": {
+    "sha256": "2a1f94c39e54e2fd22a5875296d5a37d9bbeeae9dfe9613a2f81532c7833ba96",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 13,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 365,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 13,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 365,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-desktop/breakpoint-599-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "819762ce17b65952fc13a4e11f6ebeffc6dcab7cec9037b909250bf7ca114bf5",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "05c9d2fa846c97d6ae6f344977d5b1b3211aa88f14e85ebb624d27178798973a",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 364,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "after": {
+    "sha256": "819762ce17b65952fc13a4e11f6ebeffc6dcab7cec9037b909250bf7ca114bf5",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 364,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 364,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "chromium-light-desktop/breakpoint-601-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "3f66283d449cc36db8f55ebd23dccca124b4f3a161dac7bce5f7c3c84ffad278",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "67fd90c6008f2e7fa938b1f24521988f7a1d699e76ed65bde35a57723d3ad019",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 365,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "after": {
+    "sha256": "3f66283d449cc36db8f55ebd23dccca124b4f3a161dac7bce5f7c3c84ffad278",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 365,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "box": {
+      "x": 365,
+      "y": 557,
+      "width": 3,
+      "height": 28
+     },
+     "p0Comparator": "match",
+     "class": "noise"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": false,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-desktop/breakpoint-599-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "8c5d0b084ac0beba8e29b40deaf69beaffa3aad3c4fe9f00fce02384f1caa1d6",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "8c5d0b084ac0beba8e29b40deaf69beaffa3aad3c4fe9f00fce02384f1caa1d6",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "a00bba305113163960ed4016a00f21a4b40ab95817b3505682089a17b3c7435d",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 11,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 40,
+      "y": 113,
+      "width": 520,
+      "height": 493
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 11,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 40,
+      "y": 113,
+      "width": 520,
+      "height": 493
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 11,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 40,
+      "y": 113,
+      "width": 520,
+      "height": 493
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-desktop/breakpoint-601-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "739fb7badcdb926e3d3b97da5c419dbb1e525ca09fd40960a446f15592e62791",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "739fb7badcdb926e3d3b97da5c419dbb1e525ca09fd40960a446f15592e62791",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "9cbe8afd42d775243ce3d001f960b1a3a0206842284894f4ca1f0a4a83dfbf01",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 11,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 41,
+      "y": 113,
+      "width": 520,
+      "height": 493
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 11,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 41,
+      "y": 113,
+      "width": 520,
+      "height": 493
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 11,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 41,
+      "y": 113,
+      "width": 520,
+      "height": 493
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-desktop/breakpoint-599-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "d313c25aabdce69aa1325bdacebcf61e8481227f8e1d418605b4cbf73d47c837",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "d313c25aabdce69aa1325bdacebcf61e8481227f8e1d418605b4cbf73d47c837",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "a9a8a2f5cb12a620a3847e3e66917cb47caef18ed5473dada3ab129f74176431",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 8,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 42,
+      "y": 109,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 8,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 42,
+      "y": 109,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 8,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 42,
+      "y": 109,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-light-desktop/breakpoint-601-dialog.png",
+   "scope": "breakpoint-dialog",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "5b01cec08d945ae1a3c2cf42b89624b4e428d786e5a73ec08ec1dca108260a9a",
+    "mainCommits": [
+     "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+   },
+   "before": {
+    "sha256": "5b01cec08d945ae1a3c2cf42b89624b4e428d786e5a73ec08ec1dca108260a9a",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "5aa074a2dc2c613c35ccb7d242a04134219be97a5671be1c9f78788cac44f53d",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 8,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 43,
+      "y": 109,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 8,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 43,
+      "y": 109,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": false,
+     "differentPixels": 8,
+     "maxChannelDelta": 1,
+     "box": {
+      "x": 43,
+      "y": 109,
+      "width": 518,
+      "height": 497
+     },
+     "p0Comparator": "match",
+     "class": "changed"
+    },
+    "p32ToAfter": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": false,
+   "attributedToP32": true,
+   "registrable": false
+  },
+  {
+   "screenshot": "webkit-dark-phone/profile-validation.png",
+   "scope": "other",
+   "expectation": {
+    "layer": "p0-drift",
+    "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498",
+    "mainCommits": [
+     "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+   },
+   "before": {
+    "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498",
+    "vsExpectation": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    }
+   },
+   "after": {
+    "sha256": "65df944b4ca513d72ac187a982c7fc6c5013b011e4840f799ec43c103fd4c1bd",
+    "vsExpectation": {
+     "bytesEqual": false,
+     "differentPixels": 8489,
+     "maxChannelDelta": 167,
+     "box": {
+      "x": 100,
+      "y": 44,
+      "width": 177,
+      "height": 76
+     },
+     "p0Comparator": "499 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    },
+    "vsBefore": {
+     "bytesEqual": false,
+     "differentPixels": 8489,
+     "maxChannelDelta": 167,
+     "box": {
+      "x": 100,
+      "y": 44,
+      "width": 177,
+      "height": 76
+     },
+     "p0Comparator": "499 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Only": {
+    "beforeToP32": {
+     "bytesEqual": true,
+     "differentPixels": 0,
+     "maxChannelDelta": 0,
+     "p0Comparator": "match",
+     "class": "same"
+    },
+    "p32ToAfter": {
+     "bytesEqual": false,
+     "differentPixels": 8489,
+     "maxChannelDelta": 167,
+     "box": {
+      "x": 100,
+      "y": 44,
+      "width": 177,
+      "height": 76
+     },
+     "p0Comparator": "499 pixels (ratio 0.01 of all image pixels) are different.",
+     "class": "changed"
+    }
+   },
+   "p32Evidence": {
+    "r2cCompare": null,
+    "r2cReferenceVsBefore": null,
+    "r2cDeliveryVsAfter": null
+   },
+   "failsP0ComparatorNow": true,
+   "attributedToP32": false,
+   "registrable": false
+  }
+ ]
+}

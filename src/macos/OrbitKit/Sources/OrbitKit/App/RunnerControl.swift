@@ -19,9 +19,8 @@ public struct RunnerPaths: Equatable, Sendable {
 
     public var configFile: URL { home.appendingPathComponent("config.json") }
     public var logFile: URL { home.appendingPathComponent("runner.log") }
-    /// `<ORBIT_HOME>/bin/orbit` — where the app installs the runner binary it bundles, so the
-    /// launchd service runs a stable, user-writable copy. Keeping it out of the signed .app lets
-    /// the runner self-update this file without breaking the app's signature.
+    /// `<ORBIT_HOME>/bin/orbit` — where the app installs the runner it downloads from /dl, so the
+    /// launchd service runs a stable, user-writable copy the runner can self-update.
     public var binFile: URL { home.appendingPathComponent("bin/orbit") }
 
     public static let launchdLabel = "com.orbit.runner"
@@ -145,10 +144,9 @@ public enum Launchctl {
 /// Builds the runner's LaunchAgent plist. Like `orbit register`'s `installLaunchd` (runner-go) it
 /// runs `<orbit> run` with ORBIT_HOME/HOME/PATH baked in (launchd starts agents with a minimal
 /// PATH and no HOME, so the `claude` CLI the runner shells out to wouldn't otherwise be found),
-/// RunAtLoad + KeepAlive, logging to runner.log. Unlike the CLI's, it also sets ORBIT_NO_SELFUPDATE:
-/// the app bundles the runner and re-syncs `~/.orbit/bin` on launch (RunnerControl.syncBundledRunner),
-/// so the runner's version tracks the app instead of pulling a separate network self-update from the
-/// control plane. Pure string → unit-tested.
+/// RunAtLoad + KeepAlive, logging to runner.log. No ORBIT_NO_SELFUPDATE: the app downloads the
+/// runner from the control plane's /dl once, at enrollment, and from then on the runner updates
+/// `~/.orbit/bin/orbit` itself. Pure string → unit-tested.
 public enum LaunchdPlist {
     public static func make(label: String, programPath: String, orbitHome: String,
                             home: String, path: String, logPath: String) -> String {
@@ -168,7 +166,6 @@ public enum LaunchdPlist {
             <key>ORBIT_HOME</key><string>\(orbitHome)</string>
             <key>HOME</key><string>\(home)</string>
             <key>PATH</key><string>\(path)</string>
-            <key>ORBIT_NO_SELFUPDATE</key><string>1</string>
           </dict>
           <key>RunAtLoad</key><true/>
           <key>KeepAlive</key><true/>
@@ -177,6 +174,29 @@ public enum LaunchdPlist {
         </dict>
         </plist>
         """
+    }
+
+    /// The LaunchAgent an older app left, rewritten so its runner updates itself. Apps that bundled
+    /// the runner set ORBIT_NO_SELFUPDATE and copied their own runner over `~/.orbit/bin/orbit`
+    /// whenever the versions differed; an app with no runner to copy would leave it on its version
+    /// for good. `installed` is the plist on disk, nil when no service is installed. Returns
+    /// `make`'s plist with the installed one's label, binary, ORBIT_HOME, HOME, PATH and log, or
+    /// nil when there's nothing to rewrite: no service, a plist without ORBIT_NO_SELFUPDATE (already
+    /// rewritten, or the CLI's — it never sets it), or one that doesn't read as a plist with those
+    /// values.
+    public static func migrated(from installed: String?) -> String? {
+        guard let installed,
+              let plist = try? PropertyListSerialization.propertyList(from: Data(installed.utf8), format: nil)
+                as? [String: Any],
+              let env = plist["EnvironmentVariables"] as? [String: String],
+              env["ORBIT_NO_SELFUPDATE"] != nil,
+              let label = plist["Label"] as? String,
+              let program = (plist["ProgramArguments"] as? [String])?.first,
+              let orbitHome = env["ORBIT_HOME"], let home = env["HOME"], let path = env["PATH"],
+              let logPath = plist["StandardOutPath"] as? String
+        else { return nil }
+        return make(label: label, programPath: program, orbitHome: orbitHome,
+                    home: home, path: path, logPath: logPath)
     }
 }
 

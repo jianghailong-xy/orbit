@@ -1,9 +1,11 @@
 package io.orbitd.android.composer
 
 import io.orbitd.android.core.auth.*
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -62,6 +64,15 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         launch { persist() }
     }
     fun clearError() { mutable.update { it.copy(error = null) } }
+    /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
+    fun refuse(message: String) { mutable.update { it.copy(error = message) } }
+    /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
+     * engine ([ProviderChoices.engine]), which for a key or a pool on a server that records none only the account's keys can say. */
+    private suspend fun executesDsh(effective: JsonObject): Boolean {
+        val keys = if (!ProviderChoices.engineFromKeys(effective)) emptyList()
+            else runCatching { api.read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>() }.getOrDefault(emptyList())
+        return ProviderChoices.engine(effective, keys) == DshRuntime.ENGINE
+    }
     suspend fun attachmentBytes(id: String): ByteArray = auth.readData(handle, DataKind.DRAFT, "$key:attachment:$id")
         ?.takeIf { it.isNotEmpty() } ?: error("Select the file again; its saved copy is unavailable.")
 
@@ -116,7 +127,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         launch { persist(); auth.writeData(handle, DataKind.DRAFT, "$key:attachment:$id", ByteArray(0)) }
     }
 
-    fun send() {
+    /** [seedModel]: for a new session that names no model, the one it starts on — the last picked for its engine and credential. */
+    fun send(seedModel: String? = null) {
         if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(waiting = true, error = null, notice = null) }
         launch {
@@ -126,8 +138,12 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 mutable.update { it.copy(busy = true, waiting = false) }
                 val detail = api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
                 if (state.value.draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
+                    // The engine first, as the rows of iOS's status card name it (A07-19 (c), iOS cef3c3f83 `statusRows`).
+                    val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + state.value.draft.resumeConfig),
+                        state.value.catalog?.providers.orEmpty()))
                     mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0),
-                        notice = "${detail.text("provider").orEmpty()} · ${detail.text("model").orEmpty()} · ${detail.text("status") ?: "New session"} · ${detail.text("permissionMode") ?: "default"}") }
+                        notice = "Engine: $engine · Provider: ${detail.text("provider").orEmpty()} · Model: ${detail.text("model").orEmpty()} · " +
+                            "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: "default"}") }
                     persist(); return@launch
                 }
                 val endpoint = if (target != null) {
@@ -137,17 +153,21 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
+                // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal): the command stays here (A07-5).
+                if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
                 val id = UUID.randomUUID().toString()
                 val body = buildJsonObject {
                     if (endpoint in setOf("resume", "create")) draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
                     if (target != null) {
+                        if (draft.resumeConfig["model"] == null) seedModel?.let { put("model", it) }
                         put("workspaceId", target.workspaceId); target.folderId?.let { put("folderId", it) }
                         put("prompt", content); put("shell", shell)
                         draft.resumeConfig.text("account")?.let { account ->
                             val provider = draft.resumeConfig.text("provider") ?: detail.text("provider")
-                            if (provider in setOf("codex", "claude") && account != "automatic") put("${provider}Account", account)
+                            // codexAccount, claudeAccount, antigravityAccount or kimiAccount: the engines that keep several accounts.
+                            if (provider != null && RunnerPage.keepsAccounts(provider) && account != "automatic") put("${provider}Account", account)
                         }
                     } else {
                         if (endpoint == "resume") draft.resumeConfig["account"]?.let { put("account", it) }
@@ -165,6 +185,25 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 transmit(pending, firstAttempt = true)
             } finally { mutable.update { it.copy(busy = false, waiting = false) } }
         }
+    }
+    /** A message the box never held — the auto-retry card's Continue (A07-12) — sent as anything typed is: written to the outbox
+     * before the POST, replayed under the same clientTurnId, and handed back to the box only if the server refuses it. */
+    suspend fun sendMessage(text: String) {
+        if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || target != null) return
+        mutable.update { it.copy(busy = true, error = null, notice = null) }
+        try {
+            val endpoint = sendEndpoint(api.detail())
+            val config = state.value.draft.resumeConfig
+            val id = UUID.randomUUID().toString()
+            val body = buildJsonObject {
+                if (endpoint == "resume") { config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }; config["account"]?.let { put("account", it) } }
+                put("clientTurnId", id); put("content", text); put("kind", "message"); putJsonArray("attachmentIds") {}
+            }
+            val pending = PendingSend(id, endpoint, body, text)
+            mutable.update { it.copy(draft = it.draft.copy(pending = pending)) }
+            try { persist() } catch (e: Exception) { mutable.update { it.copy(draft = it.draft.copy(pending = null)) }; throw e }
+            transmit(pending, firstAttempt = true)
+        } finally { mutable.update { it.copy(busy = false) } }
     }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
@@ -215,10 +254,18 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             if (created == null) mutable.update { it.copy(draft = it.draft.copy(pending = pending, resumeConfig = previous.resumeConfig)) }
             throw e
         }
-        mutable.update { it.copy(notice = note, error = null, acknowledgementPending = false) }
+        // The provider pick has done what its line said it would.
+        mutable.update { it.copy(notice = note, error = null, acknowledgementPending = false, switchNote = null) }
         pending.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
         refresh()
     }
+    /** What a Retry re-sends with (RetryIdentityDto, iOS 163e67872): the provider picked here for the next turn, with its engine and
+     * its account — so the re-send runs there, as a send would. Nothing picked, the body is empty and the re-send goes where the
+     * session is. */
+    fun retryIdentity(): JsonObject = retryIdentityOf(state.value.draft.resumeConfig)
+    /** The failed message again, through the retry door: the server re-sends it under a key of its own, so a second press is the
+     * turn already queued. */
+    fun retryFailed() = control("retry-message", body = retryIdentity())
     fun control(endpoint: String, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null) {
         if (state.value.busy || state.value.waiting) return
         mutable.update { it.copy(busy = true, error = null) }
@@ -235,31 +282,73 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         if (state.value.catalogLoading) return
         mutable.update { it.copy(catalogLoading = true, catalogError = null, catalog = null) }
         launch {
-            try { val catalog = api.catalog(api.detail()); mutable.update { it.copy(catalog = catalog) } }
+            try { val catalog = threeTries { api.catalog(api.detail()) }; mutable.update { it.copy(catalog = catalog) } }
             catch (e: Exception) { if (e is CancellationException) throw e; mutable.update { it.copy(catalogError = directoryError(e)) } }
             finally { mutable.update { it.copy(catalogLoading = false) } }
         }
     }
-    fun config(values: JsonObject, accountOnly: Boolean = false) {
+    /** The session's runner row again, once a minute while the session streams and on each reconnect (A07-18, iOS bc790273c
+     * `refreshRunner`), for what the catalogue on screen reads off it — the context window, the model menu, the quotas; a catalogue
+     * whose opening read failed is read whole. Quiet: a read that fails keeps what is shown, and nothing is read for a catalogue
+     * nothing has asked for. */
+    suspend fun refreshCatalog() {
+        val now = state.value
+        if (now.catalogLoading) return
+        val shown = now.catalog
+        try {
+            if (shown != null) {
+                val runner = api.runner(shown.runner.text("id")) ?: return
+                mutable.update { if (it.catalog !== shown) it else it.copy(catalog = shown.copy(runner = runner)) }
+            } else if (now.catalogError != null) {
+                val catalog = api.catalog(api.detail())
+                mutable.update { if (it.catalogLoading || it.catalog != null) it else it.copy(catalog = catalog, catalogError = null) }
+            }
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+    }
+    /** A provider is never written without its engine (docs/provider-engine-contract.md §3.5, §6.1): the session's own, which a
+     * switch never changes, or — for a draft — the engine the provider was picked under, else the provider's default. */
+    private fun withEngine(values: JsonObject, detail: JsonObject): JsonObject {
+        val provider = values.text("provider") ?: return values
+        if (values["engine"] != null) return values
+        val engine = (if (target == null) detail.text("engine") else null) ?: state.value.catalog?.providerEngines(provider)?.firstOrNull() ?: return values
+        return JsonObject(values + ("engine" to JsonPrimitive(engine)))
+    }
+    fun config(requested: JsonObject, accountOnly: Boolean = false) {
         if (state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(busy = true, error = null) }
         launch {
             try {
                 val detail = api.detail()
+                val values = withEngine(requested, detail)
+                // A provider picked for the session says what it will do and when, in place of the line that only said it was kept.
+                val note = switchNote(detail, values)
                 if (target != null || terminal(detail) && !accountOnly) {
                     mutable.update {
                         val config = it.draft.resumeConfig
                         val changedProvider = values.text("provider")?.let { provider -> provider != (config.text("provider") ?: detail.text("provider")) } == true
                         it.copy(draft = it.draft.copy(resumeConfig = JsonObject((if (changedProvider) config - "account" else config) + values)),
-                            notice = if (target == null) "Applies when this session resumes." else "Applies when this session starts.")
+                            notice = if (note != null) null else if (target == null) "Applies when this session resumes." else "Applies when this session starts.",
+                            switchNote = note ?: it.switchNote)
                     }
                     persist()
                 } else {
                     api.mutation(if (accountOnly) "account" else "config", values, HttpMethod.PATCH)
-                    mutable.update { it.copy(notice = "Selection saved.") }; refresh()
+                    mutable.update { it.copy(notice = if (note != null) null else "Selection saved.", switchNote = note ?: it.switchNote) }; refresh()
                 }
             } finally { mutable.update { it.copy(busy = false) } }
         }
+    }
+    /** What a provider picked for the session will do, and when (A07-19 (a), iOS e6295abe7/6f3083272 `providerSwitchNote`): said by the
+     * names of the credential it is on — or a pick already held for it — and the one picked, over a session still going as the turn
+     * in flight finishing on the one and the next on the other. None for a draft, a pick of what it is already on, or before the
+     * catalogue that names them is read. */
+    private fun switchNote(detail: JsonObject, values: JsonObject): String? {
+        if (target != null) return null
+        val to = values.text("provider") ?: return null
+        val from = state.value.draft.resumeConfig.text("provider") ?: detail.text("provider") ?: return null
+        val catalog = state.value.catalog ?: return null
+        val engine = values.text("engine") ?: catalog.engineOf(detail)
+        return EngineCopy.switchNote(catalog.providerName(engine, from), catalog.providerName(engine, to), liveRun = !terminal(detail))
     }
     fun consumeCreated() { mutable.update { it.copy(draft = it.draft.copy(createdSessionId = null)) }; launch { persist() } }
 }

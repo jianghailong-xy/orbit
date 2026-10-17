@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { escalatesAt } from './open-item-escalation.service';
 import { openItemOwed, ownerItemKind } from './project-open-item';
+import { DONE_REQUEST_KIND } from './project-done-request';
 import { START_REQUEST_KIND } from './project-start-request';
 
 export type ProjectAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
@@ -30,6 +31,7 @@ export interface ProjectListAttention extends WireProjectListAttention<Date> {
   ownerItems: Array<WireProjectListOwnerItem<Date>>;
   coordinatorItems: WireProjectListCoordinatorItems<Date> | null;
   startRequest: { waitingSince: Date } | null;
+  doneRequest: { waitingSince: Date } | null;
 }
 
 export function emptyProjectListAttention(): ProjectListAttention {
@@ -43,6 +45,7 @@ export function emptyProjectListAttention(): ProjectListAttention {
     ownerItems: [],
     coordinatorItems: null,
     startRequest: null,
+    doneRequest: null,
   };
 }
 
@@ -111,6 +114,7 @@ export async function readProjectListAttention(
       ownerItems: [],
       coordinatorItems: null,
       startRequest: null,
+      doneRequest: null,
     });
   }
   // A project with items and no open blockers is the common case, not an edge one: the blockers
@@ -131,6 +135,15 @@ export async function readProjectListAttention(
     if (row.kind === START_REQUEST_KIND) {
       if (!project.startRequest || row.oldestWaitingSince < project.startRequest.waitingSince) {
         project.startRequest = { waitingSince: row.oldestWaitingSince };
+      }
+      continue;
+    }
+    // Its counterpart at the other end ("Ready to close"): the coordinator asking to record an OPEN
+    // project done. The read below leaves out a request on a project that is no longer OPEN, as the
+    // needs-you count does (`projectsReadyToClose`).
+    if (row.kind === DONE_REQUEST_KIND) {
+      if (!project.doneRequest || row.oldestWaitingSince < project.doneRequest.waitingSince) {
+        project.doneRequest = { waitingSince: row.oldestWaitingSince };
       }
       continue;
     }
@@ -164,12 +177,9 @@ export async function readProjectListAttention(
         count: row.count,
         leadKind,
         oldestWaitingSince: row.oldestWaitingSince,
-        // §4.1 X-E2 freezes `escalate_at` when the item is created, so a coordinator's item has
-        // one; the column is nullable for the items that were the owner's all along, which the
-        // kind check above has already excluded. The contract's §7.1 states it as a `Date` for
-        // that reason, and it is read as one — a card counting down to a missing deadline would be
-        // counting down to nothing.
-        nextEscalationAt: row.nextEscalationAt!,
+        // In-flight fixes and handling deliberately have no deadline; a null here means the
+        // coordinator's whole queue is currently making progress.
+        nextEscalationAt: row.nextEscalationAt,
       };
       continue;
     }
@@ -180,10 +190,8 @@ export async function readProjectListAttention(
       held.oldestWaitingSince = row.oldestWaitingSince;
       held.leadKind = leadKind;
     }
-    if (
-      row.nextEscalationAt
-      && (!held.nextEscalationAt || row.nextEscalationAt < held.nextEscalationAt)
-    ) {
+    if (row.nextEscalationAt != null
+      && (held.nextEscalationAt == null || row.nextEscalationAt < held.nextEscalationAt)) {
       held.nextEscalationAt = row.nextEscalationAt;
     }
   }
@@ -222,9 +230,8 @@ async function readBlockers(
  * row's chip prints.
  *
  * `next_escalation_at` is the soonest deadline among the coordinator's items: the first one that
- * will stop being theirs, as the clock decides it (`escalatesAt` — a conversation still carrying an
- * item moves its deadline on). It is null for the kinds that were the owner's from birth, which is
- * why it is null-tolerant on the way in and read only for the rows that can have one.
+ * will stop being theirs, as the clock decides it (`escalatesAt`). An in-flight fix/handling row has
+ * no deadline, so SQL `min()` skips it; when every held row is in flight the aggregate is NULL.
  *
  * A start request counts only while its project has not been started: the start answers it in the
  * same transaction, and a request somehow left open beside a start asks nobody anything. Any item
@@ -250,5 +257,6 @@ async function readOpenItems(
      WHERE item.state = 'OPEN' ${narrowed}
        AND (item.kind <> 'START_REQUEST' OR proj.started_at IS NULL)
        AND ${openItemOwed('item')}
+       AND (item.kind <> 'DONE_REQUEST' OR proj."status" = 'OPEN')
      GROUP BY item.project_id, item.kind, item.assignee, item.assignee_reason`);
 }

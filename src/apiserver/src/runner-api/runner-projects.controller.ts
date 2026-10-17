@@ -20,12 +20,15 @@ import { type SessionLifecycleActor } from '../projects/attempt-budget';
 import {
   AskOwnerDto,
   CreateProjectDto,
+  HandOverOpenItemDto,
   RecordMergeEvidenceDto,
+  RequestProjectDoneDto,
   RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
   RetryIntegrationDto,
   SendToCoordinatorDto,
+  SkipMergeCheckDto,
   UpdateProjectDto,
 } from '../projects/dto';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
@@ -75,7 +78,7 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
-    // Only `askOwner`, `requestStart`, `resolveOpenItem`, `retryIntegration` and
+    // Only `askOwner`, `requestStart`, `requestDone`, `resolveOpenItem`, `retryIntegration` and
     // `retryPromotionCheck` need it. Defaulted for the reason
     // `ProjectsService`'s own late parameters are: Nest injects by type rather than by position,
     // while the specs that build this controller by hand to exercise one route would each have to
@@ -451,6 +454,27 @@ export class RunnerProjectsController {
   }
 
   /**
+   * A coordinator asking the account owner to record its project done (`project_request_done`).
+   *
+   * Filed and returned, like a start request: the owner answers on the "Is this project done?" card.
+   * The project is checked first — one that is not ready is 409 `DONE_REQUEST_NOT_READY` with every
+   * finding and nothing filed, and one that is comes back with the warnings the owner reads beside it.
+   *
+   * X-Orbit-Session-Id is the authority, checked by the service against the project's own
+   * coordinator pointer, exactly as for `requestStart`. No orchestration credential: the request
+   * records nothing — the owner's press on the card does.
+   */
+  @Post('projects/:id/done-requests')
+  requestDone(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RequestProjectDoneDto,
+  ) {
+    return this.openItems.requestDone(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
    * A coordinator closing an item it has carried (contract §4.7's "标记已处理").
    *
    * The item is the coordinator's because a landing of its project did not go through, and the one
@@ -480,6 +504,27 @@ export class RunnerProjectsController {
   }
 
   /**
+   * A coordinator deliberately handing an open item to the account owner (§4.7).
+   *
+   * The acting session is the authority, checked against the project's coordinator pointer.  The
+   * service performs the capability-table check and the assignment CAS, then notifies the owner
+   * only after the OWNER row is committed.
+   */
+  @Post('projects/:id/open-items/:itemId/hand-over')
+  handOverOpenItem(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+    @Body() dto: HandOverOpenItemDto,
+  ) {
+    return this.openItems.handOver(runner.ownerId, id, itemId, dto, {
+      kind: 'SESSION',
+      sessionId: sessionId?.trim() ?? '',
+    });
+  }
+
+  /**
    * A coordinator running one of its project's failed landings again (`integration_retry`, contract
    * §2.3 J-T1b): the next LAND_TASK generation of a DONE task whose newest landing ended
    * CHECK_FAILED (a red check, or one that ran out of time) or ERROR.
@@ -499,6 +544,30 @@ export class RunnerProjectsController {
     @Body() dto: RetryIntegrationDto,
   ) {
     return this.openItems.retryIntegration(runner.ownerId, id, taskId, dto, sessionId?.trim());
+  }
+
+  /**
+   * A coordinator queueing one of its project's failed landings again with the merge check NOT RUN
+   * (`integration_skip_merge_check`, contract §2.4 J-S5) — for the red that is about the check rather
+   * than the delivery: a command that cannot pass on the machine the runner is on.
+   *
+   * Held to the route above's rules — the acting session is the authority and a missing or blank
+   * header is NOT read as the account owner — and to one more of its own: the call must name the
+   * confirmation card the account owner answered, raised by this same conversation about this same
+   * task. Without one the service refuses with `INTEGRATION_SKIP_CHECK_APPROVAL_REQUIRED` and queues
+   * nothing, so no coordinator can skip a check by saying so. The check is skipped, never passed: the
+   * generation records the reason and who approved it, the project's own check command is untouched,
+   * and the next landing runs it as before.
+   */
+  @Post('projects/:id/tasks/:taskId/integration/skip-merge-check')
+  skipIntegrationMergeCheck(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: SkipMergeCheckDto,
+  ) {
+    return this.openItems.skipIntegrationMergeCheck(runner.ownerId, id, taskId, dto, sessionId?.trim());
   }
 
   /**

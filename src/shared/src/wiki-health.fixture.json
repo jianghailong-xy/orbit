@@ -9,7 +9,12 @@
     "Each case is a health read (`GET /api/wiki/spaces/:id/health`) at `now`: `parts` is the maintenance",
     "part as the line draws it — words, tone, mark, link — and `text` the same as one line of text. `line` is",
     "the whole status line on a phone, web and iOS alike (the desktop web adds the review count after the",
-    "entries): `entries` of the read, the anchors of `space.rootCommitSha`, then `text`."
+    "entries): `entries` of the read, the anchors of `space.rootCommitSha`, then `text`.",
+    "",
+    "From P9 a case may carry the read's `executor`, `systemModel` and `repo`: while the server executes the account's wiki the line",
+    "adds one reason after the look's parts and before its links (contract `maintenance.health.serverReasons`), the first that",
+    "holds of: worker not running, unconfigured, key refused, unreachable, then the runner (offline, too old) while maintenance is on",
+    "or a repository operation waits. A run the server's job made has no session: its View run opens its row on Activity."
   ],
   "now": "2026-09-28T12:00:00.000Z",
   "space": {
@@ -392,6 +397,603 @@
       ],
       "text": "● Maintenance failed · 57 to catch up",
       "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance failed · 57 to catch up"
+    },
+    {
+      "name": "server: maintained, and the runner the repository is read through is offline",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 6,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "repo": {
+          "look": "runner_offline",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": false
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "6 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Waiting for the runner to come online",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 6 to catch up · ● Waiting for the runner to come online",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up · ● Waiting for the runner to come online"
+    },
+    {
+      "name": "server: a run under way while the System model cannot be reached",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "running",
+          "enabled": true,
+          "lastOkAt": "2026-09-27T20:00:00.000Z",
+          "lastRunAt": "2026-09-27T20:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 24,
+          "oldestPendingAt": "2026-09-28T03:00:00.000Z",
+          "lagSeconds": 32400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": {
+            "sessionId": "8pmhgmiZhkzJyreQNBmhw",
+            "startedAt": "2026-09-28T11:56:00.000Z"
+          },
+          "lastRun": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "down",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintaining now · started 4m ago",
+          "tone": "plain",
+          "mark": "spin",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "24 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "System model unreachable",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "text": "Maintaining now · started 4m ago · 24 to catch up · ● System model unreachable",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintaining now · started 4m ago · 24 to catch up · ● System model unreachable"
+    },
+    {
+      "name": "server: failing because the System model refused the key, View run opening the run on Activity",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "failing",
+          "enabled": true,
+          "lastOkAt": "2026-09-26T11:00:00.000Z",
+          "lastRunAt": "2026-09-28T11:30:00.000Z",
+          "consecutiveFailures": 3,
+          "backlog": 57,
+          "oldestPendingAt": "2026-09-26T10:00:00.000Z",
+          "lagSeconds": 180000,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "failed",
+            "endedAt": "2026-09-28T11:30:00.000Z"
+          },
+          "lastFailure": {
+            "kind": "content",
+            "reason": "The System model refused the key (401)",
+            "at": "2026-09-28T11:30:00.000Z",
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009"
+          }
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "auth_failed",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintenance failed 3 times",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "last success 2d ago",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "57 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "System model refused the key",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "View run",
+          "tone": "plain",
+          "mark": "none",
+          "link": "run",
+          "strong": false
+        }
+      ],
+      "text": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● System model refused the key · View run",
+      "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● System model refused the key · View run"
+    },
+    {
+      "name": "server: maintenance off, and no System model configured",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "off",
+          "enabled": false,
+          "lastOkAt": null,
+          "lastRunAt": null,
+          "consecutiveFailures": 0,
+          "backlog": 0,
+          "oldestPendingAt": null,
+          "lagSeconds": 0,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": null
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "unconfigured",
+          "model": null,
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintenance off",
+          "tone": "muted",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "System model not configured",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "Set up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "Maintenance off · ● System model not configured · Set up",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance off · ● System model not configured · Set up"
+    },
+    {
+      "name": "server: no wiki worker — said before the offline runner, which matters only once one runs",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": null,
+          "lastRunAt": null,
+          "consecutiveFailures": 0,
+          "backlog": 0,
+          "oldestPendingAt": null,
+          "lagSeconds": 0,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": null
+        },
+        "repo": {
+          "look": "runner_offline",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": false
+          },
+          "pending": 2
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "worker_not_running",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintenance on",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "0 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "wiki worker not running",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "text": "Maintenance on · 0 to catch up · ● wiki worker not running",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance on · 0 to catch up · ● wiki worker not running"
+    },
+    {
+      "name": "server: maintained, and the runner is too old to be given repository work",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 6,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "repo": {
+          "look": "runner_upgrade",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": false,
+            "online": true
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "6 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Upgrade the runner to read the repository",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 6 to catch up · ● Upgrade the runner to read the repository",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up · ● Upgrade the runner to read the repository"
+    },
+    {
+      "name": "server: maintenance off and nothing waits on the offline runner — no reason",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "off",
+          "enabled": false,
+          "lastOkAt": null,
+          "lastRunAt": null,
+          "consecutiveFailures": 0,
+          "backlog": 0,
+          "oldestPendingAt": null,
+          "lagSeconds": 0,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": null
+        },
+        "repo": {
+          "look": "runner_offline",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": false
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintenance off",
+          "tone": "muted",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Set up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "Maintenance off · Set up",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance off · Set up"
+    },
+    {
+      "name": "runner: the account the server does not run — the line is what it always was",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 6,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "repo": {
+          "look": "runner_offline",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/orbit"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "HPC",
+            "version": "0.1.223",
+            "capability": true,
+            "online": false
+          },
+          "pending": 0
+        },
+        "executor": {
+          "mode": "canary",
+          "serverExecutes": false
+        },
+        "systemModel": null
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "6 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 6 to catch up",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up"
     }
   ]
 }

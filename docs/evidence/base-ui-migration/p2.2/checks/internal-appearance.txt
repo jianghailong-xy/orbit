@@ -1,0 +1,202 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep matches the current|existing states
+
+[WebServer] (node:2117215) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:2117306) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › attachment matches the current surface, density and option states (2.9s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › access matches the current surface, density and option states (2.9s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › expiry matches the current surface, density and option states (3.4s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › account matches the current surface, density and option states (3.2s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › search matches the current surface, density and option states (3.3s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › popover matches the current surface, density and option states (3.2s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices.browser.mjs:74:3 › tooltip matches the current surface, density and option states (3.4s)
+  ✘   8 [chromium-light-desktop] › ui-migration/choices.browser.mjs:127:1 › empty, disabled, hover and focus choice surfaces match the existing states (13.2s)
+(node:2119643) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › attachment matches the current surface, density and option states (2.2s)
+  ✓  10 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › access matches the current surface, density and option states (2.0s)
+  ✓  11 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › expiry matches the current surface, density and option states (2.2s)
+  ✓  12 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › account matches the current surface, density and option states (2.3s)
+  ✓  13 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › search matches the current surface, density and option states (2.3s)
+  ✓  14 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › popover matches the current surface, density and option states (2.2s)
+  ✓  15 [webkit-dark-phone] › ui-migration/choices.browser.mjs:74:3 › tooltip matches the current surface, density and option states (2.4s)
+  ✘  16 [webkit-dark-phone] › ui-migration/choices.browser.mjs:127:1 › empty, disabled, hover and focus choice surfaces match the existing states (8.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:127:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  -  1
+    + Received  + 15
+
+    @@ -52,10 +52,17 @@
+              "height": 12,
+              "width": 12,
+              "x": 226,
+              "y": 10,
+            },
+    +       Object {
+    +         "color": "rgba(0, 0, 0, 0.25)",
+    +         "height": 12,
+    +         "width": 12,
+    +         "x": 226,
+    +         "y": 10,
+    +       },
+          ],
+          "origin": Object {
+            "x": 24,
+            "y": 148,
+          },
+    @@ -78,11 +85,11 @@
+            "x": 0,
+            "y": 0,
+          },
+          "texts": Array [
+            Object {
+    -         "color": "rgb(31, 35, 41)",
+    +         "color": "rgba(0, 0, 0, 0.25)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "height": 16,
+              "text": "Never",
+              "width": 37.359375,
+    @@ -91,10 +98,17 @@
+            },
+          ],
+        },
+        "hover": Object {
+          "icons": Array [
+    +       Object {
+    +         "color": "rgba(0, 0, 0, 0.25)",
+    +         "height": 12,
+    +         "width": 12,
+    +         "x": 226,
+    +         "y": 10,
+    +       },
+            Object {
+              "color": "rgba(0, 0, 0, 0.25)",
+              "height": 12,
+              "width": 12,
+              "x": 226,
+
+      162 |   }
+      163 |   await attach(info, 'choice-states', measurements);
+    > 164 |   for (const values of Object.values(measurements)) expect(values.orbit).toEqual(values.antd);
+          |                                                                          ^
+      165 | });
+      166 |
+      167 | test('menu arrows, disabled items, submenu, checkbox and focus return work', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:164:74
+
+    Error Context: .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-chromium-light-desktop/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/choices.browser.mjs:127:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  -  1
+    + Received  + 15
+
+    @@ -52,10 +52,17 @@
+              "height": 12,
+              "width": 12,
+              "x": 226,
+              "y": 10,
+            },
+    +       Object {
+    +         "color": "rgba(255, 255, 255, 0.25)",
+    +         "height": 12,
+    +         "width": 12,
+    +         "x": 226,
+    +         "y": 10,
+    +       },
+          ],
+          "origin": Object {
+            "x": 24,
+            "y": 161,
+          },
+    @@ -78,11 +85,11 @@
+            "x": 0,
+            "y": 0,
+          },
+          "texts": Array [
+            Object {
+    -         "color": "rgb(201, 206, 213)",
+    +         "color": "rgba(255, 255, 255, 0.25)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "height": 16,
+              "text": "Never",
+              "width": 37.3447265625,
+    @@ -91,10 +98,17 @@
+            },
+          ],
+        },
+        "hover": Object {
+          "icons": Array [
+    +       Object {
+    +         "color": "rgba(255, 255, 255, 0.25)",
+    +         "height": 12,
+    +         "width": 12,
+    +         "x": 226,
+    +         "y": 10,
+    +       },
+            Object {
+              "color": "rgba(255, 255, 255, 0.25)",
+              "height": 12,
+              "width": 12,
+              "x": 226,
+
+      162 |   }
+      163 |   await attach(info, 'choice-states', measurements);
+    > 164 |   for (const values of Object.values(measurements)) expect(values.orbit).toEqual(values.antd);
+          |                                                                          ^
+      165 | });
+      166 |
+      167 | test('menu arrows, disabled items, submenu, checkbox and focus return work', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:164:74
+
+    Error Context: .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-webkit-dark-phone/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:127:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:127:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+  14 passed (1.0m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep 'matches the current|existing states'

@@ -1,0 +1,87 @@
+{
+ "summary": {
+  "dirA": "docs/evidence/base-ui-migration/p0-drift/accepted/screenshots",
+  "dirB": "/var/tmp/p32acc/runs/share-close-dark/snapshots",
+  "total": 4,
+  "missing": 0,
+  "same": 0,
+  "noise": 0,
+  "changed": [
+   "chromium-dark-desktop/task-share-dialog.png",
+   "chromium-dark-phone/task-share-dialog.png",
+   "webkit-dark-desktop/task-share-dialog.png",
+   "webkit-dark-phone/task-share-dialog.png"
+  ],
+  "p0ComparatorFails": []
+ },
+ "rows": [
+  {
+   "file": "chromium-dark-desktop/task-share-dialog.png",
+   "sha256A": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+   "sha256B": "9ba179ff8e7c1a6afcb518a79acb0dbc2ef385606f33e5382b06574548d938e2",
+   "bytesEqual": false,
+   "differentPixels": 364,
+   "maxChannelDelta": 36,
+   "box": {
+    "x": 851,
+    "y": 107,
+    "width": 42,
+    "height": 42
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/task-share-dialog.png",
+   "sha256A": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+   "sha256B": "266d8bf37f98c1417caa6f56a5e0a69451cbcb198d7a4937c0eef146562f0cc1",
+   "bytesEqual": false,
+   "differentPixels": 364,
+   "maxChannelDelta": 36,
+   "box": {
+    "x": 333,
+    "y": 115,
+    "width": 42,
+    "height": 42
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/task-share-dialog.png",
+   "sha256A": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+   "sha256B": "218c51c9a7550df203f4f3ea4737828d44f03f772c08f248476a493454c598b4",
+   "bytesEqual": false,
+   "differentPixels": 364,
+   "maxChannelDelta": 36,
+   "box": {
+    "x": 851,
+    "y": 107,
+    "width": 42,
+    "height": 42
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/task-share-dialog.png",
+   "sha256A": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+   "sha256B": "01153cfa294b5f449bc01f70f76ffb123e2ed322a9c692c26846e2d0a862e143",
+   "bytesEqual": false,
+   "differentPixels": 364,
+   "maxChannelDelta": 36,
+   "box": {
+    "x": 333,
+    "y": 115,
+    "width": 42,
+    "height": 42
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  }
+ ]
+}

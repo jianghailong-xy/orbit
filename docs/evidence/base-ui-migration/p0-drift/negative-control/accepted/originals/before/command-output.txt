@@ -1,0 +1,72 @@
+[WebServer] (node:996736) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 8 tests using 1 worker
+
+(node:997158) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (6.0s)
+(node:998573) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+(node:999470) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.5s)
+(node:1002033) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  4 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (5.5s)
+(node:1003338) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  5 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (10.8s)
+(node:1005935) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  6 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (6.2s)
+(node:1008956) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  7 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (6.7s)
+(node:1013195) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p0drift-s2/runs/acc-before/snapshots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (6.5s)
+
+  8 passed (57.5s)

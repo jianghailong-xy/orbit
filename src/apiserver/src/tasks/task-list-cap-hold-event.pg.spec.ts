@@ -179,8 +179,8 @@ test('a list at its ceiling records cap_hold, once, and keeps counting',
         'the sweep materialised into a list that is already at its ceiling');
       const holds = await capHolds(s.db, full.id);
       assert.equal(holds.length, 1, 'the list at its ceiling did not say so');
-      assert.match(holds[0].detail, /1 个就绪任务/, 'the detail does not carry the count');
-      assert.match(holds[0].detail, /并发上限/, 'the detail does not name the ceiling');
+      assert.match(holds[0].detail, /1 ready task/, 'the detail does not carry the count');
+      assert.match(holds[0].detail, /concurrency cap/, 'the detail does not name the ceiling');
       assert.equal(holds[0].occurrences, 1);
 
       // (3) The condition stands, so the next sweep sees it again — and the row it already has is

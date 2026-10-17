@@ -1,0 +1,30 @@
+{
+  "delivery": "ea9191d8165f827c83584087a59f4dfd0cfc2bcd",
+  "tested": "f096a2bc73db87ffcc242a5493f567a414c9ae71",
+  "reviewRoot": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m",
+  "cache": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71",
+  "lockSha256": "1cbd66c8623d8d7fbd9499ed7607efba173bb578ff0877eda2c7dc12feff7836",
+  "onlySourceAdjustments": [
+    {
+      "file": "src/web/ui-migration/choices.config.mjs",
+      "from": "4177",
+      "to": "14407",
+      "originalSha256": "6255b7998680f9e94d0aee575a9068ce77c20f80898afb214b5adbae5060aef0",
+      "reviewSha256": "42d3308e131031b98023d5720f9949b37993d6d910f1aad97202b24d65b24ec7"
+    },
+    {
+      "file": "src/web/ui-migration/toasts.config.mjs",
+      "from": "14377",
+      "to": "14408",
+      "originalSha256": "960ca0aab09f01276b854c44b1fe53ae8d19a1d2a7218f81440cf43c8c3a355c",
+      "reviewSha256": "aa37e56550a4b3b17ea86a2ecf774316e93e2da044631bb0fb713e0e37ed5f1e"
+    },
+    {
+      "file": "src/web/ui-migration/playwright.config.mjs",
+      "from": "4173",
+      "to": "14409",
+      "originalSha256": "4a6ca3760bcb30498c5fcb1fc4dc43741e1aa7c200ea5bd6507e0ef1c3e30504",
+      "reviewSha256": "a01118d8422cd69be88cf0e27b138ca1f8919f9652fa47821f87bc343f7692db"
+    }
+  ]
+}

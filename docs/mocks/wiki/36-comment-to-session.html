@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>36 wiki comment → session (web desktop)</title>
+<link rel="stylesheet" href="comment-session.css">
+</head>
+<body>
+<script src="wiki-desktop-icons.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<div class="board">
+<h1 class="b-h1">36 · 从 wiki 评论发起改动（web 桌面）：选中 → 评论 → 会话 → 合并 → 文档跟上</h1>
+<p class="b-sub">拿图 23 那篇《3.1 会话运行模型与长连接》§3 里的一句真话演一遍：<code>SESSION_RUNNER_OFFLINE_AFTER_MS = 90_000</code>（<code>session-state.ts:18</code>）和
+<code>heartbeatInterval = 30 * time.Second</code>（<code>runloop.go:23</code>）都是 main 上的原样；<b>评论、会话、合并 <code>7f3e2a1</code> 和重写后的句子是示意</b>。
+界面英文，正文与你的话按原文。左侧 app 侧栏略。方案文字见 <code>docs/wiki-comment-to-session-design.md</code>。<b>owner 10-09 定：六条全部按推荐；现在的缺口一起补（图里 ⑥）。</b></p>
+<div class="b-legend"><span><span class="tag new">新</span>新加的界面</span><span><span class="tag keep">沿用</span>现成组件照用</span><span><span class="tag word">新词</span>新的英文文案</span><span><span class="tag done">已定</span>owner 10-09 按推荐定了</span><span><span class="tag demo">示意</span>演示用的内容</span></div>
+
+<!-- ① select → Comment → composer -->
+<div class="band"><span class="bn">1</span>选中一句 → Comment → 评论框 <small>· 3.1 §3 · 拖选了半句，吸附成整句</small></div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+      <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+    <div class="o-wbody">
+      <nav class="o-dir">
+        <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+        <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+        <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+        <div class="cat">会话</div>
+        <div class="it on"><span class="no">3.1</span>会话运行模型与长连接</div>
+        <div class="it sub"><span class="no">1</span>总览</div>
+        <div class="it sub"><span class="no">2</span>一个 session 是什么</div>
+        <div class="it sub on2"><span class="no">3</span>turn 投递与 inbox 领取</div>
+        <div class="it sub"><span class="no">4</span>seq 单调与重连</div>
+        <div class="it sub"><span class="no">5</span>进程生命周期</div>
+        <div class="it sub"><span class="no">6</span>worktree 隔离</div>
+        <div class="it sub"><span class="no">7</span>已知的坑</div>
+        <div class="it"><span class="no">3.2</span>会话状态生命周期</div>
+        <div class="it"><span class="no">3.3</span>会话消息路由</div>
+        <div class="it"><span class="no">3.4</span>会话搜索</div>
+      </nav>
+      <main class="o-doc" id="doc1">
+        <div class="o-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+        <h2 class="o-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</h2>
+        <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span>当用户提交 turn 后，服务器将该 turn 持久化为 <code>ConversationTurn</code> 行，并通过 long-poll 端点 <code>GET /api/runner/runs/:id/inbox</code> 投递给 runner。<span class="fn">[2]</span><span class="cut">…</span></p>
+        <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="snap" id="snap1">Runner 每 30 秒发送一次心跳，<span class="sel" id="sel1">控制面连续 90 秒未收到心跳即判定 runner 离线</span>，此时 resume 功能不可用。</span><span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p>
+        <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手、以及 long-poll 无需网关变更即可实现亚秒级 turn 投递。<span class="fn">[2]</span></p>
+        <span class="o-float mko" data-above="sel1"><svg class="ic"><use href="#i-comment"/></svg>Comment<i class="pin">2</i></span>
+      <i class="pin solo" data-pin="snap1">1</i>
+      </main>
+      <aside class="o-rail">
+        <div class="o-cc mk" data-n="3" data-align="sel1">
+          <div class="h"><svg class="ic" style="color:var(--brand)"><use href="#i-comment"/></svg>Comment<svg class="ic x"><use href="#i-close"/></svg></div>
+          <div class="where">3.1 › §3 turn 投递与 inbox 领取 · 1 sentence</div>
+          <div class="o-quote">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span></div>
+          <div class="o-lab">Orbit attaches</div>
+          <div class="o-src"><span class="no">[5]</span><span class="k">Design doc</span><span class="p"><span class="m">docs/architecture.md</span> § Realtime and recovery</span><span class="v">✓</span></div>
+          <div class="o-src"><span class="no">[12]</span><span class="k">Code</span><span class="p"><span class="m">session-state.ts</span> L17–18 · 99cd3c4</span><span class="v">✓</span></div>
+          <div class="o-ta mk" data-n="4">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？心跳间隔要不要跟着改，你先看代码再定。<span class="caret"></span></div>
+          <div class="o-lab">Run in</div><div class="o-runin mk" data-n="5" style="margin-top:0"><span class="o-pick">orbit · wikova<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="o-pick">Claude Opus 5.5<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="o-pick">Default<svg class="ic"><use href="#i-caret-down"/></svg></span></div>
+          <div class="o-foot mk" data-n="6"><span class="o-btn">Save</span><span class="o-btn pri">Start session <kbd>⌘↩</kbd></span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">1</span><span class="tag new">新</span><b>选区按句吸附</b>：拖了半句（深蓝），整句被带上（浅蓝底线）。文档本来按句存（<code>wiki_doc_sentence</code>），评论记下句子和选中的原文；可以跨段、跨节，最多 20 句，代码块按整块算。</li>
+      <li><span class="n">2</span><span class="tag new">新</span>选区上方浮出 <b>Comment</b>。只有你自己的 wiki 有；分享链接的访客没有。</li>
+      <li><span class="n">3</span><span class="tag new">新</span><b>评论框开在右侧边栏</b>，和选区对齐，不遮正文：原文带脚注号；<span class="tag word">新词</span><b>Orbit attaches</b> 列出这几句的脚注（代码到行、设计文档到章节、会话到那一条），会话里 agent 拿到的就是这些位置。</li>
+      <li><span class="n">4</span><span class="tag demo">示意</span>你的话。会原样成为会话的第一条消息。对 No source / Not verified 的句子评论时，这里多一行琥珀提示：这句可能是 wiki 写错了，而不是系统该改。</li>
+      <li><span class="n">5</span><span class="tag keep">沿用</span><b>Run in</b>：workspace · 引擎 · 模式，和 New session 同一套选择器。默认的 workspace：你最近在其中开过会话的绑定 workspace → 维护用的 → 第一个绑定的。只想先问不想改，就选 Plan。</li>
+      <li><span class="n">6</span><b>Start session</b>（主，⌘↩）开会话；<b>Save</b> 只存评论（P2）。按了之后<b>留在文档上</b> <span class="tag done">已定 1</span>：卡片变成 <b>● Running</b>，右下角提示 <b>Session started in orbit · Open</b>。</li>
+    </ol>
+    <div class="sep"></div>
+    <div><b>边栏宽度</b>：360px。主区够宽时排在文档栏右侧；不够时文档栏让到 600px；≤1100px 时评论改成从右侧滑出的抽屉。没有评论、也没在写时不占位置。</div>
+  </div>
+</div>
+
+<!-- ② the session -->
+<div class="band"><span class="bn">2</span>会话：你的话是第一条消息，原文和出处附在后面；改完你按 Merge <small>· 新会话开在 orbit · wikova</small></div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-shead"><span class="t">缩短 runner 判离线时间</span><span class="o-from mk" data-n="1"><svg class="ic"><use href="#i-book"/></svg>From Wiki · 3.1 §3</span><span class="meta">orbit · wikova · Claude Opus 5.5 · Default</span></div>
+    <div class="o-trans">
+      <div class="o-user">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？心跳间隔要不要跟着改，你先看代码再定。</div>
+      <div class="o-att mk" data-n="2">
+        <div class="h">⊕ Orbit attached: <b>Wiki selection</b> · 3.1 §3 · 1 sentence · 2 sources</div>
+        <div class="body">
+          <div class="o-quote">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span></div>
+          <div style="height:6px"></div>
+          <div class="o-src"><span class="no">[5]</span><span class="k">Design doc</span><span class="p"><span class="m">docs/architecture.md</span> § Realtime and recovery</span></div>
+          <div class="o-src"><span class="no">[12]</span><span class="k">Code</span><span class="p"><span class="m">src/apiserver/src/sessions/session-state.ts</span> L17–18 · 99cd3c4</span></div>
+          <div class="tell">When this session’s changes reach main, Orbit rewrites this section from main. Don’t edit the wiki; change the code, or the design doc the sentence cites.</div>
+        </div>
+      </div>
+      <div class="o-agent">
+        <div class="o-tools"><span class="o-tool">Read <b>session-state.ts</b></span><span class="o-tool">Read <b>runloop.go</b></span><span class="o-tool">Grep <b>heartbeatInterval</b> · 3</span><span class="o-tool">Edited <b>2 files</b></span><span class="o-tool">Ran <b>go test ./...</b> <span class="okc">✓</span></span><span class="o-tool">Ran <b>vitest session-state</b> <span class="okc">✓</span></span></div>
+        <p>90 秒来自 <code>SESSION_RUNNER_OFFLINE_AFTER_MS</code>（session-state.ts:18），注释写的是「30 秒一次心跳，丢三次才判离线」。只改它的话，一次网络抖动就会判离线，所以连心跳一起改：</p>
+        <ul><li><code>runloop.go</code> 的 <code>heartbeatInterval</code>：30s → 15s</li><li><code>SESSION_RUNNER_OFFLINE_AFTER_MS</code>：90_000 → 45_000，仍是丢三次</li></ul>
+        <p>每台 runner 的心跳从每分钟 2 次变成 4 次。测试都过了，可以合并。</p>
+      </div>
+    </div>
+    <div class="o-wt mk" data-n="3"><svg class="ic"><use href="#i-branches"/></svg><span class="br">orbit/runner-offline-45s-3fa2c1</span>· 3 files changed <span class="add">+14</span> <span class="del">−6</span><span class="grow"></span><span class="o-btn sm">Commit</span><span class="o-split"><span class="o-btn sm pri"><svg class="ic"><use href="#i-merge"/></svg>Merge</span><span class="o-btn sm pri"><svg class="ic"><use href="#i-caret-down"/></svg></span></span></div>
+    <div class="o-divide">你按了 Merge 之后</div>
+    <div class="o-wt"><svg class="ic"><use href="#i-branches"/></svg><span class="br">orbit/runner-offline-45s-3fa2c1</span>· 3 files changed<span class="grow"></span><span class="o-merged">✓ Merged</span></div>
+    <div class="mk" data-n="4" style="margin:0 108px 16px; padding:8px 12px 2px; border-radius:8px">
+      <div class="o-sys run" style="margin:0 0 8px"><svg class="ic"><use href="#i-sync"/></svg><span>Wiki · Rewriting 3.1 §3 and 7.1 §2 from main@<code>7f3e2a1</code>…</span></div>
+      <div class="o-sys ok" style="margin:0 0 8px"><svg class="ic"><use href="#i-check-circle-f"/></svg><span>Wiki updated · 3.1 §3 — 1 sentence changed · 7.1 §2 — 2 sentences changed · <a>See changes ›</a></span></div>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">1</span><span class="tag new">新</span>页头的来处标签 <b>From Wiki · 3.1 §3</b>：点了回到文档，并打开这条评论。会话标题照常由第一条消息生成。</li>
+      <li><span class="n">2</span><span class="tag keep">沿用</span>任务启动卡那条 <b>⊕ Orbit attached</b> 折叠条，<span class="tag word">新词</span>新种类 <b>Wiki selection</b>：原文、出处，和一句给 agent 的话（不要改 wiki，改代码或这句引用的设计文档）。投递时追加，不改你的消息，所以你的原话在会话里一字不差。</li>
+      <li><span class="n">3</span><span class="tag keep">沿用</span>之后和任何会话一样：读、改、按模式问你。<b>合并照旧由你在 worktree 条上按 Merge</b>。合进别的分支不算，等它到了 main 才算。</li>
+      <li><span class="n">4</span><span class="tag new">新</span><span class="tag word">新词</span>改动到了 main，会话里多两行 Orbit 的记录，只给你看、不投递给 agent：<b>Rewriting …</b> → <b>Wiki updated</b>。不等 20 个会话或 24 小时：合并就是触发的事实。被合并文件牵到的别的节（这里是 7.1 §2）一起重写。</li>
+    </ol>
+    <div class="sep"></div>
+    <div><b>重写多给的两样材料</b>：① 这次合并改到的文件（§3 本来没引 <code>runloop.go</code>，不给就会写回 30 秒）；② 这场会话的三条记录：你的原话、合并前 agent 的最后一轮、合并回执。句子照旧逐句引一手原文、逐字核对；评论和文档本身都不算出处。</div>
+  </div>
+</div>
+
+<!-- ③ back on the doc -->
+<div class="band"><span class="bn">3</span>回到文档：新句子、评论自动解决、See changes 逐句对照</div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+      <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+    <div class="o-wbody">
+      <nav class="o-dir">
+        <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+        <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+        <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+        <div class="cat">会话</div>
+        <div class="it on"><span class="no">3.1</span>会话运行模型与长连接</div>
+        <div class="it sub"><span class="no">1</span>总览</div>
+        <div class="it sub"><span class="no">2</span>一个 session 是什么</div>
+        <div class="it sub on2"><span class="no">3</span>turn 投递与 inbox 领取</div>
+        <div class="it sub"><span class="no">4</span>seq 单调与重连</div>
+        <div class="it sub"><span class="no">5</span>进程生命周期</div>
+        <div class="it sub"><span class="no">6</span>worktree 隔离</div>
+        <div class="it sub"><span class="no">7</span>已知的坑</div>
+        <div class="it"><span class="no">3.2</span>会话状态生命周期</div>
+        <div class="it"><span class="no">3.3</span>会话消息路由</div>
+      </nav>
+      <main class="o-doc" id="doc3">
+        <div class="o-crumb">Wiki<span>›</span>会话</div>
+        <h1 class="o-dtitle">会话运行模型与长连接</h1>
+        <div class="o-dmeta mk" data-n="4"><svg class="ic"><use href="#i-clock"/></svg>Updated Oct 9 at <code>7f3e2a1</code> · §3 rewritten after a merge <span class="o-chip"><svg class="ic"><use href="#i-comment"/></svg><b>1</b> comment</span></div>
+        <h2 class="o-sech" style="margin-top:14px"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</h2>
+        <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span class="cut">…</span></p>
+        <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="newline" id="new3">Runner 每 15 秒发送一次心跳，控制面连续 45 秒（三次心跳）未收到即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12][46]</span><span class="o-badge ok"><svg class="ic"><use href="#i-comment"/></svg>1</span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p>
+        <span class="o-tip" data-tipabove="new3" style="visibility:hidden">Updated from your comment · just now</span>
+        <i class="pin solo" data-pin="new3">1</i>
+        <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手、以及 long-poll 无需网关变更即可实现亚秒级 turn 投递。<span class="fn">[2]</span></p>
+      </main>
+      <aside class="o-rail">
+        <div class="o-card resolved mk" data-n="2" data-align="new3">
+          <div class="o-st ok"><svg class="ic"><use href="#i-check-circle-f"/></svg>Wiki updated · Resolved<svg class="ic more"><use href="#i-ellipsis"/></svg></div>
+          <div class="who">You · 10:42</div>
+          <div class="said">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？</div>
+          <div class="sess"><svg class="ic"><use href="#i-message"/></svg><span><a>缩短 runner 判离线时间</a> · merged <code style="font:11.5px var(--mono)">7f3e2a1</code></span></div>
+          <div class="o-diff mk" data-n="3">
+            <div class="dh"><svg class="ic"><use href="#i-down"/></svg>See changes · §3 · 1 sentence changed</div>
+            <div class="o-del">Runner 每 <mark>30</mark> 秒发送一次心跳，控制面连续 <mark>90</mark> 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</div>
+            <div class="o-ins">Runner 每 <mark>15</mark> 秒发送一次心跳，控制面连续 <mark>45</mark> 秒（三次心跳）未收到即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[12][46]</span></div>
+            <div class="o-newfn"><span style="color:var(--brand)">[46]</span><span class="p">runloop.go L23 @ 7f3e2a1</span><span class="v">✓</span></div>
+            <div class="o-newfn" style="padding-left:30px">“heartbeatInterval = 15 * time.Second”</div>
+            <div class="o-also"><svg class="ic"><use href="#i-sync"/></svg><span>Also rewritten: <a>7.1 §2 Runner 心跳与离线判定 · 2 sentences ›</a></span></div>
+          </div>
+          <div class="acts"><span class="o-btn sm">Reopen</span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">1</span><span class="tag new">新</span>新写的句子底下一道浅绿，悬停写 <span class="tag word">新词</span><b>Updated from your comment</b>；看过一次就不再画。评论气泡跟在这句后面，绿色 = 已解决。</li>
+      <li><span class="n">2</span><span class="tag new">新</span>评论卡变成 <b>✓ Wiki updated · Resolved</b>：重写后被评论的句子有变化，就自动解决 <span class="tag done">已定 4</span>，<b>Reopen</b> 留着。</li>
+      <li><span class="n">3</span><span class="tag new">新</span><b>See changes</b> 逐句对照：删掉的划线，新写的加底色，改动的字再深一档。新脚注 [46] 指向 <code>7f3e2a1</code> 上的 <code>runloop.go</code>，它是合并改到的文件，作为额外材料带进来的。重写前，旧句子在评论上存了一份，今天节是整节替换的，不留旧文。</li>
+      <li><span class="n">4</span>页头的更新行写明这次是合并后重写的；标签里多一个 <b>1 comment</b>，点开是这篇的评论列表。同一次合并牵到的 <b>7.1 §2</b> 在卡片里列出，点了过去。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ④ states -->
+<div class="band"><span class="bn">4</span>评论卡的样子 <small>· 读的时候从「评论 × 会话 × 合并 × 重写作业」推导，不另存状态（同落地会话的活性）</small></div>
+<div class="st-grid">
+  <div class="st-cell"><div class="o-card"><div class="o-st grey"><span class="dot"></span>Not started</div><div class="q1">Runner 每 30 秒发送一次心跳，控制面连续 90 秒…</div><div class="acts"><span class="o-btn sm pri">Start session</span><span class="o-btn sm">Delete</span></div></div>
+    <div class="cap"><b>1</b> · 只存了评论，还没开会话（P2 的 Save）</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st run"><span class="dot"></span>Running</div><div class="sess"><svg class="ic"><use href="#i-message"/></svg><a>缩短 runner 判离线时间</a></div><div class="acts"><span class="o-btn sm">Open session</span></div></div>
+    <div class="cap"><b>2</b> · 会话有回合在跑</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st amb"><span class="dot"></span>Needs you · approve a command</div><div class="sess"><svg class="ic"><use href="#i-message"/></svg><a>缩短 runner 判离线时间</a></div><div class="acts"><span class="o-btn sm">Open session</span></div></div>
+    <div class="cap"><b>3</b> · 会话在等审批或提问。<b>不</b>算进 Wiki 的「等你」数：会话那边已经算了</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st grey"><span class="dot" style="background:var(--brand)"></span>Not merged · 3 files changed</div><div class="sess"><svg class="ic"><use href="#i-message"/></svg><a>缩短 runner 判离线时间</a></div><div class="acts"><span class="o-btn sm">Open session</span></div></div>
+    <div class="cap"><b>4</b> · 会话停着，改动还没到 main。不催：没有时钟</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st grey"><span class="dot"></span>No changes</div><div class="sess"><svg class="ic"><use href="#i-message"/></svg><a>为什么判离线要 90 秒</a></div><div class="acts"><span class="o-btn sm">Open session</span><span class="o-btn sm">Resolve</span></div></div>
+    <div class="cap"><b>5</b> · 会话停着，什么也没改，多半是问答</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st grey"><span class="dot"></span>Ended without merging</div><div class="sess"><svg class="ic"><use href="#i-message"/></svg><span><a>缩短 runner 判离线时间</a> · in Trash</span></div><div class="acts"><span class="o-btn sm pri">Start new session</span><span class="o-btn sm">Resolve</span></div></div>
+    <div class="cap"><b>6</b> · 会话结束、进了 Trash，或合进了别的分支，改动都没到 main</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st run"><svg class="ic"><use href="#i-sync"/></svg>Merged · Rewriting §3</div><div class="sess"><svg class="ic"><use href="#i-merge"/></svg><span>main@<code style="font:11.5px var(--mono)">7f3e2a1</code> · also 7.1 §2</span></div></div>
+    <div class="cap"><b>7</b> · 改动到了 main，重写在排队或在跑；和生成作业一样，排在后台维护前面</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st amb"><svg class="ic"><use href="#i-warning"/></svg>Merged · Rewrite waiting: runner offline</div><div class="sess">wikova has not been seen for 12 min</div><div class="acts"><span class="o-btn sm">Settings</span></div></div>
+    <div class="cap"><b>8</b> · 重写被挡住，原因照 Activity 的说法。作业自己会重试。<span class="w">算进等你数</span></div></div>
+  <div class="st-cell"><div class="o-card resolved"><div class="o-st ok"><svg class="ic"><use href="#i-check-circle-f"/></svg>Wiki updated · Resolved</div><div class="sess">§3 · 1 sentence changed · also 7.1 §2</div><div class="acts"><span class="o-btn sm">See changes</span><span class="o-btn sm">Reopen</span></div></div>
+    <div class="cap"><b>9</b> · 唯一自动解决的样子</div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st amb"><svg class="ic"><use href="#i-exclamation-circle"/></svg>Merged · §3 reads the same</div><div class="sess"><span>Rewritten from <code style="font:11.5px var(--mono)">7f3e2a1</code>; the sentence you commented on didn’t change.</span></div><div class="acts"><span class="o-btn sm">See changes</span><span class="o-btn sm">Open session</span><span class="o-btn sm">Resolve</span></div></div>
+    <div class="cap"><b>10</b> · 重写成功，但被评论的句子一句没变：可能改动确实不影响这句话，也可能写法没读到。<span class="w">算进等你数</span></div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st err"><svg class="ic"><use href="#i-close-circle-f"/></svg>Rewrite failed</div><div class="sess">The model’s draft of §3 cited nothing it could verify.</div><div class="acts"><span class="o-btn sm">Try again</span></div></div>
+    <div class="cap"><b>11</b> · 重写作业以内容失败结束，原因照作业的说法。<span class="w">算进等你数</span></div></div>
+  <div class="st-cell"><div class="o-card"><div class="o-st run"><span class="dot"></span>Running<span class="tagout">Outdated</span></div><div class="q1" style="text-decoration:line-through;color:var(--text-3)">Runner 每 30 秒发送一次心跳，控制面连续 90 秒…</div><div class="acts"><span class="o-btn sm">Open session</span></div></div>
+    <div class="cap"><b>Outdated</b> 标签 · 会话还没合并，被评论的句子已被别的重写（例如维护）换掉：原文照留，照常跟着会话走</div></div>
+</div>
+
+<!-- ⑤ decided -->
+<div class="band"><span class="bn">5</span>已定 <small>· owner 10-09：前六条按推荐；第 7 条（实现路径）选两边都做</small></div>
+<div class="askbox">
+<ol>
+  <li><b>Start session 之后</b>：<span class="rec">留在文档上</span>，卡片变成 ● Running，右下角 Session started in orbit · Open。</li>
+  <li><b>已有评论开的、还开着的会话时</b>：新评论默认 <span class="rec">开新会话</span>；<code>Add to &lt;会话&gt;</code> 放在 Start session ▾ 里，P2。</li>
+  <li><b>iOS</b>：<span class="rec">长按段落，在 sheet 里点选句子</span>（图 37）。</li>
+  <li><b>文字变了</b> <span class="rec">自动解决</span>，Reopen 留着。</li>
+  <li><b>8、10、11</b> <span class="rec">算进 Wiki 的「等你」数</span>。</li>
+  <li><b>建任务</b>：<span class="rec">P2 再定</span>。</li>
+  <li><b>跟进作业两边都做</b>：服务端执行的账号由 wiki-worker 跑，runner 模式的账号由维护会话跑 <code>orbit wiki docs follow</code>；两边读同一份金样，结果一样。今天的 runner 模式马上就有跟进。Go 那份在 P11 删旧路径时一起删。</li>
+</ol>
+</div>
+
+<!-- ⑥ G2: every rewrite is visible -->
+<div class="band"><span class="bn">6</span>现在的缺口一起补：任何合并进 main，wiki 都马上跟上，看得到改了什么 <small>· 没有评论也一样 · 图中是同一次合并牵到的 7.1 §2</small></div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+      <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+    <div class="o-wbody">
+      <nav class="o-dir">
+        <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+        <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+        <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+        <div class="cat">Runner 与引擎</div>
+        <div class="it on"><span class="no">7.1</span>Runner 架构与注册</div>
+        <div class="it sub"><span class="no">1</span>总览</div>
+        <div class="it sub on2"><span class="no">2</span>心跳与离线判定</div>
+        <div class="it sub"><span class="no">3</span>注册与令牌</div>
+        <div class="it sub"><span class="no">4</span>自更新</div>
+        <div class="it"><span class="no">7.2</span>引擎运行时适配</div>
+        <div class="it"><span class="no">7.3</span>worktree 与仓库健康</div>
+      </nav>
+      <main class="o-doc" style="width:940px;min-height:520px">
+        <div class="o-crumb">Wiki<span>›</span>Runner 与引擎</div>
+        <h1 class="o-dtitle">Runner 架构与注册</h1>
+        <div class="o-dmeta mk" data-n="3"><svg class="ic"><use href="#i-clock"/></svg>Updated Oct 9 at <code>7f3e2a1</code> · §2 rewritten after a merge</div>
+        <h2 class="o-sech" style="margin-top:14px"><span class="num">2</span>心跳与离线判定<span class="o-upd mk" data-n="1"><span class="bd"></span>Updated</span></h2>
+        <p class="o-p" style="width:420px">Runner 的心跳间隔是 <code>heartbeatInterval</code>，默认 15 秒。<span class="fn">[3]</span>控制面连续 45 秒（三次心跳）收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。<span class="fn">[4]</span></p>
+        <div class="o-pop mk" data-n="2" style="left:462px;top:150px">
+          <div class="ph"><svg class="ic"><use href="#i-down"/></svg>See changes · §2 · 2 sentences changed</div>
+          <div class="cause"><svg class="ic"><use href="#i-merge"/></svg><span>After <a>缩短 runner 判离线时间</a> merged · <code>7f3e2a1</code> · Oct 9 10:47</span></div>
+          <div class="o-del">Runner 的心跳间隔是 heartbeatInterval，默认 <mark>30</mark> 秒。</div>
+          <div class="o-ins">Runner 的心跳间隔是 heartbeatInterval，默认 <mark>15</mark> 秒。<span class="fn">[3]</span></div>
+          <div class="o-del">控制面连续 <mark>90</mark> 秒收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。</div>
+          <div class="o-ins">控制面连续 <mark>45</mark> 秒<mark>（三次心跳）</mark>收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。<span class="fn">[4]</span></div>
+          <div class="older">Earlier changes (1) ›</div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">1</span><span class="tag new">新</span><span class="tag word">新词</span>你上次打开这篇之后被重写的节，标题旁有带蓝点的 <b>Updated</b>，沿用 <code>wikiSeenKey</code>。没改过的节什么都不画。</li>
+      <li><span class="n">2</span><span class="tag new">新</span>点开是 <b>See changes</b>：一行原因，这里是哪次合并（会话或任务的标题 + sha），也可能是常规维护或生成；下面逐句对照，和评论卡同一个组件；<b>Earlier changes</b> 最多再看 4 版。</li>
+      <li><span class="n">3</span>页头的更新行写最近一次的原因。</li>
+    </ol>
+    <div class="sep"></div>
+    <div><b>谁触发</b>：Orbit 记下的每个「进 main」：会话合并回执、落地线进 main 的回执。每个 space 最多排一个跟进作业，后来的事实并进去；只写这些提交改到、又被这一节引用的文件所在的节，指纹没变不调模型；追赶期照跑；不带评论的节每天至多 40 节，超出的交给常规维护。没有事实不排作业。</div>
+  </div>
+</div>
+<div class="row" style="margin-top:22px">
+  <div class="o-act mk" data-n="4">
+    <div class="ah">Recently changed <span class="hint"><span class="bd"></span>2 new since you last looked</span></div>
+    <div class="ar"><span class="bd"></span><span class="who">Docs</span><span class="mid"><a>Rewrote 3.1 §3 · 7.1 §2</a><div class="sub">after 缩短 runner 判离线时间 merged · <code>7f3e2a1</code> · 3 sentences changed · 1 comment resolved</div></span><span class="acts2"><span>See changes</span><span class="t">2m ago</span></span></div>
+    <div class="ar"><span class="bd"></span><span class="who">Docs</span><span class="mid"><a>Rewrote 5.1 §4</a><div class="sub">after 项目集成线 merged to main · <code>a91c03e</code> · 1 sentence changed</div></span><span class="acts2"><span>See changes</span><span class="t">1h ago</span></span></div>
+    <div class="ar grey"><span class="bd old"></span><span class="who">Docs</span><span class="mid">6 sections left for the next maintenance run<div class="sub">today’s 40 follow-up sections are used · change it in Wiki settings</div></span><span class="acts2"><span class="t">3h ago</span></span></div>
+    <div class="ar"><span class="bd old"></span><span class="who">Wiki maintenance</span><span class="mid"><a>Applied 5 changes</a><div class="sub">5 Auto</div></span><span class="acts2"><span>View run</span><span class="red">Revert run…</span><span class="t">3h ago</span></span></div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">4</span><span class="tag new">新</span>Activity 的 <b>Recently changed</b> 多一种行 <b>Docs</b>：一次跟进一行，写重写了哪些节、因为哪次合并、改了几句、顺带解决了几条评论；点 See changes 看逐句对照。跟进被每日节数闸挡住时，也写一行灰的，说剩下的交给常规维护。蓝点的规则照旧。</li>
+    </ol>
+  </div>
+</div>
+</div>
+</div>
+<script>
+// Place the floating Comment button above its selection, align rail cards with their sentence, and the tooltip under it.
+window.drawMarks = function () {
+  for (const el of document.querySelectorAll('[data-above]')) {
+    const t = document.getElementById(el.dataset.above), host = el.offsetParent;
+    const r = t.getClientRects()[0], h = host.getBoundingClientRect();
+    el.style.left = (r.left - h.left + r.width / 2 - el.offsetWidth / 2) + 'px';
+    el.style.top = (r.top - h.top - el.offsetHeight - 12) + 'px';
+  }
+  for (const el of document.querySelectorAll('[data-below]')) {
+    const t = document.getElementById(el.dataset.below), host = el.offsetParent;
+    const rs = t.getClientRects(), r = rs[rs.length - 1], h = host.getBoundingClientRect();
+    el.style.left = (r.left - h.left) + 'px';
+    el.style.top = (r.bottom - h.top + 8) + 'px';
+    el.style.visibility = 'visible';
+  }
+  for (const el of document.querySelectorAll('[data-pin]')) {
+    const t = document.getElementById(el.dataset.pin), host = el.offsetParent;
+    const r = t.getClientRects()[0], h = host.getBoundingClientRect();
+    el.style.left = (h.width - 23) + 'px';
+    el.style.top = (r.top - h.top + 3) + 'px';
+  }
+  for (const el of document.querySelectorAll('[data-tipabove]')) {
+    const t = document.getElementById(el.dataset.tipabove), host = el.offsetParent;
+    const r = t.getClientRects()[0], h = host.getBoundingClientRect();
+    el.style.left = (r.left - h.left) + 'px';
+    el.style.top = (r.top - h.top - el.offsetHeight - 6) + 'px';
+    el.style.visibility = 'visible';
+  }
+  for (const el of document.querySelectorAll('[data-align]')) {
+    const t = document.getElementById(el.dataset.align);
+    const rail = el.parentElement;
+    const top = t.getClientRects()[0].top - rail.getBoundingClientRect().top - 40;
+    el.style.marginTop = Math.max(0, top) + 'px';
+  }
+};
+</script>
+</body>
+</html>

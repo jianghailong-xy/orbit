@@ -1,4 +1,5 @@
-import { CheckCircleFilled, CloseCircleFilled, LoadingOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, CloseCircleFilled, DownOutlined, LoadingOutlined, RightOutlined } from '@ant-design/icons';
+import { useState, type ReactNode } from 'react';
 import {
   agentDetail,
   agentLane,
@@ -15,7 +16,15 @@ import {
  * in the conversation and under its row in the tray; the words are @orbit/shared's
  * `taskProgressCopy`, which OrbitKit's `TaskProgressView` draws word for word.
  */
-export function TaskProgressBlock({ progress }: { progress: TaskProgress }) {
+export function TaskProgressBlock({
+  progress,
+  renderAgent,
+  defaultOpen = false,
+}: {
+  progress: TaskProgress;
+  renderAgent?: (agent: TaskProgressAgent) => ReactNode;
+  defaultOpen?: boolean;
+}) {
   const groups = progressPhaseGroups(progress);
   const footer = progressFooter(progress);
   if (groups.length === 0 && !footer) return null;
@@ -32,7 +41,7 @@ export function TaskProgressBlock({ progress }: { progress: TaskProgress }) {
             </div>
           )}
           {g.agents.map((a) => (
-            <AgentRow key={a.index} agent={a} />
+            <AgentRow key={a.index} agent={a} transcript={renderAgent?.(a)} defaultOpen={defaultOpen} />
           ))}
         </div>
       ))}
@@ -41,16 +50,45 @@ export function TaskProgressBlock({ progress }: { progress: TaskProgress }) {
   );
 }
 
-function AgentRow({ agent }: { agent: TaskProgressAgent }) {
+function AgentRow({
+  agent,
+  transcript,
+  defaultOpen,
+}: {
+  agent: TaskProgressAgent;
+  transcript?: ReactNode;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const lane = agentLane(agent);
   const now = agentNow(agent);
   const detail = agentDetail(agent);
-  return (
-    <div className={`agent-progress-agent is-${lane}`} title={agent.error || undefined}>
+  const row = (
+    <>
+      {transcript && <span className="agent-progress-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>}
       <AgentLaneIcon lane={lane} />
       <span className="agent-progress-label">{agent.label}</span>
       {now && <span className="agent-progress-now">{now}</span>}
       {detail && <span className="agent-progress-detail">{detail}</span>}
+    </>
+  );
+  return (
+    <div className="agent-progress-entry">
+      {transcript ? (
+        <button
+          type="button"
+          className={`agent-progress-agent is-${lane}`}
+          title={agent.error || undefined}
+          aria-label={`${agent.label} transcript`}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {row}
+        </button>
+      ) : (
+        <div className={`agent-progress-agent is-${lane}`} title={agent.error || undefined}>{row}</div>
+      )}
+      {transcript && open && <div className="agent-progress-transcript">{transcript}</div>}
     </div>
   );
 }

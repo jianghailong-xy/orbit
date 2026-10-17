@@ -1,0 +1,87 @@
+### bgj_26d2de4bf33f
+{"step":"setup","landedOn":"http://localhost:2376/runners/register","adminTokensSaved":true,"shot":"00-setup.png"}
+{"step":"login-before","methods":{"password":true,"google":false,"googleSignup":false},"continueWithGoogleButtons":0,"shot":"01-login-before.png"}
+{"step":"error","message":"locator.waitFor: Error: strict mode violation: getByText('Authorized redirect URI') resolved to 2 elements:\n    1) <div class=\"admin-signin-label\">Authorized redirect URI</div> aka getByText('Authorized redirect URI', { exact: true })\n    2) <div class=\"admin-signin-hint\">Register it, exactly as written, as an authorized…</div> aka getByText('Register it, exactly as')\n\nCall log:\n  - waiting for getByText('Authorized redirect URI') to be visible\n\n    at openSignInSettings (/var/tmp/google-doc-e2e/drive.mjs:61:51)\n    at async signin-empty (/var/tmp/google-doc-e2e/drive.mjs:161:5)\n    at async file:///var/tmp/google-doc-e2e/drive.mjs:310:5"}
+
+### bgj_c48f17c20c21
+{"step":"signin-empty","state":{"badge":"Google sign-in Off","redirectUri":"http://localhost:2376/api/auth/google/callback","switchOn":"false","clientId":"","secretPlaceholder":"Paste the client secret"},"shot":"02-admin-signin-empty.png"}
+{"step":"signin-fill","existingAccountsOnlyChecked":"true","state":{"badge":"Google sign-in On","redirectUri":"http://localhost:2376/api/auth/google/callback","switchOn":"true","clientId":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","secretPlaceholder":"Saved — enter a new one to replace it"},"adminGetAnswer":{"enabled":true,"clientId":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","hasSecret":true,"signupPolicy":"EXISTING_ACCOUNTS","redirectUri":"http://localhost:2376/api/auth/google/callback"},"secretInAnswer":false,"shot":"03-admin-signin-on.png"}
+{"step":"login-google","methods":{"password":true,"google":true,"googleSignup":false},"signupHint":0,"shot":"04-login-google.png"}
+
+### bgj_66159d99357e
+{"step":"policy-open","warning":"Any Google account can create an account on this server: its first sign-in opens a member account with no password.","shot":"05-admin-open-warning.png","methods":{"password":true,"google":true,"googleSignup":true},"loginHint":"New to Orbit? Continue with Google to create an account.","loginShot":"06-login-signup-hint.png"}
+{"step":"policy-existing","methods":{"password":true,"google":true,"googleSignup":false},"state":{"badge":"Google sign-in On","redirectUri":"http://localhost:2376/api/auth/google/callback","switchOn":"true","clientId":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","secretPlaceholder":"Saved — enter a new one to replace it"}}
+{"step":"users-google-only","dialogNote":["No password is set: they sign in with the Google account of this email address."],"dialogShot":"07-add-user-google-only.png","rows":["owner@orbit.test Owner ADMIN Password Oct 7, 2026 Reset password Access tokens Make member Delete","new.member@gmail.com New Member MEMBER Google · pending Oct 7, 2026 Reset password Access tokens Make admin Delete"],"usersShot":"08-users-badges.png"}
+{"step":"google-roundtrip","startPath":"/login","loginUrl":"http://localhost:2376/login","googleUrlNow":"https://accounts.google.com/signin/oauth/error","googleTitle":"","googleText":"Loading Sign in with Google Access blocked: Authorization Error The OAuth client was not found. If you are a developer of this app, see error details. Error 401: invalid_client English (United States) Help Privacy Terms","authorizationRequest":{"endpoint":"https://accounts.google.com/o/oauth2/v2/auth","response_type":"code","client_id":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","redirect_uri":"http://localhost:2376/api/auth/google/callback","scope":"openid email profile","prompt":"select_account","code_challenge_method":"S256","state":"<43 chars>","nonce":"<43 chars>","code_challenge":"<43 chars>"},"googleShot":"09-google-login.png","callback":{"finalUrl":"http://localhost:2376/login","message":"Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings."},"shot":"10-callback-login.png"}
+{"step":"google-roundtrip","startPath":"/enroll?code=DOC-WALK-1","loginUrl":"http://localhost:2376/login?next=%2Fenroll%3Fcode%3DDOC-WALK-1","googleUrlNow":"https://accounts.google.com/signin/oauth/error","googleTitle":"","googleText":"Loading Sign in with Google Access blocked: Authorization Error The OAuth client was not found. If you are a developer of this app, see error details. Error 401: invalid_client English (United States) Help Privacy Terms","authorizationRequest":{"endpoint":"https://accounts.google.com/o/oauth2/v2/auth","response_type":"code","client_id":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","redirect_uri":"http://localhost:2376/api/auth/google/callback","scope":"openid email profile","prompt":"select_account","code_challenge_method":"S256","state":"<43 chars>","nonce":"<43 chars>","code_challenge":"<43 chars>"},"googleShot":"09-google-enroll.png","callback":{"finalUrl":"http://localhost:2376/login?next=%2Fenroll%3Fcode%3DDOC-WALK-1","message":"Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings."},"shot":"10-callback-enroll.png"}
+{"step":"google-roundtrip","startPath":"/cli-login?code=DOC-WALK-2","loginUrl":"http://localhost:2376/login?next=%2Fcli-login%3Fcode%3DDOC-WALK-2","googleUrlNow":"https://accounts.google.com/signin/oauth/error","googleTitle":"","googleText":"Loading Sign in with Google Access blocked: Authorization Error The OAuth client was not found. If you are a developer of this app, see error details. Error 401: invalid_client English (United States) Help Privacy Terms","authorizationRequest":{"endpoint":"https://accounts.google.com/o/oauth2/v2/auth","response_type":"code","client_id":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","redirect_uri":"http://localhost:2376/api/auth/google/callback","scope":"openid email profile","prompt":"select_account","code_challenge_method":"S256","state":"<43 chars>","nonce":"<43 chars>","code_challenge":"<43 chars>"},"googleShot":"09-google-cli-login.png","callback":{"finalUrl":"http://localhost:2376/login?next=%2Fcli-login%3Fcode%3DDOC-WALK-2","message":"Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings."},"shot":"10-callback-cli-login.png"}
+{"step":"other-address","startedAt":"http://127.0.0.1:2376/login","redirect_uri":"http://localhost:2376/api/auth/google/callback","callback":{"finalUrl":"http://localhost:2376/login","message":"That Google sign-in expired or was finished in a different browser. Continue with Google again from this page."},"shot":"11-other-address.png"}
+{"step":"insecure","url":"http://orbit-doc.test:2376/login","isSecureContext":false,"message":"Couldn't start Google sign-in in this browser. Make sure Orbit is open over HTTPS, then try again.","shot":"12-insecure-context.png"}
+
+### bgj_7b24f38ada83
+302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 302 429 
+{"statusCode":429,"message":"too many Google sign-ins started from this address, slow down"}
+other address: 302
+
+### bgj_12a9c03aa8a0
+{"step":"google-roundtrip","startPath":"/login","loginUrl":"http://localhost:2376/login","googleUrlNow":"https://accounts.google.com/signin/oauth/error","googleTitle":"","googleText":"Loading Sign in with Google Access blocked: Authorization Error The OAuth client was not found. If you are a developer of this app, see error details. Error 401: invalid_client English (United States) Help Privacy Terms","authorizationRequest":{"endpoint":"https://accounts.google.com/o/oauth2/v2/auth","response_type":"code","client_id":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","redirect_uri":"http://localhost:2376/api/auth/google/callback","scope":"openid email profile","prompt":"select_account","code_challenge_method":"S256","state":"<43 chars>","nonce":"<43 chars>","code_challenge":"<43 chars>"},"googleShot":"09-google-rotated.png","callback":{"finalUrl":"http://localhost:2376/login","message":"Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings."},"shot":"10-callback-rotated.png"}
+{"step":"secret-again","state":{"badge":"Google sign-in On","redirectUri":"http://localhost:2376/api/auth/google/callback","switchOn":"true","clientId":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","secretPlaceholder":"Saved — enter a new one to replace it"}}
+{"step":"google-roundtrip","startPath":"/login","loginUrl":"http://localhost:2376/login","googleUrlNow":"https://accounts.google.com/signin/oauth/error","googleTitle":"","googleText":"Loading Sign in with Google Access blocked: Authorization Error The OAuth client was not found. If you are a developer of this app, see error details. Error 401: invalid_client English (United States) Help Privacy Terms","authorizationRequest":{"endpoint":"https://accounts.google.com/o/oauth2/v2/auth","response_type":"code","client_id":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","redirect_uri":"http://localhost:2376/api/auth/google/callback","scope":"openid email profile","prompt":"select_account","code_challenge_method":"S256","state":"<43 chars>","nonce":"<43 chars>","code_challenge":"<43 chars>"},"googleShot":"09-google-reentered.png","callback":{"finalUrl":"http://localhost:2376/login","message":"Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings."},"shot":"10-callback-reentered.png"}
+1:run-api: PROVIDER_SECRET_KEY replaced for this run
+623:[Nest] 1201172  - 10/07/2026, 3:04:17 PM   ERROR [GoogleSignIn] the saved Google client secret cannot be decrypted; an administrator must enter it again
+624:[Nest] 1201172  - 10/07/2026, 3:04:25 PM    WARN [GoogleSignIn] Google's token endpoint refused the code: 401 invalid_client
+
+### bgj_1d1c7229cf13
+{"step":"off","state":{"badge":"Google sign-in Off","redirectUri":"http://localhost:2376/api/auth/google/callback","switchOn":"false","clientId":"000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com","secretPlaceholder":"Saved — enter a new one to replace it"},"methods":{"password":true,"google":false,"googleSignup":false},"startLandedOn":"http://localhost:2376/login","message":"Google sign-in is turned off on this Orbit server. Sign in with your email and password, or ask an administrator to turn it on.","continueWithGoogleButtons":0,"shot":"13-off.png"}
+ provider | enabled |                                 client_id                                 | secret_enc_len | plaintext_stored |   signup_policy   | updated_by_set |         updated_at         
+----------+---------+---------------------------------------------------------------------------+----------------+------------------+-------------------+----------------+----------------------------
+ google   | f       | 000000000000-orbit-doc-walkthrough-placeholder.apps.googleusercontent.com |             86 | f                | EXISTING_ACCOUNTS | t              | 2026-10-07 07:04:41.356+00
+(1 row)
+
+ status  | intent | client | live | has_ticket 
+---------+--------+--------+------+------------
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+ PENDING | LOGIN  | WEB    | t    | f
+(31 rows)
+
+ identities 
+------------
+          0
+(1 row)
+
+        email         |  role  | passwordless |       created_at        
+----------------------+--------+--------------+-------------------------
+ owner@orbit.test     | ADMIN  | f            | 2026-10-07 07:01:58.967
+ new.member@gmail.com | MEMBER | t            | 2026-10-07 07:02:44.455
+(2 rows)
+
+

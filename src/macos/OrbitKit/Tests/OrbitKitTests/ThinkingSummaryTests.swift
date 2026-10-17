@@ -55,6 +55,16 @@ final class ThinkingSummaryTests: XCTestCase {
         XCTAssertEqual(label, "Thought for 12s · 2.3k chars")
     }
 
+    func testSettledLabelPrefersTheDurationTheRunnerStored() {
+        // The span is only what this client happened to watch; the stored figure is what every
+        // reload reads, so the row says the same thing before and after one.
+        let label = ThinkingSummary.settledLabel(
+            chars: 2300, blocks: 1,
+            startedTs: "2026-09-15T17:51:52.000Z", finishedTs: "2026-09-15T17:52:04.000Z", thinkingMs: 4200)
+
+        XCTAssertEqual(label, "Thought for 4s · 2.3k chars")
+    }
+
     func testSettledLabelStatesSizeAloneWhenNoClockSurvived() {
         // A transcript rehydrated from disk, or one recorded by a runner that stamped no `ts`:
         // size still answers "is opening this worth it".

@@ -1,7 +1,6 @@
-import { useId, useState, type JSX, type ReactNode } from 'react';
+import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, Modal } from 'antd';
 import type {
   CoordinatorFuseUsage,
   CoordinatorWakeups,
@@ -10,26 +9,45 @@ import type {
   OpenItemFacts,
   OpenItemHandling,
   OpenItemKind,
+  ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
 import { api } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { checkDuration } from '../lib/checkDuration';
+import {
+  CHAT_ABOUT_THIS,
+  CHAT_REFUSAL_LABEL,
+  EXCEPTION_CHAT_PREFIX,
+  PAUSE_CHAT_PREFIX,
+  coordinatorChatPath,
+  itemChat,
+  type CoordinatorChatSubject,
+} from '../lib/coordinatorChat';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
-import { projectOpenItemsQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
+  DEFAULT_MAIN_BRANCH,
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
   START_ROW_OWN,
+  mainBranchName,
+  startMainBranch,
+  startPageRow,
   startRequestSummary,
 } from '../lib/projectStart';
-import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
+import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { ago, formatSpan } from '../lib/watches';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Textarea } from './ui/Textarea';
 
 /**
  * What a project still owes somebody, and what its coordinator has left to spend
@@ -197,7 +215,7 @@ export function ownerLine(row: ProjectOpenItemRow, now: number): string {
 /** The label each door wears. A row draws the ways in; a card draws those AND the three that write.
  *  An action this map has no label for is not drawn at all, which is what stops a name the server
  *  has not listed from becoming a press nobody can answer. */
-const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
+export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   REVIEW: 'Review',
   ANSWER: 'Answer',
   RESUME: 'Resume',
@@ -207,6 +225,58 @@ const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   CANCEL_TASK: 'Cancel task',
   ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
 };
+
+/** Exported names keep the web/native copy contract readable while ACTION_LABEL stays literal for
+ * parity readers that extract the action table from this source. */
+export const REVIEW_ACTION_LABEL = ACTION_LABEL.REVIEW!;
+export const RETRY_ACTION_LABEL = ACTION_LABEL.RETRY!;
+export const RERUN_CHECK_ACTION_LABEL = 'Re-run the check';
+export const REQUIRED_ACTION_FALLBACK = 'Review what needs to happen next.';
+export const RETRY_REASON_FALLBACK = 'Retry the integration after the failed check.';
+export const PROMOTION_RETRY_CONSEQUENCE = 'The current candidate is checked again with your reason.';
+/** What a RETRY on a `TASK_FAILED` row does — the run-again door, not an integration rerun: the
+ *  task starts a new run and the item closes with that fact (`taskFailureDoors`, §4.7). */
+export const TASK_RUN_AGAIN_CONSEQUENCE = 'The task runs again and this item closes with it.';
+/** What the card says when that press was refused — the browser's spelling of the console's own
+ *  headline for the same door (`OwnerItemCards.notRunAgain`). */
+export const TASK_RUN_AGAIN_ERROR = 'The task was not run again';
+
+/** Shared action copy. Swift parity tests read this source, so keep every user-facing action
+ * consequence in one exported map rather than scattering variants through card branches. */
+export const ACTION_CONSEQUENCES: Readonly<Record<string, string>> = {
+  REVIEW: 'Open the current merge card.',
+  ANSWER: 'Record your answer on the coordinator question.',
+  RESUME: 'The coordinator resumes and held work can continue.',
+  OPEN_COORDINATOR: 'Open the coordinator conversation.',
+  OPEN_TASK_SESSION: 'Open the task session to repair the branch.',
+  RETRY: 'A new integration attempt is queued with your reason.',
+  CANCEL_TASK: 'The task is cancelled and its open item closes.',
+  ASK_COORDINATOR_AGAIN: 'It goes back to the coordinator with a fresh escalation clock.',
+  MARK_HANDLED: 'Only if you dealt with it yourself. Your reason goes on the record.',
+};
+// Descriptive aliases keep the mapping discoverable to native-parity tooling and callers.
+export const OPEN_ITEM_ACTION_CONSEQUENCES = ACTION_CONSEQUENCES;
+export const ACTION_CONSEQUENCE = ACTION_CONSEQUENCES;
+
+function actionLabel(row: Pick<ProjectOpenItemRow, 'promotionId'>, action: OpenItemAction): string {
+  return action === 'RETRY' && row.promotionId != null
+    ? RERUN_CHECK_ACTION_LABEL
+    : ACTION_LABEL[action] ?? action;
+}
+
+function actionConsequence(
+  row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind'>,
+  action: OpenItemAction,
+): string {
+  if (action === 'RETRY') {
+    // Three doors under one name, each wearing the words for what it actually re-runs: a
+    // candidate's check, a task's landing, or — on a failed task — the task itself
+    // (`taskFailureDoors`).
+    if (row.promotionId != null) return PROMOTION_RETRY_CONSEQUENCE;
+    if (row.kind === 'TASK_FAILED') return TASK_RUN_AGAIN_CONSEQUENCE;
+  }
+  return ACTION_CONSEQUENCES[action] ?? '';
+}
 
 /** The presses that WRITE, and the only ones. Two things turn on the same answer: that a card draws
  *  them only where this row carries what they would need, and that a ROW leaves them out — a row is
@@ -221,19 +291,31 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
 ]);
 
 /** Whether this row carries what a writing press would need, in the same shape `actionHref` answers
- *  for the links: the two task presses act on the task the item is about, and the third is about
- *  the item itself, which every row carries. */
+ *  for the links: the third is about the item itself, which every row carries. RETRY is three doors
+ *  under one name (§4.7, `open-item-doors.ts` integration-retry-task / -promotion / task-start) —
+ *  the landing rerun a TASK answers, the re-check of the merge a CANDIDATE answers, and the run
+ *  again a FAILED task answers — so it is drawn when the row carries either address, and `RetryPress`
+ *  sends it through the door its kind and its `promotionId` decide. */
 function writeTarget(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
-  return action === 'ASK_COORDINATOR_AGAIN' ? row.itemId : row.taskId;
+  if (action === 'ASK_COORDINATOR_AGAIN') return row.itemId;
+  if (action === 'RETRY') return row.taskId ?? row.promotionId ?? null;
+  return row.taskId;
 }
 
 /** Where a press goes, or null when this row does not carry the address it would need. */
-function actionHref(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
+function actionHref(
+  row: ProjectOpenItemRow,
+  action: OpenItemAction,
+  currentPromotionId?: string | null,
+): string | null {
   switch (action) {
     case 'REVIEW':
       // The merge card, mounted beside this list by both hosts — the same anchor the question's
       // press uses, and for the same reason: one merge, confirmed in one place (§7.5).
-      return row.promotionId ? `#promotion-${row.promotionId}` : null;
+      return row.promotionId != null
+        && (currentPromotionId === undefined || row.promotionId === currentPromotionId)
+        ? `#promotion-${row.promotionId}`
+        : null;
     case 'ANSWER':
       // The question's own card, already on this page and in the coordinator's conversation. An
       // anchor rather than a second copy of the card: one question, answered in one place.
@@ -254,25 +336,25 @@ function actionHref(row: ProjectOpenItemRow, action: OpenItemAction): string | n
 }
 
 /** The presses a ROW offers: the server's own list, minus the ones that write, in its order. */
-function drawableActions(row: ProjectOpenItemRow): OpenItemAction[] {
+function drawableActions(row: ProjectOpenItemRow, currentPromotionId?: string | null): OpenItemAction[] {
   return row.actions.filter(
     (action) =>
       ACTION_LABEL[action] != null
       && !WRITE_ACTIONS.has(action)
-      && (action === 'RESUME' || actionHref(row, action) != null),
+      && (action === 'RESUME' || actionHref(row, action, currentPromotionId) != null),
   );
 }
 
 /** The presses a CARD offers: the same list, with the writing presses drawn as the buttons they
  *  are — each one only where this row carries what it would need. Never more than the server
  *  listed, so a card cannot come to offer something no door answers. */
-function cardActions(row: ProjectOpenItemRow): OpenItemAction[] {
+function cardActions(row: ProjectOpenItemRow, currentPromotionId?: string | null): OpenItemAction[] {
   return row.actions.filter(
     (action) =>
       ACTION_LABEL[action] != null
       && (WRITE_ACTIONS.has(action)
         ? writeTarget(row, action) != null
-        : action === 'RESUME' || actionHref(row, action) != null),
+        : action === 'RESUME' || actionHref(row, action, currentPromotionId) != null),
   );
 }
 
@@ -289,10 +371,12 @@ const LEADING_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
 /** What the next step is for a kind of exception, where the design names one (mock 7 ①②③).
  *
  *  A conflict and a failed combined-tree check both want the branch fixed, so the way onto that
- *  branch leads and a whole new run is the way to take the same step differently. A task that failed
- *  wants another run, so `Retry` leads and the run is the alternative. A kind this map has no answer
- *  for — an integration error, which the mock does not draw — keeps the server's own order rather
- *  than being handed a step nobody asked for. */
+ *  branch leads. A whole new run is the way to take the same step differently where the server
+ *  offers one — a failed check's cell does, a conflict's does not (the rerun is refused for a
+ *  conflict), and the card draws what the server listed rather than inventing the pair. A task that
+ *  failed wants another run, so `Retry` leads and the run is the alternative. A kind this map has no
+ *  answer for — an integration error, which the mock does not draw — keeps the server's own order
+ *  rather than being handed a step nobody asked for. */
 const KIND_NEXT_STEP: Partial<Record<OpenItemKind, OpenItemAction>> = {
   INTEGRATION_CONFLICT: 'OPEN_TASK_SESSION',
   INTEGRATION_CHECK_FAILED: 'OPEN_TASK_SESSION',
@@ -306,8 +390,16 @@ const KIND_NEXT_STEP: Partial<Record<OpenItemKind, OpenItemAction>> = {
  *  Both come from the server's own list, so a card never offers a door that is not there: a kind
  *  whose next step the server does not list leads with whatever the server put first, and a card
  *  whose pair is missing a door draws the one it has. */
-function leadingDoors(row: ProjectOpenItemRow, actions: OpenItemAction[]): OpenItemAction[] {
+function leadingDoors(
+  row: ProjectOpenItemRow,
+  actions: OpenItemAction[],
+): OpenItemAction[] {
   const leading = actions.filter((action) => LEADING_ACTIONS.has(action));
+  // T9's primaryAction is the server's decision about the first door. Keep the old kind fallback
+  // only for rows from an older server that did not send it.
+  if (row.primaryAction && actions.includes(row.primaryAction)) {
+    return [row.primaryAction, ...actions.filter((action) => action !== row.primaryAction)];
+  }
   // An item that has become the owner's leads with the way back to the coordinator that should have
   // had it (§4.7): the work is not the owner's to run again, and the server lists no RETRY for one.
   const next = row.assignee === 'OWNER' ? 'ASK_COORDINATOR_AGAIN' : KIND_NEXT_STEP[row.kind];
@@ -320,6 +412,7 @@ function ItemLink({
   action,
   primary,
   quiet,
+  currentPromotionId,
 }: {
   row: ProjectOpenItemRow;
   action: OpenItemAction;
@@ -329,9 +422,10 @@ function ItemLink({
   /** The CARD's quiet weight for the doors it is not asking for (mock 7, 方案 B): a text link rather
    *  than the boxed way-in a row draws, so the press beside it is what the eye lands on. */
   quiet?: boolean;
+  currentPromotionId?: string | null;
 }): JSX.Element {
-  const href = actionHref(row, action) ?? '#';
-  const label = ACTION_LABEL[action] ?? action;
+  const href = actionHref(row, action, currentPromotionId) ?? '#';
+  const label = actionLabel(row, action);
   const className = quiet
     ? 'project-open-item-quiet'
     : `project-open-item-action${primary ? ' is-primary' : ''}`;
@@ -368,10 +462,12 @@ export function FusePauseCard({
   projectId,
   row,
   now,
+  onChat,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element {
   const qc = useQueryClient();
   const resume = useMutation({
@@ -384,22 +480,31 @@ export function FusePauseCard({
     },
   });
   return (
-    <ItemCard row={row} heading={row.title} tone="owner" now={now} id={`fuse-${row.itemId}`}>
-      <Button
-        type="primary"
-        size="small"
-        loading={resume.isPending}
-        disabled={row.fuseEpisodeId == null}
-        onClick={() => resume.mutate()}
-      >
-        Resume
-      </Button>
+    <ItemCard
+      row={row}
+      heading={row.title}
+      tone="owner"
+      now={now}
+      id={`fuse-${row.itemId}`}
+      onChat={onChat}
+    >
+      <div className="project-open-item-door">
+        <Button
+          variant="primary"
+          size="small"
+          loading={resume.isPending}
+          disabled={row.fuseEpisodeId == null}
+          onClick={() => resume.mutate()}
+        >
+          Resume
+        </Button>
+        <span className="project-open-item-consequence">{ACTION_CONSEQUENCES.RESUME}</span>
+      </div>
       {resume.isError ? (
         <Alert
           type="error"
-          showIcon
           className="project-open-item-error"
-          message="The coordinator was not resumed"
+          title="The coordinator was not resumed"
           description={(resume.error as Error).message}
         />
       ) : null}
@@ -423,22 +528,55 @@ function refreshItemWriteViews(qc: QueryClient, projectId: string, taskId?: stri
   ]).then(() => undefined);
 }
 
-/**
- * Retry: start the failed task again, through the same door every other Run press in this app
- * sends (`POST /tasks/:id/execute`, with the press's own `triggerId` so a resend of it is one run
- * rather than a second).
- *
- * Nothing here writes the ITEM: the server clears the task's FAILED as the run is dispatched and
- * answers the failure on the same fact, so the card closes because the task moved (§4.2). A
- * refusal — a run already working on this task, a replaced attempt — is drawn where the press was
- * made, in the notice the rest of the app uses for it, which is also the way into that run.
- */
+/** Retry a task through T5's owner-owned integration door. */
 export function retryTaskMutationOptions(qc: QueryClient, projectId: string, taskId: string) {
   return {
-    // A press whose ANSWER was lost is resent under the same name; a new press draws a new one.
+    mutationFn: ({ reason }: { reason: string }) =>
+      api(
+        `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/integration/retry`,
+        { method: 'POST', body: { reason } },
+      ),
+    onSuccess: () => refreshItemWriteViews(qc, projectId, taskId),
+  };
+}
+
+/** Re-run the current promotion candidate through T5's promotion integration door. */
+export function retryPromotionMutationOptions(
+  qc: QueryClient,
+  projectId: string,
+  promotionId: string,
+) {
+  return {
+    mutationFn: ({ reason }: { reason: string }) =>
+      api(
+        `/projects/${encodeURIComponent(projectId)}/promotions/${encodeURIComponent(promotionId)}/integration/retry`,
+        { method: 'POST', body: { reason } },
+      ),
+    onSuccess: () => Promise.all([
+      refreshItemWriteViews(qc, projectId),
+      qc.invalidateQueries({ queryKey: projectPromotionQuery(projectId).queryKey }),
+    ]).then(() => undefined),
+  };
+}
+
+/**
+ * Run a failed task again through the owner's own door — the press its `TASK_FAILED` card's Retry
+ * makes (`taskFailureDoors` names this route, §4.7): `POST /tasks/:id/execute`, the very route Run
+ * now presses, which clears the failure and starts a new run.
+ *
+ * An integration retry cannot stand in for it: a landing delivers a finished task's work, and this
+ * task is the one that failed, so that door answers 409 by design (J-T1b). The token names the
+ * press exactly as every other Run press names its own (`newRunRequestToken`), so a lost answer is
+ * resent as the same request rather than as a second run.
+ */
+export function runTaskAgainMutationOptions(qc: QueryClient, projectId: string, taskId: string) {
+  return {
     ...runRequestResend,
     mutationFn: ({ triggerId }: { triggerId: string }) =>
-      api(`/tasks/${encodeURIComponent(taskId)}/execute`, { method: 'POST', body: { triggerId } }),
+      api(`/tasks/${encodeURIComponent(taskId)}/execute`, {
+        method: 'POST',
+        body: { triggerId },
+      }),
     onSuccess: () => refreshItemWriteViews(qc, projectId, taskId),
   };
 }
@@ -567,7 +705,7 @@ function PressButton({
     return (
       <Button
         className={`project-open-item-quiet${danger ? ' is-danger' : ''}`}
-        type="link"
+        variant="link"
         size="small"
         loading={pending}
         onClick={onClick}
@@ -579,7 +717,7 @@ function PressButton({
   return (
     <Button
       size="small"
-      type={tier === 'primary' ? 'primary' : 'default'}
+      variant={tier === 'primary' ? 'primary' : 'default'}
       danger={danger}
       loading={pending}
       onClick={onClick}
@@ -594,9 +732,8 @@ function PressError({ headline, error }: { headline: string; error: Error }): JS
   return (
     <Alert
       type="error"
-      showIcon
       className="project-open-item-error"
-      message={headline}
+      title={headline}
       description={error.message}
     />
   );
@@ -612,21 +749,47 @@ function RetryPress({
   tier: PressTier;
 }): JSX.Element {
   const qc = useQueryClient();
-  const retry = useMutation(retryTaskMutationOptions(qc, projectId, row.taskId ?? ''));
-  const error = retry.error instanceof Error ? retry.error : null;
+  // A failed task's Retry is the run-again door the row's holder owns (`taskFailureDoors`, §4.7):
+  // the task starts a new run through the owner's own route, never the integration retry, which
+  // refuses every task that is not DONE. Everything else keeps the two integration reruns, chosen
+  // by the candidate the row names.
+  const runAgain = row.kind === 'TASK_FAILED';
+  const integration = useMutation(
+    row.promotionId != null
+      ? retryPromotionMutationOptions(qc, projectId, row.promotionId)
+      : retryTaskMutationOptions(qc, projectId, row.taskId ?? ''),
+  );
+  const runTask = useMutation(runTaskAgainMutationOptions(qc, projectId, row.taskId ?? ''));
+  const failure = runAgain ? runTask : integration;
+  const error = failure.error instanceof Error ? failure.error : null;
   const conflict = error ? readTaskRunConflict(error) : null;
+  const label = actionLabel(row, 'RETRY');
+  const reason = row.requiredAction?.trim() || RETRY_REASON_FALLBACK;
   return (
     <>
       <PressButton
-        label={ACTION_LABEL.RETRY!}
+        label={label}
         tier={tier}
-        pending={retry.isPending}
-        onClick={() => retry.mutate({ triggerId: newRunRequestToken() })}
+        pending={runAgain ? runTask.isPending : integration.isPending}
+        onClick={() =>
+          runAgain
+            ? runTask.mutate({ triggerId: newRunRequestToken() })
+            : integration.mutate({ reason })
+        }
       />
       {conflict?.sessionId ? (
         <TaskRunHandoffNotice conflict={conflict} className="project-open-item-error" />
       ) : error ? (
-        <PressError headline="The task was not started" error={error} />
+        <PressError
+          headline={
+            runAgain
+              ? TASK_RUN_AGAIN_ERROR
+              : row.promotionId != null
+                ? 'The check was not re-run'
+                : 'The task integration was not retried'
+          }
+          error={error}
+        />
       ) : null}
     </>
   );
@@ -687,25 +850,42 @@ function CancelTaskPress({
         pending={cancel.isPending}
         onClick={() => setConfirming(true)}
       />
-      <Modal
+      <Dialog
+        className="project-open-item-dialog"
         open={confirming}
         title={CANCEL_TASK_MODAL_TITLE}
-        okText={CANCEL_TASK_MODAL_OK}
-        okButtonProps={{ danger: true, loading: cancel.isPending }}
-        cancelText="Back"
-        onOk={() => cancel.mutate(undefined, { onSuccess: () => setConfirming(false) })}
-        // A refusal leaves the modal open over the row it was about: the reader gets to read what
+        // A refusal leaves the dialog open over the row it was about: the reader gets to read what
         // the server said and decide again, rather than losing the question with the answer.
-        onCancel={() => {
+        onClose={() => {
           cancel.reset();
           setConfirming(false);
         }}
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                cancel.reset();
+                setConfirming(false);
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              danger
+              loading={cancel.isPending}
+              onClick={() => cancel.mutate(undefined, { onSuccess: () => setConfirming(false) })}
+            >
+              {CANCEL_TASK_MODAL_OK}
+            </Button>
+          </>
+        }
       >
         <p>{CANCEL_TASK_MODAL_BODY}</p>
         {cancel.isError ? (
           <PressError headline="The task was not cancelled" error={cancel.error as Error} />
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }
@@ -772,30 +952,41 @@ function MarkHandledPress({
         pending={mark.isPending}
         onClick={() => setAsking(true)}
       />
-      <Modal
+      <Dialog
+        className="project-open-item-dialog"
         open={asking}
         title={MARK_HANDLED_MODAL_TITLE}
-        okText={MARK_HANDLED}
-        // Empty is not a press: the server requires the reason, so the confirm waits for one. The
-        // handler holds the same line, because a disabled button is not a rule about what is sent.
-        okButtonProps={{ disabled: trimmed === '', loading: mark.isPending }}
-        cancelText="Back"
-        onOk={() => {
-          if (trimmed === '') return;
-          mark.mutate(trimmed, {
-            onSuccess: () => {
-              setNote('');
-              setAsking(false);
-            },
-          });
-        }}
-        onCancel={close}
+        onClose={close}
+        footer={
+          <>
+            <Button onClick={close}>Back</Button>
+            {/* Empty is not a press: the server requires the reason, so the confirm waits for one.
+                The handler holds the same line, because a disabled button is not a rule about what
+                is sent. */}
+            <Button
+              variant="primary"
+              disabled={trimmed === ''}
+              loading={mark.isPending}
+              onClick={() => {
+                if (trimmed === '') return;
+                mark.mutate(trimmed, {
+                  onSuccess: () => {
+                    setNote('');
+                    setAsking(false);
+                  },
+                });
+              }}
+            >
+              {MARK_HANDLED}
+            </Button>
+          </>
+        }
       >
         <p>{MARK_HANDLED_MODAL_BODY}</p>
         <label className="project-open-item-reason-label" htmlFor={fieldId}>
           Why is it no longer open?
         </label>
-        <Input.TextArea
+        <Textarea
           id={fieldId}
           value={note}
           maxLength={2000}
@@ -805,7 +996,7 @@ function MarkHandledPress({
         {mark.isError ? (
           <PressError headline="The item was not closed" error={mark.error as Error} />
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }
@@ -852,10 +1043,17 @@ export function OpenItemCard({
   projectId,
   row,
   now,
+  currentPromotionId,
+  onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  currentPromotionId?: string | null;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
 }): JSX.Element {
   return (
     <ItemCard
@@ -863,8 +1061,10 @@ export function OpenItemCard({
       heading={itemHeading(row)}
       tone="coordinator"
       now={now}
+      onChat={onChat}
+      main={main}
     >
-      <CardActions projectId={projectId} row={row} />
+      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
     </ItemCard>
   );
 }
@@ -1025,32 +1225,34 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
   );
 }
 
-/** What the coordinator's rerun is, in the card's words: a task's landing, or a candidate's check. */
+/** What the coordinator's rerun is, in the card's words: a task's landing, or a candidate's check —
+ *  of the merge into `main`, the project's main branch by name. */
 function rerunOf(
   row: Pick<ProjectOpenItemRow, 'promotionId'>,
-  jobKind?: OpenItemHandling['jobKind'],
+  jobKind: OpenItemHandling['jobKind'] | undefined,
+  main: string,
 ): string {
   const check = jobKind ? jobKind === 'CHECK_PROMOTION' : row.promotionId != null;
-  return check ? 'the re-check of the merge into main' : 'the rerun of the landing';
+  return check ? `the re-check of the merge into ${main}` : 'the rerun of the landing';
 }
 
 /** §4.7 H1, in one line: which rerun, which generation, where it is, and since when it was asked. */
-function handlingLine(row: ProjectOpenItemRow, handling: OpenItemHandling, now: number): string {
+function handlingLine(row: ProjectOpenItemRow, handling: OpenItemHandling, now: number, main: string): string {
   const where = handling.state === 'RUNNING' ? 'is running' : 'is queued';
-  return `${rerunOf(row, handling.jobKind)} — generation ${handling.generation} ${where} · asked `
+  return `${rerunOf(row, handling.jobKind, main)} — generation ${handling.generation} ${where} · asked `
     + `${ago(handling.startedAt, now)}`;
 }
 
 /** §4.7 H2/H3, in one line: how the coordinator's handling of an item ended. */
-function outcomeLine(row: ProjectOpenItemRow): string | null {
+function outcomeLine(row: ProjectOpenItemRow, main: string): string | null {
   const outcome = row.outcome;
   if (!outcome) return null;
   if (outcome.resolution === 'RETRIED') {
-    return `${rerunOf(row)} failed again — a new item took its place`;
+    return `${rerunOf(row, undefined, main)} failed again — a new item took its place`;
   }
   if (outcome.jobId == null) return 'closed by the coordinator, with its reason';
   return row.promotionId != null
-    ? 'the re-check of the merge into main passed'
+    ? `the re-check of the merge into ${main} passed`
     : 'the rerun of the landing landed';
 }
 
@@ -1062,18 +1264,20 @@ function outcomeLine(row: ProjectOpenItemRow): string | null {
 function ItemHandlingRows({
   row,
   now,
+  main,
 }: {
   row: ProjectOpenItemRow;
   now: number;
+  main: string;
 }): JSX.Element | null {
   const handling = row.handling ?? null;
   const outcome = row.outcome ?? null;
   if (!handling && !outcome) return null;
-  const said = outcome ? outcomeLine(row) : null;
+  const said = outcome ? outcomeLine(row, main) : null;
   const reason = outcome ? outcome.note : handling?.reason ?? null;
   return (
     <div className="project-open-item-facts project-open-item-handling">
-      {handling ? <FactRow label={HANDLING_TAG}>{handlingLine(row, handling, now)}</FactRow> : null}
+      {handling ? <FactRow label={HANDLING_TAG}>{handlingLine(row, handling, now, main)}</FactRow> : null}
       {outcome && said ? (
         <FactRow label={outcome.resolution === 'RETRIED' ? SUPERSEDED_TAG : HANDLED_TAG}>
           {said}
@@ -1093,6 +1297,154 @@ function ItemHandlingRows({
       {reason ? <FactRow label="Reason">{reason}</FactRow> : null}
     </div>
   );
+}
+
+/** The card's fact block in words, for a chat about the item: the same rows `ItemFactRows` draws,
+ *  minus the check's output — a coordinator that wants it reads the item. */
+function itemFactLines(row: ProjectOpenItemRow): string[] {
+  const facts = row.facts;
+  if (!facts) return [];
+  const lines: string[] = [];
+  if (facts.task) lines.push(`Task: ${facts.task.title}`);
+  if (facts.targetRef) {
+    const sha = facts.targetSha ? ` at ${facts.targetSha.slice(0, 7)}` : '';
+    lines.push(`Into: ${facts.targetRef}${sha}${facts.nothingLanded ? ' · nothing landed' : ''}`);
+  }
+  if (facts.files.length > 0) lines.push(`Files: ${facts.files.join(' · ')}`);
+  if (facts.review) {
+    const declared = facts.review.declaredPaths;
+    lines.push(`Declared: ${declared.length > 0 ? declared.join(' · ') : 'no paths'}`);
+  }
+  if (facts.check) {
+    lines.push(`Check: ${facts.check.command} · ${checkVerdict(facts.check)} after `
+      + `${checkDuration(facts.check.durationMs)}`);
+  }
+  if (facts.branchUnchanged) {
+    lines.push(
+      'Branch: unchanged — the task passed on its own branch; it fails only on the combined tree',
+    );
+  }
+  if (facts.failure) {
+    lines.push(`How: ${howFailed(facts.failure)}`);
+    lines.push(`Retries: ${chainStanding(facts.failure)}`);
+  }
+  if (facts.errorCode) lines.push(`Error: ${facts.errorCode}`);
+  return lines;
+}
+
+/** How an item that is the owner's became theirs, as the clause a chat about it carries — the
+ *  escalation heading's story, told about the item rather than to the reader. */
+function ownerClause(row: ProjectOpenItemRow, now: number): string {
+  switch (row.assigneeReason) {
+    case 'ESCALATED':
+      return `the owner’s now — no one acted on it for ${waitedBeforeEscalation(row)}`;
+    case 'COORDINATOR_ENDED':
+      return 'the owner’s now — the coordinator conversation ended';
+    case 'CHAIN_LIMIT':
+      return 'the owner’s now — the 3rd failure in this chain';
+    case 'HANDED_OVER':
+      return 'the owner’s now — the coordinator handed it over';
+    case 'NO_COORDINATOR':
+      return 'the owner’s — the project had no coordinator when it opened';
+    default:
+      return `waiting on the owner for ${formatSpan(waitedMs(row, now))}`;
+  }
+}
+
+/** Who asked for the rerun an item's handling is, or was: the owner's own door (0380), or the
+ *  coordinator's. A settled row says it in `resolvedBy`, an open one in `handling.userId`. */
+function handledByOwner(row: ProjectOpenItemRow): boolean {
+  return row.outcome ? row.outcome.resolvedBy === 'USER' : row.handling?.userId != null;
+}
+
+/**
+ * Where an item's handling stands (§4.7), as the line a chat about it carries: whose move it is,
+ * since when, and what is in flight. The stage is the server's (`ProjectOpenItemRow.chat`). `main` is
+ * the project's main branch by name, which a rerun of a merge check names.
+ */
+export function itemStandingLine(row: ProjectOpenItemRow, now: number, main: string = DEFAULT_MAIN_BRANCH): string {
+  if (row.kind === 'FUSE_PAUSED') {
+    return 'the coordinator stopped itself, and only the owner can lift it';
+  }
+  const handling = row.handling ?? null;
+  switch (itemChat(row).stage) {
+    case 'HANDLING': {
+      const rerun = handling
+        ? `being handled — ${handlingLine(row, handling, now, main)}`
+        : 'being handled by the coordinator';
+      // The clock can hand an item to the owner while its rerun still runs (§4.7 H4): both are true,
+      // and whose move it is next is the second half.
+      return row.assignee === 'OWNER' ? `${rerun}; ${ownerClause(row, now)}` : rerun;
+    }
+    case 'WITH_COORDINATOR': {
+      const left = row.escalateAt == null ? null : Date.parse(row.escalateAt) - now;
+      return `waiting on the coordinator for ${formatSpan(waitedMs(row, now))}`
+        + (left != null && left > 0 ? ` — it goes to the owner in ${formatSpan(left)}` : '');
+    }
+    case 'WITH_OWNER':
+      return ownerClause(row, now);
+    case 'HANDLED': {
+      const owner = handledByOwner(row);
+      // The card's `outcomeLine` names the coordinator for a close with no job; the owner's own
+      // "Mark as handled" is one too, and the chat says whose it was.
+      const how = owner && row.outcome?.jobId == null ? 'closed by hand, with its reason' : outcomeLine(row, main);
+      return `handled by ${owner ? 'the owner' : 'the coordinator'} ${ago(row.outcome?.resolvedAt, now)}`
+        + `${how ? ` — ${how}` : ''}`;
+    }
+    case 'SUPERSEDED':
+      return `superseded — ${handledByOwner(row) ? 'the owner’s' : 'the coordinator’s'} rerun failed `
+        + 'again, and a new item took its place';
+  }
+}
+
+/** What the composer's bar says once "Chat about this" armed it for this item. */
+export function openItemChatBanner(row: ProjectOpenItemRow): string {
+  return (row.kind === 'FUSE_PAUSED' ? PAUSE_CHAT_PREFIX : EXCEPTION_CHAT_PREFIX) + row.title;
+}
+
+/**
+ * What "Chat about this" carries ahead of the reader's message (§4.8): the project, the item and
+ * what failed, and where its handling stands — because the conversation it is read in may not have
+ * this item in front of it any more: it is a row of the project's list, not a turn of that
+ * transcript. The ids ride along so an answer about an item that has since moved can be told apart
+ * from one about this one (the native ends' `ExceptionCards.chatContext` does the same).
+ *
+ * It describes; it authorizes nothing. A rerun, a merge or a close is still a door somebody presses.
+ */
+export function openItemChatContext({
+  projectTitle,
+  projectId,
+  row,
+  now,
+  main = DEFAULT_MAIN_BRANCH,
+}: {
+  projectTitle: string | null;
+  projectId: string;
+  row: ProjectOpenItemRow;
+  now: number;
+  /** The project's main branch by name, which a re-check of the merge into main names. */
+  main?: string;
+}): string {
+  const what = row.kind === 'FUSE_PAUSED' ? 'pause' : 'exception';
+  const reason = row.handling?.reason || row.outcome?.note || null;
+  const ids = [
+    `project ${projectId}`,
+    `open item ${row.itemId}`,
+    ...(row.taskId ? [`task ${row.taskId}`] : []),
+    ...(row.promotionId ? [`promotion ${row.promotionId}`] : []),
+    `waiting since ${row.waitingSince}`,
+  ];
+  return [
+    `About the ${what}${projectTitle ? ` in “${projectTitle}”` : ''}:`,
+    '',
+    row.title,
+    ...(row.detailLine ? [row.detailLine] : []),
+    ...itemFactLines(row),
+    `Where it stands: ${itemStandingLine(row, now, main)}`,
+    ...(reason ? [`${handledByOwner(row) ? 'The owner’s' : 'The coordinator’s'} reason: ${reason}`] : []),
+    '',
+    `(${ids.join(' · ')})`,
+  ].join('\n');
 }
 
 /** The state word a card's head wears (§4.7), or null for an item nobody is handling. */
@@ -1124,11 +1476,13 @@ function handlingTag(
 function CardActions({
   projectId,
   row,
+  currentPromotionId,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
+  currentPromotionId?: string | null;
 }): JSX.Element {
-  const actions = cardActions(row);
+  const actions = cardActions(row, currentPromotionId);
   // The pair in its own order — the step this kind is asking for, then the alternative beside it —
   // and the rest of the server's list after it: a card reads left to right as what to do, what else
   // would do it, and the ways in and out.
@@ -1138,24 +1492,36 @@ function CardActions({
     action === primary ? 'primary' : action === secondary ? 'secondary' : 'link';
   const ordered = [...leading, ...actions.filter((action) => !leading.includes(action))];
   const handClosable = row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind);
+  const door = (action: OpenItemAction): JSX.Element => (
+    <div className="project-open-item-door" key={action}>
+      {LEADING_ACTIONS.has(action) || WRITE_ACTIONS.has(action) ? (
+        <ItemPress
+          row={row}
+          action={action}
+          projectId={projectId}
+          tier={tierOf(action)}
+        />
+      ) : (
+        <ItemLink
+          row={row}
+          action={action}
+          primary={action === primary}
+          quiet={action !== primary}
+          currentPromotionId={currentPromotionId}
+        />
+      )}
+      <span className="project-open-item-consequence">{actionConsequence(row, action)}</span>
+    </div>
+  );
   return (
     <>
-      {ordered.map((action) =>
-        // A door a card may lead with, or one it writes through, has a press of its own; everything
-        // else an item lists is a door to look through, and is drawn as the way in it is.
-        LEADING_ACTIONS.has(action) || WRITE_ACTIONS.has(action) ? (
-          <ItemPress
-            key={action}
-            row={row}
-            action={action}
-            projectId={projectId}
-            tier={tierOf(action)}
-          />
-        ) : (
-          <ItemLink key={action} row={row} action={action} quiet />
-        ),
-      )}
-      {handClosable ? <MarkHandledPress row={row} projectId={projectId} /> : null}
+      {ordered.map(door)}
+      {handClosable ? (
+        <div className="project-open-item-door" key="MARK_HANDLED">
+          <MarkHandledPress row={row} projectId={projectId} />
+          <span className="project-open-item-consequence">{ACTION_CONSEQUENCES.MARK_HANDLED}</span>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -1172,15 +1538,22 @@ export function EscalatedItemCard({
   projectId,
   row,
   now,
+  currentPromotionId,
+  onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  currentPromotionId?: string | null;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
 }): JSX.Element {
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
-    <ItemCard row={row} heading={heading} tone="owner" now={now}>
-      <CardActions projectId={projectId} row={row} />
+    <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
+      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
     </ItemCard>
   );
 }
@@ -1188,18 +1561,24 @@ export function EscalatedItemCard({
 /**
  * An exception the coordinator's handling has ended (§4.7 H5): handled — its rerun landed or
  * passed, or it closed the item with a reason — or superseded by the card its failed rerun opened.
- * The same card, at the same place in the conversation, with nothing left to press: what it was
- * about, how it ended, and the coordinator's reason.
+ * The same card, at the same place in the conversation, with no door left on it: what it was about,
+ * how it ended, and the coordinator's reason. What it still has is the conversation — about how a
+ * handled one was handled; a superseded one says the chat belongs to the item that replaced it.
  */
 export function SettledItemCard({
   row,
   now,
+  onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   row: ProjectOpenItemRow;
   now: number;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
 }): JSX.Element {
   return (
-    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} />
+    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} onChat={onChat} main={main} />
   );
 }
 
@@ -1211,14 +1590,59 @@ function settledLine(row: ProjectOpenItemRow, now: number): string {
     : `Handled by the coordinator · ${when}`;
 }
 
-/** The chrome all three share: the head with its provenance mark, the fact block, the actions, and
- *  the footer that says who owes an answer and by when. */
+/**
+ * "Chat about this" (§4.8): a message to the project's coordinator conversation about this item,
+ * carrying what the card says (`openItemChatContext`). Its own row under the doors, because it is
+ * not one of them — it presses nothing on the item, so it is drawn on every card, whoever holds the
+ * item and however its handling ended — and a refusal is said beside it, in the server's terms,
+ * rather than leaving a grey button to explain itself.
+ *
+ * In the coordinator's conversation the host arms its composer (`onChat`); anywhere else the press
+ * opens that conversation, which arms it on arrival (`coordinatorChatPath`).
+ */
+function ItemChatRow({
+  row,
+  onChat,
+}: {
+  row: ProjectOpenItemRow;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+}): JSX.Element {
+  const navigate = useNavigate();
+  const chat = itemChat(row);
+  // A host with a composer of its own can always take the message; one without has to know where
+  // the conversation is.
+  const refusal = chat.refusal ?? (!onChat && !chat.sessionId ? 'NO_COORDINATOR' : null);
+  const subject: CoordinatorChatSubject = { kind: 'item', row };
+  return (
+    <div className="project-open-item-chat">
+      <Button
+        size="small"
+        disabled={refusal != null}
+        onClick={() => {
+          if (refusal != null) return;
+          if (onChat) onChat(subject);
+          else if (chat.sessionId) navigate(coordinatorChatPath(chat.sessionId, subject));
+        }}
+      >
+        {CHAT_ABOUT_THIS}
+      </Button>
+      {refusal != null ? (
+        <span className="project-open-item-chat-refusal">{CHAT_REFUSAL_LABEL[refusal]}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** The chrome all three share: the head with its provenance mark, the fact block, the actions, the
+ *  chat, and the footer that says who owes an answer and by when. */
 function ItemCard({
   row,
   heading,
   tone,
   now,
   id,
+  onChat,
+  main = DEFAULT_MAIN_BRANCH,
   children,
 }: {
   row: ProjectOpenItemRow;
@@ -1229,6 +1653,10 @@ function ItemCard({
   tone: 'owner' | 'coordinator' | 'settled';
   now: number;
   id?: string;
+  /** The host's composer, when the card is drawn in the conversation a chat about it goes to. */
+  onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
   children?: ReactNode;
 }): JSX.Element {
   const tag = handlingTag(row);
@@ -1253,9 +1681,25 @@ function ItemCard({
         </span>
       </div>
       <div className="approval-body is-plan project-open-item-body">
+        <div className="project-open-item-next">
+          <p className="project-open-item-required-action">
+            {row.requiredAction ?? row.detailLine ?? REQUIRED_ACTION_FALLBACK}
+          </p>
+          {row.handledBy?.length ? (
+            <p className="project-open-item-handled-by">
+              {row.handledBy.map((task, index) => (
+                <span key={task.taskId}>
+                  {index > 0 ? ' · ' : ''}
+                  {`The coordinator is fixing this in ${task.title}.`}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {children ? <div className="project-open-item-actions">{children}</div> : null}
+        </div>
         <ItemFactRows row={row} />
-        <ItemHandlingRows row={row} now={now} />
-        <div className="project-open-item-actions">{children}</div>
+        <ItemHandlingRows row={row} now={now} main={main} />
+        <ItemChatRow row={row} onChat={onChat} />
       </div>
       <div className="project-open-item-foot">
         {tone === 'settled' ? settledLine(row, now) : ownerLine(row, now)}
@@ -1271,25 +1715,49 @@ export function ItemAsCard({
   projectId,
   row,
   now,
+  currentPromotionId,
+  onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  currentPromotionId?: string | null;
+  /** "Chat about this" into the host's own composer — given by the coordinator conversation, which
+   *  is where the chat is held (`ItemChatRow`). */
+  onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names: the host's to give,
+   *  off a read it holds. */
+  main?: string;
 }): JSX.Element | null {
   if (row.kind === 'FUSE_PAUSED') {
-    return <FusePauseCard projectId={projectId} row={row} now={now} />;
+    return <FusePauseCard projectId={projectId} row={row} now={now} onChat={onChat} />;
   }
   // Ended by the coordinator's handling (§4.7 H5): the card stays where it was, saying how it ended.
-  if (row.outcome) return <SettledItemCard row={row} now={now} />;
+  if (row.outcome) return <SettledItemCard row={row} now={now} onChat={onChat} main={main} />;
   // A question has its own card, mounted beside this one by both hosts — drawing it again here
   // would be two cards answering one question, and only one of them could win. A merge approval is
   // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
   // land and what the checks came to actually live.
   if (hasCardOfItsOwn(row)) return null;
   return escalationHeading(row, now) != null ? (
-    <EscalatedItemCard projectId={projectId} row={row} now={now} />
+    <EscalatedItemCard
+      projectId={projectId}
+      row={row}
+      now={now}
+      currentPromotionId={currentPromotionId}
+      onChat={onChat}
+      main={main}
+    />
   ) : (
-    <OpenItemCard projectId={projectId} row={row} now={now} />
+    <OpenItemCard
+      projectId={projectId}
+      row={row}
+      now={now}
+      currentPromotionId={currentPromotionId}
+      onChat={onChat}
+      main={main}
+    />
   );
 }
 
@@ -1363,8 +1831,21 @@ function ordered(items: ProjectOpenItemsView | undefined): ProjectOpenItemRow[] 
   return [...paused, ...rest];
 }
 
-function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number }): JSX.Element {
-  const actions = drawableActions(row);
+function OpenItemRowView({
+  row,
+  now,
+  currentPromotionId,
+  main,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+  currentPromotionId?: string | null;
+  main: string;
+}): JSX.Element {
+  const actions = drawableActions(row, currentPromotionId);
+  const firstAction = row.primaryAction && actions.includes(row.primaryAction)
+    ? row.primaryAction
+    : actions[0];
   return (
     <li className={`project-open-item-row is-${row.assignee === 'OWNER' ? 'owner' : 'coordinator'}`}>
       <span className="project-open-item-dot" aria-hidden="true" />
@@ -1382,7 +1863,7 @@ function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number })
         {row.handling ? (
           <div className="project-open-item-line is-handling" title={row.handling.reason}>
             <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
-            {` ${handlingLine(row, row.handling, now)}`}
+            {` ${handlingLine(row, row.handling, now, main)}`}
           </div>
         ) : null}
       </div>
@@ -1395,8 +1876,13 @@ function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number })
       <div className="project-open-item-press">
         {/* The first door the server listed is the primary one; the rest are reachable from the
             card this row expands to. A row with none says so by drawing none. */}
-        {actions[0] ? (
-          <ItemLink row={row} action={actions[0]} primary={row.assignee === 'OWNER'} />
+        {firstAction ? (
+          <ItemLink
+            row={row}
+            action={firstAction}
+            primary={row.assignee === 'OWNER'}
+            currentPromotionId={currentPromotionId}
+          />
         ) : null}
       </div>
     </li>
@@ -1414,14 +1900,17 @@ function StartRequestRowView({
   now,
   onReview,
   reviewing,
+  standing,
 }: {
   row: ProjectOpenItemRow;
   now: number;
   onReview?: () => void;
   reviewing?: boolean;
+  /** The project's integration read, for the main branch the start card opens with. */
+  standing: ProjectIntegrationView | null;
 }): JSX.Element {
   const settings = row.startRequest?.settings ?? null;
-  const line = settings ? startRequestSummary(settings) : row.detailLine;
+  const line = settings ? startRequestSummary(settings, startMainBranch(settings.upstreamRef, standing)) : row.detailLine;
   return (
     <li className="project-open-item-row is-owner" data-kind="START_REQUEST">
       <span className="project-open-item-dot" aria-hidden="true" />
@@ -1475,6 +1964,77 @@ function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
   );
 }
 
+/** The owner-facing DONE_REQUEST row opens the same settlement card as the transcript. */
+function DoneRequestRowView({
+  row,
+  now,
+  onReview,
+  reviewing,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+  onReview?: () => void;
+  reviewing?: boolean;
+}): JSX.Element {
+  const detail = row.doneRequest
+    ? `${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`
+    : row.detailLine;
+  return (
+    <li className="project-open-item-row is-owner project-open-item-done-request" data-kind="DONE_REQUEST">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-state is-ready-to-close">{PROJECT_DONE_COPY.readyToClose}</div>
+        <div className="project-open-item-title" title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>
+        {detail ? <div className="project-open-item-line" title={detail}>{detail}</div> : null}
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+        <time className="project-open-item-age" dateTime={row.waitingSince}>{waitingLabel(row, now)}</time>
+      </div>
+      <div className="project-open-item-press">
+        {onReview ? (
+          <button type="button" className="project-open-item-action is-primary" disabled={reviewing} onClick={onReview}>
+            {ACTION_LABEL.REVIEW}
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/** The owner's own "Record as done…" while no coordinator has asked: a grey hint, because nobody is
+ *  waiting on it — so it is not counted with what needs them. */
+function OwnDoneRowView({ onRecord }: { onRecord: () => void }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner is-own-start is-hint project-open-item-done-own" data-kind="DONE">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <button type="button" className="project-open-item-title project-open-item-start" onClick={onRecord}>
+          {PROJECT_DONE_COPY.recordAsDoneRow}
+        </button>
+        <div className="project-open-item-line">{PROJECT_DONE_COPY.notAskedYet}</div>
+      </div>
+      <div className="project-open-item-who" />
+      <div className="project-open-item-press" />
+    </li>
+  );
+}
+
+/**
+ * The coordinator's open DONE_REQUEST, as the open-items entry `ProjectOpenItems` polls holds it, or
+ * null. A passive read of that one cache line: it starts no request and adds no entry of its own.
+ */
+export function useOpenDoneRequest(projectId: string | null | undefined): ProjectOpenItemRow | null {
+  const qc = useQueryClient();
+  const subscribe = useCallback((onChange: () => void) => qc.getQueryCache().subscribe(onChange), [qc]);
+  const read = (): ProjectOpenItemRow | null => (
+    projectId
+      ? (qc.getQueryData(projectOpenItemsQuery(projectId).queryKey)?.doneRequest ?? null)
+      : null
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
 /**
  * The project page's Open items card (mock 2 ②): what is waiting, in the two groups that say who is
  * expected to act, oldest first in both.
@@ -1494,6 +2054,9 @@ export function ProjectOpenItems({
   onReviewStart,
   reviewingStart,
   onStartProject,
+  onReviewDone,
+  reviewingDone,
+  onRecordDone,
 }: {
   projectId: string | null | undefined;
   now?: number;
@@ -1505,28 +2068,47 @@ export function ProjectOpenItems({
   reviewingStart?: boolean;
   /** Start… while nobody has asked: the same card, over the page. */
   onStartProject?: () => void;
+  onReviewDone?: () => void;
+  reviewingDone?: boolean;
+  onRecordDone?: () => void;
 }): JSX.Element | null {
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
     refetchInterval: 20_000,
   });
+  // The candidate mounted beside this list, for the Review press a row may offer: `?` is the read
+  // still on its way, which keeps the old drawable set until it answers.
+  const currentPromotion = useQuery({
+    ...projectPromotionQuery(projectId ?? ''),
+    enabled: Boolean(projectId),
+    refetchInterval: 20_000,
+  });
+  const currentPromotionId = currentPromotion.isFetched
+    ? currentPromotion.data?.promotionId ?? null
+    : undefined;
+  // The integration read the page's integration row holds (one query key): the project's main
+  // branch, which a rerun of a merge check names, and the one the start card opens with.
+  const integration = useQuery({ ...projectIntegrationQuery(projectId ?? ''), enabled: Boolean(projectId) });
+  const standing = integration.data ?? null;
+  const main = mainBranchName(standing?.upstreamRef);
   // The pause is drawn as a card above the groups and counted in neither: it is not something
   // waiting on a person the way the rows are, it is the reason some of them are waiting.
   const paused = (items.data?.needsYou ?? []).filter((row) => row.kind === 'FUSE_PAUSED');
-  const startRequest = started === false ? (items.data?.startRequest ?? null) : null;
+  const start = startPageRow(started, items.data);
+  const startRequest = start?.kind === 'asked' ? start.row : null;
+  const doneRequest = items.data?.doneRequest ?? null;
   const needsYou = [
     ...(startRequest ? [startRequest] : []),
-    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED'),
+    ...(doneRequest ? [doneRequest] : []),
+    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
-  // Only once the read has answered: a request still on its way is not a project nobody asked for.
-  const ownStart = started === false && items.data !== undefined && !startRequest && onStartProject
-    ? onStartProject
-    : null;
+  const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
+  const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart)
+    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -1540,11 +2122,12 @@ export function ProjectOpenItems({
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || ownStart ? (
+      {needsYou.length > 0 || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
             {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
+            {ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView
@@ -1553,9 +2136,24 @@ export function ProjectOpenItems({
                   now={now}
                   onReview={onReviewStart}
                   reviewing={reviewingStart}
+                  standing={standing}
+                />
+              ) : row === doneRequest ? (
+                <DoneRequestRowView
+                  key={row.itemId}
+                  row={row}
+                  now={now}
+                  onReview={onReviewDone}
+                  reviewing={reviewingDone}
                 />
               ) : (
-                <OpenItemRowView key={row.itemId} row={row} now={now} />
+                <OpenItemRowView
+                  key={row.itemId}
+                  row={row}
+                  now={now}
+                  currentPromotionId={currentPromotionId}
+                  main={main}
+                />
               ),
             )}
           </ul>
@@ -1566,7 +2164,13 @@ export function ProjectOpenItems({
           <div className="project-open-items-group">{WITH_COORDINATOR_GROUP}</div>
           <ul className="project-open-items-list">
             {withCoordinator.map((row) => (
-              <OpenItemRowView key={row.itemId} row={row} now={now} />
+              <OpenItemRowView
+                key={row.itemId}
+                row={row}
+                now={now}
+                currentPromotionId={currentPromotionId}
+                main={main}
+              />
             ))}
           </ul>
         </>

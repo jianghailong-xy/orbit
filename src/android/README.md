@@ -5,7 +5,8 @@ A03 adds instance selection, login/logout, rotating authentication, a reusable R
 and AndroidKeyStore credential storage. A04 supplies foreground realtime/cache recovery;
 A05 adds the semantic theme, authenticated directory and object navigation. A06 adds real
 session reading and long content. Composing, full task/project/wiki/watch pages, notifications
-and release signing belong to their feature tasks.
+belong to their feature tasks. A14 adds [the signed APK on every `v*` release, versions and
+in-app updates](docs/release.md), with [explicit release workflow isolation](docs/release-workflows.md).
 The iOS installed version is still being established by A01; no repository revision or
 "latest beta" is treated as that frozen baseline.
 
@@ -31,6 +32,7 @@ The iOS installed version is still being established by A01; no repository revis
 | Compose BOM | 2025.08.01 | Fixed stable UI family; no dynamic versions or automatic "latest" upgrades. |
 | Material 3 | 1.4.0 | Explicit stable override: 1.3.2's internal negative-anchor threshold closes a slowly dragged drawer even after its midpoint. The 1.4 drawer uses Foundation; the same slow-drag regression fails on 1.3.2 and passes on 1.4.0. |
 | Activity / Navigation Compose | 1.10.1 / 2.9.3 | Small stable activity and back-stack shell, compatible with this SDK/compiler. |
+| AndroidX Browser | 1.10.0 | Custom Tabs for Google sign-in (D1); needs compileSdk 36 and AGP 8.9.1+, both met. |
 | JUnit / Robolectric | 4.13.2 / 4.16.1 | Real JVM assertions and local execution of the Compose activity. |
 | Coroutines / serialization | 1.10.2 / 1.9.0 | Session-owned cancellation and JSON with the existing Kotlin 2.2.21 compiler. |
 | OkHttp | 4.12.0 | Cancellable JVM/Android HTTP and MockWebServer wire tests; no logging interceptor. |
@@ -235,3 +237,10 @@ emulator behavior; it is not a deployed-server login, physical-phone or iOS comp
 Evidence must retain those distinctions, including any failing exploratory runs. Real
 TalkBack traversal and spoken feedback, agreed physical devices, same-data iOS captures and approved deployment
 accounts still require direct evidence before A05's alignment criterion can be confirmed.
+
+A real server sends `"position": null` for every workspace nobody has dragged into place, which the fixture above
+also does. `DirectoryRealStackDeviceTest` checks the same on the isolated stack (`scripts/a11-stack`): it reads
+`GET /workspaces` as the signed-in account, needs at least one null position, and expects the Workspaces page and the
+drawer in iOS's order (OrbitKit `AgentListLogic.ordered`: the server's order, runner-less workspaces last). Run it with
+`A11_TEST=io.orbitd.android.directory.DirectoryRealStackDeviceTest` through `tasks-projects-stack-device-test.sh`;
+its arguments are `a11Seed` (only `server` is read), `ownerEmail` and `ownerPassword`.

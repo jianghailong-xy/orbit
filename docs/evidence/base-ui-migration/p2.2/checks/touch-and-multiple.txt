@@ -1,0 +1,37 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project chromium-light-phone --project webkit-dark-phone --grep multiple labels|multiple choices in Dialog|search option touch|multiple chip appearance
+
+[WebServer] (node:2367427) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 12 tests using 1 worker
+
+(node:2367519) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (5.2s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.4s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:588:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:627:1 › search option touch selects once and preserves input focus (1.0s)
+(node:2368422) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-light-phone] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (5.2s)
+  ✓   6 [chromium-light-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.4s)
+  ✓   7 [chromium-light-phone] › ui-migration/choices.browser.mjs:588:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   8 [chromium-light-phone] › ui-migration/choices.browser.mjs:627:1 › search option touch selects once and preserves input focus (1.1s)
+(node:2370387) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (3.9s)
+  ✓  10 [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.4s)
+  ✓  11 [webkit-dark-phone] › ui-migration/choices.browser.mjs:588:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+  ✓  12 [webkit-dark-phone] › ui-migration/choices.browser.mjs:627:1 › search option touch selects once and preserves input focus (976ms)
+
+  12 passed (28.4s)

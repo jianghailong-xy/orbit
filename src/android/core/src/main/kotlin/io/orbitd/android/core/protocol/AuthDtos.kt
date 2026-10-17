@@ -15,6 +15,16 @@ data class RefreshRequest(val refreshToken: String) {
     override fun toString() = "RefreshRequest([redacted])"
 }
 
+/** GET /auth/methods (docs/google-sign-in-design.md §6): what an instance's login page offers. */
+@Serializable
+data class SignInMethods(val password: Boolean = true, val google: Boolean = false, val googleSignup: Boolean = false)
+
+/** POST /auth/google/exchange (§4.3): the callback's one-time ticket and the sign-in's PKCE verifier. */
+@Serializable
+data class GoogleExchangeRequest(val ticket: String, val codeVerifier: String) {
+    override fun toString() = "GoogleExchangeRequest([redacted])"
+}
+
 @Serializable
 data class LoginResponse(val accessToken: String, val refreshToken: String, val user: User) {
     init {

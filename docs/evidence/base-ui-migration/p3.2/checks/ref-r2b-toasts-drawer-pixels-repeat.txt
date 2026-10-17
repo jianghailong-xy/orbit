@@ -1,0 +1,10 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (3.1s)
+  ✓  2 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.6s)
+  ✓  3 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (3.3s)
+  ✓  4 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.7s)
+  ✓  5 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.5s)
+
+  5 passed (25.1s)

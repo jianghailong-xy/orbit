@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- Design board 8 (web): the repair cards say "DeepSeek key". "现在" is drawn from today's Transcript.tsx
+     (DshRepairCard, the generic sign-in card) and dshRuntime.ts's dshRepair; "改后" is the proposal. The same
+     strings live in RunNeverStartedCard.tsx and the Swift mirror (RunnerSignInView.swift / DshRuntime.swift).
+     Hand-drawn on the shipped tokens; not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>8 · Repair cards say "DeepSeek key" (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 36px; align-items: start; }
+  .rows .case { grid-column: 1 / -1; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--border-subtle); font-size: 14px; font-weight: 650; }
+  .rows .case:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  .sess { padding: 14px 18px 16px; }
+  .sess .h { display: flex; align-items: baseline; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 12px; }
+  .sess .h b { font-size: 16px; font-weight: 600; }
+  .sess .h span { font-size: 12px; color: var(--text-3); }
+  .sess .w-msg { margin-bottom: 12px; }
+  .chg { background: var(--brand-tint); border-radius: 3px; padding: 0 1px; }
+  .w-btn.primary .chg { background: rgba(255, 255, 255, .24); color: #fff; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">8 · 修复卡文案（Web）：缺 key、key 被拒时说「DeepSeek key」</h1>
+  <p class="m-sub zh">会话里 key 出问题时，转录里出现这些卡片。「现在」是 main 上的文案，已经把「Providers」改成了「Infrastructure」。今天 DeepSeek Harness 的卡写「no DeepSeek Harness key」。同一把 DeepSeek key 在 Claude Code 会话里被拒，出的是另一张通用卡，写的是原始 slug。合并后这是同一把 DeepSeek key，三个 engine 的会话都改说「DeepSeek key」，并写出 key 的名字（DeepSeek key 可以有好几把）。只改文案：按钮、卡片样式和出现时机都不变。engine 本身出问题的三张卡不动：runner 太旧、没装、平台不支持。改动处用浅蓝底标出。同一套字符串也在 <code>RunNeverStartedCard</code>、iOS / macOS 的 <code>RunnerSignInView</code>、<code>DshRuntime.swift</code> 里，一起改。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 会话里的修复卡</div>
+    <div class="rows" id="rows"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const sess = (title, engine, card) => `<div class="w-app sess"><div class="h"><b>${title}</b><span>Failed · Open · 12m ago</span>
+  <span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">${eng(engine, 14)}</span></div>
+  <div class="w-msg">看看 CI 为什么红</div>${card}<div class="w-after">Session failed. Sending a message starts a new session.</div></div>`;
+const card = (t, b, acts) => `<div class="w-repair"><div class="t"><span class="w-warnico">▲</span>${t}</div><div class="b">${b}</div><div class="acts">${acts}</div></div>`;
+const btn = (t, p) => `<span class="w-btn sm${p ? ' primary' : ''}" style="height:30px;font-size:13px">${t}</span>`;
+const C = (t) => `<span class="chg">${t}</span>`;
+const retry = btn('Retry — re-send my last message');
+
+const rows = [
+  ['DeepSeek Harness 会话，没有可用的 DeepSeek key（被删、被停用）',
+    sess('No key', 'dsh', mk('A', card('DeepSeek Harness needs an API key',
+      'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.',
+      btn('Update the API key', true) + retry))),
+    sess('No key', 'dsh', mk(1, card(`DeepSeek Harness needs a ${C('DeepSeek key')}`,
+      `This session has no ${C('DeepSeek key')} to run on. Add or re-enable ${C('a DeepSeek key')} in Infrastructure, then send your message again.`,
+      btn('Update the API key', true) + retry)))],
+  ['DeepSeek Harness 会话，DeepSeek 拒绝了 key',
+    sess('Invalid key', 'dsh', mk('B', card('DeepSeek rejected this API key',
+      'Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.',
+      btn('Update the API key', true) + retry))),
+    sess('Invalid key', 'dsh', mk(2, card('DeepSeek rejected this API key',
+      `Update ${C('the DeepSeek key “DeepSeek 2”')} in Infrastructure, then send your message again.`,
+      btn('Update the API key', true) + retry)))],
+  ['Claude Code / OpenCode 会话用 DeepSeek key，被拒',
+    sess('Invalid key', 'claude', mk('C', `<div class="w-repair"><div class="t"><span class="w-warnico">▲</span>Provider authentication failed</div>
+      <div class="b">The API key for <code class="w-mono" style="color:var(--text-1)">deepseek</code> was rejected. Update it in Infrastructure, then send your message again.</div>
+      <div class="acts">${btn('Update the API key', true)}</div></div>`)),
+    sess('Invalid key', 'claude', mk(3, `<div class="w-repair"><div class="t"><span class="w-warnico">▲</span>Provider authentication failed</div>
+      <div class="b">${C('The DeepSeek key “DeepSeek”')} was rejected. Update it in Infrastructure, then send your message again.</div>
+      <div class="acts">${btn('Update the API key', true)}</div></div>`))],
+];
+document.getElementById('rows').innerHTML = rows.map(([title, now, after]) => `
+  <div class="case zh">${title}</div>
+  <div><div class="lbl zh"><span class="m-k">现在</span></div>${now}</div>
+  <div><div class="lbl zh"><span class="m-k new">改后</span></div>${after}</div>`).join('');
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>把 key 说成 engine 的：</b>「no DeepSeek Harness key」——合并以后没有「DeepSeek Harness key」这种东西。'],
+  ['B', '<b>「Connecting a key does not check it」</b>只对旧的 Harness key 成立：它没有默认模型，连接时不发测试请求。DeepSeek key 连接时会测（契约 §3.7，<code>DeepSeek Harness requires runtime prompt validation</code> 退役）。'],
+  ['C', '<b>同一把 DeepSeek key 在 Claude Code 会话里被拒，是另一张通用卡</b>，写的是原始 slug <code>deepseek</code>。'],
+  [1, '<b>缺 key：</b>标题「DeepSeek Harness needs a DeepSeek key」，正文改说「no DeepSeek key」「a DeepSeek key」。按钮不变：有 key 时打开那把 key，没有时去 <code>/infrastructure#keys</code>（main 已是如此）。'],
+  [2, '<b>被拒：</b>标题不变。正文写出是哪把 DeepSeek key（用户起的名字），去掉「Connecting a key does not check it」。'],
+  [3, '<b>Claude Code、OpenCode 会话的通用卡</b>也写「The DeepSeek key “…”」，不写 slug。别家的 key 照此写厂商名，如「The Moonshot key “Kimi (Moonshot)”」。'],
+  ['·', '<b>不变的：</b>卡片样式和位置、按钮（Update the API key、Retry — re-send my last message）、底下「Session failed…」那句；runner 太旧、没装、平台不支持的三张卡。'],
+]);
+finish();
+</script>
+</body>
+</html>

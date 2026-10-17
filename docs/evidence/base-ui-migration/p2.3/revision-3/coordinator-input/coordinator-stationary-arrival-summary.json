@@ -1,0 +1,109 @@
+{
+  "scenario": "A new result notification appears beneath a stationary mouse pointer",
+  "expected": "Pause the original six-second dwell while pointer remains over its action/card",
+  "results": [
+    {
+      "browser": "chromium",
+      "variant": "revision2",
+      "elapsedMs": 6502,
+      "remaining": 0,
+      "events": [
+        {
+          "type": "mouseout",
+          "target": "",
+          "time": 869.6999999880791
+        },
+        {
+          "type": "mouseover",
+          "target": "toast-action",
+          "time": 869.7999999821186
+        },
+        {
+          "type": "mouseover",
+          "target": "",
+          "time": 6864.199999988079
+        }
+      ],
+      "sourceCommit": "192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e",
+      "hoverPausePreserved": false,
+      "nativeMouseoverAtNotification": true,
+      "mousemoveCount": 0
+    },
+    {
+      "browser": "chromium",
+      "variant": "reference",
+      "elapsedMs": 6501,
+      "remaining": 1,
+      "events": [
+        {
+          "type": "mouseout",
+          "target": "",
+          "time": 447.5
+        },
+        {
+          "type": "mouseover",
+          "target": "toast-action",
+          "time": 447.59999999403954
+        }
+      ],
+      "sourceCommit": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+      "hoverPausePreserved": true,
+      "nativeMouseoverAtNotification": true,
+      "mousemoveCount": 0
+    },
+    {
+      "browser": "webkit",
+      "variant": "revision2",
+      "elapsedMs": 6504,
+      "remaining": 0,
+      "events": [
+        {
+          "type": "mouseout",
+          "target": "",
+          "time": 550
+        },
+        {
+          "type": "mouseover",
+          "target": "toast-action",
+          "time": 551
+        },
+        {
+          "type": "mouseout",
+          "target": "toast-layer",
+          "time": 6734
+        },
+        {
+          "type": "mouseover",
+          "target": "",
+          "time": 6734
+        }
+      ],
+      "sourceCommit": "192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e",
+      "hoverPausePreserved": false,
+      "nativeMouseoverAtNotification": true,
+      "mousemoveCount": 0
+    },
+    {
+      "browser": "webkit",
+      "variant": "reference",
+      "elapsedMs": 6506,
+      "remaining": 1,
+      "events": [
+        {
+          "type": "mouseout",
+          "target": "",
+          "time": 534
+        },
+        {
+          "type": "mouseover",
+          "target": "toast-action",
+          "time": 535
+        }
+      ],
+      "sourceCommit": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+      "hoverPausePreserved": true,
+      "nativeMouseoverAtNotification": true,
+      "mousemoveCount": 0
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (2.0s)
+  ✓  2 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.9s)
+  ✘  3 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (1.9s)
+  ✓  4 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (2.1s)
+  ✘  5 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (2.7s)
+
+
+  1) [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      179 |   await attach(info, 'native-entrance-transfer', frames);
+      180 |   expect(frames.some((s) => s.opacity > 0 && s.opacity < 1)).toBe(true);
+    > 181 |   expect(frames.some((s) => s.owner && s.opacity > 0 && s.opacity < 1)).toBe(true);
+          |                                                                         ^
+      182 |   for (let i = 1; i < frames.length; i++) expect(frames[i].opacity).toBeGreaterThanOrEqual(frames[i - 1].opacity);
+      183 |   expect(frames.at(-1).opacity).toBe(1);
+      184 | });
+        at /var/tmp/p32r2-ref/src/web/ui-migration/toasts-promotion.browser.mjs:181:73
+
+    Error Context: ../../../p32r2-final/ref-r2b-toasts-entrance-progress-repeat/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat2/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/ref-r2b-toasts-entrance-progress-repeat/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat2/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/ref-r2b-toasts-entrance-progress-repeat/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat2/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      179 |   await attach(info, 'native-entrance-transfer', frames);
+      180 |   expect(frames.some((s) => s.opacity > 0 && s.opacity < 1)).toBe(true);
+    > 181 |   expect(frames.some((s) => s.owner && s.opacity > 0 && s.opacity < 1)).toBe(true);
+          |                                                                         ^
+      182 |   for (let i = 1; i < frames.length; i++) expect(frames[i].opacity).toBeGreaterThanOrEqual(frames[i - 1].opacity);
+      183 |   expect(frames.at(-1).opacity).toBe(1);
+      184 | });
+        at /var/tmp/p32r2-ref/src/web/ui-migration/toasts-promotion.browser.mjs:181:73
+
+    Error Context: ../../../p32r2-final/ref-r2b-toasts-entrance-progress-repeat/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat4/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/ref-r2b-toasts-entrance-progress-repeat/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/ref-r2b-toasts-entrance-progress-repeat/toasts-promotion.browser.m-87f91-e-its-first-180ms-completes-webkit-light-phone-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+    [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes 
+  3 passed (15.2s)

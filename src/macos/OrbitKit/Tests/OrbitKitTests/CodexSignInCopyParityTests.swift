@@ -137,11 +137,11 @@ final class CodexSignInCopyParityTests: XCTestCase {
     /// The code: the page to open, what to do there, the code and its copy press, the wait, the expiry.
     func testTheCodeStepSaysWhatTheWebDialogSays() throws {
         let source = try web(Self.dialog)
-        assertSays(source, "> \(CodexSignIn.openPage) </Button>", in: Self.dialog)
+        assertSays(source, "> \(CodexSignIn.openPage) </LinkButton>", in: Self.dialog)
         assertSays(source, "'\(CodexSignIn.enterCode)'", in: Self.dialog)
         assertSays(source, "\(CodexSignIn.enterCodeAsPrefix)<b>{held.email}</b>\(CodexSignIn.enterCodeAsSuffix)",
                    in: Self.dialog)
-        assertSays(source, "tooltips: ['\(CodexSignIn.copyCode)', '\(CodexSignIn.copied)']", in: Self.dialog)
+        assertSays(source, "copied ? '\(CodexSignIn.copied)' : '\(CodexSignIn.copyCode)'", in: Self.dialog)
         assertSays(source, "<LoadingOutlined /> \(CodexSignIn.waiting)", in: Self.dialog)
         // The expiry is one sentence around a time, formatted alike at both ends (`formatResetTime`).
         let utc = TimeZone(identifier: "UTC")!
@@ -166,7 +166,7 @@ final class CodexSignInCopyParityTests: XCTestCase {
                    in: Self.dialog)
         XCTAssertTrue(CodexSignIn.doneRow(signedIn).hasSuffix(" · its sign-in stays on the Orbit server"))
         assertSays(source, "{loginLine(step.account)} · its sign-in stays on the Orbit server", in: Self.dialog)
-        assertSays(source, "<Button type=\"primary\" onClick={close}> \(CodexSignIn.done) </Button>", in: Self.dialog)
+        assertSays(source, "<Button variant=\"primary\" onClick={close}> \(CodexSignIn.done) </Button>", in: Self.dialog)
 
         assertSays(source, "<div className=\"pa-done-t\">\(CodexSignIn.expiredTitle)</div>", in: Self.dialog)
         assertSays(source, "<div className=\"pa-done-s\">\(CodexSignIn.expiredDetail)</div>", in: Self.dialog)
@@ -234,7 +234,7 @@ final class CodexSignInCopyParityTests: XCTestCase {
         let signingOut = account(email: "${member.label}")
         assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)
         assertSays(row, "aria-label={`\(CodexLoginPool.signOutLabel(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "okText=\"\(CodexLoginPool.signOut)\"", in: Self.accountPools)
+        assertSays(row, "confirmText=\"\(CodexLoginPool.signOut)\"", in: Self.accountPools)
         // Signing one out: the only account, and nothing runs on the pool; one of several, and it keeps
         // running on the others — "account" for one left, "accounts" for more.
         let one = CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 1))
@@ -242,8 +242,8 @@ final class CodexSignInCopyParityTests: XCTestCase {
         XCTAssertTrue(CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 2)).hasSuffix("its other account."))
         let several = CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 3))
         assertSays(row, "? `" + asWeb(several, "accounts.", "account${others === 1 ? '' : 's'}.") + "`", in: Self.accountPools)
-        // NEXT only where there is something to choose between.
-        assertSays(row, "{member.next && pool.members.length > 1 && <span className=\"re-chip\">\(SharedPoolPage.nextChip)</span>}",
+        // NEXT only for an unpaused account where there is something to choose between.
+        assertSays(row, "{member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className=\"re-chip\">\(SharedPoolPage.nextChip)</span>}",
                    in: Self.accountPools)
 
         let lib = try web(Self.codexLogin)

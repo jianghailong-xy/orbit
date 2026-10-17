@@ -1,8 +1,9 @@
-import { useId, useState, type ReactNode } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import { DownOutlined, UpOutlined } from '@ant-design/icons';
-import { Button, List } from 'antd';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
+import { Button } from './ui/Button';
+import './ui/List.css';
 
 /** What a section needs of a project in its own right: enough to fold it into a pill. The expanded
  *  row is rendered by the caller, which holds the full shape — this file only decides WHERE the
@@ -50,6 +51,7 @@ export function ProjectSections<T extends SectionProject>({
   renderProject,
 }: {
   sections: ProjectSection<T>[];
+  /** One project's row: an `li.orbit-list-item` (ui/List.css) the section lists. */
   renderProject: (project: T) => ReactNode;
 }) {
   return (
@@ -125,14 +127,16 @@ function Section<T extends SectionProject>({
             {section.note}
           </span>
           <Button
-            type="text"
+            variant="text"
             size="small"
             aria-expanded={!collapsed}
             aria-controls={bodyId}
             onClick={() => setCollapsed((c) => !c)}
             style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-3)' }}
+            icon={collapsed ? <DownOutlined /> : <UpOutlined />}
+            iconPlacement="end"
           >
-            {collapsed ? 'Expand' : 'Collapse'} {collapsed ? <DownOutlined /> : <UpOutlined />}
+            {collapsed ? 'Expand' : 'Collapse'}
           </Button>
         </div>
       )}
@@ -153,7 +157,11 @@ function Section<T extends SectionProject>({
             ))}
           </div>
         ) : (
-          <List dataSource={section.projects} rowKey="id" renderItem={renderProject} />
+          <div className="orbit-list orbit-list-split">
+            <ul className="orbit-list-items">
+              {section.projects.map((project) => <Fragment key={project.id}>{renderProject(project)}</Fragment>)}
+            </ul>
+          </div>
         )}
       </div>
     </section>

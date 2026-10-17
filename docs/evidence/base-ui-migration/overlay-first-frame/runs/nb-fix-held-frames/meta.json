@@ -1,0 +1,16 @@
+{
+ "label": "nb-fix-held-frames",
+ "step": "held-frames",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "KW2_RESULTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/nb-fix-held-frames/results node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T15:19:51Z",
+ "endedAt": "2026-10-08T15:31:00+00:00",
+ "loadAverage": {
+  "start": "13.67 18.04 22.98",
+  "end": "6.02 9.03 15.46"
+ },
+ "exitCode": 0
+}

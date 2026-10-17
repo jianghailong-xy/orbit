@@ -360,6 +360,23 @@ final class TranscriptReducerTests: XCTestCase {
                        "reopening a clipped card must make the full-result fetch eligible again")
     }
 
+    /// An answered question's folded card is its record, read off the call and the result — so a
+    /// clipped one is fetched whole while it is still folded, or the questions' text or the answers
+    /// after the cut would be missing from the one place they are shown.
+    func testToolPayloadResolutionKeyReadsAFoldedQuestionWhole() {
+        var question = ToolCard(id: "q1", name: "AskUserQuestion", input: .null, result: "The user answered: …",
+                                status: .ok, inputSeq: 3, inputTruncated: true)
+        question.resultSeq = 4
+        question.resultTruncated = true
+        let folded = ToolPayloadResolutionKey(card: question, expanded: false)
+        XCTAssertNil(folded.inputSeq)
+        XCTAssertNil(folded.resultSeq)
+        let whole = ToolPayloadResolutionKey(card: question, expanded: false,
+                                             needsWholeInput: true, needsWholeResult: true)
+        XCTAssertEqual(whole.inputSeq, 3)
+        XCTAssertEqual(whole.resultSeq, 4)
+    }
+
     /// An AskUserQuestion arrives as BOTH a `tool_use` (read-only tool card) and an `approval_request`
     /// (interactive card). While the question is pending, only the interactive card should show — the
     /// read-only card is suppressed to avoid double-displaying the question (web parity); once answered

@@ -44,6 +44,45 @@
 | TableColumnsType | P4.2 | 页面本地/Orbit 原生表格列类型；只覆盖当前列与 render/响应式需求 |
 | RefSelectProps | P4.2 | Orbit 公开 focus/原生 ref 能力；RunnerDetailPage 的 keepFreeRef.focus({ preventScroll: true }) 是公开 ref 使用，但仍须随 Select 迁移，不是任意内部DOM读取 |
 
+## Menu 打开后的焦点与 Tab（协调者 2026-10-07 判定）
+
+**约定**：Orbit `Menu` 打开后，焦点在菜单内；在菜单内按 Tab，焦点离开菜单，菜单随之关闭。旧 AntD Dropdown 不同：打开后焦点留在触发器，按 Tab 才进入菜单。协调者把 Orbit 的行为作为 WAI-ARIA 菜单按钮模式的约定接受（P3.3 缺口 G5）。理由有两条：
+- 打开即聚焦是 P2.2 已验收的行为，方向键、回车和 Menu 打开窗口的修复（`4fb7ee43f`）都建立在它上面；
+- 恢复旧语义要和 Base UI 的焦点管理对着干，会抬高长期维护成本。
+
+账号所有者可随时推翻这一判定。
+
+**适用范围**：
+- 所有 Orbit `Menu`（`components/ui/Menu.tsx`）的根菜单，也就是各批替换 Dropdown 的菜单：试点已在用的 More（TaskDetailPanel）和 Access（ShareModal）、P4 其余用 Dropdown 的文件、P5 的 WorkspaceView。
+- 打开方式不限。用键盘打开（触发器上 ⏎、↓、↑）时，焦点落在打开键高亮的那一项；用指针或触摸打开时，焦点同样移入菜单。
+- 约定里的 Tab 指焦点已经进入菜单之后。以下情况没有记录，不在本约定内：
+  - 打开后、焦点移入前那一帧里落在触发器上的 Tab；
+  - 子菜单里的 Tab；
+  - Shift+Tab。
+
+  第一项属于「P2 跟进（第 2 批窗口）」的范围（触发器窗口内的其余按键）。生产代码目前没有子菜单，要到 P5 迁 WorkspaceView 时才出现。
+
+**各批对照怎么处理**：
+- 同提交对照里，AntD 参照与 Orbit 如果只差在下面两点，按本约定处理：不算回归，也不为此改 `Menu`。
+  - 打开后，焦点在触发器（AntD）还是在菜单内（Orbit）；
+  - 按 Tab 是进入菜单（AntD），还是离开并关闭菜单（Orbit）。
+- 其他焦点差异照常逐条解释。
+- 由此带来的 P0 截图变化（例如触发按钮上的焦点环），仍按作业指导在证据里逐张说明，经协调者确认后登记。
+
+**测试依据**：
+- 打开后焦点在菜单内，有三处常驻检查：
+  - [`Menu.test.tsx`](../../../src/web/src/components/ui/Menu.test.tsx) 的 9 个参照用例（jsdom）：分别用 ↓、↑、⏎ 打开，让焦点移动的那一帧运行之后，焦点在打开键高亮的那一项上。
+  - [`choices.browser.mjs`](../../../src/web/ui-migration/choices.browser.mjs) 的「menu arrows, disabled items, submenu, checkbox and focus return work」（`npm run test:ui-choices -w @orbit/web`，八环境）：在触发器上按 ↓ 打开后，第一项获得焦点；按 Esc 后，焦点回到触发器。
+  - P0 的 `task-action-menu`（`npm run test:ui-migration -w @orbit/web`，八环境）：点击 More 打开菜单后截图，More 按钮上没有焦点环。浅色 4 张已作为 P3.2 的已接受迁移差异登记（[p3.2-accepted](p3.2-accepted/README.md)）。深色 4 张的差异低于 P0 比较器阈值，查不出这一变化。
+- 按 Tab 离开并关闭菜单，目前**没有常驻用例断言**。直接记录在 [p2-keyboard-window](p2-keyboard-window/README.md)「范围外观察」第 1 条：
+  - 逐键（paced）按 `⏎ Tab ↓ ⏎`，字段页和样例页各 20 次。Orbit 菜单每次都在 Tab 后关闭，焦点移到触发器之后的下一个可聚焦元素，没有执行任何菜单项（40/40）。
+  - 同一组按键下，旧 Dropdown 的 Tab 把焦点移入菜单（`@rc-component/dropdown` 的 `es/hooks/useAccessibility.js:30-54`），随后的 ↓⏎ 执行了 Image（20/20）。
+- 这一行为来自 Base UI 1.8.0：
+  - 根菜单的 `MenuPopup` 对任何打开方式都设 `initialFocus`；
+  - Orbit `Menu` 传 `modal={false}`，焦点移出浮层树时，`FloatingFocusManager` 以 `focusOut` 关闭弹层。
+
+  升级 Base UI 或改动 `Menu` 的焦点管理时，要重新核对这两点。
+
 ## 非导入依赖
 
 `audit-baseline.json` 按行标记 Provider、useApp、useToken、命令式确认及反馈、内部 ref、ant-* class/selector、图标和支持包；不是只数 import。`routes-and-tests.md` 人工复核热点，`css-ownership.json` 为 index.css 命中的每个区段给出迁移归属。

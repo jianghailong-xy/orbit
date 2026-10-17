@@ -1,0 +1,450 @@
+[
+ {
+  "trace": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-12--trace.zip",
+  "moduleRequests": 29,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5920.2
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5921.6
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.0
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 5922.1
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react-dom.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 5442.6
+   }
+  ],
+  "networkChangedConsoleErrors": 11,
+  "slowestRequests": [
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 7556.3
+   },
+   {
+    "url": ":4177/src/components/ui/Button.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 7528.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 7454.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 7410.7
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 7410.5
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 639731.242,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 639752.644,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 640275.776,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 611327.188,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 611659.578,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 617839.616,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-4--trace.zip",
+  "moduleRequests": 90,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Spinner.css",
+    "status": -1,
+    "failure": null,
+    "ms": 132.4
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useOpenChangeComplete-CgVWpovx.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useOpenInteractionType-CaVy9pp_.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/usePopupViewport-BTgI1wTn.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/visuallyHidden-D3E1DNug.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useBaseUiId-CC83DwEX.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/usePositioner-CbCrsqih.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/NullStore-DNQY1lt2.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/composite-DamRnZr1.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useAnchoredPopupScrollLock--qb7lbZ9.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/ToolbarRootContext-Cbshu_oZ.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useTriggerFocusGuards-CgfH6FCI.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/composite-Bm0x_hhg.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useFocus-DJjbL5Bw.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/getPseudoElementBounds-DUvIEkAD.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/CompositeRootContext-C6IXZKvA.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useControlled-BKu7XdFr.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/DirectionContext-CzXvojAM.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/CompositeList-DfLv1Gnc.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useCompositeListItem-BCHNcFi4.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/CompositeItem-DyUOkz9a.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/isElementDisabled-Du0JueEn.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.0
+   },
+   {
+    "url": ":4177/src/lib/idCodec.ts",
+    "status": -1,
+    "failure": null,
+    "ms": 133.0
+   }
+  ],
+  "networkChangedConsoleErrors": 23,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 161.8
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/composite-DamRnZr1.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useAnchoredPopupScrollLock--qb7lbZ9.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/ToolbarRootContext-Cbshu_oZ.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/useTriggerFocusGuards-CgfH6FCI.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 133.7
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 583976.618,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 583977.498,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 584021.157,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 567653.899,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 567673.312,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 568905.21,
+    "error": null
+   }
+  ]
+ }
+]

@@ -9,11 +9,11 @@ const now = new Date('2026-10-04T10:00:00Z');
 const first = new Date('2026-10-04T11:00:00Z');
 const later = new Date('2026-10-04T12:00:00Z');
 const account = (accountId: string, pausedUntil: Date | null): LoginAccount => ({
-  accountId, pausedUntil, email: accountId, state: 'ACTIVE', spentUntil: null, usage: null,
+  accountId, pausedUntil, email: accountId, state: 'ACTIVE', spentUntil: null, throttledUntil: null, usage: null,
 });
 const key = (id: string, pausedUntil: Date | null): PoolKeyCandidate & { label: string } => ({
   id, label: id, pausedUntil, contributorId: 'owner', state: 'ACTIVE', enabled: true,
-  spentUntil: null, shareCap: null, othersCostMicros: 0,
+  spentUntil: null, throttledUntil: null, shareCap: null, othersCostMicros: 0,
 });
 const member = (id: string, pausedUntil: Date | null): PoolCandidate<{ id: string; slug: string }> => ({
   row: { id, slug: id }, pausedUntil, usage: null, refused: false, usageUnreadable: false,

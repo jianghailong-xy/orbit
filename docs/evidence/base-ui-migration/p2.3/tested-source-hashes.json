@@ -1,0 +1,20 @@
+{
+  "src/web/.gitignore": "01d06c45866f38bacfce5a00659b7df50a6b6642334c307b5f7464a5ebe2c44d",
+  "src/web/package.json": "7159b220a8f68e5b6979f9087ee3a0a8ea89d816eba8f8a134e93bf894f9970e",
+  "src/web/src/components/ToastViewport.tsx": "475d7800ac591ee2ac3bc354c5642e9e2306af468cf4b169e5e45a2ac10a7fa3",
+  "src/web/src/components/ui/Overlay.tsx": "9cf7e1e40a22465077c080aed14a1fc36e0c0b8e78963a1a0e3de15f9b1fd6af",
+  "src/web/src/components/ui/README.md": "3b695ef5d669019ab2d024ef5799355265bc72c158db1e52cb73ff277d073fff",
+  "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx": "b9e336d0b39dda8b6c36991b275c712d7f658c10fb0a26b93125e491a8a3760f",
+  "src/web/src/components/ui/feedbackPortal.ts": "370163a8bd4733ee6f2e2b2410cb132c7514fdfbcabd4f2cdabe5ab0e9240066",
+  "src/web/src/index.css": "50c082e3a5c090e6e93350f0df6f046b7064eac0539463cdb0b5eed5412e7cab",
+  "src/web/src/lib/toast.test.tsx": "265e0e08987d53d583de3e0e41e1af4d98ff90617afc6aa2c5550f556c2e85e9",
+  "src/web/src/lib/toastFeed.test.ts": "a82e4ac31dd7587a88247ca5e86cc325bd68b8e9c2e0276ab2d4f4e3d28c3930",
+  "src/web/ui-migration/feedback-production.browser.mjs": "24beebd9d0999753801eb246daf77fb36467ed1441fc5aa3637c19e9fa93a87d",
+  "src/web/ui-migration/playwright.config.mjs": "d6b0bec762b262c3bdc753ff938e5f2ddedda92698dea8db771880af52139ad8",
+  "src/web/ui-migration/toasts-tests.tsconfig.json": "160be627c81b564201f241a2ea7605831a37d07585c9535762ad465a45fab844",
+  "src/web/ui-migration/toasts.browser.mjs": "45198d2357f76d1216f246199e439e5689f29ba5abac99c794883b8e23facd02",
+  "src/web/ui-migration/toasts.config.mjs": "960ca0aab09f01276b854c44b1fe53ae8d19a1d2a7218f81440cf43c8c3a355c",
+  "src/web/ui-migration/toasts.html": "fc631d4d714a20f879d1af60f599110811d321fffa2ede1b55b2641ae83f21a3",
+  "src/web/ui-migration/toasts.tsconfig.json": "9c7197b650df259f85a73b0942be692d9acc6f030fa1d420737dbb5770477977",
+  "src/web/ui-migration/toasts.tsx": "88ef089f13fd7cdbc4ec97a7d555d4a265e8435b671015a7743ffd8383ed0c4b"
+}

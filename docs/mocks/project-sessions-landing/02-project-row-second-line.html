@@ -1,0 +1,90 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<style>
+:root{--tint:#3E69F6;--l2:rgba(60,60,67,.6);--l3:rgba(60,60,67,.3);--sep:rgba(60,60,67,.18);--green:#34C759;--orange:#FF9500}
+*{box-sizing:border-box}
+body{margin:0;padding:40px 40px 56px;background:#e4e4e9;color:#16161a;font:15px/1.55 "Inter","Noto Sans SC",sans-serif;-webkit-font-smoothing:antialiased;width:1900px}
+h1{font-size:26px;letter-spacing:-.02em;margin:0 0 8px}
+.lede{color:#55555e;max-width:1780px;margin:0 0 28px}
+code{font:12.5px "DejaVu Sans Mono",monospace;background:#d9d9e0;border-radius:4px;padding:1px 5px}
+.wrap{display:flex;gap:36px;align-items:flex-start}
+figure{margin:0;width:393px}
+figcaption{margin-top:16px;font-size:13.5px;color:#4a4a52}
+figcaption>b{color:#16161a;display:block;font-size:14.5px;margin-bottom:4px}
+.tag{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:1px 9px;margin-bottom:8px}
+.tag.now{background:#ffd9d4;color:#8f1d13}.tag.after{background:#d6e4ff;color:#14428f}
+.phone{width:393px;height:852px;background:#fff;overflow:hidden;position:relative;border-radius:44px;box-shadow:0 18px 44px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.08)}
+.status{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 30px 0 44px;font-size:17px;font-weight:600}
+.status .r{display:flex;gap:6px;align-items:center;font-size:12px}
+.bars{display:flex;align-items:flex-end;gap:1.5px;height:11px}.bars i{width:3px;background:#000;border-radius:1px}
+.batt{width:25px;height:12px;border:1.5px solid var(--l3);border-radius:4px;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.nav{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.circ{width:46px;height:46px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.12),inset 0 0 0 .5px rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center}
+.big{font-size:32px;font-weight:700;letter-spacing:-.02em;padding:2px 20px 6px}
+.list{padding:0 16px}
+.sh{font-size:20px;font-weight:600;color:var(--l2);margin:14px 0 2px}
+.r{padding:10px 0 11px;border-bottom:.5px solid var(--sep);position:relative}
+.r .a{display:flex;align-items:center;gap:8px}
+.r .t{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.r .tm{font-size:13px;color:var(--l2);flex:none}
+.r .b{display:flex;gap:7px;align-items:center;margin-top:3px;min-width:0}
+.r .sub{font-size:15px;color:var(--l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sub.run{color:var(--tint)} .sub.amb{color:var(--orange)}
+.chip{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--l2);background:rgba(120,120,128,.14);border-radius:5px;padding:2px 6px;flex:none}
+.mini{width:26px;height:4px;border-radius:2px;background:rgba(120,120,128,.3);display:flex;overflow:hidden}.mini i{height:100%}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--orange)}
+.hl{outline:2.5px solid rgba(255,59,48,.85);outline-offset:2px;border-radius:10px}
+.hlb{outline:2.5px solid rgba(62,105,246,.9);outline-offset:2px;border-radius:10px}
+.panel{flex:1;background:#fff;border-radius:22px;padding:26px 30px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+.panel h2{font-size:19px;margin:0 0 4px}
+.panel .hint{color:#6a6a72;font-size:13.5px;margin:0 0 16px}
+.tier{display:grid;grid-template-columns:34px 361px 1fr;gap:18px;align-items:center;padding:10px 0;border-top:1px solid #ececf0}
+.tier .n{width:26px;height:26px;border-radius:50%;background:#e9e9ef;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.tier.new .n{background:var(--tint);color:#fff}
+.tier.new{background:linear-gradient(90deg,rgba(62,105,246,.07),transparent 80%);border-radius:10px}
+.tier .r{border-bottom:0;padding:4px 0}
+.tier .why{font-size:13.5px;color:#3c3c44}
+.tier .why b{color:#16161a}
+.rules{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;font-size:13.5px;color:#3c3c44}
+.rules div b{color:#16161a;display:block;font-size:14px}
+</style>
+<body>
+<h1>Session 列表 · 项目行第二行小字</h1>
+<p class="lede">现在项目行的第二行在没人等你时显示 coordinator 自己的状态，比如 “Watching P5：…”。合入排队 13 分钟、项目实际卡在合入上时，这一行看不出来。方案：在优先级里加一档<b>合入进行中</b>，放在 “coordinator 正在干活” 之后、“coordinator 在 watch／闲置” 之前。用词和项目页合入行一致：<code>Merge to main</code> / <code>Landing</code> / <code>Merge check</code> + 状态 + 分钟。</p>
+<div class="wrap" id="wrap"></div>
+<script>
+const head=`<div class="status"><span>11:24</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="batt">32</span></span></div>
+<div class="nav"><div class="circ"><svg width="20" height="16" viewBox="0 0 20 16"><path d="M2 2h16M2 8h16M2 14h16" stroke="#000" stroke-width="2" stroke-linecap="round"/></svg></div><div class="circ"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3v14M3 10h14" stroke="#000" stroke-width="2.2" stroke-linecap="round"/></svg></div></div>
+<div class="big">orbit-develop</div>`;
+const chip=(d,t,run)=>`<span class="chip"><span class="mini"><i style="width:${d/t*100}%;background:var(--green)"></i><i style="width:${run/t*100}%;background:var(--tint)"></i></span>${d}/${t}</span>`;
+const row=(title,tm,sub,cls='',c='',ind='',box='')=>`<div class="r ${box}"><div class="a"><span class="t">${title}</span>${ind}<span class="tm">${tm}</span></div><div class="b">${c}<span class="sub ${cls}">${sub}</span></div></div>`;
+const proj='DeepSeek Harness 原生接入（核心 P1–P5）';
+const others=`
+${row('修复 iOS 菜单字幕被截断','3m ago','You: 再看一下 macOS 菜单里的换行')}
+${row('Antigravity Google 登录',`18m ago`,'Running Bash…','run','',`<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="rgba(60,60,67,.35)" stroke-width="2"/><path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round"/></svg>`)}
+${row('Landing session 设计','1h ago','The design doc is up for review at docs/landing…')}
+<div class="sh">Yesterday</div>
+${row('Toast 系统重做','yesterday','Levels and the iPhone board are in docs/mocks…')}
+${row('Provider 账号池','yesterday','Done. Accounts are grouped by engine now.')}`;
+const phone=(pr)=>`<div class="phone">${head}<div class="list"><div class="sh">Today</div>${pr}${others}</div></div>`;
+const now=phone(row(proj,'just now','Watching P5：接通 Web、macOS 和 iOS','',chip(12,15,0.4),'','hl'));
+const after=phone(row(proj,'just now','Merge to main · queued · 13m','',chip(12,15,0.4),'','hlb'));
+const tiers=[
+ [1,'',row(proj,'just now','Waiting for approval · P5：接通 Web、macOS…','amb',chip(12,15,.4),'<span class="dot"></span>'),'<b>等你</b>（coordinator 或成员有审批/确认）。不变，只有这一档能让你动手。'],
+ [2,'',row(proj,'just now','Checks failed · 12m','run',chip(12,15,.4)),'<b>Coordinator 正在处理异常</b>（冲突、检查失败等）。不变；合入出错时走这一档，不走第 4 档。'],
+ [3,'',row(proj,'just now','Running Edit…','run',chip(12,15,.4)),'<b>Coordinator 正在跑一轮</b>。不变，agent 真在干活。'],
+ [4,'new',row(proj,'just now','Merge to main · queued · 13m','',chip(12,15,.4)),'<b>新：合入排队中</b>。灰色。'],
+ [4,'new',row(proj,'just now','Landing · checking · 4m · P5：接通 Web、macOS…','run',chip(12,15,.4)),'<b>新：合入进行中</b>。蓝色；任务标题放最后，截断时先被截掉。多个任务时写 <code>Landing 2 jobs</code>。'],
+ [5,'',row(proj,'just now','Watching P5：接通 Web、macOS 和 iOS','',chip(12,15,.4)),'<b>Coordinator 的其它状态</b>：watching、后台任务、最后一条回复。'],
+ [6,'',row(proj,'2d ago','No coordinator','',chip(12,15,0)),'<b>没有 coordinator</b>。不变。'],
+];
+const panel=`<div class="panel"><h2>第二行优先级（从上往下，取第一档命中的）</h2><p class="hint">左边是项目行实际宽度（361pt）的效果，第 4 档是新增的。</p>
+${tiers.map(([n,c,r,w])=>`<div class="tier ${c}"><span class="n">${n}</span>${r}<span class="why">${w}</span></div>`).join('')}
+<div class="rules">
+<div><b>为什么放在 3 和 5 之间</b>coordinator 在跑一轮时，它的动作是最新的；它在 watch 时，等的往往就是这次合入（截图里 “Watching P5” 等的正是 P5 合入），直接说合入更具体。</div>
+<div><b>时间用分钟，不跳秒</b>列表不是每秒刷新的，所以和第 2 档 “· 12m” 一样用分钟；排队用 queued，进行中用当前 phase（rebasing / checking / pushing）。</div>
+<div><b>需要服务端补一点数据</b>列表的项目数据（<code>/projects/sidebar</code> 的 <code>integration</code>）现在只有 <code>activeJobCount</code>。要给它加上最早那个在途任务的类型、状态、phase、开始时间和任务标题，和项目页 <code>inFlight</code> 字段一样。老服务端只有计数时退回成 <code>Landing · 1 job</code>。</div>
+<div><b>Web 同步</b>这套词来自 web 的 <code>SESSION_PROJECT_COPY</code>，web 的项目行按同一顺序改，两端说法一致。</div>
+</div></div>`;
+document.getElementById('wrap').innerHTML=`<figure><span class="tag now">现在</span>${now}<figcaption><b>合入排队 13 分钟，第二行还写着 Watching</b>看起来是 coordinator 在等，看不出项目卡在合入上。</figcaption></figure>
+<figure><span class="tag after">方案</span>${after}<figcaption><b>第二行直接说在合入</b>和项目 sessions 页顶部那行合入状态用同样的词，只是更短、没有秒。</figcaption></figure>${panel}`;
+</script>

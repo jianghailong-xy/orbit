@@ -1,0 +1,14 @@
+# This image accepts only runner sources and its entrypoint/pins, never host state.
+**
+!src/
+!src/runner-go/
+!src/runner-go/*.go
+!src/runner-go/go.mod
+!src/runner-go/go.sum
+!deploy/
+!deploy/managed-runner/
+!deploy/managed-runner/image/
+!deploy/managed-runner/image/Dockerfile
+!deploy/managed-runner/image/entrypoint.py
+!deploy/managed-runner/image/pins.json
+src/runner-go/*_test.go

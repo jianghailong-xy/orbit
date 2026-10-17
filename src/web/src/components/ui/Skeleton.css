@@ -1,0 +1,32 @@
+/* The replaced skeleton's paragraph as measured: 16px lines with a 4px radius, 16px apart (the list's
+   own margins are the page's: the global reset's 1em below until P6); a 1.4s shimmer from the fill to
+   the stronger fill and back, which runs whatever motion is asked for, as the replaced one did. */
+.orbit-skeleton {
+  display: table;
+  width: 100%;
+}
+.orbit-skeleton .orbit-skeleton-section {
+  display: table-cell;
+  width: 100%;
+  vertical-align: top;
+}
+.orbit-skeleton .orbit-skeleton-section .orbit-skeleton-paragraph {
+  padding: 0;
+}
+/* The replaced rules' weight (0,3,1), so a page's own list rules weigh on these lines as before. */
+.orbit-skeleton .orbit-skeleton-section .orbit-skeleton-paragraph > li {
+  width: 100%;
+  height: 16px;
+  list-style: none;
+  border-radius: var(--orbit-radius-sm);
+  background: linear-gradient(90deg, var(--orbit-skeleton-from) 25%, var(--orbit-skeleton-to) 37%, var(--orbit-skeleton-from) 63%);
+  background-size: 400% 100%;
+  animation: orbit-skeleton-loading 1.4s ease infinite;
+}
+.orbit-skeleton .orbit-skeleton-section .orbit-skeleton-paragraph > li + li {
+  margin-top: 16px;
+}
+@keyframes orbit-skeleton-loading {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}

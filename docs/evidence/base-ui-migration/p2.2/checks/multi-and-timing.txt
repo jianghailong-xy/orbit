@@ -1,0 +1,120 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-phone --project webkit-dark-phone --grep multiple labels|tooltip matches|touch or pointer --repeat-each 2
+
+[WebServer] (node:2324336) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 12 tests using 1 worker
+
+(node:2324594) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-phone] › ui-migration/choices.browser.mjs:81:3 › tooltip matches the current surface, density and option states (4.3s)
+  ✓   2 [chromium-light-phone] › ui-migration/choices.browser.mjs:227:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (2.1s)
+  ✓   3 [chromium-light-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (2.0s)
+(node:2325671) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › ui-migration/choices.browser.mjs:81:3 › tooltip matches the current surface, density and option states (3.6s)
+  ✓   5 [chromium-light-phone] › ui-migration/choices.browser.mjs:227:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.9s)
+  ✓   6 [chromium-light-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.7s)
+(node:2326610) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › tooltip matches the current surface, density and option states (3.3s)
+  ✓   8 [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.8s)
+  ✘   9 [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (16.1s)
+(node:2329094) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › tooltip matches the current surface, density and option states (2.5s)
+  ✓  11 [webkit-dark-phone] › ui-migration/choices.browser.mjs:227:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.5s)
+  ✘  12 [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (16.2s)
+
+
+  1) [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('region', { name: 'Multiple choices', exact: true }).locator('output[aria-label="Labels value"]')
+    Expected: "[\"bug\",\"docs\",\"ops\"]"
+    Received: "[\"bug\",\"docs\"]"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('region', { name: 'Multiple choices', exact: true }).locator('output[aria-label="Labels value"]') with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Multiple choices', exact: true }).locator('output[aria-label="Labels value"]')
+        34 × locator resolved to <output aria-hidden="true" aria-label="Labels value">["bug","docs"]</output>
+           - unexpected value "["bug","docs"]"
+
+
+      520 |   await expect(page.getByRole('option', { name: 'Docs', exact: true })).toHaveAttribute('aria-selected', 'true');
+      521 |   await tap(page, info, page.getByRole('option', { name: 'Ops', exact: true }));
+    > 522 |   await expect(value).toHaveText('["bug","docs","ops"]');
+          |                       ^
+      523 |   await expect(region.getByLabel('1 more selected', { exact: true })).toBeVisible();
+      524 |   await expect(page.getByRole('option', { name: 'Archived', exact: true })).toHaveAttribute('aria-disabled', 'true');
+      525 |   await input.focus();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:522:23
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('region', { name: 'Multiple choices', exact: true }).locator('output[aria-label="Labels value"]')
+    Expected: "[\"bug\",\"docs\",\"ops\"]"
+    Received: "[\"bug\",\"docs\"]"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('region', { name: 'Multiple choices', exact: true }).locator('output[aria-label="Labels value"]') with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Multiple choices', exact: true }).locator('output[aria-label="Labels value"]')
+        34 × locator resolved to <output aria-hidden="true" aria-label="Labels value">["bug","docs"]</output>
+           - unexpected value "["bug","docs"]"
+
+
+      520 |   await expect(page.getByRole('option', { name: 'Docs', exact: true })).toHaveAttribute('aria-selected', 'true');
+      521 |   await tap(page, info, page.getByRole('option', { name: 'Ops', exact: true }));
+    > 522 |   await expect(value).toHaveText('["bug","docs","ops"]');
+          |                       ^
+      523 |   await expect(region.getByLabel('1 more selected', { exact: true })).toBeVisible();
+      524 |   await expect(page.getByRole('option', { name: 'Archived', exact: true })).toHaveAttribute('aria-disabled', 'true');
+      525 |   await input.focus();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:522:23
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+  10 passed (1.0m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-phone --project webkit-dark-phone --grep 'multiple labels|tooltip matches|touch or pointer' --repeat-each 2

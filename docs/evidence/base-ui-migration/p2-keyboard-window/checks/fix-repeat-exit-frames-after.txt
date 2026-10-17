@@ -1,0 +1,30 @@
+761ddffa4 docs(web): archive the fixed tree's full choices run and its one failure's repeats
+df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep no-preference Dialog Popover Select exits --project webkit-light-desktop --repeat-each 10
+
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 10 tests using 1 worker
+
+  ✓   1 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.6s)
+  ✓   2 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.7s)
+  ✓   3 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.8s)
+  ✓   4 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.6s)
+  ✓   5 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.3s)
+  ✓   6 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.4s)
+  ✓   7 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.2s)
+  ✓   8 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.8s)
+  ✓   9 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.6s)
+  ✓  10 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.9s)
+
+  10 passed (42.3s)

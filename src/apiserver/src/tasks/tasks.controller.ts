@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   AddDependencyDto,
@@ -49,21 +50,30 @@ export class TasksController {
    * independent session about the evidence revision it references, so a forgotten field did not
    * produce a lax task, it produced one waiting on a decision nobody had been asked for.
    */
+  @PatScope('tasks:write', {
+    workspaceConfinable: {
+      body: { assigneeId: 'workspace', dependsOnTaskIds: 'task', supersedesTaskId: 'task' },
+      // The task, and the check `verification` files beside it, are made in the workspace they name.
+      requires: ['assigneeId', 'verification.assigneeId'],
+    },
+  })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) {
     requireExplicitCompletionCriterion(dto);
-    return this.tasks.create(user.userId, dto);
+    return this.tasks.create(user.userId, dto, undefined, undefined, user.credential);
   }
 
+  @PatScope('tasks:read', { workspaceConfinable: 'LIST' })
   @Get()
   list(
     @CurrentUser() user: AuthUser,
     @Query('creatorSessionId', PublicIdPipe) creatorSessionId?: string,
   ) {
-    return this.tasks.list(user.userId, { creatorSessionId });
+    return this.tasks.list(user.userId, { creatorSessionId }, workspaceConfinement(user));
   }
 
   // Kept above :id so Nest never interprets the literal "page" as a task UUID.
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('page')
   listPage(
     @CurrentUser() user: AuthUser,
@@ -102,6 +112,7 @@ export class TasksController {
 
   // The tab badges and the progress bar, on their own. They are identical for every tab, so a
   // client holds them across tab changes instead of asking for them with each tab's first page.
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('counts')
   taskCounts(
     @CurrentUser() user: AuthUser,
@@ -115,6 +126,7 @@ export class TasksController {
   }
 
   // Above :id, like "page" and "labels" — none of these literals is a task uuid.
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('active')
   activeTasks(
     @CurrentUser() user: AuthUser,
@@ -125,6 +137,7 @@ export class TasksController {
   }
 
   // Above :id for the same reason as "page" — "labels" is not a task uuid.
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('labels')
   labelSummary(
     @CurrentUser() user: AuthUser,
@@ -135,6 +148,7 @@ export class TasksController {
     return this.tasks.labelSummary(user.userId, { listId, projectId, assigneeId });
   }
 
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get(':id/dependency-graph')
   dependencyGraph(
     @CurrentUser() user: AuthUser,
@@ -152,6 +166,7 @@ export class TasksController {
     });
   }
 
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Post(':id/dependency-graph/expand')
   expandDependencyGraph(
     @CurrentUser() user: AuthUser,
@@ -161,6 +176,7 @@ export class TasksController {
     return this.tasks.expandDependencyGraph(user.userId, id, dto);
   }
 
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Post(':id/dependency-graph/nodes')
   dependencyGraphNodes(
     @CurrentUser() user: AuthUser,
@@ -183,6 +199,7 @@ export class TasksController {
    * for the case it exists to make visible: a task filed under NO project has an attribution
    * boundary too, and it is the one most worth looking at.
    */
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get(':id/attribution')
   attributionOf(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.attribution.read(user.userId, id);
@@ -190,21 +207,25 @@ export class TasksController {
 
   /** Lightweight list-row hydration for incremental `task.changed` events. Kept separate from
    * `GET :id`, whose comments/runs/dependency detail is intentionally much heavier. */
+  @PatScope('tasks:read', { workspaceConfinable: { params: { id: 'task' } } })
   @Get(':id/row')
   listRow(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tasks.listRow(user.userId, id);
   }
 
+  @PatScope('tasks:read', { workspaceConfinable: { params: { id: 'task' } } })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tasks.get(user.userId, id);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task' }, body: { assigneeId: 'workspace' } } })
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateTaskDto) {
     return this.tasks.update(user.userId, id, dto);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task' } } })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tasks.remove(user.userId, id);
@@ -217,6 +238,7 @@ export class TasksController {
   // including the warnings a refusal body drops, and how many rows the real call would add. Same
   // endpoint rather than a second one, because a preview served by a different route is a preview
   // that can disagree with the write.
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post('batch-create')
   batchCreate(@CurrentUser() user: AuthUser, @Body() dto: CreateTasksBatchDto) {
     // Before the dryRun branch, so the preview a person decides on is judged by the rule the write
@@ -224,24 +246,28 @@ export class TasksController {
     dto.tasks?.forEach((item, index) => requireExplicitCompletionCriterion(item, index));
     return dto.dryRun
       ? this.tasks.previewPlan(user.userId, dto)
-      : this.tasks.createMany(user.userId, dto);
+      : this.tasks.createMany(user.userId, dto, undefined, undefined, user.credential);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post('batch-execute')
   batchExecute(@CurrentUser() user: AuthUser, @Body() dto: BatchExecuteDto) {
     return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent, dto.triggerId);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post('batch-stop')
   batchStop(@CurrentUser() user: AuthUser, @Body() dto: BatchStopDto) {
     return this.tasks.batchStop(user.userId, dto.taskIds);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post('batch-delete')
   batchDelete(@CurrentUser() user: AuthUser, @Body() dto: BatchDeleteDto) {
     return this.tasks.batchDelete(user.userId, dto.taskIds);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post('batch-assign')
   batchAssign(@CurrentUser() user: AuthUser, @Body() dto: BatchAssignDto) {
     return this.tasks.batchAssign(user.userId, dto.taskIds, dto.assigneeId);
@@ -252,6 +278,7 @@ export class TasksController {
    * is what makes a retry of it the same request rather than a second run. A client that sends no
    * body at all — every build predating the field — behaves exactly as it did.
    */
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task' } } })
   @Post(':id/execute')
   execute(
     @CurrentUser() user: AuthUser,
@@ -261,6 +288,7 @@ export class TasksController {
     return this.tasks.execute(user.userId, id, undefined, dto?.triggerId);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task' }, body: { mentions: 'workspace' } } })
   @Post(':id/comments')
   addComment(
     @CurrentUser() user: AuthUser,
@@ -270,6 +298,7 @@ export class TasksController {
     return this.tasks.addComment(user.userId, id, dto);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task' } } })
   @Delete(':id/comments/:commentId')
   removeComment(
     @CurrentUser() user: AuthUser,
@@ -279,6 +308,7 @@ export class TasksController {
     return this.tasks.removeComment(user.userId, id, commentId);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task' }, body: { dependsOnTaskId: 'task' } } })
   @Post(':id/dependencies')
   addDependency(
     @CurrentUser() user: AuthUser,
@@ -288,6 +318,7 @@ export class TasksController {
     return this.tasks.addDependency(user.userId, id, dto.dependsOnTaskId);
   }
 
+  @PatScope('tasks:write', { workspaceConfinable: { params: { id: 'task', dependsOnTaskId: 'task' } } })
   @Delete(':id/dependencies/:dependsOnTaskId')
   removeDependency(
     @CurrentUser() user: AuthUser,

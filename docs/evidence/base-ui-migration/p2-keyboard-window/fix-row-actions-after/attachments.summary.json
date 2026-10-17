@@ -1,0 +1,967 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/fix-row-actions-after/<name>",
+ "files": [
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-1--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-10--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-11--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-12--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-13--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-14--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-15--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-16--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-17--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-18--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-19--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-2--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-20--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-21--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-22--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-23--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-24--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-25--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-26--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-27--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-28--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-29--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-3--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-30--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-31--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-32--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-33--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-34--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-35--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-36--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-37--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-38--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-39--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-4--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-5--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-6--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-7--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-8--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-9--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-1--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-10--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-11--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-12--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-13--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-14--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-15--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-16--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-17--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-18--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-19--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-2--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-20--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-21--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-22--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-23--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-24--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-25--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-26--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-27--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-28--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-29--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-3--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-30--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-31--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-32--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-33--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-34--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-35--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-36--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-37--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-38--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-39--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-4--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-5--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-6--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-7--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-8--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-9--multi-dialog-and-row.json",
+   "bytes": 154,
+   "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2",
+   "fields": {
+    "portalInsideOwner": true,
+    "sequentialEscape": true,
+    "compositionIgnored": true,
+    "focusReturn": true,
+    "pointerAndKeyboardStopRowClick": true
+   }
+  }
+ ]
+}

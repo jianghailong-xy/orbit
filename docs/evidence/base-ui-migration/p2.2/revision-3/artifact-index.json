@@ -1,0 +1,834 @@
+{
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-build-and-test.json": {
+    "sha256": "e924bd9e4bbe794f1f6d44050173a3636ecfa10f5b79b36e86fcfaf2beef9f43",
+    "bytes": 11510
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-build-and-test.txt": {
+    "sha256": "9868b0dd76ba35ceee1f118718950060ecd293f78ac65744f75a89423fbdfe8f",
+    "bytes": 2215
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-choices-entry.json": {
+    "sha256": "05df44bbb74a6f9e0bc4167e4126a37eaa075da6e42027c7daba81f1205a8ecd",
+    "bytes": 11599
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-choices-entry.txt": {
+    "sha256": "9523dc4441fe29ec919499f28e778d9d00d7de9afb90992ffc1e6a1650de1ebe",
+    "bytes": 9764
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-choices-scroll-repeat.json": {
+    "sha256": "6c7f7654e2c64c3d049a2b7d02a43abcff1d06f143853d9bc6bc0d895f12e42a",
+    "bytes": 11666
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-choices-scroll-repeat.txt": {
+    "sha256": "4ce2f09f6edd8a21f5cd2b8da7b2d39d79a36bf72c49aa8670af8d4ae35181e1",
+    "bytes": 2206
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-dependencies.json": {
+    "sha256": "d29ff03487d96b4fd53d865addbb47bc8a9fc7e9a3c15fc58e7e9b91457e02d7",
+    "bytes": 11469
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-dependencies.txt": {
+    "sha256": "4c87c4458156d19c79b4d062c25765017c31f2d3875b8e840abee1a5bd2d1ef5",
+    "bytes": 705
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-fixture-types.json": {
+    "sha256": "954a72b2d1d03961a4427d07f2a6dbb04d4927fec28b5d92fb804b6408dfc258",
+    "bytes": 11824
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-fixture-types.txt": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-list-choices.json": {
+    "sha256": "532b577ed9c22dbdd6ce723d44758796d48156cbc55b55349d68c376921d76e1",
+    "bytes": 11567
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-list-choices.txt": {
+    "sha256": "d30ed472227ba3de4b75fb6f5b0f61a91b167f754fb9fb60ddf55d0cb45f38fa",
+    "bytes": 66183
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-list-p0.json": {
+    "sha256": "882c60c336c3cf6ac56c70f8a16eb10f378ec2e34ab039da27a30009dade9562",
+    "bytes": 11570
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-list-p0.txt": {
+    "sha256": "271edb76a63259da8ff3502add3751e3e4fcbd8dacd7828cedd5a9a89786fe37",
+    "bytes": 9483
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-list-toasts.json": {
+    "sha256": "ddc79bb13adb5a2828194692a2917e46896692d6d7e5e83c871c23777ac3e0b5",
+    "bytes": 11566
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-list-toasts.txt": {
+    "sha256": "eef02e6264fa6b8cf1f240aa455656b4061f1a9f6de28cd90ab5c9df0fd0a7c0",
+    "bytes": 32991
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-merge-audit.json": {
+    "sha256": "b123236d3ef62ed7a49ffe5369426525b6c35f928013bfefa3dbe09e938308d1",
+    "bytes": 11507
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-merge-audit.txt": {
+    "sha256": "03029838f703eab7584936a329c5389d10cafb34418e6361b53a08b9db735b16",
+    "bytes": 2625
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-production-entry.json": {
+    "sha256": "121a812977f47f230796fab24355b6914f2aa439547eeeae680b068a4098dfc3",
+    "bytes": 11546
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-production-entry.txt": {
+    "sha256": "78729671ba69da188ba8174aecf881711acaad843234e6ec15e3f51b9478c164",
+    "bytes": 4565
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-toasts-entry.json": {
+    "sha256": "a5d0a8847e5959fe5fdb373ca30d8ea4f0279875eac5611d79313554de2986da",
+    "bytes": 11667
+  },
+  "docs/evidence/base-ui-migration/p2.2/checks/r3-toasts-entry.txt": {
+    "sha256": "147dbd1f739902e04ef2b891256c840348def273b297662d709a810ed56ca805",
+    "bytes": 6060
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/README.md": {
+    "sha256": "83781885ba474455f99f9f3a94bfaa9ba7f9b876a788c5d9cbdae66f98234346",
+    "bytes": 7451
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/artifact-audit.json": {
+    "sha256": "fa47eb25144a2bbc751d38351c39e3314895b620581583befce2e0654d21385c",
+    "bytes": 3019
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/audit-merge.py": {
+    "sha256": "532f757890d28d6593d920ce26cff22b5e8286ed0e5bfbd0ac356ab76e94b749",
+    "bytes": 5368
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "2ce5951c0e0d88c239c4d4451c84011f645205849dddea13329db28897cd8da7",
+    "bytes": 24592
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "9dd4eace7d7c4b6eacb34367e12856b16314ef6de0f1fed14373307564c87a2d",
+    "bytes": 4238
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "48a8f7200193d699f7298adb0753aa6ed90d3ae3c59a310224b84bd2bf49954b",
+    "bytes": 64728
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "b96d4f2d1a89daa1bc393b04667f98f427ab8a29fc805214454a97880fc0c80a",
+    "bytes": 634
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "61a222d2ea97b6431c36b5b5539bd2b16de5e8832d6f40753cafba7e357a6e3b",
+    "bytes": 64729
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "dc83a7ee34e51e7712fe543d82688ce7d0966ce9b806914c987bb8eeb0f5094e",
+    "bytes": 26524
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "d0962078635dc862d11984e6fd0b53a27127f3dbde76e4d1cbe2be621d9e8d1f",
+    "bytes": 4584
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "784db55e058fb0e0b2f762d5247683dec44a9b1c099cd72e838fe0dbe7d87f98",
+    "bytes": 39589
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+    "bytes": 744
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "87c65a26a90050af3080551181a77261438408ae069c56d7626378e7612addfd",
+    "bytes": 39446
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "242eebbd081847e3085a1e539df38daaf4e97458110ded787222661fcd75d33f",
+    "bytes": 23771
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "cedfc665c124b9d86e3d2237f3dd7924c70161f170d464c61d80741c2a68dbec",
+    "bytes": 4471
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "4aebe7bb4ebd05d97050c34181a645a3331556cf4535b9dc635a4ebd5a62b118",
+    "bytes": 74137
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--error-context.md": {
+    "sha256": "ff00525246022cb29b7486296c5976b22e21a5d942893398a5275c2a51c3349d",
+    "bytes": 13510
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "4d8a1cf1c8ca07a7a501c7559d36f7a2d349641dcc49b9df15f9228e2148c05f",
+    "bytes": 74086
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip": {
+    "sha256": "028f45ca780ad341f915ee65b8fdb7c22ba7d11449fe9416bc1ced12aa037608",
+    "bytes": 643311
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "05751930800570e8a5db8b6da243606c86b5ea1f98ed26b566d39ca2ff082487",
+    "bytes": 25704
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "cd55d71ebc656996576c92b2b4ef2264a6cd73c1d7d9a587f91619dd2b3da2a2",
+    "bytes": 4572
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "5e3283ec7cb00a37c0e348f5b41e12da809294217b463da004f894d58e26908b",
+    "bytes": 45473
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+    "bytes": 744
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "e461f47239d6a092e455229942a0557c17f0545badf12e9bdf92c4e2abe7e288",
+    "bytes": 45271
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/environment.json": {
+    "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+    "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/report.json": {
+    "sha256": "f448f7f9f30506da237ef0517b4f87f6e7e619acc1aa3c9d1df1f78005bfa497",
+    "bytes": 1726026
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/summary.json": {
+    "sha256": "5fbc33d860e7aadcc0cad9094fc85120641dff430a07da62a215cf40ec2bac44",
+    "bytes": 23837
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "810c8771445ce24e9df0908d5118920161565f8c15cf94e5aedfe067d4a54608",
+    "bytes": 29014
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "1ab3c67ec8ecb747765891a999ac10694c3fa76dad787c3ddb07186701272c62",
+    "bytes": 3650
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "33adb8e8fc29acc94e2c7bcc5b92364d5a81615b84c88c2f3d0cd1467b595341",
+    "bytes": 79017
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+    "bytes": 634
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "a87884fda24b29472f41f92cec79e538fe8f8be985d35a3b0fdc00a8d462d53c",
+    "bytes": 79002
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "2ed8214b56d6c0751940572cd0365888cac582aac2b70ee367b14cb1a4a6b21c",
+    "bytes": 32097
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "3972c9cb411214e251db47f376a5d0ddb24573e15dbb82c16bfba69182dee026",
+    "bytes": 3878
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2",
+    "bytes": 49245
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5",
+    "bytes": 741
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "0d8e13833f63b12e9996e18bd59468b7879eb9a7d93bb17609f5e5a7a0520fdf",
+    "bytes": 49256
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "a6631d68bc94f6ec3c2e4b8499761ee5f1fbdb4571d17173b8c64dff577c04f1",
+    "bytes": 28229
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "25afa4dd6e4855895f7bd40292a04e45e8acd444359849609ee357f784da4abf",
+    "bytes": 4108
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "fc9795b8ed1b631f746e546f1e5b9f5fee00b48c6f6b5b9ddb4ad1b460809684",
+    "bytes": 88001
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+    "bytes": 634
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "fc9795b8ed1b631f746e546f1e5b9f5fee00b48c6f6b5b9ddb4ad1b460809684",
+    "bytes": 88001
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json": {
+    "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+    "bytes": 121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png": {
+    "sha256": "aa08666fa974c9d4e32f3f6a18c4b6f537900a21ca8a1de06bc8e26a205be183",
+    "bytes": 31594
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json": {
+    "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+    "bytes": 171
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "346c64e88627d53f49da328d970c49e5dcc38f93b06177cac97ce46439530490",
+    "bytes": 3874
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592",
+    "bytes": 55082
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+    "bytes": 632
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-entry-first/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592",
+    "bytes": 55082
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json": {
+    "sha256": "5981598da1695ed15cc64d525418ded37569a7bef640ab0535442446aa07816c",
+    "bytes": 743
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png": {
+    "sha256": "1b80245cc9551dabbc2dc6ee0a6544294a4a59246d549be38718d7299c1c3092",
+    "bytes": 74078
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json": {
+    "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+    "bytes": 746
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png": {
+    "sha256": "78deb572bad10c7326d5a011882ec4f5d883f65a070b11b424c9828ccbc91414",
+    "bytes": 74083
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json": {
+    "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+    "bytes": 746
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png": {
+    "sha256": "1b80245cc9551dabbc2dc6ee0a6544294a4a59246d549be38718d7299c1c3092",
+    "bytes": 74078
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json": {
+    "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+    "bytes": 746
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png": {
+    "sha256": "2637e72f6db65c5deb0d2cf234e0acc594199f2f81c528097b3b3b255301b896",
+    "bytes": 74084
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json": {
+    "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+    "bytes": 746
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png": {
+    "sha256": "78deb572bad10c7326d5a011882ec4f5d883f65a070b11b424c9828ccbc91414",
+    "bytes": 74083
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/environment.json": {
+    "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+    "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/report.json": {
+    "sha256": "54b4a37ae28b2d341d88307519b93079166818c0ad15be05feab72e630acc675",
+    "bytes": 512718
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/choices-scroll-repeat/summary.json": {
+    "sha256": "b5f258cb57d365ff7c5ee9308af96d194fdbb4fce8f44ec63c5001253221c21a",
+    "bytes": 4222
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/coordinator-input.json": {
+    "sha256": "b807709aed7f21ab0a874ef4240941498e9d75d376eda38a4ddec9cd5e09cabb",
+    "bytes": 7369
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/diff-from-project-web.patch": {
+    "sha256": "af91f60ebda4b6ccd919e883e4777d1a20a7c6f44b9459d520a24a2dde5d6919",
+    "bytes": 146596
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/diff-from-task-web.patch": {
+    "sha256": "23967f9efd28c2192efc88582cc4dea82d7cdcd51fd85130033929467a5ae230",
+    "bytes": 219503
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/discovery-audit.json": {
+    "sha256": "858c66b714e19702b8aff09fefc9e6031eafe311e1e076939602b47b3aeff2d9",
+    "bytes": 217422
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/environment-and-provenance.json": {
+    "sha256": "af494a0dcd79f3f754414306bd476e5baaaac16d30a8a59b3c0436f48e999fb6",
+    "bytes": 2305
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/merge-audit.json": {
+    "sha256": "03029838f703eab7584936a329c5389d10cafb34418e6361b53a08b9db735b16",
+    "bytes": 2625
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-dark-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "d084afa5bb1608d7fe17355011eacdec3a2e473558c925ef4b47d429cf1f3e01",
+    "bytes": 5726
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-dark-desktop--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "cf89e4da16348501ca07530ee1de81227d7389ca092451d326f6916ba6aa58dc",
+    "bytes": 1044
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-dark-desktop--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "1e799f036ced55b19820a0fb4d6e9bc0d25b8bf694997938fdbeb6074253698a",
+    "bytes": 93233
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-dark-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "f6c1303d11af5d9969eac89e1fa334679915b977754c0c9342b72c0bf4a5ab5a",
+    "bytes": 5732
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-dark-phone--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "619706f5374e7cca53a3270623eae186b069eeb0c517f619bc364395567b2a74",
+    "bytes": 1037
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-dark-phone--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e",
+    "bytes": 50014
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-light-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "ae66ad712ce09ade233a12148ef29ac17e1657e5f4936bcc9d38919dabaa2b7f",
+    "bytes": 5727
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-light-desktop--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "1fdf3ed3c589cf0de3f14609b32d38e9b7d18b74268eeb40646f0b50f7d535ae",
+    "bytes": 1033
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-light-desktop--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "e58caff51600e2bd02b240fa548bc830f77a764b8b6f7c950a5787a6f2faf2b6",
+    "bytes": 89680
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-light-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "243d7bdb92558035aeef67b8acf60a36429a795122b2732764a9a4b9d4736250",
+    "bytes": 5734
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-light-phone--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "dceb069b8caa2178eade8e2a5899763b78ed9724339924cdf8e49f4709cc7b5c",
+    "bytes": 1026
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/chromium-light-phone--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194",
+    "bytes": 47485
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/environment.json": {
+    "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+    "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/report.json": {
+    "sha256": "6c4380b167d99ceb6526493cbd2dd4f0c3a456d83e0745be99fd2a53461316fc",
+    "bytes": 849082
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/summary.json": {
+    "sha256": "c6d28b879c0dbd2d2d8244153a6e3b11b7587b36e6ca2ff39225963000b2d590",
+    "bytes": 7047
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-dark-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "66f006ae0be2d51514177a4e653d4d52e23824f338e222a7019b0e4a18030f79",
+    "bytes": 5690
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-dark-desktop--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "3aebcf6913caee8978c14331cafbf225eb3b0b286d89a719f8cdbe54f5b8ea3f",
+    "bytes": 1028
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-dark-desktop--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797",
+    "bytes": 106124
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-dark-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "bcc22f3989ee755ed8bb87963fb53900750fbc2923a88f3660cbe9e9b84963ef",
+    "bytes": 5687
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-dark-phone--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "2c329e0a5769442c93e21887d3bad660b8bd4762964186c2796eed04a02914db",
+    "bytes": 1021
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-dark-phone--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8",
+    "bytes": 58562
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-light-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "ff3f61c38be9d9498babef7e345fb45fea6dc697e68920bcd97566f1eb9767a3",
+    "bytes": 5689
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-light-desktop--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "878bda7c75e17cd4d3a52d308f64167a06688f7b82a8763a7e73e7e020f32dfc",
+    "bytes": 1017
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-light-desktop--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324",
+    "bytes": 106273
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-light-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json": {
+    "sha256": "ea3bb340506189487482e60a890737d52eff4349d8f00c923adbe73da17bc72a",
+    "bytes": 5689
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-light-phone--P2.3-production-notification-compatibility--notification-appearance.json": {
+    "sha256": "706efeaad06e84ba1832f3a2ec4a22d4564210e5b8aa08e8dfb5c043ab482f3a",
+    "bytes": 1010
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/production-entry/webkit-light-phone--P2.3-production-notification-compatibility--production-notification.png": {
+    "sha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8",
+    "bytes": 59805
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/scroll-unlock-diagnostic.json": {
+    "sha256": "dff52f26a5806a903115f9f03104768a07a10592607fc72b81c1762645e9e23b",
+    "bytes": 4517
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "63c86d3d9e486da6a3b650193865d14a8d2014077913d1ee3b81b836c7e1de38",
+    "bytes": 51090
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "95c9438703cb53ba486e68bd0bcf7d71212dc6c93cb3f1fbed268f25a87a3307",
+    "bytes": 38746
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "a7483a77c08fc439a278e868e407a913263ea8192dacae9ed84c58b375741f84",
+    "bytes": 11257
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a",
+    "bytes": 9095
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "4b11c868b8d846965d5c85af60f427b5ea3090f76318cf0e21fb372210e7a354",
+    "bytes": 56220
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "4da7466a09258dcbea2708b962ef4efb6561ea968a33a3726735555474d7f2cd",
+    "bytes": 9106
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "0a36ef264ad1b0634066e679c728e02d3cff9a6fd565d7b74ebf081be6f007e3",
+    "bytes": 42774
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "810146b4591de9867a6c4c59e86708727454bdc90901739e6d67f2b44d3d516f",
+    "bytes": 40764
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "e7724a0a047ff2b6c7ce6b3a20aedf0b545cc85ccbbed2ab9d9ea1e5023b5569",
+    "bytes": 11243
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478",
+    "bytes": 9267
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "e24be83c1b444eb70f5b473a922c60264405970bab967b6dea46c84ad009c142",
+    "bytes": 44420
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "b8ef29e559719fff8d97697ca5a84aead0114595f5a6ec776891cc714e34c45a",
+    "bytes": 9265
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "cff24f611328f59c40c4694d44fa5606a6e3cd211f2c3413e738609f0bc69d66",
+    "bytes": 50946
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "13cfdc234bd48a3562c1a8b1ee66a6310ae6db70908da8fa630e2f192c1e4f5f",
+    "bytes": 40199
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "2856537e763bdc2bf47064c8d7ae994788f729a3377d5750c49d509d56d74779",
+    "bytes": 11217
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188",
+    "bytes": 7656
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "16882c43ab4605194faf38cfd67bbe203ec71ee269291fc1f169f78717e800d2",
+    "bytes": 56543
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "aca954e6aa50ca3c33e35fe382554fb0f105124729b7d08e40346314e3512268",
+    "bytes": 7724
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "022161f077fb25a7b43afa95384c4a286139ac87d816d2970297656826b52120",
+    "bytes": 42121
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "4824903768dab1402c58880d093c8e7efb62801beb7a50fb671952e7f3f8c427",
+    "bytes": 42073
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "7d8b2b5d2748e7b6fc1c708517bdd20ed63f042b9995c1f3573848903be5ebdc",
+    "bytes": 11203
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808",
+    "bytes": 7730
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "e0e5d604337812cc48f3a5d5850ed0e34e7cff5d481b4d5ec28fd9c05800040e",
+    "bytes": 43525
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "b2d154c34a7457e92b09eb4c80bd5d766050f842c687704dc8cf777703042b46",
+    "bytes": 7766
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/chromium-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/environment.json": {
+    "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+    "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/report.json": {
+    "sha256": "a48e4aa899111df4e338ab9f6cfed04c8fd4dd0253380c47c174906445e63080",
+    "bytes": 1957035
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/summary.json": {
+    "sha256": "6e4e86c7905a4d3dad67f31b713d7b4f674a33d5dfca9bedb5c7131e6ab63ade",
+    "bytes": 23985
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "81685153c2c73bd80718271f33f44164708fbfde8290c87fbe465981bef3de0a",
+    "bytes": 58505
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "ccfa7958cfddf8b558e41e9095b27761593b25ced51d8fb7495f9995d7055e1b",
+    "bytes": 46826
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "6903cda22582f2ed4e9679f4cff74ffe54f77cbfa6cc83fefd172e0546362074",
+    "bytes": 11065
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538",
+    "bytes": 8984
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "29a1e3704d139ee1efd85aa749e1f9b5e99bffa1752cb5aa56f105403fd76ed2",
+    "bytes": 65136
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "aa51db22e93bcd4a705748643fa895bcef071ea6e8e1732998a4dd80cd655976",
+    "bytes": 8980
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "784a7b6f0f90d272da08392f85fccafd504de59b97771c46773332073dc094a4",
+    "bytes": 48536
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "d1cc2d4e6555213bf32a61e944ef94422d61b349fcd4b85a342bc2ac48f800f0",
+    "bytes": 48659
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "1d20ec826ddb71c3c81b7c9644a6e95cd4b7425c86b815fcd388103af30fcfa3",
+    "bytes": 11051
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1",
+    "bytes": 9058
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "f6522b468b965d083581d1f3c5e244f6c4cb754abefe422932e74fb7b5e1d092",
+    "bytes": 51010
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "704a4fe3378d7faade9983dff7a044b5b9d5e1e41dfa3e4242868489b29b3131",
+    "bytes": 9049
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "8fca5888eec3675aea5c267a029ddf5c1b2fdf525ee95a112dee28c649054115",
+    "bytes": 61128
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "c78a3f86f1ff467884ef3af5a593e0aef22ae5a03992295a0b8c9d4e260acbe3",
+    "bytes": 48386
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "2f9ec3b5b52a59f5c8cd4d7b0333a496641f327ed29b15c437c20a05ac6d944c",
+    "bytes": 11025
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8",
+    "bytes": 8976
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "04bd2981d6906c675cd8566d70ccc79252ad1d01746117e2fa0d504fa91f46d9",
+    "bytes": 67885
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "03db1ff4ec72c2ed924b644d3d404fbdabd3e35a4eb581739ff68b47189dbd88",
+    "bytes": 9039
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png": {
+    "sha256": "2c762aca611c5bc4a16b6de04a0756727c4b5ad41ee6b2ea84a1ec7eea5a7d84",
+    "bytes": 50832
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png": {
+    "sha256": "a84c58e4591d44f992fe2553a9ff9a790090fc07941e732b667f7b9e7a06bd82",
+    "bytes": 50874
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirmation.json": {
+    "sha256": "b73a28b2093f7f88fa60263c6b8aee696ff53d63e9abd2417632ad7241427df6",
+    "bytes": 198
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--appearance.json": {
+    "sha256": "faec3a0bf69c614251c2f6a19d0fbcd8672dc2087cc4d8c428ba5990c70bc20c",
+    "bytes": 11011
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--before-overlay.png": {
+    "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67",
+    "bytes": 9081
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--keyboard.json": {
+    "sha256": "a322d6efbc187e5cbee1522b7f69234d0b5c2f8eb2628d71e0357afe16b2d54d",
+    "bytes": 131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--notification-and-overlay.png": {
+    "sha256": "cf7c537714ec43bf270badfcbcaf863ab932486584997da6298674341f5a89ea",
+    "bytes": 52728
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png": {
+    "sha256": "8c2cb3bfff10d9e9fce5c927cda77e6c5953af065d16d48587b66aeb50feb4c1",
+    "bytes": 9131
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/toasts-entry/webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json": {
+    "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+    "bytes": 141
+  },
+  "docs/evidence/base-ui-migration/p2.2/revision-3/tool-call-refs.json": {
+    "sha256": "807ddb4d2769091561ecb71d75d5c91de970b879ba254a5f9c4216cf9bb2c005",
+    "bytes": 3550
+  }
+}

@@ -1,0 +1,7 @@
+
+Running 1 test using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/settings-saved.png, writing actual.
+  ✓  1 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.5s)
+
+  1 passed (2.4s)

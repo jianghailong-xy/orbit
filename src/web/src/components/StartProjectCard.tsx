@@ -1,8 +1,21 @@
-import { useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type Ref,
+  type RefObject,
+} from 'react';
+import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input, InputNumber, Modal, Radio, Spin, Switch } from 'antd';
 import type {
+  ProjectBranchCandidates,
   ProjectIntegrationView,
+  ProjectLastMainBranch,
   ProjectOpenItemRow,
   ProjectStartRequest,
   ProjectStartSettings,
@@ -17,39 +30,58 @@ import {
   projectOpenItemsQuery,
 } from '../lib/queries';
 import {
+  DEFAULT_MAIN_BRANCH,
   RUN_AT_MOST,
   RUN_AUTOMATIC,
-  RUN_LINE_MAIN,
-  RUN_LINE_MAIN_HINT,
   RUN_LINE_PROJECT_BRANCH,
   RUN_LINE_PROJECT_BRANCH_HINT,
+  RUN_MAIN_BRANCH,
   RUN_MERGE_CHECK,
-  RUN_MERGE_CHECK_HINT,
+  RUN_MERGE_CHECK_NONE,
+  RUN_MERGE_CHECK_NONE_SAYS,
   RUN_MERGE_CHECK_PLACEHOLDER,
-  RUN_NO_MERGE_CHECK_WARNING,
-  RUN_SWITCH_OFF,
-  RUN_SWITCH_ON,
+  RUN_MERGE_CHECK_SET,
+  RUN_MERGE_CHECK_TIMEOUT,
+  RUN_MERGE_CHECK_TIMEOUT_HINT,
+  RUN_MERGE_CHECK_TIMEOUT_UNIT,
   RUN_TASKS_LAND_ON,
+  START_COMES_TO_YOU,
+  START_COORDINATOR,
   START_HOW_IT_RUNS,
+  START_LESS,
+  START_MORE,
   START_NOT_RECORDED,
+  START_NOW,
+  START_OPENS_COORDINATOR,
   START_PROJECT_ACTION,
   START_PROJECT_TITLE,
   START_REQUEST_GONE,
-  START_SUGGESTED_BY_COORDINATOR,
+  START_TASK_GRAPH,
   START_VIEW_TASKS,
-  planOrderLine,
+  START_YOU,
+  mainBranchRef,
+  planLevels,
+  planTaskLabel,
+  planTaskRest,
   projectStarted,
-  runAutomaticHint,
-  runMergeCheckMissing,
+  runAutomaticSays,
+  runLastChoiceFor,
+  runLineMain,
+  runLineMainHint,
+  runMergeCheckHint,
   runTasksAtATime,
-  startCardMeta,
-  startCheckedLine,
-  startCoordinatorSays,
+  startAskedLine,
+  startBarCaption,
+  startComesToYou,
   startDoneWhenHead,
   startExplanation,
+  startHowItRunsNote,
+  startInParallel,
+  startMainBranch,
+  startNobodyAskedLine,
   startPlanHead,
   startProject,
-  startWarningLines,
+  type PlanLevelTask,
   type PlanTask,
 } from '../lib/projectStart';
 import {
@@ -65,8 +97,19 @@ import { AppLink } from './AppLink';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
+import { MainBranchSelect } from './MainBranchSelect';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
+import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
+import { Alert } from './ui/Alert';
+import { Dialog } from './ui/Dialog';
+import { Drawer } from './ui/Drawer';
+import { NumberInput } from './ui/NumberInput';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Switch } from './ui/Switch';
+import { Textarea } from './ui/Textarea';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -105,21 +148,46 @@ import { ago } from '../lib/watches';
 /** The settings as the card edits them: the number box can be empty mid-edit, the text box is text. */
 export interface StartSettingsDraft {
   line: ProjectStartSettings['line'];
+  /** The main branch by name, `refs/heads/` left off: what the menu shows and the reader types —
+   *  null for a project with no repository, which has no main branch to choose. */
+  upstream: string | null;
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
+  /** The check's budget in seconds — null, an empty box, for the one-hour default. */
+  mergeCheckTimeoutSeconds: number | null;
 }
 
 /** The most tasks a project may run at once, as the door bounds it (`MAX_PROJECT_CONCURRENT_TASKS`). */
 export const START_MAX_CONCURRENT_TASKS = 100;
 
-/** The card's draft of what a suggestion says. */
-export function startDraftOf(settings: ProjectStartSettings): StartSettingsDraft {
+/** The escalation window a project has when the read does not say (`project.exception_escalation_seconds`'s
+ *  default). */
+const DEFAULT_ESCALATION_SECONDS = 7_200;
+
+/**
+ * The card's draft of what a suggestion says — with Automatic on whatever was suggested: delegating
+ * is the owner's default (the owner, 2026-10-07), and a coordinator that would keep it off says so in
+ * its own words, which the card quotes.
+ */
+export function startDraftOf(
+  settings: ProjectStartSettings,
+  standing: Pick<
+    ProjectIntegrationView,
+    'repository' | 'upstreamRef' | 'upstreamChosenAt' | 'lastMainBranch'
+  > | null = null,
+): StartSettingsDraft {
   return {
     line: settings.line,
-    automatic: settings.automatic,
+    // Only a project with a repository has a main branch to choose; a read that does not say whether
+    // it has one offers none.
+    upstream: standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,
+    automatic: true,
     maxConcurrentTasks: settings.maxConcurrentTasks,
     mergeCheckCommand: settings.mergeCheckCommand ?? '',
+    // The coordinator's budget when it suggested one, and an empty box — the default — when it did
+    // not: what it sends is what the card opens on, and the owner may change it.
+    mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
   };
 }
 
@@ -132,7 +200,10 @@ export function startDraftComplete(draft: StartSettingsDraft): boolean {
 /**
  * The body a press sends: the seal, every setting, and the request it answers. The branch the
  * coordinator named rides only with a project branch — the door refuses a branch name on a line
- * that has none — and an empty merge check is none.
+ * that has none — and an empty merge check is none. The main branch on the card is the owner's
+ * choice once pressed, so it rides whenever the card offered one: a project with no repository has
+ * none, and the door refuses one for it. The check's budget rides as the box reads it: an empty box
+ * is null, which is the naming that runs the check on its one-hour default.
  */
 export function startBody(
   request: Pick<ProjectStartRequest, 'criteriaDigest' | 'settings'>,
@@ -144,29 +215,78 @@ export function startBody(
     criteriaDigest: request.criteriaDigest,
     line: draft.line,
     ...(draft.line === 'PROJECT_BRANCH' && branch ? { projectBranchName: branch } : {}),
+    ...(draft.upstream ? { upstreamRef: mainBranchRef(draft.upstream) } : {}),
     automatic: draft.automatic,
     maxConcurrentTasks: draft.maxConcurrentTasks ?? request.settings.maxConcurrentTasks,
     mergeCheckCommand: draft.mergeCheckCommand.trim() || null,
+    mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds,
     requestId,
   };
 }
 
-/** The plan as the card reads it: how many tasks, their order in one line, and the warnings. */
+/** The plan as the card reads it: how many tasks, the plan in levels (null when the graph came back
+ *  folded — a plan too big to list), and the facts the list of what comes to the owner reads. */
 export interface StartPlanView {
   count: number;
-  /** Null when the plan is too big to say in a line (the graph came back folded). */
-  order: string | null;
-  warnings: string[];
+  levels: PlanLevelTask[][] | null;
+  /** Its OWNER_CONFIRMED tasks, by label and the rest of their title. */
+  ownerConfirmed: Array<{ label: string; title: string }>;
+  /** How many of its tasks are settled by a judgment of their evidence. */
+  evidenceJudged: number;
+  /** The labels of the tasks Orbit starts the moment the project does. */
+  startsNow: string[];
+}
+
+/** What the project read says about who runs it: whether it has a coordinator, and how long a
+ *  problem waits on one before it reaches the owner. */
+export interface StartProjectFacts {
+  hasCoordinator: boolean;
+  escalationSeconds: number;
+}
+
+// The project page's task graph, behind the same kind of boundary the project page draws it
+// through: React Flow and dagre load when a start card has a plan to draw, never with the page.
+const LazyStartPlanGraph = lazy(() => import('./StartPlanGraph'));
+const LazyStartTaskGraph = lazy(async () => ({ default: (await import('./StartPlanGraph')).StartTaskGraph }));
+
+/**
+ * Whether a line clamp under `box` is hiding text right now — `box` itself, or each element under it
+ * that `selector` names — measured after layout and again whenever the box changes size, which
+ * opening or closing the clamp does too. A toggle for text that already shows in full would open
+ * nothing, so the card draws More and "Read all" only while this says something is cut (or once
+ * they are open). `content` re-measures when the words change without the box changing size.
+ */
+function useClampHides(box: RefObject<HTMLElement | null>, selector: string | null, content: string): boolean {
+  const [hides, setHides] = useState(false);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return undefined;
+    const measure = () => {
+      const texts = selector ? [...element.querySelectorAll<HTMLElement>(selector)] : [element];
+      setHides(texts.some((text) => text.scrollHeight > text.clientHeight + 1));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [box, selector, content]);
+  return hides;
 }
 
 export function StartProjectCard({
   ref,
+  projectId,
   projectTitle,
   askedAt,
   request,
   criteria,
   plan,
+  graph = null,
+  facts,
   branch,
+  branches = null,
+  lastMainBranch = null,
   draft,
   stale = null,
   busy = false,
@@ -180,16 +300,25 @@ export function StartProjectCard({
 }: {
   /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
   ref?: Ref<HTMLDivElement>;
+  projectId: string;
   projectTitle: string;
   /** When the coordinator asked; null for a card nobody asked for. */
   askedAt: string | null;
-  /** What the coordinator asked for: the settings it suggests, why, what the check found. */
+  /** What the coordinator asked for: the settings it suggests and why. */
   request: ProjectStartRequest;
   /** The stated criteria, or null when the project document could not be read. */
   criteria: ConfirmationCriterion[] | null;
   plan: StartPlanView;
-  /** The project branch as the first option names it. */
+  /** The dependency graph `plan` was read off, which the Plan draws when it fits. */
+  graph?: ProjectDependencyGraphResponse | null;
+  facts: StartProjectFacts;
+  /** The project branch as the line menu names it. */
   branch: string;
+  /** What the Main branch menu offers: the branches the runner reported for the coordination
+   *  workspace's checkout, or null for none. */
+  branches?: ProjectBranchCandidates | null;
+  /** The branch the owner last chose for this repository, which the menu tags. */
+  lastMainBranch?: ProjectLastMainBranch | null;
   draft: StartSettingsDraft;
   /** Why Start is dead, or null while it is live. */
   stale?: string | null;
@@ -211,15 +340,66 @@ export function StartProjectCard({
 }): JSX.Element {
   const listId = useId();
   const [criteriaOpen, setCriteriaOpen] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
+  const [mergeCheckOpen, setMergeCheckOpen] = useState(false);
+  const [graphDrawn, setGraphDrawn] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
+  const whyText = useRef<HTMLParagraphElement>(null);
+  const criteriaList = useRef<HTMLOListElement>(null);
+  const whyHides = useClampHides(whyText, null, request.why);
+  const criteriaHide = useClampHides(
+    criteriaList,
+    '.settlement-card-criterion',
+    items.map((item) => item.text).join('\n'),
+  );
   // A card nobody asked for — the owner's own "Start…" on the project page — carries the default
-  // rule's settings rather than a suggestion, and no ready check ran on its plan, so it claims
-  // neither.
+  // rule's settings rather than a suggestion, and quotes nobody.
   const asked = askedAt !== null;
   const startable = !busy && stale === null && startDraftComplete(draft);
   const editable = !busy && stale === null;
-  const missingCheck = runMergeCheckMissing(draft);
+  const hasMergeCheck = draft.mergeCheckCommand.trim() !== '';
+  const opensCoordinator = draft.automatic && !facts.hasCoordinator;
+  // The branch every sentence about where work goes names: the one on the card, or main for a
+  // project with no repository to have another.
+  const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
+  const comesToYou = startComesToYou({
+    automatic: draft.automatic,
+    line: draft.line,
+    ownerConfirmed: plan.ownerConfirmed,
+    evidenceJudged: plan.evidenceJudged,
+    escalationSeconds: facts.escalationSeconds,
+    main,
+  });
   const set = (patch: Partial<StartSettingsDraft>) => onDraft({ ...draft, ...patch });
+  // The two lines the menu offers, each with what it means and, for a project branch, its name.
+  const lines = [
+    { value: 'PROJECT_BRANCH' as const, label: RUN_LINE_PROJECT_BRANCH, hint: RUN_LINE_PROJECT_BRANCH_HINT, branch },
+    { value: 'MAIN' as const, label: runLineMain(main), hint: runLineMainHint(main), branch: null },
+  ];
+  // The plan by level: what starts now, what runs together, and the task that needs the owner.
+  const levels = plan.levels ? (
+    <ol className="start-card-levels">
+      {plan.levels.map((level, at) => (
+        <li key={level[0]!.id} className="start-card-level">
+          <span className="start-card-level-number">{at + 1}</span>
+          {level.length === 1 ? (
+            <span className="start-card-task">
+              <b>{level[0]!.label}</b>
+              <span className="start-card-task-title">{planTaskRest(level[0]!.title, level[0]!.label)}</span>
+              {level[0]!.now ? <span className="start-card-pill is-now">{START_NOW}</span> : null}
+              {level[0]!.you ? <span className="start-card-pill is-you">{START_YOU}</span> : null}
+            </span>
+          ) : (
+            <span className="start-card-task">
+              <b>{level.map((task) => task.label).join(' · ')}</b>
+              <span className="start-card-parallel">{startInParallel(level.length)}</span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
+  ) : null;
   return (
     <div ref={ref} className="approval-card settlement-card start-card">
       <div className="approval-head settlement-card-head">
@@ -229,17 +409,33 @@ export function StartProjectCard({
         </span>
       </div>
       <div className="approval-body is-questions settlement-card-body">
+        {/* Who is asking, and in their own words: the card is the coordinator asking to begin. */}
+        <div className="start-card-project">{projectTitle}</div>
         <div className="settlement-card-meta">
-          {startCardMeta(projectTitle, askedAt ? ago(askedAt, Date.now()) : null, shortSeal(request.criteriaDigest))}
+          {asked ? startAskedLine(ago(askedAt, Date.now())) : startNobodyAskedLine(facts.hasCoordinator)}
         </div>
+        {asked && request.why ? (
+          <div className="start-card-quote">
+            <div className="start-card-quote-head">{START_COORDINATOR}</div>
+            <p ref={whyText} className={whyOpen ? 'start-card-quote-text is-open' : 'start-card-quote-text'}>
+              {request.why}
+            </p>
+            {whyOpen || whyHides ? (
+              <button type="button" className="start-card-link" onClick={() => setWhyOpen((open) => !open)}>
+                {whyOpen ? START_LESS : START_MORE}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {stale ? <p className="settlement-card-stale">{stale}</p> : null}
 
-        {/* The criteria, open: what a press confirms, each clamped to two lines, the toggle taking
-            the clamp off — the older card's rule, for its reason. */}
+        {/* Done when: what a press confirms, open — each clamped to two lines, the toggle taking the
+            clamp off while the clamp hides anything. A folded list is an invitation to sign unread. */}
         <div className="start-card-section">{startDoneWhenHead(items.length)}</div>
         {items.length > 0 ? (
           <>
             <ol
+              ref={criteriaList}
               id={listId}
               className={criteriaOpen ? 'settlement-card-criteria is-open' : 'settlement-card-criteria'}
             >
@@ -249,21 +445,178 @@ export function StartProjectCard({
                 </li>
               ))}
             </ol>
-            <button
-              type="button"
-              className="settlement-card-read"
-              aria-expanded={criteriaOpen}
-              aria-controls={listId}
-              onClick={() => setCriteriaOpen((open) => !open)}
-            >
-              {criteriaOpen ? ACCEPTANCE_SHOW_LESS_LABEL : acceptanceReadLabel(items.length)}
-            </button>
+            {criteriaOpen || criteriaHide ? (
+              <button
+                type="button"
+                className="settlement-card-read"
+                aria-expanded={criteriaOpen}
+                aria-controls={listId}
+                onClick={() => setCriteriaOpen((open) => !open)}
+              >
+                {criteriaOpen ? ACCEPTANCE_SHOW_LESS_LABEL : acceptanceReadLabel(items.length)}
+              </button>
+            ) : null}
           </>
         ) : null}
+        <p className="start-card-note">{startExplanation(items.length)}</p>
 
-        <div className="start-card-section">{startPlanHead(plan.count)}</div>
+        {/* How it runs: Automatic first, with what still comes to the owner under it — the switch's
+            consequence, listed — then the three settings that can change later, one row each. */}
+        <div className="start-card-section">{START_HOW_IT_RUNS}</div>
+        <div className="start-card-settings">
+          <div className="start-card-row">
+            <div className="start-card-row-head">
+              <span>{RUN_AUTOMATIC}</span>
+              <Switch
+                checked={draft.automatic}
+                disabled={!editable}
+                aria-label={RUN_AUTOMATIC}
+                onCheckedChange={(automatic) => set({ automatic })}
+              />
+            </div>
+            <div className="start-card-hint">{runAutomaticSays(draft.automatic, draft.line, hasMergeCheck, main)}</div>
+            {opensCoordinator ? <div className="start-card-opens">{START_OPENS_COORDINATOR}</div> : null}
+            <div className="start-card-comes">
+              <div className="start-card-comes-head">{START_COMES_TO_YOU}</div>
+              <ul>
+                {comesToYou.map((item) => (
+                  <li key={item.text}>
+                    {item.text}
+                    {item.detail ? <span className="start-card-comes-detail">{` · ${item.detail}`}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="start-card-row">
+            <div className="start-card-row-head">
+              <span>{RUN_TASKS_LAND_ON}</span>
+              <Select
+                className="start-card-line"
+                aria-label={RUN_TASKS_LAND_ON}
+                value={draft.line}
+                disabled={!editable}
+                matchTriggerWidth={false}
+                onValueChange={(line) => {
+                  if (line) set({ line });
+                }}
+                options={lines.map(({ value, label }) => ({ value, label }))}
+                renderOption={(option) => {
+                  const line = lines.find((entry) => entry.value === option.value);
+                  return (
+                    <div className="start-card-line-option">
+                      <b>{option.label}</b>
+                      {line?.branch ? <code className="start-card-branch">{line.branch}</code> : null}
+                      <div className="start-card-hint">{line?.hint}</div>
+                    </div>
+                  );
+                }}
+              />
+            </div>
+          </div>
+          {/* Which branch "main" is for this project: where its tasks start and its work ends up.
+              Under the line, because the two are one decision and lock together. A project with no
+              repository has no branch to name, and no row. */}
+          {draft.upstream !== null ? (
+            <div className="start-card-row">
+              <div className="start-card-row-head">
+                <span>{RUN_MAIN_BRANCH}</span>
+                <MainBranchSelect
+                  className="start-card-line"
+                  value={draft.upstream}
+                  branches={branches}
+                  remembered={lastMainBranch?.branch ?? null}
+                  disabled={!editable}
+                  onChange={(upstream) => set({ upstream })}
+                />
+              </div>
+              {lastMainBranch && draft.upstream === lastMainBranch.branch ? (
+                <div className="start-card-hint">{runLastChoiceFor(lastMainBranch.repository)}</div>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="start-card-row">
+            <button
+              type="button"
+              className="start-card-row-head start-card-row-button"
+              aria-expanded={mergeCheckOpen}
+              onClick={() => setMergeCheckOpen((open) => !open)}
+            >
+              <span>{RUN_MERGE_CHECK}</span>
+              <span className="start-card-row-value">
+                {hasMergeCheck ? RUN_MERGE_CHECK_SET : RUN_MERGE_CHECK_NONE} ›
+              </span>
+            </button>
+            {!hasMergeCheck && !mergeCheckOpen ? <div className="start-card-hint">{RUN_MERGE_CHECK_NONE_SAYS}</div> : null}
+            {mergeCheckOpen ? (
+              <>
+                <Textarea
+                  className="start-card-mono"
+                  value={draft.mergeCheckCommand}
+                  placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
+                  disabled={!editable}
+                  aria-label={RUN_MERGE_CHECK}
+                  autoSize={{ minRows: 1, maxRows: 6 }}
+                  onChange={(event) => set({ mergeCheckCommand: event.target.value })}
+                />
+                <div className="start-card-hint">{runMergeCheckHint(main)}</div>
+                <div className="start-card-row-head start-card-budget">
+                  <span>{RUN_MERGE_CHECK_TIMEOUT}</span>
+                  <span className="start-card-inline">
+                    <NumberInput
+                      className="start-card-count"
+                      min={1}
+                      precision={0}
+                      value={draft.mergeCheckTimeoutSeconds}
+                      disabled={!editable}
+                      aria-label={RUN_MERGE_CHECK_TIMEOUT}
+                      onValueChange={(value) => set({ mergeCheckTimeoutSeconds: value })}
+                    />
+                    <span>{RUN_MERGE_CHECK_TIMEOUT_UNIT}</span>
+                  </span>
+                </div>
+                <div className="start-card-hint">{RUN_MERGE_CHECK_TIMEOUT_HINT}</div>
+              </>
+            ) : null}
+          </div>
+          <div className="start-card-row">
+            <div className="start-card-row-head">
+              <span>{RUN_AT_MOST}</span>
+              <span className="start-card-inline">
+                <NumberInput
+                  className="start-card-count"
+                  min={1}
+                  max={START_MAX_CONCURRENT_TASKS}
+                  precision={0}
+                  value={draft.maxConcurrentTasks}
+                  disabled={!editable}
+                  aria-label={RUN_AT_MOST}
+                  onValueChange={(value) => set({ maxConcurrentTasks: value })}
+                />
+                <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <p className="start-card-note">
+          {startHowItRunsNote(asked, asked && request.settings.automatic === false)}
+        </p>
+
+        {/* The plan: the project page's task graph while the whole of it fits the card legibly —
+            what waits on what, task by task — and otherwise by level (what starts now, what runs
+            together, the task that needs the owner) with the graph full screen a press away. A
+            drawn graph's rows are its layout's, not levels, so its head counts tasks only. */}
+        <div className="start-card-section">
+          {startPlanHead(plan.count, graphDrawn ? 1 : (plan.levels?.length ?? 1))}
+        </div>
         <div className="start-card-plan">
-          {plan.order ? <span>{plan.order}</span> : null}
+          {graph ? (
+            <Suspense fallback={levels}>
+              <LazyStartPlanGraph projectId={projectId} data={graph} fallback={levels} onDrawn={setGraphDrawn} />
+            </Suspense>
+          ) : (
+            levels
+          )}
           {onViewTasks ? (
             <button type="button" className="start-card-link" onClick={onViewTasks}>
               {START_VIEW_TASKS}
@@ -271,146 +624,83 @@ export function StartProjectCard({
           ) : (
             <AppLink className="start-card-link" to={projectHref}>{START_VIEW_TASKS}</AppLink>
           )}
+          {graph && !graphDrawn ? (
+            <button type="button" className="start-card-link start-card-graph-link" onClick={() => setGraphOpen(true)}>
+              {START_TASK_GRAPH} <span aria-hidden="true">⤢</span>
+            </button>
+          ) : null}
+          {graph && graphOpen ? (
+            <Suspense fallback={null}>
+              <LazyStartTaskGraph projectId={projectId} data={graph} onClose={() => setGraphOpen(false)} />
+            </Suspense>
+          ) : null}
         </div>
-        {plan.warnings.map((warning) => (
-          <div key={warning} className="start-card-warn">{`⚠ ${warning}`}</div>
-        ))}
-
-        {/* How it runs: the integration settings card's own rows, prefilled with the coordinator's
-            suggestion and the owner's to change before the press. */}
-        <div className="start-card-section">
-          <span>{START_HOW_IT_RUNS}</span>
-          {asked ? <span className="start-card-section-aside">{START_SUGGESTED_BY_COORDINATOR}</span> : null}
-        </div>
-        <div className="start-card-settings">
-          <div className="project-integration-setting">
-            <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
-            <Radio.Group
-              className="start-card-lines"
-              aria-label={RUN_TASKS_LAND_ON}
-              value={draft.line}
-              disabled={!editable}
-              onChange={(event) => set({ line: event.target.value })}
-            >
-              <Radio value="PROJECT_BRANCH">
-                <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch">{branch}</code>
-                <div className="project-integration-setting-hint start-card-option-hint">
-                  {RUN_LINE_PROJECT_BRANCH_HINT}
-                </div>
-              </Radio>
-              <Radio value="MAIN">
-                <b>{RUN_LINE_MAIN}</b>
-                <div className="project-integration-setting-hint start-card-option-hint">
-                  {RUN_LINE_MAIN_HINT}
-                </div>
-              </Radio>
-            </Radio.Group>
-          </div>
-          <div className="project-integration-setting">
-            <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
-            <div>
-              <div className="start-card-inline">
-                <Switch
-                  checked={draft.automatic}
-                  disabled={!editable}
-                  aria-label={RUN_AUTOMATIC}
-                  onChange={(automatic) => set({ automatic })}
-                />
-                <span>{draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</span>
-              </div>
-              <div className="project-integration-setting-hint">{runAutomaticHint(draft.line)}</div>
-            </div>
-          </div>
-          <div className="project-integration-setting">
-            <div className="project-integration-setting-label">{RUN_AT_MOST}</div>
-            <div className="start-card-inline">
-              <InputNumber
-                className="start-card-count"
-                min={1}
-                max={START_MAX_CONCURRENT_TASKS}
-                precision={0}
-                value={draft.maxConcurrentTasks}
-                disabled={!editable}
-                aria-label={RUN_AT_MOST}
-                onChange={(value) => set({ maxConcurrentTasks: typeof value === 'number' ? value : null })}
-              />
-              <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
-            </div>
-          </div>
-          <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
-            <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
-            <div>
-              <Input
-                className="start-card-mono"
-                value={draft.mergeCheckCommand}
-                placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
-                disabled={!editable}
-                aria-label={RUN_MERGE_CHECK}
-                status={missingCheck ? 'warning' : undefined}
-                onChange={(event) => set({ mergeCheckCommand: event.target.value })}
-              />
-              <div className="project-integration-setting-hint">{RUN_MERGE_CHECK_HINT}</div>
-              {missingCheck ? <div className="start-card-warn">{RUN_NO_MERGE_CHECK_WARNING}</div> : null}
-            </div>
-          </div>
-        </div>
-        {request.why ? <p className="start-card-note">{startCoordinatorSays(request.why)}</p> : null}
-
-        {asked ? (
-          <p className="start-card-checked">
-            <span className="start-card-tick" aria-hidden="true">✓</span>
-            <span>{startCheckedLine(request.repository)}</span>
-          </p>
-        ) : null}
-        <p className="settlement-card-explains">{startExplanation(items.length)}</p>
         {error ? (
           <Alert
             className="settlement-card-error"
             type="error"
-            showIcon
-            message={START_NOT_RECORDED}
+            title={START_NOT_RECORDED}
             description={error.message}
           />
         ) : null}
       </div>
-      <CardActions className="approval-actions settlement-card-actions">
-        <CardActionButton tone="primary" disabled={!startable} onClick={onStart}>
-          {START_PROJECT_ACTION}
-          {keys && startable && <span className="approval-kbd">{ENTER_HINT}</span>}
-        </CardActionButton>
-        {onChatAbout ? (
-          <CardActionButton tone="secondary" disabled={criteria === null} onClick={onChatAbout}>
-            {OWNER_SEND_BACK_ACTION}
+      <div className="start-card-bar">
+        <CardActions className="approval-actions settlement-card-actions">
+          <CardActionButton tone="primary" disabled={!startable} onClick={onStart}>
+            {START_PROJECT_ACTION}
+            {keys && startable && <span className="approval-kbd">{ENTER_HINT}</span>}
           </CardActionButton>
-        ) : null}
-      </CardActions>
+          {onChatAbout ? (
+            <CardActionButton tone="secondary" disabled={criteria === null} onClick={onChatAbout}>
+              {OWNER_SEND_BACK_ACTION}
+            </CardActionButton>
+          ) : null}
+        </CardActions>
+        <p className="start-card-caption">
+          {startBarCaption({
+            opensCoordinator,
+            startsNow: plan.startsNow,
+            criteria: items.length,
+            seal: shortSeal(request.criteriaDigest),
+          })}
+        </p>
+      </div>
     </div>
   );
 }
 
-/** The plan, off the project's dependency graph: the tasks nothing cancelled, their order, and the
- *  check's warnings in the order line's names. A folded graph is a plan too big for one line, and
- *  says only how many tasks it holds. */
+/** The plan, off the project's dependency graph: the tasks nothing cancelled, in levels, and what the
+ *  list of what comes to the owner reads off them. A folded graph is a plan too big to list, and says
+ *  only how many tasks it holds. */
 export function startPlanView(
   graph: {
-    marks: Array<{ kind: string; id: string; taskId?: string; title: string; status?: string }>;
+    marks: Array<{
+      kind: string;
+      id: string;
+      taskId?: string;
+      title: string;
+      status?: string;
+      completionCriterion?: string;
+      autoRunWhenReady?: boolean;
+    }>;
     edges: Array<{ sourceMarkId: string; targetMarkId: string }>;
     taskCount: number;
     folded: boolean;
     truncated: boolean;
   } | null,
-  request: Pick<ProjectStartRequest, 'warnings'>,
   fallbackCount: number,
 ): StartPlanView {
   if (!graph || graph.folded || graph.truncated) {
     return {
       count: graph?.taskCount ?? fallbackCount,
-      order: null,
-      warnings: startWarningLines(request.warnings, []),
+      levels: null,
+      ownerConfirmed: [],
+      evidenceJudged: 0,
+      startsNow: [],
     };
   }
-  // Unfolded, every mark is one task. Cancelled ones are not part of the plan, and settled ones
-  // run nothing, so neither is given a place in the order.
+  // Unfolded, every mark is one task. Cancelled ones are not part of the plan, and settled ones run
+  // nothing and ask nobody, so neither is listed or counted.
   const tasks = graph.marks.filter((mark) => mark.kind === 'TASK' && mark.status !== 'CANCELLED');
   const planned: PlanTask[] = tasks
     .filter((mark) => mark.status !== 'DONE')
@@ -418,29 +708,58 @@ export function startPlanView(
       id: mark.id,
       title: mark.title,
       after: graph.edges.filter((edge) => edge.targetMarkId === mark.id).map((edge) => edge.sourceMarkId),
+      completionCriterion: mark.completionCriterion,
+      autoRunWhenReady: mark.autoRunWhenReady,
     }));
+  const levels = planned.length === 0 ? null : planLevels(planned);
   return {
     count: tasks.length,
-    order: planned.length === 0 ? null : planOrderLine(planned),
-    warnings: startWarningLines(
-      request.warnings,
-      tasks.map((mark) => ({ id: mark.taskId ?? mark.id, title: mark.title })),
-    ),
+    levels,
+    ownerConfirmed: planned
+      .filter((task) => task.completionCriterion === 'OWNER_CONFIRMED')
+      .map((task) => {
+        const label = planTaskLabel(task.title);
+        return { label, title: planTaskRest(task.title, label) };
+      }),
+    evidenceJudged: planned.filter((task) => task.completionCriterion === 'EVIDENCE_JUDGMENT').length,
+    startsNow: (levels?.[0] ?? []).filter((task) => task.now).map((task) => task.label),
+  };
+}
+
+/** What the project read says about who runs it, as the card reads it. */
+export function startProjectFacts(
+  document: { coordinatorSessionId?: string | null; exceptionEscalationSeconds?: number } | null,
+  asked: boolean,
+): StartProjectFacts {
+  return {
+    // A coordinator asked, so there is one; otherwise the project read says.
+    hasCoordinator: asked || Boolean(document?.coordinatorSessionId),
+    escalationSeconds: document?.exceptionEscalationSeconds ?? DEFAULT_ESCALATION_SECONDS,
   };
 }
 
 /**
  * The wired card for one conversation: the coordinator's open request, the criteria it names and
  * the plan it is about, read on every render; the press; and the keys.
+ *
+ * `bare` draws the same card for the project's sessions page, inside its start dialog
+ * (`ProjectStartDialog` with `asked`): no review wrapper around it, Chat about this only when there
+ * is a composer to hand it to, and a word in place of the card while the request is still being
+ * read or has stopped standing.
  */
 export function SessionStartProjectCard({
   projectId,
+  bare = false,
   onOpen,
+  onStarted,
   onChatAbout,
   onViewTasks,
 }: {
   /** The project this conversation coordinates. Ordinary conversations have none and get no card. */
   projectId: string | null | undefined;
+  bare?: boolean;
+  /** Told once a press went through, after the reads it changed have come round. */
+  onStarted?: () => void;
   /** Told whether the card is on screen, each time that changes, and `false` when it goes. A
    *  stable function. */
   onOpen?: (open: boolean) => void;
@@ -448,13 +767,15 @@ export function SessionStartProjectCard({
   onChatAbout?: (plan: SettlementPlanChat) => void;
   onViewTasks?: () => void;
 }): JSX.Element | null {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
   const standingRead = useQuery({ ...acceptanceConfirmationQuery(project), enabled });
   const documentRead = useQuery({
     queryKey: ['project', project],
-    queryFn: () => api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
+    queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
     refetchInterval: 20_000,
   });
@@ -483,8 +804,17 @@ export function SessionStartProjectCard({
   // The owner's edits belong to the request they were made on: a new request arrives with its own
   // suggestions.
   const [edited, setEdited] = useState<{ itemId: string; draft: StartSettingsDraft } | null>(null);
-  const draft = shown && request
-    ? (edited?.itemId === shown.itemId ? edited.draft : startDraftOf(request.settings))
+  // The project's repository and main branch as they stand, this account's last choice for that
+  // repository, and the branches the Main branch menu offers. The card waits for the read: a card
+  // drawn before it answered would open on a main branch the answer then moves. One that fails
+  // offers no main branch, and the start keeps the one the project stands on.
+  const integrationRead = useQuery({
+    ...projectIntegrationQuery(project),
+    enabled: enabled && started === false,
+  });
+  const integration = integrationRead.isError ? null : (integrationRead.data ?? null);
+  const draft = shown && request && !integrationRead.isLoading
+    ? (edited?.itemId === shown.itemId ? edited.draft : startDraftOf(request.settings, integration))
     : null;
 
   const graphRead = useQuery({
@@ -497,12 +827,17 @@ export function SessionStartProjectCard({
       qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),
       qc.invalidateQueries({ queryKey: ['project', project], exact: true }),
       qc.invalidateQueries({ queryKey: projectOpenItemsQuery(project).queryKey }),
+      // The project rows say whether it started too: the sessions page's start row reads them.
+      qc.invalidateQueries({ queryKey: ['projects'] }),
     ]);
   const start = useMutation({
     mutationFn: (body: StartProjectRequestBody) => startProject(project, body),
     // The record of the start is drawn by the conversation from the confirmation read, and the
     // project read is what says it is started: both come round again.
-    onSuccess: () => reread(),
+    onSuccess: async () => {
+      await reread();
+      onStarted?.();
+    },
     // Returned rather than fired off, so the button stays dead until the reads it re-derives from
     // have caught up with the refusal.
     onError: () => reread(),
@@ -520,7 +855,7 @@ export function SessionStartProjectCard({
 
   const criteria = document?.acceptanceCriteriaItems ?? null;
   const title = document?.title || project;
-  const onScreen = shown !== null && request !== null && !answeredHere;
+  const onScreen = shown !== null && request !== null && draft !== null && !answeredHere;
   useEffect(() => {
     onOpen?.(onScreen);
   }, [onOpen, onScreen]);
@@ -532,6 +867,7 @@ export function SessionStartProjectCard({
   };
   const talkAbout = (): void => {
     if (!request || criteria === null) return;
+    setReviewOpen(false);
     onChatAbout?.({
       projectId: project,
       criteriaDigest: request.criteriaDigest,
@@ -542,23 +878,40 @@ export function SessionStartProjectCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
+    confirmEnabled: (!narrow || reviewOpen || bare) && onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
     onConfirm: press,
     anchor,
   });
 
-  if (!onScreen || !shown || !request || !draft) return null;
+  if (!onScreen || !shown || !request || !draft) {
+    if (!bare || answeredHere) return null;
+    // In the dialog, nothing at all would read as a dialog that broke: say what is happening.
+    const reading = standingRead.isPending || documentRead.isPending
+      || (started === false && (itemsRead.isPending || integrationRead.isLoading));
+    return reading ? (
+      <div className="start-card-dialog-loading">
+        <Spinner />
+      </div>
+    ) : (
+      <Alert type="info" title={unread ? CONFIRMATION_UNREAD_EXPLANATION : START_REQUEST_GONE} />
+    );
+  }
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
-  return (
+  const card = (
     <StartProjectCard
       ref={anchor}
       key={shown.itemId}
+      projectId={project}
       projectTitle={title}
       askedAt={shown.waitingSince}
       request={request}
       criteria={criteria}
-      plan={startPlanView(graphRead.data ?? null, request, document?._count?.tasks ?? 0)}
+      plan={startPlanView(graphRead.data ?? null, document?._count?.tasks ?? 0)}
+      graph={graphRead.data ?? null}
+      facts={startProjectFacts(document, true)}
       branch={branchRef.replace(/^refs\/heads\//u, '')}
+      branches={integration?.branches ?? null}
+      lastMainBranch={integration?.lastMainBranch ?? null}
       draft={draft}
       stale={stale}
       busy={start.isPending}
@@ -568,9 +921,17 @@ export function SessionStartProjectCard({
       projectHref={`/projects/${encodeURIComponent(project)}`}
       onDraft={(next) => setEdited({ itemId: shown.itemId, draft: next })}
       onStart={press}
-      onChatAbout={talkAbout}
-      onViewTasks={onViewTasks}
+      onChatAbout={onChatAbout ? talkAbout : undefined}
+      onViewTasks={onViewTasks ? () => { setReviewOpen(false); onViewTasks(); } : undefined}
     />
+  );
+  if (bare) return card;
+  return (
+    <ReviewCard id="settlement-preview" title={START_PROJECT_TITLE} summary={title}
+      meta={stale ?? `${criteria?.length ?? 0} criteria · ${document?._count?.tasks ?? 0} tasks`}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
+      {card}
+    </ReviewCard>
   );
 }
 
@@ -585,7 +946,10 @@ export function SessionStartProjectCard({
  * can exist) the start door says so, on the card, and the owner picks again.
  */
 export function defaultStartSettings(
-  view: Pick<ProjectIntegrationView, 'line' | 'ref' | 'mergeCheckCommand'>,
+  view: Pick<
+    ProjectIntegrationView,
+    'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand' | 'mergeCheckTimeoutSeconds'
+  >,
   project: { maxConcurrentTasks?: number },
   graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> | null,
 ): ProjectStartSettings {
@@ -593,9 +957,14 @@ export function defaultStartSettings(
   return {
     line,
     ...(view.line === 'PROJECT_BRANCH' && view.ref ? { projectBranchName: `refs/heads/${view.ref}` } : {}),
+    // The main branch the project already stands on, where it has one: what a start that names none
+    // would keep. The card's own order puts the owner's choices before it (`startMainBranch`).
+    ...(view.upstreamRef ? { upstreamRef: mainBranchRef(view.upstreamRef) } : {}),
     automatic: true,
     maxConcurrentTasks: project.maxConcurrentTasks ?? 1,
     mergeCheckCommand: view.mergeCheckCommand ?? null,
+    // The budget the project's check already runs on, which a start that names none keeps.
+    mergeCheckTimeoutSeconds: view.mergeCheckTimeoutSeconds ?? null,
   };
 }
 
@@ -608,9 +977,12 @@ function planHasDependencies(graph: Pick<ProjectDependencyGraphResponse, 'marks'
     || graph.edges.some((edge) => live.has(edge.sourceMarkId) && live.has(edge.targetMarkId));
 }
 
-/** The project document, as the owner's own start reads it. */
-interface OwnerStartDocument extends ConfirmationProjectDocument {
+/** The project document, as the start card reads it: the confirmation card's, plus who runs the
+ *  project and how long a problem waits on its coordinator. */
+interface StartProjectDocument extends ConfirmationProjectDocument {
   maxConcurrentTasks?: number;
+  coordinatorSessionId?: string | null;
+  exceptionEscalationSeconds?: number;
 }
 
 /**
@@ -633,7 +1005,7 @@ function OwnerStartProjectCard({
   const standingRead = useQuery(acceptanceConfirmationQuery(projectId));
   const documentRead = useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => api<OwnerStartDocument>(`/projects/${encodeURIComponent(projectId)}`),
+    queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(projectId)}`),
   });
   const integrationRead = useQuery(projectIntegrationQuery(projectId));
   const graphRead = useQuery(projectDependencyGraphQuery(projectId));
@@ -655,7 +1027,7 @@ function OwnerStartProjectCard({
     : null;
   // The owner's edits, once there are any; until then the defaults, as the reads resolve them.
   const [edited, setEdited] = useState<StartSettingsDraft | null>(null);
-  const draft = edited ?? (defaults ? startDraftOf(defaults) : null);
+  const draft = edited ?? (defaults ? startDraftOf(defaults, view) : null);
 
   const reread = () =>
     Promise.all([
@@ -675,10 +1047,10 @@ function OwnerStartProjectCard({
   const stale = unread ? CONFIRMATION_UNREAD_EXPLANATION : null;
   if (!request || !draft) {
     return unread ? (
-      <Alert type="error" showIcon message={CONFIRMATION_UNREAD_EXPLANATION} />
+      <Alert type="error" title={CONFIRMATION_UNREAD_EXPLANATION} />
     ) : (
       <div className="start-card-dialog-loading">
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -686,12 +1058,17 @@ function OwnerStartProjectCard({
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${projectId}`;
   return (
     <StartProjectCard
+      projectId={projectId}
       projectTitle={document?.title || projectId}
       askedAt={null}
       request={request}
       criteria={criteria}
-      plan={startPlanView(graph, request, document?._count?.tasks ?? 0)}
+      plan={startPlanView(graph, document?._count?.tasks ?? 0)}
+      graph={graph}
+      facts={startProjectFacts(document, false)}
       branch={branchRef.replace(/^refs\/heads\//u, '')}
+      branches={view?.branches ?? null}
+      lastMainBranch={view?.lastMainBranch ?? null}
       draft={draft}
       stale={stale}
       busy={start.isPending}
@@ -707,25 +1084,50 @@ function OwnerStartProjectCard({
   );
 }
 
-/** The owner's "Start…", as a dialog over the project page. Mounted only while open, so a page nobody
- *  starts from never reads the plan's graph for it. */
+/** The start card over a page: the owner's own "Start…", or — `asked` — the coordinator's request,
+ *  answered here (the project's sessions page, docs/mocks/project-start-sessions-page). A dialog on a
+ *  wide screen and a sheet from the bottom on a phone, as iOS puts it up. Mounted only while open, so
+ *  a page nobody starts from never reads the plan's graph for it. */
 export function ProjectStartDialog({
   projectId,
   open,
   onClose,
   onViewTasks,
+  asked = false,
 }: {
   projectId: string;
   open: boolean;
   onClose: () => void;
   /** Where the card's "View tasks" goes: the page's own task list, under the dialog. */
   onViewTasks?: () => void;
+  asked?: boolean;
 }): JSX.Element {
-  return (
-    <Modal open={open} onCancel={onClose} footer={null} width={640} className="start-card-dialog">
-      {open ? (
-        <OwnerStartProjectCard projectId={projectId} onStarted={onClose} onViewTasks={onViewTasks} />
-      ) : null}
-    </Modal>
+  const narrow = useIsMobile();
+  // A task opened from the card's graph opens over the project's page: the dialog gets out of its
+  // way rather than standing over it.
+  const { pathname } = useLocation();
+  const openedAt = useRef(pathname);
+  useEffect(() => {
+    if (!open) {
+      openedAt.current = pathname;
+      return;
+    }
+    if (pathname !== openedAt.current) onClose();
+  }, [onClose, open, pathname]);
+  const card = !open ? null : asked ? (
+    <SessionStartProjectCard projectId={projectId} bare onStarted={onClose} onViewTasks={onViewTasks} />
+  ) : (
+    <OwnerStartProjectCard projectId={projectId} onStarted={onClose} onViewTasks={onViewTasks} />
+  );
+  return narrow ? (
+    <Drawer open={open} onClose={onClose} title={START_PROJECT_TITLE} placement="bottom" height="92%"
+      className="start-card-sheet">
+      {card}
+    </Drawer>
+  ) : (
+    // No title of its own on a wide screen: the card's head is its heading.
+    <Dialog open={open} onClose={onClose} title={null} width={640} className="start-card-dialog">
+      {card}
+    </Dialog>
   );
 }

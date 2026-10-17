@@ -1,0 +1,450 @@
+{
+ "webkit-dark-desktop": {
+  "fixab": {
+   "n": 8,
+   "medianFirstOwnedMs": 115.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 169,
+     "opacity": 0.999,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 121,
+     "opacity": 0.981,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 110,
+     "opacity": 0.968,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.971,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 108,
+     "opacity": 0.967,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 115,
+     "opacity": 0.973,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 116,
+     "opacity": 0.974,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 132,
+     "opacity": 0.987,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 8,
+   "medianFirstOwnedMs": 119.5,
+   "failed": 1,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.97,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 127,
+     "opacity": 0.983,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 103,
+     "opacity": 0.962,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 220,
+     "opacity": 1,
+     "status": "failed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 119,
+     "opacity": 0.977,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 120,
+     "opacity": 0.979,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 124,
+     "opacity": 0.983,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 114,
+     "opacity": 0.973,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-dark-phone": {
+  "fixab": {
+   "n": 8,
+   "medianFirstOwnedMs": 121.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 114,
+     "opacity": 0.973,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 149,
+     "opacity": 0.995,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 119,
+     "opacity": 0.978,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 168,
+     "opacity": 0.999,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 124,
+     "opacity": 0.981,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 119,
+     "opacity": 0.978,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 128,
+     "opacity": 0.986,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 110,
+     "opacity": 0.97,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 8,
+   "medianFirstOwnedMs": 126.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 101,
+     "opacity": 0.959,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 131,
+     "opacity": 0.987,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 178,
+     "opacity": 1.0,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 145,
+     "opacity": 0.994,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 163,
+     "opacity": 0.998,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 121,
+     "opacity": 0.98,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 117,
+     "opacity": 0.976,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 118,
+     "opacity": 0.977,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-light-desktop": {
+  "fixab": {
+   "n": 8,
+   "medianFirstOwnedMs": 111.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 122,
+     "opacity": 0.98,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 116,
+     "opacity": 0.974,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 113,
+     "opacity": 0.971,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 109,
+     "opacity": 0.966,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 111,
+     "opacity": 0.97,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 108,
+     "opacity": 0.966,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 111,
+     "opacity": 0.968,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 106,
+     "opacity": 0.966,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 8,
+   "medianFirstOwnedMs": 113.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 113,
+     "opacity": 0.973,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 110,
+     "opacity": 0.97,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 110,
+     "opacity": 0.969,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 115,
+     "opacity": 0.974,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 120,
+     "opacity": 0.979,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 116,
+     "opacity": 0.975,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 113,
+     "opacity": 0.972,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 114,
+     "opacity": 0.973,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-light-phone": {
+  "fixab": {
+   "n": 8,
+   "medianFirstOwnedMs": 112.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 110,
+     "opacity": 0.969,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 109,
+     "opacity": 0.969,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 120,
+     "opacity": 0.979,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 117,
+     "opacity": 0.977,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 109,
+     "opacity": 0.969,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.971,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 138,
+     "opacity": 0.99,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.971,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 8,
+   "medianFirstOwnedMs": 111.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 109,
+     "opacity": 0.969,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 117,
+     "opacity": 0.977,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 107,
+     "opacity": 0.966,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 109,
+     "opacity": 0.969,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.971,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 116,
+     "opacity": 0.976,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 116,
+     "opacity": 0.976,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 111,
+     "opacity": 0.971,
+     "status": "passed"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,443 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-reference.config.mjs",
+   "--grep",
+   "exit keeps.*no-preference|clear retains",
+   "--project",
+   "chromium-light-desktop",
+   "--project",
+   "webkit-dark-phone"
+  ],
+  "configFile": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-reference.config.mjs",
+  "rootDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-promotion.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14380 --strictPort",
+   "cwd": "/tmp/promotion-toast-mechanical-reference/src/web/",
+   "url": "http://127.0.0.1:14380",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-promotion.browser.mjs",
+   "file": "toasts-promotion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2168,
+         "error": {
+          "message": "Error: entry delay must not skip the new exit\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0.6\u001b[39m\nReceived:   \u001b[31m0.109166\u001b[39m",
+          "stack": "Error: entry delay must not skip the new exit\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0.6\u001b[39m\nReceived:   \u001b[31m0.109166\u001b[39m\n    at /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:59:76",
+          "location": {
+           "file": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs",
+           "column": 76,
+           "line": 59
+          },
+          "snippet": "  57 |     expect(connected.length).toBeGreaterThan(3);\n  58 |     expect(connected[0].t).toBeLessThan(80);\n> 59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);\n     |                                                                            ^\n  60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);\n  61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);\n  62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs",
+            "column": 76,
+            "line": 59
+           },
+           "message": "Error: entry delay must not skip the new exit\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0.6\u001b[39m\nReceived:   \u001b[31m0.109166\u001b[39m\n\n  57 |     expect(connected.length).toBeGreaterThan(3);\n  58 |     expect(connected[0].t).toBeLessThan(80);\n> 59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);\n     |                                                                            ^\n  60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);\n  61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);\n  62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);\n    at /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:59:76"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:05.348Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs",
+          "column": 76,
+          "line": 59
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-20c25e4693be43ff1d9c",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "clear retains the last shape for exactly 250ms but immediately blocks focus and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 969,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:07.854Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "clear-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-5e60340ee24893d02ff1",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1666,
+         "error": {
+          "message": "Error: entry delay must not skip the new exit\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0.6\u001b[39m\nReceived:   \u001b[31m0.226984\u001b[39m",
+          "stack": "Error: entry delay must not skip the new exit\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0.6\u001b[39m\nReceived:   \u001b[31m0.226984\u001b[39m\n    at /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:59:76",
+          "location": {
+           "file": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs",
+           "column": 76,
+           "line": 59
+          },
+          "snippet": "  57 |     expect(connected.length).toBeGreaterThan(3);\n  58 |     expect(connected[0].t).toBeLessThan(80);\n> 59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);\n     |                                                                            ^\n  60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);\n  61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);\n  62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs",
+            "column": 76,
+            "line": 59
+           },
+           "message": "Error: entry delay must not skip the new exit\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0.6\u001b[39m\nReceived:   \u001b[31m0.226984\u001b[39m\n\n  57 |     expect(connected.length).toBeGreaterThan(3);\n  58 |     expect(connected[0].t).toBeLessThan(80);\n> 59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);\n     |                                                                            ^\n  60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);\n  61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);\n  62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);\n    at /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:59:76"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:09.086Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs",
+          "column": 76,
+          "line": 59
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-72b9710b2c36a10e185a",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "clear retains the last shape for exactly 250ms but immediately blocks focus and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 860,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:54:11.084Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "clear-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-327a58e76e70456904f8",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 71,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:54:04.317Z",
+  "duration": 7785.389,
+  "expected": 2,
+  "skipped": 0,
+  "unexpected": 2,
+  "flaky": 0
+ }
+}

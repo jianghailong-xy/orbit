@@ -1,0 +1,71 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.3-b1/checks/toasts-v1-round-1/failure-attachments/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 2115,
+   "sha256": "497198ac95a4fd961158e6a79a906ff93913f05633c92154ee53d9ab316f6fb6",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "656e9b5174a42ee44096fecb0165e98987c7d78a34b4282bec7eacfd18adca88",
+   "fields": {
+    "elapsedMs": 6516,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "bytes": 58292,
+   "sha256": "8ad223c5b3af1a0d9bf23e7d5c16317756d3ce1678a3a32dd8c943279f313f23",
+   "fields": {
+    "phase": "close-0",
+    "running": false
+   }
+  },
+  {
+   "name": "webkit-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "bytes": 28,
+   "sha256": "9324dd5668b5ade8bad7e56b09fcceccf869c3e8521c40e7c40a07a25129bd87",
+   "fields": {
+    "elapsedMs": 9164,
+    "count": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+   "bytes": 86,
+   "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f",
+   "fields": {
+    "count": 2,
+    "scale": "0.98024",
+    "translate": "none",
+    "opacity": "0.802403"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 203,
+   "sha256": "c9079188cdf03caab9d59320cec9bf075e604016b70f6dfd51462a63ebd97b3f"
+  },
+  {
+   "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+   "bytes": 5954,
+   "sha256": "a59090f40c8df9311d54ffbbe6c96f7ecc83964fde9aa3c73185f04b7a17a845",
+   "fields": {
+    "motion": "reduce"
+   }
+  },
+  {
+   "name": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+   "bytes": 206,
+   "sha256": "c7a1b0b9be1673bbd268c477e171674c8a8830b8e27c07a6999db448c9de611a"
+  }
+ ]
+}

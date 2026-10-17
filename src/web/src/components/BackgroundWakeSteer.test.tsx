@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSessionTurn } from '../api';
@@ -220,9 +219,7 @@ describe('a wake written into the running turn, while it waits for the runner', 
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -360,7 +357,7 @@ describe('a wake written into the running turn, once the runner has written it',
     expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Delivering…');
 
     await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'written'), delivered(6, 'acknowledged')]);
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('已送达当前轮次');
+    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Sent into this turn');
     expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
   });
 

@@ -1,9 +1,10 @@
 package main
 
 // Account slots: one CLI account on this machine is one directory the CLI keeps its login state in
-// — Codex's CODEX_HOME, Claude Code's CLAUDE_CONFIG_DIR — and the slot id is this runner's own name
-// for it. Everything else follows from that one fact: what the page lists, which directory a
-// session runs in, what a removal deletes, whose quota a read belongs to.
+// — Codex's CODEX_HOME, Claude Code's CLAUDE_CONFIG_DIR, Antigravity's Gemini directory, Kimi Code's
+// KIMI_CODE_HOME — and the slot id is this runner's own name for it. Everything else follows from
+// that one fact: what the page lists, which directory a session runs in, what a removal deletes,
+// whose quota a read belongs to.
 //
 // This file is the store every engine's accounts share, and it is the part that has to be right
 // rather than the part that is convenient: a slot is a private directory (0700) never adopted
@@ -75,6 +76,10 @@ type accountSlotKind struct {
 	resolveDefault func(env []string, cwd string) (string, error)
 	// loginStatus asks the CLI, in that directory's environment, whether it is signed in.
 	loginStatus func(ctx context.Context, binPath, dir string) authState
+	// usageStatus, when set, is loginStatus for a CLI whose status question also reads that account's
+	// quota (Antigravity's /usage): one call answers both, and the engine report carries each added
+	// account's quota under its snapshot's accounts.
+	usageStatus func(ctx context.Context, binPath, dir string) (authState, *PlanUsage)
 	// liveDirs is every directory in sessionIDs that a running session is stuck to, as removal
 	// reads it: the ground under a turn in flight must not be pulled away.
 	liveDirs func(sessionIDs []string) map[string]bool
@@ -85,7 +90,7 @@ type accountSlotKind struct {
 var accountSlotKinds []accountSlotKind
 
 // accountSlotKindFor finds the kind an engine name belongs to, or false: an engine whose CLI has
-// one login for the whole machine (Kimi, OpenCode today) simply has no accounts.
+// one login for the whole machine (OpenCode today) simply has no accounts.
 func accountSlotKindFor(engine string) (accountSlotKind, bool) {
 	for _, kind := range accountSlotKinds {
 		if kind.engine == engine {
@@ -261,13 +266,17 @@ func (kind accountSlotKind) create(name string) (accountSlot, error) {
 // removeAccount carries out one removal for whichever engine asked: the slot's directory and record
 // go, and so does everything this runner reads for that account — its usage probe is stopped with
 // the directory it reads, which is the one part of a removal that has to know the engine.
-func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexUsage *codexAccountUsage, id string, liveDirs map[string]bool) error {
+func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexUsage *codexAccountUsage, kimiUsage *kimiAccountUsage, id string, liveDirs map[string]bool) error {
 	switch kind.engine {
 	case providerClaude:
 		return removeClaudeAccount(claudeUsage, id, liveDirs)
 	case providerCodex:
 		return removeCodexAccount(codexUsage, id, liveDirs)
+	case providerKimi:
+		return removeKimiAccount(kimiUsage, id, liveDirs)
 	}
+	// Antigravity reads an account's quota with its status probe (usageStatus), so nothing outlives the
+	// directory here.
 	return kind.remove(id, liveDirs)
 }
 

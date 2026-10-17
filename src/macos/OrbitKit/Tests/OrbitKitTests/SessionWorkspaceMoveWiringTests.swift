@@ -111,8 +111,10 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
                                    ".foregroundStyle(row.isEnabled ? .primary : .secondary)", "Text(row.detail)"],
                                   in: drawn)
         XCTAssertEqual(parts, parts.sorted())
+        XCTAssertTrue(sheet.contains("ProviderEngines.isEngine(slug) ? ProviderEngines.cliName(slug)"),
+                      "an engine's own sign-in by the engine's CLI (web `SessionMoveModal`)")
         XCTAssertTrue(sheet.contains("AgentDefaults.providerName(slug, configured: app.agents?.configuredProviders)"),
-                      "`<provider>` spelled as the workspace switcher spells it")
+                      "anything else by its label")
 
         let load = try slice(sheet, from: "private func loadTargets() async {", to: "\n    }\n")
         XCTAssertTrue(load.contains("targets = try await app.sessionMoveTargets(session.id)"))

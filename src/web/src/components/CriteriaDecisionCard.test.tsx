@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   APPROVE_LABEL,
   CRITERIA_DECISION_ALREADY_SETTLED,
@@ -1023,3 +1023,6 @@ describe('what is left on disk', () => {
     expect(source.includes('<button')).toBe(false);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

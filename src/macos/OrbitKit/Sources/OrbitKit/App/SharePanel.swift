@@ -29,8 +29,10 @@ public enum SharePanelCopy {
     public static let shareLink = "Share Link…"
 
     public static let includes = "Includes"
-    /// The Conversations layer's risk, in the contract's fixed words (§8).
+    /// The Conversations layer's risk, in the contract's fixed words (§8) — a wiki's Footnotes say it too.
     public static let conversationsRisk = "Can include command output and file contents."
+    /// What a wiki's Footnotes are, said before that risk.
+    public static let footnotesDetail = "The quotes and code each sentence cites, with file paths and lines."
     /// The count beside the root's own content, which every link includes.
     public static let always = "Always"
 
@@ -58,6 +60,7 @@ public enum SharePanelCopy {
         case .session: return "Share session"
         case .task: return "Share task"
         case .project: return "Share project"
+        case .wiki: return "Share wiki"
         }
     }
 
@@ -66,7 +69,7 @@ public enum SharePanelCopy {
         switch kind {
         case .session:
             return "Anyone with the link can view — no sign-in. They can’t reply or change anything."
-        case .task, .project:
+        case .task, .project, .wiki:
             return "Anyone with the link can view — no sign-in. They can’t change anything."
         }
     }
@@ -114,8 +117,8 @@ public struct ShareExpiryChoice: Equatable, Sendable, Identifiable {
 
 /// One row of Includes, as the panel draws it.
 public struct ShareLayerRow: Equatable, Sendable, Identifiable {
-    /// Nil is the root's own content — a session's Messages, a task's or a project's Overview —
-    /// which every link includes: its switch is on and cannot be turned off.
+    /// Nil is the root's own content — a session's Messages, a task's or a project's Overview, a
+    /// wiki's Documents — which every link includes: its switch is on and cannot be turned off.
     public let layer: ShareLayer?
     public let name: String
     public let detail: String
@@ -134,7 +137,7 @@ public struct ShareLayerRow: Equatable, Sendable, Identifiable {
 }
 
 /// The Share panel for one root — the native half of web's `ShareModal`, and one panel for a
-/// session, a task and a project alike: Access (Only you / Anyone with the link), the public link,
+/// session, a task, a project and a wiki alike: Access (Only you / Anyone with the link), the public link,
 /// the layers it includes with how much each holds, the Live line, Expires, and how often it was
 /// opened. Every change is saved as it is made: the panel answers the request a press sends, and
 /// takes the server's answer back. Turning a link off asks first, since whoever has it loses it at
@@ -385,6 +388,16 @@ public struct SharePanel: Equatable, Sendable {
                                   + SharePanelCopy.conversationsRisk
                           },
                           count: transcripts, warns: true, under: .taskPages),
+            ]
+        case .wiki:
+            return [
+                LayerSpec(layer: nil, name: "Documents",
+                          detail: { _ in "The wiki’s home and every document written so far" },
+                          count: { SharePanelCopy.countOf($0.documents ?? 0, "document") }),
+                // What a footnote shows, then the fixed risk sentence (§8).
+                LayerSpec(layer: .footnotes, name: "Footnotes",
+                          detail: { _ in SharePanelCopy.footnotesDetail + " " + SharePanelCopy.conversationsRisk },
+                          count: { SharePanelCopy.countOf($0.footnotes ?? 0, "footnote") }, warns: true),
             ]
         }
     }

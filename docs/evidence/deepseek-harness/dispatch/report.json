@@ -1,0 +1,81 @@
+{
+  "report": [
+    {
+      "name": "D1-S1 current runner declares dsh on claim, reclaim and heartbeat",
+      "status": "PASS",
+      "ms": 30044
+    },
+    {
+      "name": "D1-S2 Harness session created through the API is claimed and settles one turn on pinned dsh",
+      "status": "PASS",
+      "ms": 21657
+    },
+    {
+      "name": "D1-S3 runner without dsh declaration is refused at create and never claims a Harness session",
+      "status": "PASS",
+      "ms": 125638
+    },
+    {
+      "name": "D1-S4 Claude dispatch is unchanged on current and legacy runners",
+      "status": "PASS",
+      "ms": 1059
+    },
+    {
+      "name": "D1-S5 the same runner declaring dsh again claims the waiting Harness session",
+      "status": "PASS",
+      "ms": 51157
+    }
+  ],
+  "facts": {
+    "dshVersion": "0.2.0-rc.2",
+    "cliSha256": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
+    "runnerAHeader": "claude,codex,opencode,antigravity,dsh",
+    "s2": {
+      "status": "CANCELLED",
+      "endReason": "ended",
+      "answerEvents": {
+        "n": 1,
+        "types": [
+          "assistant"
+        ]
+      },
+      "numTurns": 1,
+      "runtimeSessionId": "b04eeb0c-f8ef-469d-ad19-76ececd0c768",
+      "runEvents": 6,
+      "conversationTurnStatus": "ANSWERED",
+      "modelRequests": 1
+    },
+    "s3": {
+      "legacyCapabilities": [
+        "provider:claude",
+        "provider:codex",
+        "provider:opencode",
+        "provider:antigravity"
+      ],
+      "waitingError": "DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first",
+      "refusal": "DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first",
+      "builtinRefusal": "DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first",
+      "legacyClaims": 3
+    },
+    "s4": {
+      "A": {
+        "header": "current",
+        "args": "-p --input-format stream-json --output-format stream-json --include-partial-messages --replay-user-messages --verbose --model claude-opus-5 --permission-mode au"
+      },
+      "B": {
+        "header": "claude,codex,opencode,antigravity",
+        "args": "-p --input-format stream-json --output-format stream-json --include-partial-messages --replay-user-messages --verbose --model claude-opus-5 --permission-mode au"
+      }
+    },
+    "s5": {
+      "status": "AWAITING_INPUT",
+      "answerEvents": {
+        "n": 1,
+        "types": [
+          "assistant"
+        ]
+      },
+      "runtimeSessionId": "ec5401ba-5b4d-43f4-ac93-86ea45938303"
+    }
+  }
+}

@@ -16,6 +16,9 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   // models ship with the CLI and come and go with its releases (`agy models`), so naming one here
   // could only ever go stale; the runner's catalogue supplies the concrete ids.
   [AgentProvider.ANTIGRAVITY]: '',
+  // ACP supplies opaque model tokens via configOptions. No static model or window fallback:
+  // a blank selection leaves the Harness's current/default choice intact (P0 contract §4).
+  [AgentProvider.DSH]: '',
 };
 
 /**
@@ -126,6 +129,49 @@ export function fastModeAvailable(
   return Array.isArray(row?.serviceTiers) && row.serviceTiers.includes(CODEX_FAST_SERVICE_TIER);
 }
 
+/** agy's thinking levels, the suffixes its `agy models` slugs carry (`claude-opus-5-5-medium`). */
+const ANTIGRAVITY_MODEL_LEVELS: ReadonlySet<string> = new Set([
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+
+/** The catalogue row an agy model id belongs to: `claude-opus-5-5-medium` -> `claude-opus-5-5`.
+ *
+ *  The runner folds each `agy models` slug into one row per BASE model, reporting the levels as
+ *  `reasoningLevels` (dto.ts, contract §9.1), while agy itself also accepts the full slug a
+ *  session may carry — the runner splits it back apart before `--model`/`--effort`
+ *  (runner-go antigravityModelArgs). A model and its base name are therefore the same offered
+ *  model. */
+export function antigravityBaseModel(model: string): string {
+  const i = model.lastIndexOf('-');
+  if (i <= 0) return model;
+  const suffix = model.slice(i + 1).toLowerCase();
+  return ANTIGRAVITY_MODEL_LEVELS.has(suffix) ? model.slice(0, i) : model;
+}
+
+/** Whether the assigned runner's `agy models` catalogue offers this model.
+ *
+ *  The catalogue is agy's own answer about what `--model` accepts, and it is the whole space: the
+ *  API-key list, plus — for a runner with a Google sign-in — the Claude Opus/Sonnet 5.5 and
+ *  GPT-OSS rows that sign-in adds (contract §16.7). `claude-…`/`gpt-oss-…` ids are therefore
+ *  agy's too, which no prefix rule could have known; only the runner can say.
+ *
+ *  Silence is not a no. A runner that has not reported a catalogue (or reported none for
+ *  Antigravity) cannot be asked, so the historical `gemini-…` prefix rule stands in — the space
+ *  every catalogue has always contained. A catalogue that HAS spoken is authoritative in both
+ *  directions: an id it does not list is one agy refuses to start on. */
+function antigravityOffers(
+  model: string,
+  offered: ReadonlyArray<{ value?: unknown }> | null | undefined,
+): boolean {
+  if (!offered || offered.length === 0) return model.startsWith('gemini-');
+  const base = antigravityBaseModel(model);
+  return offered.some((row) => row && (row.value === model || row.value === base));
+}
+
 /** Resolve the model to run for a provider, guarding against a cross-provider mismatch.
  *
  *  A per-session or Runtime-derived value normally wins, but a model whose id clearly belongs to a
@@ -136,23 +182,40 @@ export function fastModeAvailable(
  *  mismatch at dispatch.
  *
  *  Only unambiguous built-in prefixes are policed; unknown/custom ids (e.g. an
- *  `ANTHROPIC_MODEL` endpoint override) pass through untouched. */
-export function modelForProvider(provider: AgentProvider, override?: string | null): string {
+ *  `ANTHROPIC_MODEL` endpoint override) pass through untouched.
+ *
+ *  `offered` is the assigned runner's live catalogue for this provider's own model space, where
+ *  one applies: Antigravity's is the only space a prefix cannot describe (antigravityOffers). */
+export function modelForProvider(
+  provider: AgentProvider,
+  override?: string | null,
+  offered?: ReadonlyArray<{ value?: unknown }> | null,
+): string {
   const fallback = DEFAULT_MODEL_BY_PROVIDER[provider];
   // `||` (not `??`) so a blank override ('' from a degenerate row) also falls back to the default
   // rather than reaching the runner as `-m ''`.
   const model = override || fallback;
+  // Harness configOptions values are opaque tokens, not ids that can be rebuilt or validated
+  // using another runtime's prefixes. Admission checks them against that runtime's live list.
+  if (provider === AgentProvider.DSH) return model;
   // OpenCode's selector is always `provider/model`. A provider-only API patch from an older
   // client can leave the prior runtime's model on the agent; omit that invalid bare id instead
   // of passing it to the CLI. A namespaced id is opaque here — it may legitimately name any
   // upstream provider (`anthropic/…`, `kimi-code/…`), so the prefix guards below must not
   // police it.
   if (provider === AgentProvider.OPENCODE) return model.includes('/') ? model : fallback;
-  // agy's model space is the `gemini-…` slugs `agy models` lists (contract §9) and nothing else:
-  // it refuses to start on any other `--model`, so whatever is not one of them is dropped and agy
-  // runs its own default rather than failing the turn.
+  // agy refuses to start on a `--model` it does not list, so what is dropped here is what would
+  // have failed the turn. What it lists is the runner's own catalogue, never a prefix: a Google
+  // sign-in's rows are `claude-opus-5-5`, `gpt-oss-120b` and friends, which a `gemini-…`-only
+  // rule discarded — the session then silently ran Gemini instead of the model that was picked.
+  if (provider === AgentProvider.ANTIGRAVITY) {
+    return antigravityOffers(model, offered) ? model : fallback;
+  }
+  // `gemini-…` stays the one unambiguous agy prefix, but solely as an OTHER-provider guard: the
+  // account catalogue's `claude-…`/`gpt-oss-…` ids belong to the runtimes that own those prefixes
+  // too, so they cannot be policed for them by prefix — and each of those providers' own rules
+  // already polices them.
   const isAntigravityModel = model.startsWith('gemini-');
-  if (provider === AgentProvider.ANTIGRAVITY) return isAntigravityModel ? model : fallback;
   const isClaudeModel = model.startsWith('claude-');
   const isCodexModel = model.startsWith('gpt-');
   const isKimiModel = model.startsWith('kimi-') || model.startsWith('kimi-code/');

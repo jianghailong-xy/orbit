@@ -1,0 +1,154 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs toasts-promotion.browser.mjs --grep exit keeps|entrance progress --project chromium-light-desktop --project webkit-dark-phone
+
+[WebServer] (node:325203) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:325309) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+(node:325570) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:325733) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:149:1 › entrance progress survives a modal transfer before its first 180ms completes (1.1s)
+(node:326017) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  4 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+(node:326429) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  5 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:326799) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  6 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:149:1 › entrance progress survives a modal transfer before its first 180ms completes (956ms)
+
+
+  1) [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      58 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+      59 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+    > 60 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+         |                                                                                                                     ^
+      61 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+      62 |     for (let i = 1; i < connected.length; i++) {
+      63 |       expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);
+        at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:60:117
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      58 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+      59 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+    > 60 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+         |                                                                                                                     ^
+      61 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+      62 |     for (let i = 1; i < connected.length; i++) {
+      63 |       expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);
+        at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:60:117
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      58 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+      59 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+    > 60 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+         |                                                                                                                     ^
+      61 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+      62 |     for (let i = 1; i < connected.length; i++) {
+      63 |       expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);
+        at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:60:117
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      58 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+      59 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+    > 60 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+         |                                                                                                                     ^
+      61 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+      62 |     for (let i = 1; i < connected.length; i++) {
+      63 |       expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);
+        at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:60:117
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+    [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+    [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+    [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+  2 passed (10.9s)
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs toasts-promotion.browser.mjs --grep 'exit keeps|entrance progress' --project chromium-light-desktop --project webkit-dark-phone

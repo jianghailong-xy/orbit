@@ -171,6 +171,64 @@ final class SubagentTranscriptTests: XCTestCase {
         XCTAssertEqual(r.state.maxSeq, 31)
     }
 
+    func testWorkflowAgentCallsRemainInspectableAfterReplayAndSnapshot() throws {
+        let key = "toolu_wf:workflow-agent:a123"
+        let progress: [String: JSONValue] = [
+            "toolUseId": .string("toolu_wf"), "taskType": .string("local_workflow"),
+            "agents": .array([.object(["index": .int(0), "label": .string("read:server"),
+                                       "state": .string("done"), "transcriptKey": .string(key)])]),
+        ]
+        let events = [
+            ev(1, .toolUse, ["id": .string("toolu_wf"), "name": .string("Workflow"), "input": .object([:])]),
+            ev(2, .toolResult, ["toolUseId": .string("toolu_wf"), "content": .string(workflowReceipt)]),
+            ev(3, .toolUse, ["id": .string(key), "name": .string("Agent"),
+                             "input": .object(["description": .string("read:server")]),
+                             "parentToolUseId": .string("toolu_wf")]),
+            ev(4, .toolUse, ["id": .string("bash-1"), "name": .string("Bash"),
+                             "input": .object(["command": .string("rg -n workflow src")]),
+                             "parentToolUseId": .string(key)]),
+            ev(5, .toolResult, ["toolUseId": .string("bash-1"), "content": .string("server.ts:42: workflow"),
+                                "parentToolUseId": .string(key)]),
+            ev(6, .toolUse, ["id": .string("bash-2"), "name": .string("Bash"),
+                             "input": .object(["command": .string("cat missing.ts")]),
+                             "parentToolUseId": .string(key)]),
+            ev(7, .toolResult, ["toolUseId": .string("bash-2"), "content": .string("No such file"),
+                                "isError": .bool(true), "parentToolUseId": .string(key)]),
+            ev(8, .toolResult, ["toolUseId": .string(key), "content": .string("Read complete"),
+                                "parentToolUseId": .string("toolu_wf")]),
+            ev(9, .backgroundTask, ["toolUseId": .string("toolu_wf"), "status": .string("completed"),
+                                    "progress": .object(progress)]),
+        ]
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: events, hasMore: false))
+        let state = try JSONDecoder().decode(TranscriptState.self, from: JSONEncoder().encode(r.state))
+        XCTAssertEqual(state.items.count, 1, "workflow agents must not spill into the conversation")
+        XCTAssertEqual(state.taskProgress["toolu_wf"]?.agents.first?.transcriptKey, key)
+        XCTAssertEqual(state.background.map(\.id), ["toolu_wf"], "nested agents must not become tray jobs")
+        guard case .toolCall(let agent)? = state.subagentItems["toolu_wf"]?.first else {
+            return XCTFail("workflow agent missing")
+        }
+        XCTAssertEqual(agent.status, .ok)
+        XCTAssertEqual(agent.result, "Read complete", "the journal answer remains on the agent card")
+        let calls = state.subagentItems[key] ?? []
+        XCTAssertEqual(calls.count, 2)
+        guard case .toolCall(let first) = calls[0], case .toolCall(let second) = calls[1] else {
+            return XCTFail("agent calls missing")
+        }
+        XCTAssertEqual(first.input["command"]?.stringValue, "rg -n workflow src")
+        XCTAssertEqual(first.result, "server.ts:42: workflow")
+        XCTAssertEqual(first.status, .ok)
+        XCTAssertEqual(second.result, "No such file")
+        XCTAssertEqual(second.status, .error)
+    }
+
+    func testWorkflowProgressWithoutTranscriptKeyStillDecodes() throws {
+        let progress = try XCTUnwrap(TaskProgress.from(.object(progressPayload(state: "running", tokens: 1))))
+        let back = try JSONDecoder().decode(TaskProgress.self, from: JSONEncoder().encode(progress))
+        XCTAssertEqual(back.agents.count, 1)
+        XCTAssertNil(back.agents.first?.transcriptKey)
+    }
+
     func testAnOlderPageGraftsASubagentsEarlierWorkInFrontOfItsLaterWork() {
         let all = agentSession()
         var r = TranscriptReducer()

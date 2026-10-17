@@ -95,4 +95,78 @@ final class ToastHostWiringTests: XCTestCase {
         XCTAssertTrue(host.contains("PlatformPasteboard.copyString(detail)"))
         XCTAssertTrue(host.contains(".allowsHitTesting(toast.level == .result || toast.opens)"))
     }
+
+    /// A conflict is actionable from the pinned card even when the registry evicted its console;
+    /// the branch and target must survive every handoff to the worktree bar's existing resolver.
+    func testTheConflictCardResolvesThroughItsSessionsConsole() throws {
+        let worktree = code(try source("WorktreeModel.swift"))
+        let conflict = try slice(worktree, from: #"case "conflict":"#, to: #"case "error":"#)
+        XCTAssertTrue(conflict.contains(#"message: "Couldn't merge into \(target)""#), conflict)
+        XCTAssertTrue(conflict.contains("detail: Self.trimmed(detail.mergeError)"), conflict)
+        XCTAssertTrue(conflict.contains("WorktreeBarLogic.conflictTarget("), conflict)
+        XCTAssertTrue(conflict.contains("mergeTarget: detail.mergeTarget, targets: detail.mergeTargets ?? []"), conflict)
+        XCTAssertTrue(conflict.contains("agentDefaultTarget: detail.agent?.defaultMergeTarget"), conflict)
+        XCTAssertTrue(conflict.contains("ToastMergeConflict(branch: $0, target: target)"), conflict)
+        XCTAssertTrue(conflict.contains(#"tone: .error, key: "merge""#), conflict)
+
+        let model = code(try source("AppModel.swift"))
+        XCTAssertTrue(model.contains("mergeConflict: request.mergeConflict"))
+        let show = try slice(model, from: "func showToast(", to: "\n    }")
+        XCTAssertTrue(show.contains("mergeConflict: mergeConflict"), show)
+        let resolve = try slice(model, from: "func resolveToastConflict(", to: "\n    }")
+        XCTAssertTrue(resolve.contains("toast.sessionID"), resolve)
+        XCTAssertTrue(resolve.contains("toast.mergeConflict"), resolve)
+        XCTAssertTrue(resolve.contains("registry.resolveInSession(sessionID: sessionID"), resolve)
+        XCTAssertTrue(resolve.contains("branch: conflict.branch, target: conflict.target"), resolve)
+
+        let registry = code(try source("ConsoleRegistry.swift"))
+        let handoff = try slice(registry, from: "func resolveInSession(", to: "\n    }")
+        XCTAssertTrue(handoff.contains("model(for: sessionID).worktree.resolveInSession(branch: branch, target: target)"), handoff)
+        let host = code(try source("Views/ToastHost.swift"))
+        XCTAssertTrue(host.contains(#"Button("Resolve in session") { model.resolveToastConflict(toast.id) }"#))
+    }
+
+    /// Touch-down cancels the dwell immediately; lift/cancel/unmount restarts it without replacing
+    /// the swipe's threshold or taking the copy Button's tap or a pass-through pill's touch.
+    func testTransientTouchHoldPreservesTapAndSwipe() throws {
+        let host = code(try source("Views/ToastHost.swift"))
+        XCTAssertTrue(host.contains("import UIKit.UIGestureRecognizerSubclass"))
+        let transient = try slice(host, from: "private func transient(", to: "private func resultCard(")
+        XCTAssertTrue(transient.contains("ToastTouchHold { holding in"), transient)
+        XCTAssertTrue(transient.contains("holding ? model.holdToast(toast.id) : model.releaseToast(toast.id)"), transient)
+        XCTAssertTrue(transient.contains(".simultaneousGesture(swipeAway(toast.id))"), transient)
+        XCTAssertTrue(transient.contains(".allowsHitTesting(toast.level == .result || toast.opens)"), transient)
+        let swipe = try slice(host, from: "private func swipeAway(", to: "\n    }")
+        XCTAssertTrue(swipe.contains("DragGesture(minimumDistance: 10, coordinateSpace: .global)"), swipe)
+        XCTAssertTrue(swipe.contains(".onChanged { value in"), swipe)
+        XCTAssertTrue(swipe.contains("model.dismissToast(id)"), swipe)
+
+        let observer = try slice(host, from: "private struct ToastTouchHold:", to: "private struct ToastPill:")
+        XCTAssertTrue(observer.contains("isUserInteractionEnabled = false"), observer)
+        XCTAssertTrue(observer.contains("window?.addGestureRecognizer(observer)"), observer)
+        XCTAssertTrue(observer.contains("observer.cancelsTouchesInView = false"), observer)
+        XCTAssertTrue(observer.contains("observer.delaysTouchesBegan = false"), observer)
+        XCTAssertTrue(observer.contains("observer.delaysTouchesEnded = false"), observer)
+        XCTAssertTrue(observer.contains("view.point(inside: $0.location(in: view), with: event)"), observer)
+        XCTAssertTrue(observer.contains("onHoldingChanged(true)"), observer)
+        XCTAssertTrue(observer.contains("onHoldingChanged(false)"), observer)
+        XCTAssertTrue(observer.contains("dismantleUIView(_ view: ToastTouchView, coordinator: ()) { view.detach() }"), observer)
+        for method in ["touchesEnded(", "touchesCancelled(", "func detach()", "func reset()"] {
+            XCTAssertTrue(try slice(observer, from: method, to: "\n        }").contains("release()"), method)
+        }
+        for state in [".began", ".changed", ".ended", ".recognized"] {
+            XCTAssertFalse(observer.contains("state = \(state)"), "an observer must never recognize a gesture")
+        }
+
+        let model = code(try source("AppModel.swift"))
+        let hold = try slice(model, from: "func holdToast(", to: "\n    }")
+        XCTAssertTrue(hold.contains("heldToastID = id"), hold)
+        XCTAssertTrue(hold.contains("toastExpiry?.cancel()"), hold)
+        let release = try slice(model, from: "func releaseToast(", to: "\n    }")
+        XCTAssertTrue(release.contains("if heldToastID == id { heldToastID = nil }"), release)
+        XCTAssertTrue(release.contains("expireToastLater(id, after: dwell)"), release)
+        // A same-key progress/result update keeps its id and must also keep the finger's hold.
+        let show = try slice(model, from: "func showToast(", to: "\n    }")
+        XCTAssertTrue(show.contains("else if let dwell = shown.dwell, heldToastID != id"), show)
+    }
 }

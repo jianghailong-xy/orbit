@@ -1,0 +1,219 @@
+<!doctype html>
+<!-- Design board 1 (web): the Infrastructure page after provider/engine decoupling. Both frames are drawn
+     with the shipped page's own markup and CSS (InfrastructurePage.tsx, InfrastructureOverview.tsx,
+     RunnerEngines.tsx, ProviderGallery.tsx; src/web/src/index.css and components/ui/*.css at main
+     0a887da2c). "现在" is today's page; "改后" is the proposal. Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>1 · Infrastructure page (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Table.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 36px; }
+  .st-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 2px; }
+  .states .w-app { padding: 14px 16px; }
+  .mini-gal .provider-gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .t-diff td code { white-space: nowrap; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">1 · Infrastructure 页（Web）：引擎概览里一把 key 出现在它能跑的每个 engine 下；机器加 DeepSeek Harness 一行；API keys 按厂商分组；画廊只放厂商</h1>
+  <p class="m-sub zh">两张都按 main（0a887da2c）上真实的 Infrastructure 页画，用的是页面自己的 class 和 CSS。今天「What your agents can run on」只有四个能登录的 engine，每把 key 按它的 runtime 只归一个 engine：DeepSeek key 只在 Claude Code 下，旧的 DeepSeek Harness key 哪里都不出现，OpenCode 没有卡片。改后六个 engine 各一张卡，一把 key 出现在它能跑的每个 engine 下（取接口新加的 <code>engines</code> 字段，契约 §6.3，顺序按兼容表：默认 engine 在前）。Machines 卡片里加 DeepSeek Harness 一行，写「Uses API keys」和这台机器能不能跑。API keys 按厂商分组、每把写可用 engine，画廊去掉 DeepSeek Harness。engine 显示名和画廊厂商名是待定项，板上按 A 画（见 ③）。示例数据：3 台机器——hpc 在线；old-mac 是 v0.1.198，早于 DeepSeek Harness；build-box 没装 DeepSeek Harness。另有两把 DeepSeek key（不是同一把），Gemini、Kimi、GLM 各一把，一把 Claude 订阅 token，一个 Claude 账号池。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 整页（/infrastructure）</div>
+    <div class="cols2">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>main 0a887da2c</div>
+        <div class="w-app"><div class="w-page"><div class="infra-frame" id="now"></div></div></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>engine 显示名、厂商名按待定项 A</div>
+        <div class="w-app"><div class="w-page"><div class="infra-frame" id="after"></div></div></div>
+      </div>
+    </div>
+    <div id="notes"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② DeepSeek Harness 在每台机器上；以及一把 DeepSeek key 都没有时</div>
+    <div class="states" id="states"></div>
+    <p class="m-cap zh">机器卡片上的 DeepSeek Harness 行就是机器详情页今天已有的那一行（<code>CliRow</code>），搬到 Infrastructure 的卡片上。状态写「Uses API keys」，或 <code>DSH_STATE_LABEL</code> 里的原因。今天鼠标悬停才看得到的原因说明（<code>DSH_STATE_HINT</code>），改成写在行下面。能装或该重装时，行上带 Install；这个按钮今天在 Harness key 那一行下面。一把 DeepSeek key 都没有时，概览卡片写 Not set up，并给出连接入口。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 待定 · 请所有者在板上选 A 或 B</div>
+    <div id="ask"></div>
+  </div>
+</section>
+
+<script>
+const head = `<div class="prov-page-head"><h1 class="page-title">Infrastructure</h1>${obtn('Add', { variant: 'primary', size: 'middle', icon: '' }).replace('<span>Add</span>', `<span>Add</span>${ICO.caret}`)}
+  <div class="prov-page-sub">Where your agents run, and whose model quota they spend.</div></div>`;
+const attn = `<div class="infra-attn"><div class="infra-attn-row"><span class="infra-attn-dot"></span><span class="infra-attn-text"><b>Codex</b> is signed out on <b>old-mac</b><span class="infra-attn-sub"> · Sessions there can’t use it</span></span>${obtn('Sign in', { variant: 'primary' })}</div></div>`;
+const overview = (cards) => `<div class="re-sec">${reSecHead('What your agents can run on', 'Every engine, and everything that can pay for it right now.')}<div class="infra-engines">${cards.join('')}</div></div>`;
+const sub = (machines) => `<b>Subscription</b> · ${machines}`;
+const apiKey = (pairs) => `<b>API key</b> · ${keyList(pairs)}`;
+
+/* today's machine rows (RunnerEngines MachineEngines, ENGINE_NAME) */
+const rows = {
+  claude: reRow({ engine: 'claude', meta: '2.1.290 · <b>2 of 2 accounts available</b>', status: badge('Signed in', 'success'),
+    quota: '<div class="re-quota-head re-quota-next">Next: Default</div><div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>23%</span></div><div class="runner-util"><span class="runner-util-fill" style="width:23%"></span></div></div>',
+    act: obtn('Add account', { icon: ICO.plus, cls: 're-action' }) }),
+  codex: reRow({ engine: 'codex', meta: '0.162.0', status: badge('Signed in', 'success'),
+    quota: '<div class="re-window"><div class="re-quota-head"><b>Weekly limit</b><span>41%</span></div><div class="runner-util"><span class="runner-util-fill" style="width:41%"></span></div></div>',
+    act: obtn('Add account', { icon: ICO.plus, cls: 're-action' }) }),
+  antigravity: reRow({ engine: 'antigravity', name: 'Antigravity', meta: '1.3.2', status: badge('Signed in', 'success'), quota: '<span class="re-quota-none">No quota reported</span>',
+    act: obtn('Add account', { icon: ICO.plus, cls: 're-action' }) }),
+  kimi: reRow({ engine: 'kimi', meta: 'Not installed — Orbit can install it here', status: badge('Not installed'), act: obtn('Install', { icon: ICO.down, cls: 're-action' }) }),
+  opencode: reRow({ engine: 'opencode', meta: '1.18.35', status: badge('Signed in', 'success'), quota: '<span class="re-quota-none">—</span>' }),
+  dsh: reRow({ engine: 'dsh', meta: '0.2.0-rc.2', status: badge('Uses API keys'), quota: '<span class="re-quota-none">—</span>' }),
+};
+const others = [
+  machineCard({ name: 'old-mac', meta: '1 / 4 running · old-mac.local · v0.1.198', busy: 0.25, summary: '1 of 2 signed in' }),
+  machineCard({ name: 'build-box', meta: '0 / 4 running · build-box · v0.1.240', busy: 0, summary: 'All signed in' }),
+];
+const machines = (hpcRows) => `<div class="re-sec">${reSecHead('Machines', 'Subscriptions signed in here are spent only by sessions on that machine.', '3 machines · 4 / 24 slots busy')}
+  ${machineCard({ name: 'hpc', meta: '3 / 16 running · hpc-01 · v0.1.240', busy: 0.19, open: true, rows: hpcRows })}${others.join('')}</div>`;
+const keysHead = '<div class="re-sec-head" style="margin-top:28px"><h3>API keys</h3><span class="re-sec-sub">On your account and usable from every machine — billed per token.</span></div>';
+const pools = `<div class="re-sec">${reSecHead('Account pools', 'Several accounts under one name.')}
+  <div class="re-card collapsed"><div class="re-head"><span class="re-toggle" style="display:flex;align-items:center;gap:10px"><span class="re-chev">${ICO.chev}</span>${ptile('anthropic', 22)}<span class="re-runner-copy"><span class="re-runner">Claude accounts</span></span></span>
+  <div class="re-runner-status"><span class="re-summary">2 of 2 accounts available</span></div><a class="re-manage">Manage →</a></div></div></div>`;
+
+/* ── 现在 ── */
+document.getElementById('now').innerHTML = head + attn
+  + mk('A', overview([
+    engineCard({ engine: 'claude', ready: true, lines: [sub('hpc ×2, old-mac, build-box'), apiKey([['DeepSeek', 'DeepSeek V4 Pro'], ['Z.AI (GLM)', 'GLM-5.2'], ['Claude Max', 'Claude Opus 5.5']]), '<b>Pool</b> · Claude accounts'] }),
+    engineCard({ engine: 'codex', ready: true, lines: [sub('hpc, build-box')] }),
+    engineCard({ engine: 'kimi', ready: true, lines: [apiKey([['Kimi (Moonshot)', 'Kimi K2.7 Code']])] }),
+    engineCard({ engine: 'antigravity', name: 'Antigravity', ready: true, lines: [sub('hpc'), apiKey([['Antigravity', 'Gemini 3.8 Flash']])] }),
+  ]))
+  + mk('B', machines([rows.claude, rows.codex, rows.antigravity, rows.kimi, rows.opencode]))
+  + keysHead + mk('C', keysTableReal([
+    { brand: 'deepseek', name: 'DeepSeek Harness', models: '—', endpoint: 'https://api.deepseek.com/anthropic', lines: [
+      runtimeLines('Runs on DeepSeek Harness', 'Ready on 1 machine', 'old-mac: Update runner', 'build-box: Not installed <span class="re-link">Install</span>'), balanceReal('¥36.20')] },
+    { brand: 'deepseek', name: 'DeepSeek', models: 2, endpoint: 'https://api.deepseek.com/anthropic', lines: [runtimeLines('Runs on Claude Code'), balanceReal('¥110.00')] },
+    { brand: 'antigravity', name: 'Antigravity', models: 1, endpoint: 'https://generativelanguage.googleapis.com', lines: [runtimeLines('Runs on the Antigravity CLI', 'Ready on 1 machine <span class="re-link">See machines ↑</span>')] },
+    { brand: 'kimi', name: 'Kimi (Moonshot)', models: 1, endpoint: 'https://api.moonshot.ai/v1' },
+    { brand: 'glm', name: 'Z.AI (GLM)', models: 2, endpoint: 'https://api.z.ai/api/anthropic' },
+    { brand: 'anthropic', name: 'Claude Max', models: 3, endpoint: 'https://api.anthropic.com' },
+  ]))
+  + `<div class="provider-more"><h3>Connect another provider</h3>${galleryReal([
+    { brand: 'anthropic', name: 'Anthropic (Claude)', sub: 'Connected', connected: true },
+    { brand: 'openai', name: 'OpenAI (Codex)', sub: 'Already signed in on hpc', local: true },
+    { brand: 'antigravity', name: 'Antigravity', sub: 'Connected', connected: true },
+    { brand: 'deepseek', name: 'DeepSeek', sub: 'Connected', connected: true },
+    { brand: 'deepseek', name: 'DeepSeek Harness', sub: 'Connected', connected: true, id: 'g-dsh' },
+    { brand: 'kimi', name: 'Kimi (Moonshot)', sub: 'Connected', connected: true },
+    { brand: 'glm', name: 'Z.AI (GLM)', sub: 'Connected', connected: true },
+    { brand: 'minimax', name: 'MiniMax', sub: 'Anthropic-compatible' },
+    { brand: 'qwen', name: 'Qwen (Model Studio)', sub: 'Anthropic-compatible' },
+    { custom: true },
+  ])}</div>` + pools;
+
+/* ── 改后 ── */
+const E = (list) => engineLine(list);
+document.getElementById('after').innerHTML = head + attn
+  + mk(1, overview([
+    engineCard({ engine: 'claude', ready: true, lines: [sub('hpc ×2, old-mac, build-box'), apiKey([['DeepSeek', 'DeepSeek V4 Pro'], ['DeepSeek 2', 'DeepSeek V4 Pro'], ['Z.AI (GLM)', 'GLM-5.2'], ['Claude Max', 'Claude Opus 5.5']]), '<b>Pool</b> · Claude accounts'] }),
+    engineCard({ engine: 'codex', ready: true, lines: [sub('hpc, build-box')] }),
+    engineCard({ engine: 'kimi', ready: true, lines: [apiKey([['Kimi (Moonshot)', 'Kimi K2.7 Code']])] }),
+    engineCard({ engine: 'antigravity', ready: true, lines: [sub('hpc'), apiKey([['Gemini', 'Gemini 3.8 Flash']])] }),
+    engineCard({ engine: 'opencode', ready: true, id: 'oc', lines: ['<b>Own sign-in</b> · hpc', apiKey([['DeepSeek', 'DeepSeek V4 Pro'], ['DeepSeek 2', 'DeepSeek V4 Pro'], ['Gemini', 'Gemini 3.8 Flash'], ['Kimi (Moonshot)', 'Kimi K2.7 Code'], ['Z.AI (GLM)', 'GLM-5.2']])] }),
+    engineCard({ engine: 'dsh', ready: true, id: 'dsh', lines: [apiKey([['DeepSeek', 'DeepSeek V4 Pro'], ['DeepSeek 2', 'DeepSeek V4 Pro']])] }),
+  ]))
+  + machines([rows.claude, rows.codex, rows.antigravity.replace('>Antigravity<', '>Antigravity CLI<'), rows.kimi, rows.opencode, mk(2, rows.dsh)])
+  + keysHead + mk(3, keysTableReal([
+    { grp: 'deepseek', name: 'DeepSeek', count: '2 keys' },
+    { indent: true, name: 'DeepSeek', models: 2, endpoint: 'https://api.deepseek.com/anthropic', lines: [E(WORKS.deepseek), balanceReal('¥110.00')] },
+    { indent: true, name: 'DeepSeek 2', models: 2, endpoint: 'https://api.deepseek.com/anthropic', lines: [E(WORKS.deepseek), balanceReal('¥36.20')] },
+    { grp: 'gemini', name: 'Google Gemini' },
+    { indent: true, name: 'Gemini', models: 1, endpoint: 'https://generativelanguage.googleapis.com', lines: [E(WORKS.gemini)] },
+    { grp: 'kimi', name: 'Moonshot (Kimi)' },
+    { indent: true, name: 'Kimi (Moonshot)', models: 1, endpoint: 'https://api.moonshot.ai/v1', lines: [E(WORKS.moonshot)] },
+    { grp: 'glm', name: 'Z.AI (GLM)' },
+    { indent: true, name: 'Z.AI (GLM)', models: 2, endpoint: 'https://api.z.ai/api/anthropic', lines: [E(WORKS.anthropicKey)] },
+    { grp: 'anthropic', name: 'Anthropic' },
+    { indent: true, name: 'Claude Max', models: 3, endpoint: 'https://api.anthropic.com', lines: [engineLine(WORKS.subscription, '<span class="ek-sep">·</span><span>subscription token, Claude Code only</span>')] },
+  ], { first: 'Key' }))
+  + `<div class="provider-more wrap-sub"><h3>Connect another provider</h3>${mk(4, galleryReal([
+    { brand: 'anthropic', name: 'Anthropic', sub: 'Connected', connected: true },
+    { brand: 'openai', name: 'OpenAI', sub: 'Already signed in on hpc', local: true },
+    { brand: 'gemini', name: 'Google Gemini', sub: 'Connected', connected: true },
+    { brand: 'deepseek', name: 'DeepSeek', sub: 'Connected · 2 keys', connected: true },
+    { brand: 'kimi', name: 'Moonshot (Kimi)', sub: 'Connected', connected: true },
+    { brand: 'glm', name: 'Z.AI (GLM)', sub: 'Connected', connected: true },
+    { brand: 'minimax', name: 'MiniMax', sub: 'Claude Code · OpenCode' },
+    { brand: 'qwen', name: 'Qwen', sub: 'Claude Code · OpenCode' },
+    { custom: true },
+  ]))}</div>` + pools;
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>概览只有四个 engine，每把 key 只归一个：</b>按 key 的 runtime 归（<code>key.runtime === engine</code>）。DeepSeek key 只在 Claude Code 下；旧的 DeepSeek Harness key 哪里都不出现；OpenCode 和 DeepSeek Harness 没有卡片；Gemini key 叫「Antigravity」。'],
+  ['B', '<b>机器卡片上没有 DeepSeek Harness：</b>它只在机器详情页列出。哪台机器能跑，写在下面那把 Harness key 的行里。'],
+  ['C', '<b>key 行写「Runs on …」：</b>把 key 说成某个 engine 的。同一家 DeepSeek 分成两行；画廊里 DeepSeek Harness 和 DeepSeek 并排。'],
+  [1, '<b>概览六张卡</b>，顺序同 <code>ALL_ENGINES</code>：Claude Code、Codex、Kimi Code、Antigravity CLI、OpenCode、DeepSeek Harness。<b>一把 key 出现在它能跑的每个 engine 下</b>（读接口的 <code>engines</code>，不在前端判断）：DeepSeek、DeepSeek 2 同时在 Claude Code、OpenCode、DeepSeek Harness 下；Gemini 在 Antigravity CLI 和 OpenCode 下；Claude 订阅 token 只在 Claude Code 下。模型名按（engine, key）的模型空间取（契约 §2.2）。OpenCode 卡片多一行「Own sign-in · 机器」，即 <code>opencode auth login</code> 配好的机器。Ready 的判定不变：有任一来源即 Ready。'],
+  [2, '<b>机器卡片加 DeepSeek Harness 一行：</b>状态「Uses API keys」，没有额度，也不用登录。跑不了时写原因和 Install（见 ②）。行排在 OpenCode 之后。'],
+  [3, '<b>API keys 按厂商分组：</b>每个厂商一行组头，第一列表头从 Provider 改为 Key。每把 key 下面一行写它能用的 engine，替代「Runs on …」和 DeepSeek Harness 的就绪行；余额行照旧。'],
+  [4, '<b>画廊只放厂商：</b>去掉 DeepSeek Harness，剩 9 格。没连接过的卡片，副标题从「Anthropic-compatible」「Runs on Claude Code」改写成这家 key 能跑的 engine；DeepSeek 有三个 engine，副标题允许折成两行。厂商名见 ③-1。'],
+  ['·', '<b>不变的：</b>页头和 Add、需要处理、Ready / Not set up 的判定、机器卡片的其余行和操作、余额、Edit / Delete、账号池。迁移后第二把 DeepSeek key 默认叫「DeepSeek 2」（已定）。'],
+]);
+
+/* ── ② DSH states ── */
+const one = (name, meta, row, busy) => `<div class="w-app">${machineCard({ name, meta, open: true, rows: [row], busy })}</div>`;
+const dshRow = (meta, status, act, hint) => reRow({ engine: 'dsh', meta, status, quota: '<span class="re-quota-none">—</span>', act: act || '',
+  extra: hint ? `<div class="re-panel-hint re-login-note">${hint}</div>` : '' });
+document.getElementById('states').innerHTML = [
+  ['hpc：能跑', one('hpc', '3 / 16 running · hpc-01 · v0.1.240', dshRow('0.2.0-rc.2', badge('Uses API keys')), 0.19)],
+  ['old-mac：runner 早于 DeepSeek Harness', one('old-mac', '1 / 4 running · old-mac.local · v0.1.198', dshRow('', badge('Update runner', 'orange'), '', 'This runner predates DeepSeek Harness. It updates itself when no session is running on it.'), 0.25)],
+  ['build-box：没装，Orbit 可以装', one('build-box', '0 / 4 running · build-box · v0.1.240', dshRow('Not installed — Orbit can install it here', badge('Not installed'), obtn('Install', { icon: ICO.down, cls: 're-action' })), 0)],
+  ['mac-studio：平台不支持', one('mac-studio', '0 / 4 running · mac-studio.local · v0.1.240', dshRow('', badge('Not supported here'), '', 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only.'), 0)],
+  ['概览：一把 DeepSeek key 都没有（或都停用了）', `<div class="w-app"><div class="infra-engines" style="grid-template-columns:minmax(0,1fr)">${engineCard({ engine: 'dsh', ready: false,
+    none: 'No DeepSeek key. <a>Connect a DeepSeek key</a> — it runs on Claude Code and OpenCode too.' })}</div></div>`],
+  ['概览：OpenCode 没装在任何机器上、也没有能用的 key', `<div class="w-app"><div class="infra-engines" style="grid-template-columns:minmax(0,1fr)">${engineCard({ engine: 'opencode', ready: false,
+    none: 'No machine signed in, no key. <a>Install on a machine</a> or <a>connect a key</a>.' })}</div></div>`],
+].map(([l, html]) => `<div><div class="st-l zh">${l}</div>${html}</div>`).join('');
+
+/* ── ③ A/B ── */
+const galA = galleryReal([
+  { brand: 'anthropic', name: 'Anthropic', sub: 'Claude Code · OpenCode' }, { brand: 'openai', name: 'OpenAI', sub: 'Codex · OpenCode' },
+  { brand: 'gemini', name: 'Google Gemini', sub: 'Antigravity CLI · OpenCode' }, { brand: 'deepseek', name: 'DeepSeek', sub: 'Claude Code · OpenCode · DeepSeek Harness' },
+  { brand: 'kimi', name: 'Moonshot (Kimi)', sub: 'Kimi Code · OpenCode' }, { brand: 'glm', name: 'Z.AI (GLM)', sub: 'Claude Code · OpenCode' },
+  { brand: 'minimax', name: 'MiniMax', sub: 'Claude Code · OpenCode' }, { brand: 'qwen', name: 'Qwen', sub: 'Claude Code · OpenCode' }, { custom: true }]);
+const galB = galleryReal([
+  { brand: 'anthropic', name: 'Anthropic (Claude)', sub: 'Claude Code · OpenCode' }, { brand: 'openai', name: 'OpenAI (Codex)', sub: 'Codex · OpenCode' },
+  { brand: 'antigravity', name: 'Antigravity', sub: 'Antigravity CLI · OpenCode' }, { brand: 'deepseek', name: 'DeepSeek', sub: 'Claude Code · OpenCode · DeepSeek Harness' },
+  { brand: 'kimi', name: 'Kimi (Moonshot)', sub: 'Kimi Code · OpenCode' }, { brand: 'glm', name: 'Z.AI (GLM)', sub: 'Claude Code · OpenCode' },
+  { brand: 'minimax', name: 'MiniMax', sub: 'Claude Code · OpenCode' }, { brand: 'qwen', name: 'Qwen (Model Studio)', sub: 'Claude Code · OpenCode' }, { custom: true }]);
+document.getElementById('ask').innerHTML = `
+  <div class="ask zh" style="margin-top:0"><h4><span class="tbd">待定</span>1 · 画廊里的厂商名（也是连接页标题和 API keys 的组名）</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>改成厂商名（板上按此画）</h5><div class="ab-sub">Anthropic、OpenAI、Google Gemini、DeepSeek、Moonshot (Kimi)、Z.AI (GLM)、MiniMax、Qwen、Custom。括号里不再带 engine。「Antigravity」改回 Google Gemini，图标换成 Gemini 的星（预设自带 <code>#4285f4→#9b72cb</code>），叫「Gemini」的 key 也不再显示成「Antigravity」。</div>
+        <div class="w-app mini-gal wrap-sub" style="padding:12px;margin-top:10px">${galA}</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>保留今天的名字，只去掉 DeepSeek Harness</h5><div class="ab-sub">Anthropic (Claude)、OpenAI (Codex)、Antigravity、DeepSeek、Kimi (Moonshot)、Z.AI (GLM)、MiniMax、Qwen (Model Studio)、Custom。副标题同样改写成能跑的 engine。Gemini key 仍显示成「Antigravity」，所以它在 OpenCode 下也会叫 Antigravity。</div>
+        <div class="w-app mini-gal wrap-sub" style="padding:12px;margin-top:10px">${galB}</div></div>
+    </div></div>
+  <div class="ask zh"><h4><span class="tbd">待定</span>2 · engine 显示名（新会话的 engine 列表、概览、机器卡片、菜单标题、任务 pin、工作区设置）</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>处处用 ENGINE_CLI_NAMES（契约 §10 第 1 条已按此写；板上按此画）</h5><div class="ab-sub">Claude Code、Codex、Kimi Code、<b>Antigravity CLI</b>、OpenCode、DeepSeek Harness。新会话里的「Claude」「Kimi」随之改名；Infrastructure 的「Antigravity」改成「Antigravity CLI」。以后改名只改 <code>ENGINE_CLI_NAMES</code> 一处。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>保留各处今天的叫法</h5><div class="ab-sub">新会话 engine 列表：Claude、Codex、Kimi、Antigravity、OpenCode、DeepSeek Harness。Infrastructure 和登录卡：Claude Code、Codex、Kimi Code、Antigravity。菜单标题：…、Antigravity CLI。三张名单并存（<code>ENGINE_LABELS</code>、<code>ENGINE_NAME</code>、<code>ENGINE_CLI_NAME</code>）。</div></div>
+    </div>
+    <table class="t-diff" style="margin-top:12px"><tr><th>engine</th><th>新会话（今天）</th><th>Infrastructure（今天）</th><th>菜单标题（今天）</th><th>A</th></tr>
+      <tr><td><code>claude</code></td><td>Claude</td><td>Claude Code</td><td>Claude Code</td><td><b>Claude Code</b></td></tr>
+      <tr><td><code>kimi</code></td><td>Kimi</td><td>Kimi Code</td><td>Kimi Code</td><td><b>Kimi Code</b></td></tr>
+      <tr><td><code>antigravity</code></td><td>Antigravity</td><td>Antigravity</td><td>Antigravity CLI</td><td><b>Antigravity CLI</b></td></tr>
+      <tr><td><code>codex</code> / <code>opencode</code> / <code>dsh</code></td><td colspan="3">Codex / OpenCode / DeepSeek Harness（各处相同）</td><td><b>不变</b></td></tr></table></div>
+  <div class="ask zh"><h4><span class="tbd">待定</span>3 · 停用、删除 key 前是否先确认影响 —— 见板 3</h4></div>`;
+finish();
+</script>
+</body>
+</html>

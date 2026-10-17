@@ -102,10 +102,29 @@ final class RunnersModel {
         await press { _ = try await self.api.startEngineUpdate(id) }
     }
 
+    /// Install the pinned DeepSeek Harness CLI on the machine (the same install relay as Antigravity's).
+    @discardableResult
+    func installDsh(_ id: String) async -> String? {
+        await press { _ = try await self.api.installDsh(id) }
+    }
+
+    /// Install one engine's CLI on the machine — the same relay, for an engine it doesn't have.
+    @discardableResult
+    func installEngine(_ id: String, engine: String) async -> String? {
+        await press { _ = try await self.api.installEngine(id, engine: engine) }
+    }
+
     /// The machine re-reads its CLIs' model lists; the new ones arrive on a later check-in.
     @discardableResult
     func refreshModels(_ id: String) async -> String? {
         await press { _ = try await self.api.refreshRunnerModels(id) }
+    }
+
+    /// The machine checks for its own release now rather than at its next 10-minute check — by the
+    /// same rules, so a turn in flight still holds the install.
+    @discardableResult
+    func updateRunner(_ id: String) async -> String? {
+        await press { _ = try await self.api.requestRunnerSelfUpdate(id) }
     }
 
     /// A stuck checkout rescued to a branch and put back on its last commit.

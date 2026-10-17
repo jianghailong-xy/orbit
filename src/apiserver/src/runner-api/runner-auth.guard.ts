@@ -4,8 +4,25 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { Runner } from '@prisma/client';
+import { accountDisabled } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
+import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
+
+/** What the runner a credential names is read with: whether its owner's account is disabled, too. */
+export const RUNNER_OWNER_STATE = { owner: { select: { disabledAt: true } } } as const;
+
+/**
+ * The runner a credential named, read with RUNNER_OWNER_STATE, once its owner's account is known not
+ * to be disabled (docs/google-sign-in-design.md §5.5). A disabled account's runner is refused 403
+ * ACCOUNT_DISABLED rather than 401: the credential is not wrong, and it works again once the account
+ * is enabled.
+ */
+export function admitRunner({ owner, ...runner }: Runner & { owner: { disabledAt: Date | null } }): Runner {
+  if (owner.disabledAt) throw accountDisabled();
+  return runner;
+}
 
 @Injectable()
 export class RunnerAuthGuard implements CanActivate {
@@ -23,10 +40,16 @@ export class RunnerAuthGuard implements CanActivate {
 
     const runner = await this.prisma.runner.findFirst({
       where: { tokenHash: sha256(token) },
+      include: RUNNER_OWNER_STATE,
     });
     if (!runner) throw new UnauthorizedException('invalid runner token');
 
-    req.runner = runner;
+    // A disabled account's runner first: 403 ACCOUNT_DISABLED, whichever instance asks. Then a managed
+    // runner's credential is accepted only from the instance the manager authorized
+    // (managed-runner-instance.ts); a self-managed runner is not asked.
+    const admitted = admitRunner(runner);
+    req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, req.headers);
+    req.runner = admitted;
     return true;
   }
 }

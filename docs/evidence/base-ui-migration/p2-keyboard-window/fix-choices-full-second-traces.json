@@ -1,0 +1,82 @@
+[
+ {
+  "trace": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+  "moduleRequests": 136,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=4186d26b",
+    "status": 200,
+    "failure": null,
+    "ms": 216.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=4186d26b",
+    "status": 200,
+    "failure": null,
+    "ms": 195.8
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/client-HvpxMbDi.js?v=4186d26b",
+    "status": 200,
+    "failure": null,
+    "ms": 179.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=4186d26b",
+    "status": 200,
+    "failure": null,
+    "ms": 159.1
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 157.6
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "waitForSelector",
+    "title": "Evaluate",
+    "start": 839526.929,
+    "error": null
+   },
+   {
+    "api": "screenshot",
+    "title": null,
+    "start": 839562.332,
+    "error": null
+   },
+   {
+    "api": "waitForSelector",
+    "title": "Evaluate",
+    "start": 840066.521,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 840162.283,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"not toBeVisible\"",
+    "start": 840231.107,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 840654.777,
+    "error": null
+   }
+  ]
+ }
+]

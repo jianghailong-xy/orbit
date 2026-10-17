@@ -1,0 +1,16 @@
+/* A picture that opens in the viewer (Image.tsx), as the replaced Image drew it: an inline-block whose <img> fills its
+   width at its own aspect ratio, a 30% black wash over it with the cover in white on hover and keyboard focus, and the
+   focus ring the other Orbit controls draw. Callers size the picture with their own class on the <img>. */
+.orbit-image { position: relative; display: inline-block; font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); }
+.orbit-image:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
+.orbit-image .orbit-image-img { width: 100%; height: auto; vertical-align: middle; }
+.orbit-image-cover {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #fff; background: rgba(0, 0, 0, 0.3); cursor: pointer; opacity: 0;
+}
+.orbit-image:hover > .orbit-image-cover,
+.orbit-image:focus-visible > .orbit-image-cover { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .orbit-image-cover { transition: opacity 0.3s; }
+  .orbit-image:focus-visible { transition: outline-offset 0s, outline 0s; }
+}

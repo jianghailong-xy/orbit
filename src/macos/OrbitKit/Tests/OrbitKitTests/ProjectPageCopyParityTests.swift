@@ -48,6 +48,17 @@ final class ProjectPageCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains(literal), "\(file) no longer says \(literal)", line: line)
     }
 
+    /// Whether one of this end's words names main, and that word as the browser writes it for whichever
+    /// branch is the project's main branch: each `main` put back as the template's `${main}`. A project
+    /// on main then reads the same word at both ends.
+    private static func namesMain(_ word: String) -> Bool {
+        word.range(of: "\\bmain\\b", options: .regularExpression) != nil
+    }
+
+    private static func onMainBranch(_ word: String) -> String {
+        word.replacingOccurrences(of: "\\bmain\\b", with: "${main}", options: .regularExpression)
+    }
+
     func testWorkOverviewWords() throws {
         let web = try source(Self.panorama)
         let integrating = ProjectPanoramaBuckets(running: 1, ready: 1, blocked: 1, awaitingVerification: 1,
@@ -59,13 +70,20 @@ final class ProjectPageCopyParityTests: XCTestCase {
             + ProjectPage.overviewCells(integrating, taskCount: 9, line: .projectBranch, started: false)
             + ProjectPage.overviewCells(ProjectPanoramaBuckets(), taskCount: 0, line: nil, started: false)
         for cell in cells {
-            assertSays(web, "label: '\(cell.label)'", in: Self.panorama)
+            // A lane about the project's main branch names it: `${main}`, main on a project on main.
+            assertSays(web, Self.namesMain(cell.label) ? "label: `\(Self.onMainBranch(cell.label))`" : "label: '\(cell.label)'",
+                       in: Self.panorama)
             if cell.key == "blocked", cell.footnote.hasPrefix("1 waiting") {
                 assertSays(web, "`${buckets.waitingForLanding} waiting for a prerequisite to land`", in: Self.panorama)
+            } else if Self.namesMain(cell.footnote) {
+                assertSays(web, "`\(Self.onMainBranch(cell.footnote))`", in: Self.panorama)
             } else {
                 assertSays(web, "'\(cell.footnote)'", in: Self.panorama)
             }
         }
+        // …which is the integration read's, main until it answers.
+        assertSays(web, "integrationLanes(loaded, integrationLine ?? null, mainBranch)", in: Self.panorama)
+        assertSays(web, "mainBranch={mainBranchName(integration.data?.upstreamRef)}", in: Self.panorama)
         assertSays(web, "'waiting on dependencies'", in: Self.panorama)
         assertSays(web, "% complete`", in: Self.panorama)
         // Ready on a project nobody has started (mock board3 ②), in both shapes of the card.
@@ -81,7 +99,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
     func testAProjectNobodyStartedIsTaggedNotStarted() throws {
         let web = try source(Self.page)
         assertSays(web, "{p.status === 'OPEN' && started === false ? (", in: Self.page)
-        assertSays(web, "<Tag color=\"default\">{NOT_STARTED}</Tag>", in: Self.page)
+        assertSays(web, "<Badge>{NOT_STARTED}</Badge>", in: Self.page)
         let words = try source("src/web/src/lib/projectStart.ts")
         assertSays(words, "export const NOT_STARTED = '\(StartProject.notStarted)';", in: "src/web/src/lib/projectStart.ts")
     }
@@ -111,7 +129,10 @@ final class ProjectPageCopyParityTests: XCTestCase {
             XCTAssertEqual(ProjectPage.criterionWork(c, integrationRef: nil)?.landing, words)
             assertSays(web, "\(landing): '\(words)'", in: Self.acceptance)
         }
-        assertSays(web, "tail: 'not on main yet'", in: Self.acceptance)
+        // Met on the project branch is not yet on the project's main branch, which the document names.
+        assertSays(web, "tail: `\(Self.onMainBranch("not on main yet"))`", in: Self.acceptance)
+        assertSays(web, "landing === 'LANDED' ? `\(Self.onMainBranch("on main"))`", in: Self.acceptance)
+        assertSays(web, "mainBranch={mainBranchName(detail.data?.integration?.upstreamRef)}", in: Self.acceptance)
         assertSays(web, "'the project branch'", in: Self.acceptance)
     }
 
@@ -136,10 +157,6 @@ final class ProjectPageCopyParityTests: XCTestCase {
                               (.openCoordinator, "OPEN_COORDINATOR"), (.openTaskSession, "OPEN_TASK_SESSION")] {
             assertSays(web, "\(key): '\(ProjectPage.actionLabel(action)!)'", in: Self.progress)
         }
-        let hint = ProjectPage.openItemsHint(needsYou: 23, withCoordinator: 29)
-            .replacingOccurrences(of: "23", with: "${needsYou.length}")
-            .replacingOccurrences(of: "29", with: "${withCoordinator.length}")
-        assertSays(web, "`\(hint)`", in: Self.progress)
         // The coordinator's request to start leads Needs you, and is counted there; the owner's own
         // Start… is counted in nothing.
         assertSays(web, "...(startRequest ? [startRequest] : []),", in: Self.progress)
@@ -154,10 +171,65 @@ final class ProjectPageCopyParityTests: XCTestCase {
         }
     }
 
+    /// The closing row in Open items: the coordinator's request leads Needs you beside the start
+    /// request — Ready to close over the card's question, who asked and how many gaps it could not
+    /// prove, and Review — and with nobody asking, the owner's own Record as done…, quiet.
+    func testTheClosingRowsInOpenItemsAreTheWebs() throws {
+        let web = try source(Self.progress)
+        assertSays(web, "...(doneRequest ? [doneRequest] : []),", in: Self.progress)
+        assertSays(web, "row.kind !== 'DONE_REQUEST'", in: Self.progress)
+        assertSays(web, "{ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}", in: Self.progress)
+        assertSays(web, "<div className=\"project-open-item-state is-ready-to-close\">{PROJECT_DONE_COPY.readyToClose}</div>",
+                   in: Self.progress)
+        assertSays(web, "title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>", in: Self.progress)
+        assertSays(web, "`${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`",
+                   in: Self.progress)
+        assertSays(web, "{PROJECT_DONE_COPY.recordAsDoneRow}", in: Self.progress)
+        assertSays(web, "<div className=\"project-open-item-line\">{PROJECT_DONE_COPY.notAskedYet}</div>", in: Self.progress)
+        let row = ProjectOpenItemRow(itemId: "d", kind: .unknown, title: ProjectDone.heading, waitingSince: "",
+                                     doneRequest: DoneRequest(criteriaDigest: "c", judgment: "j", gaps: [
+                                         AcceptedGap(criterionKey: "a"), AcceptedGap(criterionKey: "b"),
+                                     ]))
+        XCTAssertEqual(ProjectDone.requestRowDetail(row), "The coordinator asked · 2 gaps it couldn’t prove")
+        XCTAssertEqual(ProjectPage.needsYouRows(ProjectOpenItemsView(needsYou: [row])), [],
+                       "the request is drawn once, in its own row, as the browser filters it")
+        // The owner's own Record as done… is a grey hint the Open items count leaves out (the browser
+        // since 1f85c0afe): only the request counts as needing the owner.
+        assertSays(web, "is-owner is-own-start is-hint project-open-item-done-own", in: Self.progress)
+        assertSays(web, "`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`",
+                   in: Self.progress)
+        XCTAssertEqual(ProjectPage.openItemsSummary(status: .open, started: true, items: ProjectOpenItemsView())?.needsYou, 0,
+                       "nobody asked: the owner's own row needs nobody")
+        XCTAssertEqual(ProjectPage.openItemsSummary(status: .open, started: true,
+                                                    items: ProjectOpenItemsView(doneRequest: row))?.needsYou, 1,
+                       "the coordinator's request is the one thing that needs the owner")
+    }
+
+    /// The page's header: Ready to close beside the status while the coordinator asks, and once the
+    /// project is done, who recorded it — in `doneProvenance`'s words.
+    func testTheHeaderSaysReadyToCloseAndWhoRecordedItDone() throws {
+        let web = try source(Self.page)
+        assertSays(web, "<Badge tone=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Badge>", in: Self.page)
+        // …only while the coordinator's request stands, not for every OPEN project (the browser since
+        // 1f85c0afe; this client's `ProjectDone.readyToClose`).
+        assertSays(web, "{p.status === 'OPEN' && doneRequest ? (", in: Self.page)
+        assertSays(web, "const doneRequest = useOpenDoneRequest(id);", in: Self.page)
+        assertSays(web, "<span className=\"project-done-provenance\">{doneProvenance(p)}</span>", in: Self.page)
+        assertSays(web, "DONE: 'Completed',", in: Self.page)
+        XCTAssertEqual(ProjectDone.readyToClose, "Ready to close")
+        XCTAssertEqual(ProjectDone.provenance(doneBy: .owner, acceptedGaps: 2), "recorded by you · 2 gaps accepted")
+        XCTAssertEqual(ProjectDone.provenance(doneBy: .derived, acceptedGaps: 0), "recorded by Orbit")
+        // Record as done opens the owner's door on a current server, the old status door on an older.
+        assertSays(web, "const hasDoneGate = project.derivedDone != null && 'counts' in project.derivedDone;", in: Self.page)
+    }
+
     func testIntegrationLineWords() throws {
         let web = try source(Self.integration)
+        // How far ahead of the project's main branch, and when it last synced with it: `{main}` is
+        // that branch by name, main on a project on main.
         for phrase in ["PASSING: { text: '✓ passing'", "FAILING: { text: '✕ failing'", "UNKNOWN: { text: 'not checked'",
-                       "ahead of main", "synced with main", "at last measurement", "Last landing check", "Running jobs"] {
+                       "ahead of {main}", "synced with {main}", "const main = mainBranchName(view.upstreamRef);",
+                       "at last measurement", "Last landing check", "Running jobs"] {
             assertSays(web, phrase, in: Self.integration)
         }
     }

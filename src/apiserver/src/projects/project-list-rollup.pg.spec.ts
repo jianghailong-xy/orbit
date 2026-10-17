@@ -710,6 +710,7 @@ test('the rail reaches the index’s running count from the rows that can be run
       id: string;
       status: string;
       buckets: { running: number };
+      taskCounts: { done: number; failed: number; total: number };
       lastActivityAt: Date | null;
       attention: Record<string, unknown>;
       coordinatorActivity: { working: boolean; lastTurnAt: Date | null } | null;
@@ -907,6 +908,43 @@ test('the rail reaches the index’s running count from the rows that can be run
         // property under test is that this number does not grow with the number of projects, which
         // is what the rail’s 15-second cadence needs.
         assert.equal(rawQueries, 3, 'canonical running count, blockers and the items behind them');
+      });
+
+      await t.test('taskCounts matches the maintained status tally and excludes CANCELLED', async () => {
+        const failed = await makeTask(db, ownerId, railId, 'failed', TaskStatus.FAILED);
+        await makeTask(db, ownerId, railId, 'another failure', TaskStatus.FAILED);
+        const cancelled = await makeTask(db, ownerId, railId, 'cancelled', TaskStatus.CANCELLED);
+        await makeTask(db, ownerId, railId, 'another cancellation', TaskStatus.CANCELLED);
+        await makeTask(db, ownerId, railId, 'third cancellation', TaskStatus.CANCELLED);
+
+        const assertTally = async (expected: RailRow['taskCounts']) => {
+          const tally = await db.projectTaskStatusCount.findMany({
+            where: { projectId: railId }, select: { status: true, count: true },
+          });
+          assert.deepEqual(tally.filter((row) => row.count > 0).map((row) => row.status).sort(),
+            Object.values(TaskStatus).sort(), 'the fixture contains every task status');
+          const counts = {
+            done: tally.find((row) => row.status === TaskStatus.DONE)?.count ?? 0,
+            failed: tally.find((row) => row.status === TaskStatus.FAILED)?.count ?? 0,
+            total: tally.filter((row) => row.status !== TaskStatus.CANCELLED)
+              .reduce((sum, row) => sum + row.count, 0),
+          };
+          const rows = await railRows();
+          assert.deepEqual(rows.get(railId)!.taskCounts, counts,
+            'the wire counts agree with project_task_status_count');
+          assert.deepEqual(counts, expected);
+          const retired = tally.find((row) => row.status === TaskStatus.CANCELLED)!.count;
+          assert.ok(retired > 0, 'CANCELLED tasks make the total exclusion observable');
+          assert.equal(counts.total + retired, tally.reduce((sum, row) => sum + row.count, 0));
+          assert.deepEqual(rows.get(emptyId)!.taskCounts, { done: 0, failed: 0, total: 0 });
+          assert.deepEqual(rows.get(coordinatedId)!.taskCounts, { done: 0, failed: 0, total: 1 },
+            'a neighbouring project receives only its own tally');
+        };
+
+        await assertTally({ done: 1, failed: 2, total: 10 });
+        await db.task.update({ where: { id: failed }, data: { status: TaskStatus.OPEN } });
+        await db.task.update({ where: { id: cancelled }, data: { status: TaskStatus.OPEN } });
+        await assertTally({ done: 1, failed: 1, total: 11 });
       });
     } finally {
       await db.$disconnect();

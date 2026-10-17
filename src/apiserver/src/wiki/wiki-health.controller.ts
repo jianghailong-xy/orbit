@@ -1,5 +1,6 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { WikiHealth } from './wiki-health';
@@ -18,6 +19,7 @@ import { WikiRolloutGuard } from './wiki-rollout';
 export class WikiHealthController {
   constructor(private readonly health: WikiHealth) {}
 
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/health')
   read(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.health.read(user.userId, id);

@@ -1,0 +1,39 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs
+
+
+Running 520 tests using 1 worker
+
+  ✓    1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (4.3s)
+  ✓    2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (2.2s)
+  ✓    3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion attachment has no transition and dismisses cleanly (1.3s)
+  ✓    4 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion expiry has no transition and dismisses cleanly (1.3s)
+  ✓    5 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion search has no transition and dismisses cleanly (2.3s)
+  ✓    6 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion multiple has no transition and dismisses cleanly (2.0s)
+  ✓    7 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion popover has no transition and dismisses cleanly (1.4s)
+  ✓    8 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion tooltip has no transition and dismisses cleanly (1.5s)
+  ✓    9 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal attachment can reopen during exit without stale unmount (2.3s)
+  ✓   10 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal expiry can reopen during exit without stale unmount (2.1s)
+  ✓   11 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal search can reopen during exit without stale unmount (2.0s)
+  ✓   12 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal popover can reopen during exit without stale unmount (2.4s)
+  ✓   13 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment (5.2s)
+  ✓   14 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment (6.0s)
+  ✓   15 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (9.2s)
+  ✓   16 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry (9.7s)
+  ✓   17 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry (5.8s)
+  ✓   18 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry (8.0s)
+  ✓   19 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search (6.6s)
+  ✓   20 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search (6.6s)
+  ✓   21 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search (5.8s)
+  ✓   22 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple (7.5s)
+  ✓   23 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple (6.8s)
+  ✓   24 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple (20.0s)

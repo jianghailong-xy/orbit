@@ -1,0 +1,42 @@
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4563 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     6.07 kB │ gzip:   2.58 kB
+dist/assets/Transcript-CTw2Y3Hr.css                 6.47 kB │ gzip:   1.83 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-CNCGjxd0.css                    464.00 kB │ gzip:  76.67 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-DcmMbwvb.js            1.01 kB │ gzip:   0.59 kB
+dist/assets/popconfirm-BzLwRXn3.js                  7.81 kB │ gzip:   3.07 kB
+dist/assets/ProjectDependencyGraph-NqXo1aFM.js     14.28 kB │ gzip:   5.23 kB
+dist/assets/projectDependencyGraph-ChbzVQLS.js    173.99 kB │ gzip:  59.04 kB
+dist/assets/TaskDependencyGraph-BbkwlZQg.js       188.61 kB │ gzip:  60.88 kB
+dist/assets/taskDependencyGraph-D9V_qvrC.js       537.32 kB │ gzip: 176.49 kB
+dist/assets/sessionExport-Mo42vAmc.js             867.67 kB │ gzip: 208.11 kB
+dist/assets/Transcript-BMIzRsIn.js                896.82 kB │ gzip: 278.05 kB
+dist/assets/index-BYyu0e-U.js                   1,835.86 kB │ gzip: 550.40 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 21.16s
+[33m[PLUGIN_TIMINGS] [0mJavaScript callbacks ran for 1.6s of this 20.8s build (8%).
+The slowest callbacks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - plugin vite:css-post transform (6%, 1.2s, 25 calls)
+Additional callback time came from the callbacks below and from callbacks under 1s.
+1 callback is listed without a time. Its calls overlapped, so the time inside one call includes work from other calls. To find its cost, profile the build with `node --cpu-prof`:
+  - plugin vite:asset load (2 calls)
+See https://rolldown.rs/reference/InputOptions.checks#bundlertimings for more details.
+

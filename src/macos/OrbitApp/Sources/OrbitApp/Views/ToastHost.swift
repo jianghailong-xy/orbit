@@ -1,5 +1,9 @@
 import SwiftUI
 import OrbitKit
+#if os(iOS)
+import UIKit
+import UIKit.UIGestureRecognizerSubclass
+#endif
 
 /// The app's one toast surface (docs/mocks/toast-system): the toasts that wait for you, pinned, and
 /// the one transient toast under them, ruled by `ToastFeed` and fed by `AppModel.showToast` — row
@@ -150,11 +154,23 @@ private struct ToastHost: ViewModifier {
     }
 
     /// ③ open: what failed or waits, what it's about, the diagnostic to read or paste, and what to do.
+    ///
+    /// The card's own copy is the way in, exactly as it is on ② — a press that only follows the
+    /// toast is one the whole card should answer, not one it keeps to a button of its own. What still
+    /// earns a button here is only what does MORE than follow it (`Resolve in session`) or what acts
+    /// on the card's own words (`Copy error`). There is deliberately no chevron on the copy either:
+    /// ② has never carried one, and the two cards are the same gesture.
     private func attentionCard(_ toast: ToastItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 ToastIcon(toast: toast, card: true)
-                ToastCopy(toast: toast, showsDetail: false)
+                if toast.opens {
+                    Button { model.openToastSession(toast.id) } label: { ToastCopy(toast: toast, showsDetail: false) }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens the session")
+                } else {
+                    ToastCopy(toast: toast, showsDetail: false)
+                }
                 Button { model.dismissToast(toast.id) } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.bold))
@@ -179,10 +195,10 @@ private struct ToastHost: ViewModifier {
                     .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .padding(.leading, 38)
             }
-            if toast.opens || toast.detail != nil {
+            if toast.mergeConflict != nil || toast.detail != nil {
                 HStack(spacing: 8) {
-                    if toast.opens {
-                        Button(toast.awaitsApproval ? "Review" : "Open session") { model.openToastSession(toast.id) }
+                    if toast.mergeConflict != nil {
+                        Button("Resolve in session") { model.resolveToastConflict(toast.id) }
                             .buttonStyle(.borderedProminent)
                     }
                     if let detail = toast.detail {
@@ -222,6 +238,13 @@ private struct ToastHost: ViewModifier {
         // the right trade for a toast that blocks nothing and is gone in three seconds anyway.
         .allowsHitTesting(toast.level == .result || toast.opens)
         .onHover { hovering in hovering ? model.holdToast(toast.id) : model.releaseToast(toast.id) }
+        #if os(iOS)
+        .background {
+            ToastTouchHold { holding in
+                holding ? model.holdToast(toast.id) : model.releaseToast(toast.id)
+            }
+        }
+        #endif
     }
 
     /// ② A card: the outcome, what it was about, and the one thing you might do about it.
@@ -279,6 +302,90 @@ private struct ToastHost: ViewModifier {
             }
     }
 }
+
+#if os(iOS)
+/// Observes touch-down without claiming a gesture: the pill's tap and swipe still belong to SwiftUI,
+/// and a confirmation without a session keeps passing taps through to the page underneath it.
+private struct ToastTouchHold: UIViewRepresentable {
+    let onHoldingChanged: (Bool) -> Void
+
+    func makeUIView(context: Context) -> ToastTouchView { ToastTouchView() }
+
+    func updateUIView(_ view: ToastTouchView, context: Context) {
+        view.observer.onHoldingChanged = onHoldingChanged
+    }
+
+    static func dismantleUIView(_ view: ToastTouchView, coordinator: ()) { view.detach() }
+
+    final class ToastTouchView: UIView {
+        let observer = TouchObserver(target: nil, action: nil)
+        private weak var observedWindow: UIWindow?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = false
+            observer.toastView = self
+            observer.cancelsTouchesInView = false
+            observer.delaysTouchesBegan = false
+            observer.delaysTouchesEnded = false
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            detach()
+            observedWindow = window
+            window?.addGestureRecognizer(observer)
+        }
+
+        func detach() {
+            observer.release()
+            observedWindow?.removeGestureRecognizer(observer)
+            observedWindow = nil
+        }
+    }
+
+    final class TouchObserver: UIGestureRecognizer {
+        weak var toastView: UIView?
+        var onHoldingChanged: (Bool) -> Void = { _ in }
+        private var heldTouch: UITouch?
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard heldTouch == nil, let view = toastView,
+                  let touch = touches.first(where: { view.point(inside: $0.location(in: view), with: event) }) else { return }
+            heldTouch = touch
+            onHoldingChanged(true)
+        }
+
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard let heldTouch, touches.contains(heldTouch) else { return }
+            release()
+            // Never recognize: observing the finger must not take a tap away from the toast's Button.
+            state = .failed
+        }
+
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+            release()
+            state = .failed
+        }
+
+        override func reset() {
+            super.reset()
+            release()
+        }
+
+        override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+        override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+
+        func release() {
+            guard heldTouch != nil else { return }
+            heldTouch = nil
+            onHoldingChanged(false)
+        }
+    }
+}
+#endif
 
 // MARK: - The pieces
 

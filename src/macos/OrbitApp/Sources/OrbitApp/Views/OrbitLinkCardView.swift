@@ -236,13 +236,15 @@ struct SessionStatusPill: View {
         HStack(spacing: 4) {
             switch glyph.shape {
             case .spinner:
-                ProgressView().controlSize(.mini)
+                // `TaskStatusPill`'s spinner, so a running session and a running task look alike
+                // side by side (the Watching card lists both).
+                SpinnerGlyph(color: color).scaleEffect(0.7).frame(width: 9, height: 9)
             case .symbol(let name):
                 Image(systemName: name).font(.orbitMeta)
             }
             Text(glyph.label).font(.orbitMeta).lineLimit(1).truncationMode(.tail)
         }
-        .padding(.horizontal, 7)
+        .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(color.opacity(0.15), in: Capsule())
         .foregroundStyle(color)

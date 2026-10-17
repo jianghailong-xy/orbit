@@ -1,0 +1,67 @@
+{
+  "task": "34a0sy3NmYy7MLbOcqhkW",
+  "session": "3MEkTQSKUJ2vqkVLNYKPTZ",
+  "model": "gpt-6-astra",
+  "originalTaskBase": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "main": "182fa7832a52df7bcefceeb359f71191f6c4f238",
+  "mainTree": "ce68cce98c3f696a75b2658a0b9358a181d89f66",
+  "projectBranch": "project/34ZZeq0e3IR65GVm2kAs7",
+  "projectTipAtStart": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "regressionIntroducedBy": "9198bdfd45cc197308c19ceb1f7c84fdba5e7ae7",
+  "p23Delivery": "2998e2de37158e9bbcb577ddffa48be30ce53301",
+  "upstreamTargetedRepairFound": false,
+  "preparation": "scripts/worktree-overlay.sh selected isolated npm ci using the lockfile; no shared node_modules written",
+  "node": "v26.10.0",
+  "initialCoordinatorArchive": {
+    "path": "/tmp/orbit-p23-integration-review-2h7k3cmn",
+    "totalCollected": 3614,
+    "assertionFailures": 32,
+    "collectionFailures": 4,
+    "omittedFixtures": [
+      "contracts",
+      "src/apiserver",
+      "src/macos"
+    ],
+    "restoredFixtureRetest": {
+      "files": 6,
+      "passed": 114,
+      "failed": 0
+    },
+    "businessFailures": {
+      "files": 6,
+      "tests": 30
+    },
+    "note": "Do not describe the initial incomplete archive as a 30-failure-only run. Original reports were preserved by the coordinator."
+  },
+  "thisTaskReproduction": {
+    "scope": "complete repository; six affected files",
+    "filesFailed": 6,
+    "testsFailed": 30,
+    "testsPassed": 17,
+    "result": "before/reproduced.json",
+    "log": "before/reproduced.log"
+  },
+  "implementationCommit": "903b115fd11a898e393014a446d358a072eebcad",
+  "implementationTree": "6fd5b5fcb4a243fc4c931f8a0b738a09c2b35510",
+  "initialImplementationCommit": "60ffb541a4a8d89481719f77926da90e5ec9efc0",
+  "candidateCommit": "2c511f64466dd4f2e58fd307861f63e17c15ee34",
+  "candidateTree": "ecc5bd657558779733cecf032a704f3f8cf72bfc",
+  "candidateParents": [
+    "903b115fd11a898e393014a446d358a072eebcad",
+    "2998e2de37158e9bbcb577ddffa48be30ce53301"
+  ],
+  "candidatePath": "/root/.orbit/uploads/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/p23-candidate",
+  "mergeNote": "Initial EOF .gitignore additions conflicted with P2.3. Moved our newly added ignore line to the beginning in 903b115fd; final git merge-tree exits 0 with no manual candidate resolution. No production UI, P2.3 notification code/style, target ref or runner was modified.",
+  "commands": {
+    "prepare": "NO_COLOR=1 npm_config_cache=/tmp/orbit-p2-card-npm-cache bash scripts/worktree-overlay.sh",
+    "testTypes": "node node_modules/typescript/bin/tsc -p src/web/tsconfig.cards-check.json",
+    "standardGate": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+    "standardGateEnvironment": {
+      "NO_COLOR": "1"
+    },
+    "browser": "node ../../node_modules/@playwright/test/cli.js test --config ui-migration/reviews.config.mjs",
+    "browserCwd": "src/web",
+    "reconstructCandidate": "git merge-tree --write-tree 903b115fd11a898e393014a446d358a072eebcad 2998e2de37158e9bbcb577ddffa48be30ce53301"
+  },
+  "rollback": "Revert 903b115fd and 60ffb541a together to undo this test-only repair; this restores the failing old inline-card expectations and does not roll back the approved compact-card production behavior."
+}

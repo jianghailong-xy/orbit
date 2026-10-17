@@ -1,0 +1,14 @@
+{
+  "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop --reporter=dot,json",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_b22f37618622",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "38947755e48ac979362db36f82bfcf966b527a75",
+  "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+  "started": "2026-10-06T06:17:03Z",
+  "outputLastWritten": "2026-10-06T06:17:08.001045+00:00",
+  "exitCode": null,
+  "outputSha256": "227ee7d922cdee6aa306b201dd648d4e829d99a48573d76f85b803cfee576848",
+  "outputBytes": 38,
+  "note": "Killed by the session after 5s: the CLI --reporter override would have sent the JSON report to stdout instead of the configured file. Not a result."
+}

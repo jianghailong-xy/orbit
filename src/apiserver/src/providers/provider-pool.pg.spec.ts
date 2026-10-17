@@ -125,6 +125,8 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
     assert.deepEqual(guards.rows, [
       { relation: 'model_provider', trigger: 'model_provider_dispatch_slug_guard' },
       { relation: 'provider_pool', trigger: 'provider_pool_dispatch_slug_guard' },
+      // 0415: a retired provider name holds its slug in the same namespace.
+      { relation: 'provider_slug_alias', trigger: 'provider_slug_alias_dispatch_slug_guard' },
     ]);
   });
 
@@ -137,7 +139,7 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
     // everything the write returned it says the same.
     const listed = (await service.listPools(alice)).map(({ resetsAt: _resetsAt, unavailable: _unavailable, members, ...rest }) => ({
       ...rest,
-      members: members.map(({ id, slug, label }) => ({ id, slug, label })),
+      members: members.map(({ id, slug, label, pausedUntil }) => ({ id, slug, label, pausedUntil })),
     }));
     assert.deepEqual(listed, [pool], 'the list reads back exactly what the write returned');
     assert.deepEqual(await service.listPools(bob), [], 'and to its owner only');

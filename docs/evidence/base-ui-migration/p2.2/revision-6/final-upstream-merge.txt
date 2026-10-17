@@ -1,0 +1,11 @@
+Merge made by the 'ort' strategy.
+ .../OrbitApp/Views/Console/ConsoleView.swift       |  61 +++++++++---
+ .../OrbitApp/Views/NeedsYouBannerView.swift        |   6 +-
+ .../TranscriptScrollWiringTests.swift              | 108 +++++++++++++++++++++
+ .../OrbitKitTests/TypingFoldWiringTests.swift      |   2 +-
+ src/web/src/components/DecisionRail.tsx            |  47 +++++----
+ src/web/src/components/ReviewCard.test.tsx         |  87 ++++++++++++++++-
+ src/web/src/components/StartProjectCard.test.tsx   |   7 +-
+ .../WorkspaceView.scrollToBottom.test.tsx          |  43 +++++++-
+ src/web/src/components/WorkspaceView.tsx           |  26 +++--
+ 9 files changed, 341 insertions(+), 46 deletions(-)

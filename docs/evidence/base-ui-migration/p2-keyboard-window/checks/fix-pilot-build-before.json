@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/before2 && bash scripts/worktree-overlay.sh 2>&1 | tail -2 && git log --oneline -1 && nice -n 10 npm run build -w @orbit/shared && nice -n 10 npm run build -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_cde67efb8eff",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T04:37:58.080963+00:00",
+ "exitCode": 0,
+ "outputSha256": "b43b25686dadeaee5d9d1d9a93d4e95186f6567fa8b1fd611be606f48c4d90e0",
+ "outputBytes": 1975,
+ "note": "Production build of the before-fix tree (scratch worktree at 46a418fba, clean) for the pilot A/B: 4520 modules; index chunk 1,988.39 kB (gzip 601.03 kB), with the existing larger-than-500 kB notice."
+}

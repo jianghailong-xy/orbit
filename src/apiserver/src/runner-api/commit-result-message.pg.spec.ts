@@ -157,7 +157,9 @@ test('the message of a commit result is read back from the session it settled', 
   // Nothing here reaches the collaborators a commit result and a session read do not use; the empty
   // doubles answer a call with a TypeError, which surfaces as a 500 on the status asserted below.
   const queue = { notifySessionQueued: () => undefined };
-  const sessions = new SessionsService(prisma as unknown as PrismaService, queue as never, {} as never);
+  // A pressed Commit wakes the runner it was queued for (`commitWorktree`); nothing here listens.
+  const realtime = { notifyRunnerWake: () => undefined };
+  const sessions = new SessionsService(prisma as unknown as PrismaService, queue as never, realtime as never);
   @Module({
     controllers: [RunnerApiController, SessionsController],
     providers: [

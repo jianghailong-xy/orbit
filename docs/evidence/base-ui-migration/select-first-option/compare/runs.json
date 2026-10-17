@@ -1,0 +1,456 @@
+{
+ "f-choices-del": {
+  "exit": "exit=1",
+  "stats": {
+   "expected": 773,
+   "unexpected": 3,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 4405958.299
+  },
+  "failing": [
+   {
+    "project": "chromium-dark-phone",
+    "title": "menu is drawn where it settles from its first frame, at the replaced popup's place",
+    "status": "unexpected",
+    "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+   },
+   {
+    "project": "chromium-dark-phone",
+    "title": "submenu is drawn where it settles from its first frame, at the replaced popup's place",
+    "status": "unexpected",
+    "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+   },
+   {
+    "project": "chromium-light-phone",
+    "title": "submenu at the middle of the page settles where the replaced submenu does",
+    "status": "unexpected",
+    "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+   }
+  ]
+ },
+ "f-close-hover-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 8,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 47598.512
+  },
+  "failing": []
+ },
+ "f-close-hover-ref": {
+  "exit": "exit=1",
+  "stats": {
+   "expected": 0,
+   "unexpected": 8,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 40674.395000000004
+  },
+  "failing": [
+   {
+    "project": "chromium-light-desktop",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-light-phone",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-dark-phone",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-light-phone",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "title": "the dialog Close takes the replaced modal Close hover background",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   }
+  ]
+ },
+ "f-first-option-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 96,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 394843.327
+  },
+  "failing": []
+ },
+ "f-first-option-ref": {
+  "exit": "exit=1",
+  "stats": {
+   "expected": 80,
+   "unexpected": 16,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 566415.694
+  },
+  "failing": [
+   {
+    "project": "chromium-light-desktop",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-light-desktop",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-light-phone",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-light-phone",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-dark-phone",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "chromium-dark-phone",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-light-phone",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-light-phone",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+    "status": "unexpected",
+    "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m"
+   }
+  ]
+ },
+ "f-kw1-other-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 66,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 301451.544
+  },
+  "failing": []
+ },
+ "f-kw1-select-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 222,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 593396.641
+  },
+  "failing": []
+ },
+ "f-kw1-select-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 222,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 515876.716
+  },
+  "failing": []
+ },
+ "f-kw2-other-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 336,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 874694.417
+  },
+  "failing": []
+ },
+ "f-kw2-select-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 294,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 697379.6410000001
+  },
+  "failing": []
+ },
+ "f-kw2-select-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 294,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 636366.7189999999
+  },
+  "failing": []
+ },
+ "f-merge-check-del": {
+  "exit": "exit=0"
+ },
+ "f-overlays-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 184,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 556486.9349999999
+  },
+  "failing": []
+ },
+ "f-p0-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 101,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 11,
+   "duration": 249832.496
+  },
+  "failing": []
+ },
+ "f-p0-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 101,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 11,
+   "duration": 390972.324
+  },
+  "failing": []
+ },
+ "f-p43a-coordinator-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 8,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 85875.90699999999
+  },
+  "failing": []
+ },
+ "f-p43a-coordinator-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 8,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 100062.684
+  },
+  "failing": []
+ },
+ "f-probe-icon-hover-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 32,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 160642.46800000002
+  },
+  "failing": []
+ },
+ "f-probe-pages-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 16,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 65638.371
+  },
+  "failing": []
+ },
+ "f-probe-pages-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 16,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 317883.175
+  },
+  "failing": []
+ },
+ "f-probe-select-openers-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 12,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 116794.94099999999
+  },
+  "failing": []
+ },
+ "f-rerun-first-frame-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 2,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 47538.585
+  },
+  "failing": []
+ },
+ "f-rerun-first-frame-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 2,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 61342.191999999995
+  },
+  "failing": []
+ },
+ "f-rerun-submenu-geometry-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 4,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 79097.58
+  },
+  "failing": []
+ },
+ "f-rerun-submenu-geometry-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 4,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0,
+   "duration": 79169.339
+  },
+  "failing": []
+ },
+ "f-select-keys-del": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 1104,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 1104,
+   "duration": 2717260.019
+  },
+  "failing": []
+ },
+ "f-select-keys-ref": {
+  "exit": "exit=0",
+  "stats": {
+   "expected": 1104,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 1104,
+   "duration": 2812653.8320000004
+  },
+  "failing": []
+ }
+}

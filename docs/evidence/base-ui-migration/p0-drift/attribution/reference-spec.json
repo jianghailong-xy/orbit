@@ -1,0 +1,186 @@
+[
+ {
+  "group": "session list row",
+  "change": [
+   "A1",
+   "A2"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-961-session.png",
+   "chromium-dark-desktop/notification-error.png",
+   "chromium-dark-desktop/session-attachment-menu.png",
+   "chromium-dark-desktop/session-attachment-staged.png",
+   "chromium-dark-desktop/session-composer-focus.png",
+   "chromium-dark-desktop/session-idle.png",
+   "chromium-dark-desktop/session-streaming.png",
+   "chromium-light-desktop/breakpoint-961-session.png",
+   "chromium-light-desktop/notification-error.png",
+   "chromium-light-desktop/session-attachment-menu.png",
+   "chromium-light-desktop/session-attachment-staged.png",
+   "chromium-light-desktop/session-composer-focus.png",
+   "chromium-light-desktop/session-idle.png",
+   "chromium-light-desktop/session-streaming.png",
+   "webkit-dark-desktop/breakpoint-961-session.png",
+   "webkit-dark-desktop/notification-error.png",
+   "webkit-dark-desktop/session-attachment-menu.png",
+   "webkit-dark-desktop/session-attachment-staged.png",
+   "webkit-dark-desktop/session-composer-focus.png",
+   "webkit-dark-desktop/session-idle.png",
+   "webkit-dark-desktop/session-streaming.png",
+   "webkit-light-desktop/breakpoint-961-session.png",
+   "webkit-light-desktop/notification-error.png",
+   "webkit-light-desktop/session-attachment-menu.png",
+   "webkit-light-desktop/session-attachment-staged.png",
+   "webkit-light-desktop/session-composer-focus.png",
+   "webkit-light-desktop/session-idle.png",
+   "webkit-light-desktop/session-streaming.png"
+  ],
+  "mainCommits": [
+   "918034e72",
+   "f5bdd7fd3"
+  ],
+  "projectLine": [
+   "ed108d8c8",
+   "e5a470fe6"
+  ],
+  "generatedFrom": "full2-f5bdd7fd3"
+ },
+ {
+  "group": "project page",
+  "change": [
+   "A3"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-639-graph.png",
+   "chromium-dark-desktop/breakpoint-641-graph.png",
+   "chromium-dark-desktop/project-graph-fullscreen.png",
+   "chromium-dark-desktop/project-graph.png",
+   "chromium-dark-desktop/project-overview.png",
+   "chromium-dark-phone/project-graph.png",
+   "chromium-dark-phone/project-overview.png",
+   "chromium-light-desktop/breakpoint-639-graph.png",
+   "chromium-light-desktop/breakpoint-641-graph.png",
+   "chromium-light-desktop/project-graph-fullscreen.png",
+   "chromium-light-desktop/project-graph.png",
+   "chromium-light-desktop/project-overview.png",
+   "chromium-light-phone/project-graph.png",
+   "chromium-light-phone/project-overview.png",
+   "webkit-dark-desktop/breakpoint-639-graph.png",
+   "webkit-dark-desktop/breakpoint-641-graph.png",
+   "webkit-dark-desktop/project-graph-fullscreen.png",
+   "webkit-dark-desktop/project-graph.png",
+   "webkit-dark-desktop/project-overview.png",
+   "webkit-dark-phone/project-graph.png",
+   "webkit-dark-phone/project-overview.png",
+   "webkit-light-desktop/breakpoint-639-graph.png",
+   "webkit-light-desktop/breakpoint-641-graph.png",
+   "webkit-light-desktop/project-graph-fullscreen.png",
+   "webkit-light-desktop/project-graph.png",
+   "webkit-light-desktop/project-overview.png",
+   "webkit-light-phone/project-graph.png",
+   "webkit-light-phone/project-overview.png"
+  ],
+  "mainCommits": [
+   "93d3ec580"
+  ],
+  "projectLine": [
+   "42e7e01f4"
+  ],
+  "generatedFrom": "full2-93d3ec580"
+ },
+ {
+  "group": "task panel and settings",
+  "change": [
+   "A4"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-599-dialog.png",
+   "chromium-dark-desktop/breakpoint-601-dialog.png",
+   "chromium-dark-desktop/settings-saved.png",
+   "chromium-dark-desktop/settings.png",
+   "chromium-dark-desktop/task-action-focus.png",
+   "chromium-dark-desktop/task-action-hover.png",
+   "chromium-dark-desktop/task-action-menu.png",
+   "chromium-dark-desktop/task-detail.png",
+   "chromium-dark-desktop/task-share-dialog.png",
+   "chromium-dark-phone/settings-saved.png",
+   "chromium-dark-phone/settings.png",
+   "chromium-dark-phone/task-action-focus.png",
+   "chromium-dark-phone/task-action-hover.png",
+   "chromium-dark-phone/task-action-menu.png",
+   "chromium-dark-phone/task-detail.png",
+   "chromium-dark-phone/task-share-dialog.png",
+   "chromium-light-desktop/breakpoint-599-dialog.png",
+   "chromium-light-desktop/breakpoint-601-dialog.png",
+   "chromium-light-desktop/settings-saved.png",
+   "chromium-light-desktop/settings.png",
+   "chromium-light-desktop/task-action-focus.png",
+   "chromium-light-desktop/task-action-hover.png",
+   "chromium-light-desktop/task-action-menu.png",
+   "chromium-light-desktop/task-detail.png",
+   "chromium-light-desktop/task-share-dialog.png",
+   "chromium-light-phone/settings-saved.png",
+   "chromium-light-phone/settings.png",
+   "chromium-light-phone/task-action-focus.png",
+   "chromium-light-phone/task-action-hover.png",
+   "chromium-light-phone/task-action-menu.png",
+   "chromium-light-phone/task-detail.png",
+   "chromium-light-phone/task-share-dialog.png",
+   "webkit-dark-desktop/breakpoint-599-dialog.png",
+   "webkit-dark-desktop/breakpoint-601-dialog.png",
+   "webkit-dark-desktop/settings-saved.png",
+   "webkit-dark-desktop/settings.png",
+   "webkit-dark-desktop/task-action-focus.png",
+   "webkit-dark-desktop/task-action-hover.png",
+   "webkit-dark-desktop/task-action-menu.png",
+   "webkit-dark-desktop/task-detail.png",
+   "webkit-dark-desktop/task-share-dialog.png",
+   "webkit-dark-phone/settings-saved.png",
+   "webkit-dark-phone/settings.png",
+   "webkit-dark-phone/task-action-focus.png",
+   "webkit-dark-phone/task-action-hover.png",
+   "webkit-dark-phone/task-action-menu.png",
+   "webkit-dark-phone/task-detail.png",
+   "webkit-dark-phone/task-share-dialog.png",
+   "webkit-light-desktop/breakpoint-599-dialog.png",
+   "webkit-light-desktop/breakpoint-601-dialog.png",
+   "webkit-light-desktop/settings-saved.png",
+   "webkit-light-desktop/settings.png",
+   "webkit-light-desktop/task-action-focus.png",
+   "webkit-light-desktop/task-action-hover.png",
+   "webkit-light-desktop/task-action-menu.png",
+   "webkit-light-desktop/task-detail.png",
+   "webkit-light-desktop/task-share-dialog.png",
+   "webkit-light-phone/settings-saved.png",
+   "webkit-light-phone/settings.png",
+   "webkit-light-phone/task-action-focus.png",
+   "webkit-light-phone/task-action-hover.png",
+   "webkit-light-phone/task-action-menu.png",
+   "webkit-light-phone/task-detail.png",
+   "webkit-light-phone/task-share-dialog.png"
+  ],
+  "mainCommits": [
+   "4088d37e6"
+  ],
+  "projectLine": [
+   "8ef6b60d1"
+  ],
+  "generatedFrom": "full2-4088d37e6"
+ },
+ {
+  "group": "wiki 961px dark",
+  "change": [
+   "A5"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-961-wiki.png"
+  ],
+  "mainCommits": [
+   "e64d0c72a"
+  ],
+  "projectLine": [
+   "8ef6b60d1"
+  ],
+  "generatedFrom": "m5-e64d0c72a"
+ }
+]

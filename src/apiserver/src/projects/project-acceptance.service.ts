@@ -43,7 +43,7 @@ import { storeDerivedProjectStatus } from './project-done-derived';
 import { defaultStartLine, startProjectLine } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
-import { DONE_REQUEST_KIND, answerDoneRequests } from './project-done-request';
+import { DONE_REQUEST_KIND, answerDoneRequests, doneRequestMoved } from './project-done-request';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -364,7 +364,9 @@ export class ProjectAcceptanceService {
    *      is a seal that is not the one standing now, read under that lock so no criteria edit can
    *      land between the comparison and the write.
    *   2. The request the press answers, when it answers one (`requestId`), FOR UPDATE (rank 60): it
-   *      must still be OPEN and about that same seal, or the press is a 409.
+   *      must still be OPEN and about that same seal — and, when it names the state it was made
+   *      about, about that same work (`doneRequestMoved`, read but not locked) — or the press is a
+   *      409.
    *   3. The project: DONE, `done_by = 'OWNER'`, the instant, the seal and the accepted gaps, in one
    *      statement.
    *   4. The open request, if any, resolved APPROVED by the owner at that instant with the gaps they
@@ -410,9 +412,13 @@ export class ProjectAcceptanceService {
       if (input.criteriaDigest !== version.digest) throw projectDoneCriteriaMoved(version.digest);
 
       if (requestId !== null) {
-        const [request] = await tx.$queryRaw<Array<{ state: string; payload: Prisma.JsonValue }>>(
+        const [request] = await tx.$queryRaw<Array<{
+          state: string;
+          payload: Prisma.JsonValue;
+          askedBySessionId: string | null;
+        }>>(
           Prisma.sql`
-            SELECT "state", "payload"
+            SELECT "state", "payload", "asked_by_session_id" AS "askedBySessionId"
               FROM "project_open_item"
              WHERE "id" = ${requestId}::uuid AND "project_id" = ${projectId}::uuid
                AND "owner_id" = ${ownerId}::uuid AND "kind" = ${DONE_REQUEST_KIND}
@@ -422,6 +428,14 @@ export class ProjectAcceptanceService {
         const asked = request.payload as unknown as Partial<DoneRequest> | null;
         if (asked?.criteriaDigest !== version.digest) {
           throw projectDoneRequestStale('was made about criteria that have changed since');
+        }
+        // And about the work: a request whose tasks, runs or landings have moved since is void even
+        // before a read of the open items gets round to superseding it (`project-done-request.ts`).
+        if (asked.stateDigest !== undefined
+          && (await doneRequestMoved(tx, ownerId, projectId, request)).length > 0) {
+          throw projectDoneRequestStale(
+            'was made about tasks, runs or landings that have changed since',
+          );
         }
       }
 
@@ -461,10 +475,10 @@ export class ProjectAcceptanceService {
    *
    * The same authority as `confirmStandardSet`, because a start IS a confirmation — of the criteria
    * the card showed, named by their seal — and of how the project is to run besides: its integration
-   * line, Automatic, its concurrency limit and its merge check. Refused whole for a request carrying
-   * an acting session, before anything is read; a seal that is not the current one is a 409 and
-   * nothing is written; so is a project that has been started already, which is what makes a second
-   * press, or a re-sent request, a refusal instead of a second start.
+   * line and main branch, Automatic, its concurrency limit and its merge check. Refused whole for a
+   * request carrying an acting session, before anything is read; a seal that is not the current one
+   * is a 409 and nothing is written; so is a project that has been started already, which is what
+   * makes a second press, or a re-sent request, a refusal instead of a second start.
    *
    * `requestId` names the coordinator's start request the card was drawn from, when there was one
    * (`project-start-request.ts`): the settings it suggested are then what the start records as asked
@@ -477,7 +491,7 @@ export class ProjectAcceptanceService {
     projectId: string,
     input: StartProjectRequestBody,
     actingSessionId?: string,
-  ): Promise<StartProjectResponse> {
+  ): Promise<Omit<StartProjectResponse, 'coordinator'>> {
     const refusal = refuseSessionAuthoredConfirmation(actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
     if (input.line === 'MAIN' && input.projectBranchName !== undefined) {
@@ -490,9 +504,15 @@ export class ProjectAcceptanceService {
     const asked: ProjectStartSettings = {
       line: input.line,
       ...(input.projectBranchName !== undefined ? { projectBranchName: input.projectBranchName } : {}),
+      ...(input.upstreamRef !== undefined ? { upstreamRef: input.upstreamRef } : {}),
       automatic: input.automatic,
       maxConcurrentTasks: input.maxConcurrentTasks,
       mergeCheckCommand: input.mergeCheckCommand ?? null,
+      // Absent is a client that does not know the field, and is left absent so `startProjectLine`
+      // leaves the binding's budget as it stands rather than clearing one nobody named.
+      ...(input.mergeCheckTimeoutSeconds !== undefined
+        ? { mergeCheckTimeoutSeconds: input.mergeCheckTimeoutSeconds }
+        : {}),
     };
     const started = await this.start(
       ownerId,
@@ -520,9 +540,10 @@ export class ProjectAcceptanceService {
    *      before it writes the same columns. A project that has a `started_at` is refused here,
    *      409 `PROJECT_ALREADY_STARTED`, and so is a seal that is not the one standing now, read
    *      under that lock so no criteria edit can land between the comparison and the writes.
-   *   2. The line and the merge check, under the binding's lock (rank 55): written as the owner's
-   *      choice, unless the line has started integrating — then it is left where it is, and the
-   *      answer says so (`startProjectLine`).
+   *   2. The line, its main branch when the start names one, and the merge check, under the
+   *      binding's lock (rank 55): written as the owner's choice, a named main branch recorded as
+   *      chosen (L6), unless the line has started integrating — then it is left where it is, and
+   *      the answer says so (`startProjectLine`).
    *   3. Automatic and the concurrency limit — `coordinator_enabled` and `max_concurrent_tasks`,
    *      written only where they change, with the one `configRevision` bump every write of
    *      `ProjectsService.AUTHORIZATION_FIELDS` owes — and `started_at`, in the same statement, as a
@@ -572,14 +593,24 @@ export class ProjectAcceptanceService {
       });
       if (requestId !== null && !request) throw new NotFoundException('start request not found');
 
+      const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const asked = await settingsFor(tx, project);
       const line = await startProjectLine(tx, { ownerId, projectId, settings: asked });
+      // The main branch is recorded when the start or the request it answers named one — the
+      // branch the project stands on now, so a choice a locked line kept out reads as a difference.
+      const upstreamNamed = asked.upstreamRef !== undefined || suggested?.upstreamRef !== undefined;
       const settings: ProjectStartSettings = {
         line: line.line,
         ...(line.projectBranchName !== undefined ? { projectBranchName: line.projectBranchName } : {}),
+        ...(upstreamNamed && line.upstreamRef !== undefined
+          ? { upstreamRef: line.upstreamRef }
+          : {}),
         automatic: asked.automatic,
         maxConcurrentTasks: asked.maxConcurrentTasks,
         mergeCheckCommand: line.mergeCheckCommand,
+        // As the check stands once the start is done: the budget the start named, the one the
+        // binding already had when it named none, or null for a check that runs on its default.
+        mergeCheckTimeoutSeconds: line.mergeCheckTimeoutSeconds ?? null,
       };
 
       const at = new Date();
@@ -601,7 +632,6 @@ export class ProjectAcceptanceService {
       });
       if (written.count !== 1) throw projectAlreadyStarted(null);
 
-      const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const record: ProjectStartRecord = {
         settings,
         differsFromRequest: differingStartSettings(suggested ?? asked, settings),

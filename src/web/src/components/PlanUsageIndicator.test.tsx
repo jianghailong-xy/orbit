@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp, ConfigProvider } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -182,18 +181,14 @@ async function mount(runner: CodexResetRunner, reset = true, account?: PlanUsage
   await act(async () => {
     mounted.render(
       <QueryClientProvider client={client}>
-        <ConfigProvider theme={{ token: { motion: false } }}>
-          <AntApp>
-            <MemoryRouter>
-              <PlanUsageIndicator
-                usage={runner.planUsage!.codex!}
-                reset={reset ? { runner, workspaceId: 'Workspace1' } : undefined}
-                account={account}
-              />
-              <ToastViewport />
-            </MemoryRouter>
-          </AntApp>
-        </ConfigProvider>
+        <MemoryRouter>
+          <PlanUsageIndicator
+            usage={runner.planUsage!.codex!}
+            reset={reset ? { runner, workspaceId: 'Workspace1' } : undefined}
+            account={account}
+          />
+          <ToastViewport />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
@@ -211,7 +206,7 @@ async function unmount(): Promise<void> {
   document.body.innerHTML = '';
 }
 
-// A mounted antd tree in jsdom is slow on a loaded machine. A test that times out keeps running in
+// A mounted tree in jsdom is slow on a loaded machine. A test that times out keeps running in
 // the background and its unmount would clear the next test's page, so the budget is generous and
 // every wait gives up well inside it.
 vi.setConfig({ testTimeout: 60_000 });
@@ -232,7 +227,13 @@ async function until(what: string, predicate: () => boolean, timeoutMs = 20_000)
 }
 
 const pill = () => document.querySelector<HTMLButtonElement>('button.composer-usage')!;
-const usagePanel = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Plan usage"]');
+/** A dialog by its accessible name: the text of what it is labelled by. */
+const dialogNamed = (name: string) =>
+  Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find(
+    (each) => document.getElementById(each.getAttribute('aria-labelledby') ?? '')?.textContent === name,
+  ) ?? null;
+/** The popover's body, where a press puts focus: inside the dialog its "Plan usage" title names. */
+const usagePanel = () => dialogNamed('Plan usage')?.querySelector<HTMLElement>('.cu-pop') ?? null;
 const panelText = () => usagePanel()?.textContent ?? '';
 const button = (name: string) =>
   Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((each) => each.textContent?.trim() === name) ??
@@ -243,10 +244,7 @@ const toastText = () =>
     .join(' ');
 
 function confirmation(): HTMLElement | null {
-  const title = Array.from(document.querySelectorAll('.ant-modal-title')).find(
-    (each) => each.textContent === 'Use reset credit?',
-  );
-  return (title?.closest('[role="dialog"]') as HTMLElement | null) ?? null;
+  return dialogNamed('Use reset credit?');
 }
 
 async function click(element: HTMLElement): Promise<void> {
@@ -263,10 +261,15 @@ async function keydown(element: Element, key: string, init: KeyboardEventInit = 
   await pause();
 }
 
+/** A press on the pill opens the popover with focus moving into it, a frame later; the next press waits for that,
+ *  as a person's does (a press inside that frame would have the popover's focus land after it). */
 async function openUsage(): Promise<void> {
   pill().focus();
   await click(pill());
-  await until('the Plan usage popover', () => usagePanel() !== null && pill().getAttribute('aria-expanded') === 'true');
+  await until(
+    'the Plan usage popover, focus inside it',
+    () => usagePanel() !== null && pill().getAttribute('aria-expanded') === 'true' && !!usagePanel()?.contains(document.activeElement),
+  );
 }
 
 async function confirmReset(): Promise<void> {
@@ -408,10 +411,12 @@ describe('confirming a reset', () => {
     await click(button('Use reset credit')!);
     await until('the confirmation', () => confirmation() !== null);
     const dialog = confirmation()!;
-    // Looked up inside the dialog: under NODE_ENV=test rc-util hands every component the same id
-    // ("test-id"), so a document-wide lookup would find the popover first. A browser gets unique ids.
     const labelId = dialog.getAttribute('aria-labelledby')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    // Modal: while it is open, the page under it — the pill and the entry in the popover it opened from — is
+    // hidden from assistive technology (live regions, such as the card's status line, keep being announced).
+    expect(pill().closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(button('Use reset credit')?.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(dialog.closest('[aria-hidden="true"]')).toBeNull();
     expect(dialog.querySelector(`[id="${labelId}"]`)?.textContent).toBe('Use reset credit?');
     expect(dialog.textContent).toContain(
       'This consumes 1 earned credit and resets eligible Codex usage windows. This action can’t be undone.',
@@ -699,15 +704,6 @@ describe('the reset entry', () => {
     { name: 'there is no lease', runner: () => resetRunner(at(), { heartbeatLeaseOwner: null }), reason: "The runner hasn't checked in yet." },
     { name: 'the runner is draining', runner: () => resetRunner(at(), { heartbeatDraining: true }), reason: 'The runner is restarting.' },
     {
-      name: 'there are no credits',
-      runner: () => {
-        const now = at();
-        return resetRunner(now, {}, resetBlock(now, { rateLimitResetCredits: { availableCount: 0, credits: [] } }));
-      },
-      reason: 'No reset credits available.',
-      also: '0 available',
-    },
-    {
       name: 'Codex reports no credit summary',
       runner: () => {
         const now = at();
@@ -731,6 +727,19 @@ describe('the reset entry', () => {
       expect(server.posts()).toHaveLength(0);
     });
   }
+
+  it('hides the reset section when there are no credits, keeping the usage windows', async () => {
+    const server = new FakeResetApi();
+    const now = at();
+    await mount(resetRunner(now, {}, resetBlock(now, { rateLimitResetCredits: { availableCount: 0, credits: [] } })));
+    await openUsage();
+    expect(usagePanel()!.querySelector('.cu-rc')).toBeNull();
+    expect(button('Use reset credit')).toBeNull();
+    expect(panelText()).toContain('5h limit92%');
+    expect(panelText()).toContain('Weekly limit68%');
+    expect(panelText()).toContain('Resets ');
+    expect(server.posts()).toHaveLength(0);
+  });
 
   it('is not drawn for an unsupported sign-in, an older runner, or a session off the built-in Codex', async () => {
     const now = new Date();

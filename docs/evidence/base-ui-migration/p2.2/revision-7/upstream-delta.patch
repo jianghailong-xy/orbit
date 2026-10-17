@@ -1,0 +1,263 @@
+diff --git a/scripts/codex-reset-e2e/run.mjs b/scripts/codex-reset-e2e/run.mjs
+index 901a5f019..f2e3b98cb 100644
+--- a/scripts/codex-reset-e2e/run.mjs
++++ b/scripts/codex-reset-e2e/run.mjs
+@@ -1000,7 +1000,7 @@ const SCENARIOS = [
+   },
+   {
+     id: 'S11',
+-    title: 'Provider outcome noCredit, then no balance: nothing spent, the empty count is read back, the entry is disabled and the API refuses NO_CREDIT_AVAILABLE',
++    title: 'Provider outcome noCredit, then no balance: nothing spent, the empty count is read back, the reset section is hidden and the API refuses NO_CREDIT_AVAILABLE',
+     async run(ctx, facts) {
+       const { page } = ctx;
+       await onWorkspace(ctx, ctx.w1);
+@@ -1018,14 +1018,11 @@ const SCENARIOS = [
+       const calls = ctx.fake.consumeCalls(ledgerMark);
+       assert.equal(calls.length, 1);
+       assert.deepEqual(calls[0].params, { idempotencyKey: done.providerIdempotencyKey });
+-      const shown = await watchCard(page, 'the card to say there is no credit', (s) => fold(s.card?.statusTitle) === 'No reset credit available', 60_000, seen);
+-      assert.equal(fold(shown.card.statusDetail), 'Codex reports no earned reset credits on this account. No credit was used.');
+       const empty = await eventually('the empty count to be stored', async () => {
+         const block = await storedBlock(ctx);
+         return block?.rateLimitResetCredits?.availableCount === 0 ? block : null;
+       }, 90_000, 1000);
+-      await clearCard(page);
+-      await watchCard(page, 'the entry to be disabled for no credit', (s) => s.card?.count === '0 available' && button(s, 'Use reset credit')?.disabled === true && s.card.reasons.includes('No reset credits available.'), 150_000, seen);
++      await watchCard(page, 'the reset section to be hidden for no credit', (s) => s.popoverVisible && s.card === null, 150_000, seen);
+       const refused = await pageFetch(page, 'POST', `/api/runners/${ctx.runnerPublicId}/codex-rate-limit-reset`, {
+         clientRequestId: randomUUID(),
+         accountFingerprint: empty.accountFingerprint,
+diff --git a/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift b/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift
+index 18e209bf4..2649cb5b8 100644
+--- a/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift
++++ b/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift
+@@ -509,6 +509,19 @@ final class AppModel {
+             self?.rememberDefaultPermissionMode(raw)
+         }
+         consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
++        consoleRegistry?.seedSessionContext = { [weak self] console in
++            guard let self, let session = self.session(id: console.sessionID) else { return }
++            console.seedSessionContext(
++                session,
++                modelCatalog: self.agents?.modelCatalog(for: session.assignedRunnerId),
++                runtimeDefaultModels: session.assignedRunnerId.flatMap {
++                    self.agents?.runnerRuntimeDefaultModels[$0]
++                },
++                configuredProviders: self.agents?.configuredProviders ?? [],
++                configuredProvidersLoaded: self.agents?.configuredProvidersLoaded ?? false,
++                providerPools: self.agents?.providerPools ?? [],
++                sharedPools: self.agents?.sharedPools ?? [])
++        }
+         #if os(macOS)
+         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
+         #endif
+diff --git a/src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift b/src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift
+index 75a970b2f..262daffd6 100644
+--- a/src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift
++++ b/src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift
+@@ -368,12 +368,13 @@ final class ConsoleModel {
+     }
+ 
+     /// Whether the usage sheet should reserve room for the reset card. Unsupported/auth-unknown
+-    /// answers stay hidden just like the web card; CREDITS_UNAVAILABLE remains visible with a reason.
++    /// answers and zero credits stay hidden; CREDITS_UNAVAILABLE remains visible with a reason.
+     var codexResetCardVisible: Bool {
+         guard let block = codexResetBlock,
+               Self.isCodexResetBlockValid(block),
+               let fingerprint = block.accountFingerprint,
+-              Self.isCodexResetFingerprint(fingerprint) else { return false }
++              Self.isCodexResetFingerprint(fingerprint),
++              block.rateLimitResetCredits?.availableCount != 0 else { return false }
+         return block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE"
+     }
+ 
+@@ -643,6 +644,7 @@ final class ConsoleModel {
+                                                      usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
+     }
+     private(set) var modelCatalog: RunnerModelCatalog?
++    private var runtimeDefaultModels: [String: String]?
+     /// What the session's runner last reported about each engine CLI it can host. A provider
+     /// choice is a claim about that machine, so the picker greys out what it says can't run there.
+     /// Nil until the runner read lands (and from an older server), which claims nothing.
+@@ -848,6 +850,21 @@ final class ConsoleModel {
+         wireWorktree()
+     }
+ 
++    /// Seed a console opened from a list before its first frame. The list already owns the config;
++    /// the cached runner/provider catalogs name it without waiting for `loadContext`'s REST reads.
++    func seedSessionContext(_ session: Session, modelCatalog: RunnerModelCatalog?,
++                            runtimeDefaultModels: [String: String]?,
++                            configuredProviders: [ConfiguredProvider], configuredProvidersLoaded: Bool,
++                            providerPools: [ProviderPool], sharedPools: [SharedPool]) {
++        self.modelCatalog = modelCatalog
++        self.runtimeDefaultModels = runtimeDefaultModels
++        self.providerPools = providerPools
++        self.sharedPools = sharedPools
++        self.configuredProviders = configuredProviders + ProviderPools.asProviders(allPools)
++        self.configuredProvidersLoaded = configuredProvidersLoaded
++        adoptSessionConfiguration(session)
++    }
++
+     /// Seed the live composer's first frame before the draft opens it. The create response owns
+     /// the config; the draft's catalogue names it without another asynchronous runner read.
+     func adoptCreatedSession(_ session: Session, from draft: ConsoleModel) {
+@@ -1502,6 +1519,7 @@ final class ConsoleModel {
+         runnerHeartbeatDraining = runner.heartbeatDraining
+         runnerPlanUsage = runner.planUsage
+         modelCatalog = runner.modelCatalog
++        runtimeDefaultModels = runner.runtimeDefaultModels
+         runnerEngines = runner.engines
+         runnerAntigravity = runner.antigravity
+         runnerVersion = runner.version
+@@ -1516,6 +1534,7 @@ final class ConsoleModel {
+         runnerHeartbeatDraining = nil
+         runnerPlanUsage = nil
+         modelCatalog = nil
++        runtimeDefaultModels = nil
+         runnerEngines = nil
+         runnerAntigravity = nil
+         runnerVersion = nil
+@@ -1559,7 +1578,6 @@ final class ConsoleModel {
+         taskID = s.taskId
+         ownerReadMoment = runMoment(s)
+         if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
+-        provider = s.provider ?? "claude"
+         poolMemberProviderID = s.poolMemberProviderId
+         poolKeyID = s.poolKeyId
+         sessionCodexAccount = s.codexAccount
+@@ -1571,31 +1589,8 @@ final class ConsoleModel {
+         workspaceEnv = s.agent?.env
+         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
+ 
+-        // A historical Session.model is authoritative and can be adopted immediately. If the user
+-        // already touched the picker while the session request was in flight, their explicit value
+-        // wins and no later context request may replace it.
+-        if modelSelectionRevision.isPristine {
+-            modelID = s.model ?? AgentDefaults.defaultModel(for: provider)
+-        }
+-        // A stored mode is adopted verbatim; a session with none (task- or MCP-created) resolves
+-        // exactly as the server will — account default, else the floor. Web parity
+-        // (`effectivePermissionMode`).
+-        permissionMode = AgentDefaults.resolvePermissionMode(
+-            session: s.permissionMode, accountDefault: accountDefaultPermissionMode())
+-        if let ef = s.effort ?? s.agent?.effort, let e = Effort(rawValue: ef) {
+-            effort = AgentDefaults.normalizeEffort(e, for: provider)
+-        } else {
+-            effort = .default
+-        }
+-        // Fast mode is stored, never inherited from the agent: a session either is in the lane or
+-        // is not, and an absent field (older server, or one that never set it) is off.
+-        fastMode = s.fastMode == true
++        adoptSessionConfiguration(s)
+         let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
+-        // When the session already stores a model, this is a complete server baseline before the
+-        // slower optional Runner/provider reads. A manual pick can now PATCH against it safely.
+-        if live, s.model != nil, modelSelectionRevision.isPristine {
+-            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
+-        }
+ 
+         // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
+         // merely unavailable data and must retain the model already on screen.
+@@ -1658,6 +1653,29 @@ final class ConsoleModel {
+         }
+     }
+ 
++    /// List seeds and the later detail read resolve the same settings. A model-less session keeps
++    /// using the cached Runtime default while the runner refresh is in flight.
++    private func adoptSessionConfiguration(_ session: Session) {
++        provider = session.provider ?? "claude"
++        // A picker edit made while REST was in flight always wins over the server's seed.
++        if modelSelectionRevision.isPristine {
++            modelID = session.model ?? AgentDefaults.effectiveDefaultModel(
++                for: provider, catalog: modelCatalog, configured: configuredProviders,
++                runtimeDefaults: runtimeDefaultModels)
++        }
++        permissionMode = AgentDefaults.resolvePermissionMode(
++            session: session.permissionMode, accountDefault: accountDefaultPermissionMode())
++        effort = AgentDefaults.normalizeEffort(
++            Effort(rawValue: session.effort ?? session.agent?.effort ?? "") ?? .default,
++            for: provider)
++        // Fast mode belongs to the session; it is never inherited from the workspace.
++        fastMode = session.fastMode == true
++        if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil,
++           modelSelectionRevision.isPristine {
++            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
++        }
++    }
++
+     /// Adopt a fresh list/detail snapshot too. The app's control-plane-driven list refresh carries
+     /// heartbeat-derived capability changes, so an open console needn't keep an older denial.
+     func adoptServerSnapshot(_ session: Session?) {
+diff --git a/src/macos/OrbitApp/Sources/OrbitApp/ConsoleRegistry.swift b/src/macos/OrbitApp/Sources/OrbitApp/ConsoleRegistry.swift
+index 10a0c86a8..fcd04ea6e 100644
+--- a/src/macos/OrbitApp/Sources/OrbitApp/ConsoleRegistry.swift
++++ b/src/macos/OrbitApp/Sources/OrbitApp/ConsoleRegistry.swift
+@@ -33,6 +33,8 @@ final class ConsoleRegistry {
+     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
+     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
+     @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
++    /// Apply the app's cached session and catalog before a new console can be rendered.
++    @ObservationIgnored var seedSessionContext: (ConsoleModel) -> Void = { _ in }
+ 
+     private var models: [String: ConsoleModel] = [:]
+     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
+@@ -218,6 +220,7 @@ final class ConsoleRegistry {
+             self.report(settled, detail)
+         }
+         wireAccountDefaults(model)
++        seedSessionContext(model)
+         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
+         return model
+     }
+diff --git a/src/web/src/components/CodexResetCredit.tsx b/src/web/src/components/CodexResetCredit.tsx
+index fa55e6877..cb4330107 100644
+--- a/src/web/src/components/CodexResetCredit.tsx
++++ b/src/web/src/components/CodexResetCredit.tsx
+@@ -462,6 +462,7 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
+   const headingId = useId();
+   const reasonId = useId();
+   const { card, operation, create, notice, hiddenBy } = state;
++  if (card?.details.availableCount === 0) return null;
+   const status = codexResetStatusOf(state);
+   if ((!card && !status) || (hiddenBy && !status)) return null;
+   const expiry = card ? codexResetExpiry(card.block, fmtDay) : null;
+diff --git a/src/web/src/components/PlanUsageIndicator.test.tsx b/src/web/src/components/PlanUsageIndicator.test.tsx
+index 37644d575..70b1778ec 100644
+--- a/src/web/src/components/PlanUsageIndicator.test.tsx
++++ b/src/web/src/components/PlanUsageIndicator.test.tsx
+@@ -698,15 +698,6 @@ describe('the reset entry', () => {
+     },
+     { name: 'there is no lease', runner: () => resetRunner(at(), { heartbeatLeaseOwner: null }), reason: "The runner hasn't checked in yet." },
+     { name: 'the runner is draining', runner: () => resetRunner(at(), { heartbeatDraining: true }), reason: 'The runner is restarting.' },
+-    {
+-      name: 'there are no credits',
+-      runner: () => {
+-        const now = at();
+-        return resetRunner(now, {}, resetBlock(now, { rateLimitResetCredits: { availableCount: 0, credits: [] } }));
+-      },
+-      reason: 'No reset credits available.',
+-      also: '0 available',
+-    },
+     {
+       name: 'Codex reports no credit summary',
+       runner: () => {
+@@ -732,6 +723,19 @@ describe('the reset entry', () => {
+     });
+   }
+ 
++  it('hides the reset section when there are no credits, keeping the usage windows', async () => {
++    const server = new FakeResetApi();
++    const now = at();
++    await mount(resetRunner(now, {}, resetBlock(now, { rateLimitResetCredits: { availableCount: 0, credits: [] } })));
++    await openUsage();
++    expect(usagePanel()!.querySelector('.cu-rc')).toBeNull();
++    expect(button('Use reset credit')).toBeNull();
++    expect(panelText()).toContain('5h limit92%');
++    expect(panelText()).toContain('Weekly limit68%');
++    expect(panelText()).toContain('Resets ');
++    expect(server.posts()).toHaveLength(0);
++  });
++
+   it('is not drawn for an unsupported sign-in, an older runner, or a session off the built-in Codex', async () => {
+     const now = new Date();
+     const cases: [CodexResetRunner, boolean][] = [

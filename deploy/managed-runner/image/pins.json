@@ -1,0 +1,18 @@
+{
+  "metadataVerifiedOn": "2026-10-04",
+  "supportedPlatforms": ["linux/amd64", "linux/arm64"],
+  "dockerfileFrontend": "docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e",
+  "goImage": "golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5",
+  "nodeImage": "node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1",
+  "debianSnapshot": "20260928T000000Z",
+  "codexPackage": "@openai/codex@0.158.0",
+  "sources": {
+    "go": "https://hub.docker.com/v2/repositories/library/golang/tags/1.27.1-trixie",
+    "node": "https://hub.docker.com/v2/repositories/library/node/tags/26.10.0-trixie-slim",
+    "dockerfileFrontend": "https://hub.docker.com/v2/repositories/docker/dockerfile/tags/1.7.1",
+    "codex": "https://registry.npmjs.org/@openai/codex/0.158.0",
+    "codexLayout": "https://github.com/openai/codex/blob/rust-v0.158.0/scripts/codex_package/README.md",
+    "debian": "https://snapshot.debian.org/archive/debian/20260928T000000Z/dists/trixie/Release",
+    "debianSecurity": "https://snapshot.debian.org/archive/debian-security/20260928T000000Z/dists/trixie-security/Release"
+  }
+}

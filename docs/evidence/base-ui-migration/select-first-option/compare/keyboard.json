@@ -1,0 +1,3722 @@
+{
+ "select-keys": {
+  "ref": {
+   "antd-multiple down-down-enter": {
+    "burst": {
+     "Bug | Ops | list open": 80
+    },
+    "paced": {
+     "Bug | Ops | list open": 12
+    }
+   },
+   "antd-sample down-down-enter": {
+    "burst": {
+     "7 days | 7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | 7 days | list closed": 12
+    }
+   },
+   "antd-sample down-up-enter": {
+    "burst": {
+     "Never | Never | list closed": 80
+    },
+    "paced": {
+     "Never | Never | list closed": 12
+    }
+   },
+   "antd-search down-down-enter": {
+    "burst": {
+     "7 days | 7 days | list closed": 79,
+     "7 days | 7 days | list open": 1
+    },
+    "paced": {
+     "7 days | 7 days | list closed": 12
+    }
+   },
+   "orbit-combobox down-down-enter": {
+    "burst": {
+     "7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | list closed": 12
+    }
+   },
+   "orbit-field down-down-enter": {
+    "burst": {
+     "7 | list closed": 80
+    },
+    "paced": {
+     "7 | list closed": 12
+    }
+   },
+   "orbit-field down-enter": {
+    "burst": {
+     "never | list closed": 80
+    },
+    "paced": {
+     "never | list closed": 12
+    }
+   },
+   "orbit-field down-up-enter": {
+    "burst": {
+     "never | list closed": 80
+    },
+    "paced": {
+     "never | list closed": 12
+    }
+   },
+   "orbit-menu down-down-enter": {
+    "burst": {
+     "image | list closed": 80
+    },
+    "paced": {
+     "image | list closed": 12
+    }
+   },
+   "orbit-multiselect down-down-enter": {
+    "burst": {
+     "Bug | Ops | list open": 80
+    },
+    "paced": {
+     "Bug | Ops | list open": 12
+    }
+   },
+   "orbit-sample down-down-enter": {
+    "burst": {
+     "7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | list closed": 12
+    }
+   },
+   "orbit-sample down-up-enter": {
+    "burst": {
+     "Never | list closed": 80
+    },
+    "paced": {
+     "Never | list closed": 12
+    }
+   }
+  },
+  "del": {
+   "antd-multiple down-down-enter": {
+    "burst": {
+     "Bug | Ops | list open": 80
+    },
+    "paced": {
+     "Bug | Ops | list open": 12
+    }
+   },
+   "antd-sample down-down-enter": {
+    "burst": {
+     "7 days | 7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | 7 days | list closed": 12
+    }
+   },
+   "antd-sample down-up-enter": {
+    "burst": {
+     "Never | Never | list closed": 80
+    },
+    "paced": {
+     "Never | Never | list closed": 12
+    }
+   },
+   "antd-search down-down-enter": {
+    "burst": {
+     "7 days | 7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | 7 days | list closed": 12
+    }
+   },
+   "orbit-combobox down-down-enter": {
+    "burst": {
+     "7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | list closed": 12
+    }
+   },
+   "orbit-field down-down-enter": {
+    "burst": {
+     "7 | list closed": 80
+    },
+    "paced": {
+     "7 | list closed": 12
+    }
+   },
+   "orbit-field down-enter": {
+    "burst": {
+     "never | list closed": 80
+    },
+    "paced": {
+     "never | list closed": 12
+    }
+   },
+   "orbit-field down-up-enter": {
+    "burst": {
+     "never | list closed": 80
+    },
+    "paced": {
+     "never | list closed": 12
+    }
+   },
+   "orbit-menu down-down-enter": {
+    "burst": {
+     "image | list closed": 80
+    },
+    "paced": {
+     "image | list closed": 12
+    }
+   },
+   "orbit-multiselect down-down-enter": {
+    "burst": {
+     "Bug | Ops | list open": 80
+    },
+    "paced": {
+     "Bug | Ops | list open": 12
+    }
+   },
+   "orbit-sample down-down-enter": {
+    "burst": {
+     "7 days | list closed": 80
+    },
+    "paced": {
+     "7 days | list closed": 12
+    }
+   },
+   "orbit-sample down-up-enter": {
+    "burst": {
+     "Never | list closed": 80
+    },
+    "paced": {
+     "Never | list closed": 12
+    }
+   }
+  },
+  "same outcomes": {
+   "antd-multiple down-down-enter": true,
+   "antd-sample down-down-enter": true,
+   "antd-sample down-up-enter": true,
+   "antd-search down-down-enter": false,
+   "orbit-combobox down-down-enter": true,
+   "orbit-field down-down-enter": true,
+   "orbit-field down-enter": true,
+   "orbit-field down-up-enter": true,
+   "orbit-menu down-down-enter": true,
+   "orbit-multiselect down-down-enter": true,
+   "orbit-sample down-down-enter": true,
+   "orbit-sample down-up-enter": true
+  },
+  "ref: burst as paced": {
+   "antd-multiple down-down-enter": true,
+   "antd-sample down-down-enter": true,
+   "antd-sample down-up-enter": true,
+   "antd-search down-down-enter": false,
+   "orbit-combobox down-down-enter": true,
+   "orbit-field down-down-enter": true,
+   "orbit-field down-enter": true,
+   "orbit-field down-up-enter": true,
+   "orbit-menu down-down-enter": true,
+   "orbit-multiselect down-down-enter": true,
+   "orbit-sample down-down-enter": true,
+   "orbit-sample down-up-enter": true
+  },
+  "del: burst as paced": {
+   "antd-multiple down-down-enter": true,
+   "antd-sample down-down-enter": true,
+   "antd-sample down-up-enter": true,
+   "antd-search down-down-enter": true,
+   "orbit-combobox down-down-enter": true,
+   "orbit-field down-down-enter": true,
+   "orbit-field down-enter": true,
+   "orbit-field down-up-enter": true,
+   "orbit-menu down-down-enter": true,
+   "orbit-multiselect down-down-enter": true,
+   "orbit-sample down-down-enter": true,
+   "orbit-sample down-up-enter": true
+  }
+ },
+ "kw1-select": {
+  "ref": {
+   "antd-sample select-down": {
+    "burst": {
+     "Never | list open": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "antd-sample select-down-7-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-n-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-pagedown-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-pageup-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-space": {
+    "burst": {
+     "Never | list open": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "antd-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-field select-down": {
+    "burst": {
+     "never | list open": 3
+    },
+    "paced": {
+     "never | list open": 3
+    }
+   },
+   "orbit-field select-down-7-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-down-end-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list open": 3
+    }
+   },
+   "orbit-field select-down-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-enter-from-7": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-down-home-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-n-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-pagedown-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-pageup-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-down-space": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-space-from-null": {
+    "burst": {
+     "null | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-enter-down-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-space-down-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-sample select-down": {
+    "burst": {
+     "Never | list open": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "orbit-sample select-down-7-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "orbit-sample select-down-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-n-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-pagedown-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-pageup-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-down-space": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   }
+  },
+  "del": {
+   "antd-sample select-down": {
+    "burst": {
+     "Never | list open": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "antd-sample select-down-7-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-n-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-pagedown-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "antd-sample select-down-pageup-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-down-space": {
+    "burst": {
+     "Never | list open": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "antd-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "antd-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-field select-down": {
+    "burst": {
+     "never | list open": 3
+    },
+    "paced": {
+     "never | list open": 3
+    }
+   },
+   "orbit-field select-down-7-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-down-end-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list open": 3
+    }
+   },
+   "orbit-field select-down-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-enter-from-7": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-down-home-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-n-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-pagedown-enter": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-pageup-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-down-space": {
+    "burst": {
+     "never | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-down-space-from-null": {
+    "burst": {
+     "null | list closed": 3
+    },
+    "paced": {
+     "never | list closed": 3
+    }
+   },
+   "orbit-field select-enter-down-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-field select-space-down-enter": {
+    "burst": {
+     "7 | list closed": 3
+    },
+    "paced": {
+     "7 | list closed": 3
+    }
+   },
+   "orbit-sample select-down": {
+    "burst": {
+     "Never | list open": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "orbit-sample select-down-7-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list open": 3
+    }
+   },
+   "orbit-sample select-down-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-n-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-pagedown-enter": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-down-pageup-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-down-space": {
+    "burst": {
+     "Never | list closed": 3
+    },
+    "paced": {
+     "Never | list closed": 3
+    }
+   },
+   "orbit-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   },
+   "orbit-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed": 3
+    },
+    "paced": {
+     "7 days | list closed": 3
+    }
+   }
+  },
+  "same outcomes": {
+   "antd-sample select-down": true,
+   "antd-sample select-down-7-enter": true,
+   "antd-sample select-down-end-enter": true,
+   "antd-sample select-down-enter": true,
+   "antd-sample select-down-enter-from-7": true,
+   "antd-sample select-down-home-enter": true,
+   "antd-sample select-down-n-enter": true,
+   "antd-sample select-down-pagedown-enter": true,
+   "antd-sample select-down-pageup-enter": true,
+   "antd-sample select-down-space": true,
+   "antd-sample select-enter-down-enter": true,
+   "antd-sample select-space-down-enter": true,
+   "orbit-field select-down": true,
+   "orbit-field select-down-7-enter": true,
+   "orbit-field select-down-end-enter": true,
+   "orbit-field select-down-enter": true,
+   "orbit-field select-down-enter-from-7": true,
+   "orbit-field select-down-home-enter": true,
+   "orbit-field select-down-n-enter": true,
+   "orbit-field select-down-pagedown-enter": true,
+   "orbit-field select-down-pageup-enter": true,
+   "orbit-field select-down-space": true,
+   "orbit-field select-down-space-from-null": true,
+   "orbit-field select-enter-down-enter": true,
+   "orbit-field select-space-down-enter": true,
+   "orbit-sample select-down": true,
+   "orbit-sample select-down-7-enter": true,
+   "orbit-sample select-down-end-enter": true,
+   "orbit-sample select-down-enter": true,
+   "orbit-sample select-down-enter-from-7": true,
+   "orbit-sample select-down-home-enter": true,
+   "orbit-sample select-down-n-enter": true,
+   "orbit-sample select-down-pagedown-enter": true,
+   "orbit-sample select-down-pageup-enter": true,
+   "orbit-sample select-down-space": true,
+   "orbit-sample select-enter-down-enter": true,
+   "orbit-sample select-space-down-enter": true
+  },
+  "ref: burst as paced": {
+   "antd-sample select-down": true,
+   "antd-sample select-down-7-enter": true,
+   "antd-sample select-down-end-enter": true,
+   "antd-sample select-down-enter": true,
+   "antd-sample select-down-enter-from-7": true,
+   "antd-sample select-down-home-enter": true,
+   "antd-sample select-down-n-enter": true,
+   "antd-sample select-down-pagedown-enter": true,
+   "antd-sample select-down-pageup-enter": true,
+   "antd-sample select-down-space": true,
+   "antd-sample select-enter-down-enter": true,
+   "antd-sample select-space-down-enter": true,
+   "orbit-field select-down": true,
+   "orbit-field select-down-7-enter": true,
+   "orbit-field select-down-end-enter": false,
+   "orbit-field select-down-enter": true,
+   "orbit-field select-down-enter-from-7": true,
+   "orbit-field select-down-home-enter": false,
+   "orbit-field select-down-n-enter": true,
+   "orbit-field select-down-pagedown-enter": true,
+   "orbit-field select-down-pageup-enter": true,
+   "orbit-field select-down-space": true,
+   "orbit-field select-down-space-from-null": false,
+   "orbit-field select-enter-down-enter": true,
+   "orbit-field select-space-down-enter": true,
+   "orbit-sample select-down": true,
+   "orbit-sample select-down-7-enter": true,
+   "orbit-sample select-down-end-enter": false,
+   "orbit-sample select-down-enter": true,
+   "orbit-sample select-down-enter-from-7": true,
+   "orbit-sample select-down-home-enter": false,
+   "orbit-sample select-down-n-enter": true,
+   "orbit-sample select-down-pagedown-enter": true,
+   "orbit-sample select-down-pageup-enter": true,
+   "orbit-sample select-down-space": true,
+   "orbit-sample select-enter-down-enter": true,
+   "orbit-sample select-space-down-enter": true
+  },
+  "del: burst as paced": {
+   "antd-sample select-down": true,
+   "antd-sample select-down-7-enter": true,
+   "antd-sample select-down-end-enter": true,
+   "antd-sample select-down-enter": true,
+   "antd-sample select-down-enter-from-7": true,
+   "antd-sample select-down-home-enter": true,
+   "antd-sample select-down-n-enter": true,
+   "antd-sample select-down-pagedown-enter": true,
+   "antd-sample select-down-pageup-enter": true,
+   "antd-sample select-down-space": true,
+   "antd-sample select-enter-down-enter": true,
+   "antd-sample select-space-down-enter": true,
+   "orbit-field select-down": true,
+   "orbit-field select-down-7-enter": true,
+   "orbit-field select-down-end-enter": false,
+   "orbit-field select-down-enter": true,
+   "orbit-field select-down-enter-from-7": true,
+   "orbit-field select-down-home-enter": false,
+   "orbit-field select-down-n-enter": true,
+   "orbit-field select-down-pagedown-enter": true,
+   "orbit-field select-down-pageup-enter": true,
+   "orbit-field select-down-space": true,
+   "orbit-field select-down-space-from-null": false,
+   "orbit-field select-enter-down-enter": true,
+   "orbit-field select-space-down-enter": true,
+   "orbit-sample select-down": true,
+   "orbit-sample select-down-7-enter": true,
+   "orbit-sample select-down-end-enter": false,
+   "orbit-sample select-down-enter": true,
+   "orbit-sample select-down-enter-from-7": true,
+   "orbit-sample select-down-home-enter": false,
+   "orbit-sample select-down-n-enter": true,
+   "orbit-sample select-down-pagedown-enter": true,
+   "orbit-sample select-down-pageup-enter": true,
+   "orbit-sample select-down-space": true,
+   "orbit-sample select-enter-down-enter": true,
+   "orbit-sample select-space-down-enter": true
+  }
+ },
+ "kw2-select": {
+  "ref": {
+   "antd-sample select-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-7-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-down-tab": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-n-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-shift-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-space": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-enter": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-enter-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-field select-down": {
+    "burst": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-field select-down-7-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-down": {
+    "burst": {
+     "never | list open | listbox\u00d71 | @option:7 days": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:7 days": 3
+    }
+   },
+   "orbit-field select-down-down-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Workspace": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Workspace": 3
+    }
+   },
+   "orbit-field select-down-end-enter": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:30 days": 3
+    }
+   },
+   "orbit-field select-down-enter": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-enter-from-7": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-home-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-n-enter": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-shift-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-space": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-space-from-null": {
+    "burst": {
+     "null | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Workspace": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Workspace": 3
+    }
+   },
+   "orbit-field select-enter": {
+    "burst": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-field select-enter-down-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-enter-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Workspace": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Workspace": 3
+    }
+   },
+   "orbit-field select-space-down-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-sample select-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-sample select-down-7-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @option:7 days": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:7 days": 3
+    }
+   },
+   "orbit-sample select-down-down-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:30 days": 3
+    }
+   },
+   "orbit-sample select-down-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-n-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-shift-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-space": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-enter": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-enter-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   }
+  },
+  "del": {
+   "antd-sample select-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-7-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-down-tab": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-n-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-shift-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-space": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-down-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-enter": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-enter-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "antd-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-field select-down": {
+    "burst": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-field select-down-7-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-down": {
+    "burst": {
+     "never | list open | listbox\u00d71 | @option:7 days": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:7 days": 3
+    }
+   },
+   "orbit-field select-down-down-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Workspace": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Workspace": 3
+    }
+   },
+   "orbit-field select-down-end-enter": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:30 days": 3
+    }
+   },
+   "orbit-field select-down-enter": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-enter-from-7": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-home-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-n-enter": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-shift-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-space": {
+    "burst": {
+     "never | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-space-from-null": {
+    "burst": {
+     "null | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-down-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Workspace": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Workspace": 3
+    }
+   },
+   "orbit-field select-enter": {
+    "burst": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-field select-enter-down-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-field select-enter-tab": {
+    "burst": {
+     "never | list closed | none | @combobox:Workspace": 3
+    },
+    "paced": {
+     "never | list closed | none | @combobox:Workspace": 3
+    }
+   },
+   "orbit-field select-space-down-enter": {
+    "burst": {
+     "7 | list closed | none | @combobox:Expires": 3
+    },
+    "paced": {
+     "7 | list closed | none | @combobox:Expires": 3
+    }
+   },
+   "orbit-sample select-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-sample select-down-7-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-down": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @option:7 days": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:7 days": 3
+    }
+   },
+   "orbit-sample select-down-down-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-end-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:30 days": 3
+    }
+   },
+   "orbit-sample select-down-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-enter-from-7": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-home-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-n-enter": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-shift-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-space": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-down-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-enter": {
+    "burst": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    },
+    "paced": {
+     "Never | list open | listbox\u00d71 | @option:Never": 3
+    }
+   },
+   "orbit-sample select-enter-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-enter-tab": {
+    "burst": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "Never | list closed | none | @combobox:Sample choice": 3
+    }
+   },
+   "orbit-sample select-space-down-enter": {
+    "burst": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    },
+    "paced": {
+     "7 days | list closed | none | @combobox:Sample choice": 3
+    }
+   }
+  },
+  "same outcomes": {
+   "antd-sample select-down": true,
+   "antd-sample select-down-7-enter": true,
+   "antd-sample select-down-down": true,
+   "antd-sample select-down-down-tab": true,
+   "antd-sample select-down-end-enter": true,
+   "antd-sample select-down-enter": true,
+   "antd-sample select-down-enter-from-7": true,
+   "antd-sample select-down-home-enter": true,
+   "antd-sample select-down-n-enter": true,
+   "antd-sample select-down-shift-tab": true,
+   "antd-sample select-down-space": true,
+   "antd-sample select-down-tab": true,
+   "antd-sample select-enter": true,
+   "antd-sample select-enter-down-enter": true,
+   "antd-sample select-enter-tab": true,
+   "antd-sample select-space-down-enter": true,
+   "orbit-field select-down": true,
+   "orbit-field select-down-7-enter": true,
+   "orbit-field select-down-down": true,
+   "orbit-field select-down-down-tab": true,
+   "orbit-field select-down-end-enter": true,
+   "orbit-field select-down-enter": true,
+   "orbit-field select-down-enter-from-7": true,
+   "orbit-field select-down-home-enter": true,
+   "orbit-field select-down-n-enter": true,
+   "orbit-field select-down-shift-tab": true,
+   "orbit-field select-down-space": true,
+   "orbit-field select-down-space-from-null": true,
+   "orbit-field select-down-tab": true,
+   "orbit-field select-enter": true,
+   "orbit-field select-enter-down-enter": true,
+   "orbit-field select-enter-tab": true,
+   "orbit-field select-space-down-enter": true,
+   "orbit-sample select-down": true,
+   "orbit-sample select-down-7-enter": true,
+   "orbit-sample select-down-down": true,
+   "orbit-sample select-down-down-tab": true,
+   "orbit-sample select-down-end-enter": true,
+   "orbit-sample select-down-enter": true,
+   "orbit-sample select-down-enter-from-7": true,
+   "orbit-sample select-down-home-enter": true,
+   "orbit-sample select-down-n-enter": true,
+   "orbit-sample select-down-shift-tab": true,
+   "orbit-sample select-down-space": true,
+   "orbit-sample select-down-tab": true,
+   "orbit-sample select-enter": true,
+   "orbit-sample select-enter-down-enter": true,
+   "orbit-sample select-enter-tab": true,
+   "orbit-sample select-space-down-enter": true
+  },
+  "ref: burst as paced": {
+   "antd-sample select-down": true,
+   "antd-sample select-down-7-enter": true,
+   "antd-sample select-down-down": true,
+   "antd-sample select-down-down-tab": true,
+   "antd-sample select-down-end-enter": true,
+   "antd-sample select-down-enter": true,
+   "antd-sample select-down-enter-from-7": true,
+   "antd-sample select-down-home-enter": true,
+   "antd-sample select-down-n-enter": true,
+   "antd-sample select-down-shift-tab": true,
+   "antd-sample select-down-space": true,
+   "antd-sample select-down-tab": true,
+   "antd-sample select-enter": true,
+   "antd-sample select-enter-down-enter": true,
+   "antd-sample select-enter-tab": true,
+   "antd-sample select-space-down-enter": true,
+   "orbit-field select-down": true,
+   "orbit-field select-down-7-enter": true,
+   "orbit-field select-down-down": true,
+   "orbit-field select-down-down-tab": true,
+   "orbit-field select-down-end-enter": false,
+   "orbit-field select-down-enter": true,
+   "orbit-field select-down-enter-from-7": true,
+   "orbit-field select-down-home-enter": false,
+   "orbit-field select-down-n-enter": true,
+   "orbit-field select-down-shift-tab": true,
+   "orbit-field select-down-space": true,
+   "orbit-field select-down-space-from-null": false,
+   "orbit-field select-down-tab": true,
+   "orbit-field select-enter": true,
+   "orbit-field select-enter-down-enter": true,
+   "orbit-field select-enter-tab": true,
+   "orbit-field select-space-down-enter": true,
+   "orbit-sample select-down": true,
+   "orbit-sample select-down-7-enter": true,
+   "orbit-sample select-down-down": true,
+   "orbit-sample select-down-down-tab": true,
+   "orbit-sample select-down-end-enter": false,
+   "orbit-sample select-down-enter": true,
+   "orbit-sample select-down-enter-from-7": true,
+   "orbit-sample select-down-home-enter": false,
+   "orbit-sample select-down-n-enter": true,
+   "orbit-sample select-down-shift-tab": true,
+   "orbit-sample select-down-space": true,
+   "orbit-sample select-down-tab": true,
+   "orbit-sample select-enter": true,
+   "orbit-sample select-enter-down-enter": true,
+   "orbit-sample select-enter-tab": true,
+   "orbit-sample select-space-down-enter": true
+  },
+  "del: burst as paced": {
+   "antd-sample select-down": true,
+   "antd-sample select-down-7-enter": true,
+   "antd-sample select-down-down": true,
+   "antd-sample select-down-down-tab": true,
+   "antd-sample select-down-end-enter": true,
+   "antd-sample select-down-enter": true,
+   "antd-sample select-down-enter-from-7": true,
+   "antd-sample select-down-home-enter": true,
+   "antd-sample select-down-n-enter": true,
+   "antd-sample select-down-shift-tab": true,
+   "antd-sample select-down-space": true,
+   "antd-sample select-down-tab": true,
+   "antd-sample select-enter": true,
+   "antd-sample select-enter-down-enter": true,
+   "antd-sample select-enter-tab": true,
+   "antd-sample select-space-down-enter": true,
+   "orbit-field select-down": true,
+   "orbit-field select-down-7-enter": true,
+   "orbit-field select-down-down": true,
+   "orbit-field select-down-down-tab": true,
+   "orbit-field select-down-end-enter": false,
+   "orbit-field select-down-enter": true,
+   "orbit-field select-down-enter-from-7": true,
+   "orbit-field select-down-home-enter": false,
+   "orbit-field select-down-n-enter": true,
+   "orbit-field select-down-shift-tab": true,
+   "orbit-field select-down-space": true,
+   "orbit-field select-down-space-from-null": false,
+   "orbit-field select-down-tab": true,
+   "orbit-field select-enter": true,
+   "orbit-field select-enter-down-enter": true,
+   "orbit-field select-enter-tab": true,
+   "orbit-field select-space-down-enter": true,
+   "orbit-sample select-down": true,
+   "orbit-sample select-down-7-enter": true,
+   "orbit-sample select-down-down": true,
+   "orbit-sample select-down-down-tab": true,
+   "orbit-sample select-down-end-enter": false,
+   "orbit-sample select-down-enter": true,
+   "orbit-sample select-down-enter-from-7": true,
+   "orbit-sample select-down-home-enter": false,
+   "orbit-sample select-down-n-enter": true,
+   "orbit-sample select-down-shift-tab": true,
+   "orbit-sample select-down-space": true,
+   "orbit-sample select-down-tab": true,
+   "orbit-sample select-enter": true,
+   "orbit-sample select-enter-down-enter": true,
+   "orbit-sample select-enter-tab": true,
+   "orbit-sample select-space-down-enter": true
+  }
+ },
+ "kw1-other": {
+  "del": {
+   "antd-menu menu-down-down-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "antd-menu menu-down-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "antd-menu menu-down-up-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "antd-menu menu-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "antd-menu menu-enter-down-enter": {
+    "burst": {
+     "closed": 1
+    },
+    "paced": {
+     "closed": 1
+    }
+   },
+   "antd-menu menu-enter-enter": {
+    "burst": {
+     "closed": 1
+    },
+    "paced": {
+     "closed": 1
+    }
+   },
+   "antd-menu menu-enter-tab-down-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran Image": 1
+    }
+   },
+   "antd-menu menu-enter-up-enter": {
+    "burst": {
+     "closed": 1
+    },
+    "paced": {
+     "closed": 1
+    }
+   },
+   "antd-menu menu-up-down-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "antd-menu menu-up-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "antd-menu menu-up-up-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "orbit-menu menu-down-down-enter": {
+    "burst": {
+     "ran Image": 1
+    },
+    "paced": {
+     "ran Image": 1
+    }
+   },
+   "orbit-menu menu-down-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran File": 1
+    }
+   },
+   "orbit-menu menu-down-up-enter": {
+    "burst": {
+     "ran /Command": 1
+    },
+    "paced": {
+     "ran /Command": 1
+    }
+   },
+   "orbit-menu menu-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "orbit-menu menu-enter-down-enter": {
+    "burst": {
+     "ran Image": 1
+    },
+    "paced": {
+     "ran Image": 1
+    }
+   },
+   "orbit-menu menu-enter-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran File": 1
+    }
+   },
+   "orbit-menu menu-enter-tab-down-enter": {
+    "burst": {
+     "closed": 1
+    },
+    "paced": {
+     "closed": 1
+    }
+   },
+   "orbit-menu menu-enter-up-enter": {
+    "burst": {
+     "ran /Command": 1
+    },
+    "paced": {
+     "ran /Command": 1
+    }
+   },
+   "orbit-menu menu-up-down-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran File": 1
+    }
+   },
+   "orbit-menu menu-up-enter": {
+    "burst": {
+     "ran /Command": 1
+    },
+    "paced": {
+     "ran /Command": 1
+    }
+   },
+   "orbit-menu menu-up-up-enter": {
+    "burst": {
+     "ran Shell": 1
+    },
+    "paced": {
+     "ran Shell": 1
+    }
+   },
+   "orbit-menu-sample menu-down-down-enter": {
+    "burst": {
+     "ran Image": 1
+    },
+    "paced": {
+     "ran Image": 1
+    }
+   },
+   "orbit-menu-sample menu-down-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran File": 1
+    }
+   },
+   "orbit-menu-sample menu-down-up-enter": {
+    "burst": {
+     "ran /Command": 1
+    },
+    "paced": {
+     "ran /Command": 1
+    }
+   },
+   "orbit-menu-sample menu-enter": {
+    "burst": {
+     "open": 1
+    },
+    "paced": {
+     "open": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-down-enter": {
+    "burst": {
+     "ran Image": 1
+    },
+    "paced": {
+     "ran Image": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran File": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-tab-down-enter": {
+    "burst": {
+     "closed": 1
+    },
+    "paced": {
+     "closed": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-up-enter": {
+    "burst": {
+     "ran /Command": 1
+    },
+    "paced": {
+     "ran /Command": 1
+    }
+   },
+   "orbit-menu-sample menu-up-down-enter": {
+    "burst": {
+     "ran File": 1
+    },
+    "paced": {
+     "ran File": 1
+    }
+   },
+   "orbit-menu-sample menu-up-enter": {
+    "burst": {
+     "ran /Command": 1
+    },
+    "paced": {
+     "ran /Command": 1
+    }
+   },
+   "orbit-menu-sample menu-up-up-enter": {
+    "burst": {
+     "ran Shell": 1
+    },
+    "paced": {
+     "ran Shell": 1
+    }
+   }
+  },
+  "del: burst as paced": {
+   "antd-menu menu-down-down-enter": true,
+   "antd-menu menu-down-enter": true,
+   "antd-menu menu-down-up-enter": true,
+   "antd-menu menu-enter": true,
+   "antd-menu menu-enter-down-enter": true,
+   "antd-menu menu-enter-enter": true,
+   "antd-menu menu-enter-tab-down-enter": false,
+   "antd-menu menu-enter-up-enter": true,
+   "antd-menu menu-up-down-enter": true,
+   "antd-menu menu-up-enter": true,
+   "antd-menu menu-up-up-enter": true,
+   "orbit-menu menu-down-down-enter": true,
+   "orbit-menu menu-down-enter": true,
+   "orbit-menu menu-down-up-enter": true,
+   "orbit-menu menu-enter": true,
+   "orbit-menu menu-enter-down-enter": true,
+   "orbit-menu menu-enter-enter": true,
+   "orbit-menu menu-enter-tab-down-enter": true,
+   "orbit-menu menu-enter-up-enter": true,
+   "orbit-menu menu-up-down-enter": true,
+   "orbit-menu menu-up-enter": true,
+   "orbit-menu menu-up-up-enter": true,
+   "orbit-menu-sample menu-down-down-enter": true,
+   "orbit-menu-sample menu-down-enter": true,
+   "orbit-menu-sample menu-down-up-enter": true,
+   "orbit-menu-sample menu-enter": true,
+   "orbit-menu-sample menu-enter-down-enter": true,
+   "orbit-menu-sample menu-enter-enter": true,
+   "orbit-menu-sample menu-enter-tab-down-enter": true,
+   "orbit-menu-sample menu-enter-up-enter": true,
+   "orbit-menu-sample menu-up-down-enter": true,
+   "orbit-menu-sample menu-up-enter": true,
+   "orbit-menu-sample menu-up-up-enter": true
+  }
+ },
+ "kw2-other": {
+  "del": {
+   "antd-confirm dlg-enter": {
+    "burst": {
+     "none | dialog:Delete runner? | @button:Cancel": 1
+    },
+    "paced": {
+     "none | dialog:Delete runner? | @button:Cancel": 1
+    }
+   },
+   "antd-confirm dlg-enter-enter": {
+    "burst": {
+     "ran Cancel | none | @button:AntD confirm": 1
+    },
+    "paced": {
+     "ran Cancel | none | @button:AntD confirm": 1
+    }
+   },
+   "antd-confirm dlg-enter-escape": {
+    "burst": {
+     "none | none | @button:AntD confirm": 1
+    },
+    "paced": {
+     "none | none | @button:AntD confirm": 1
+    }
+   },
+   "antd-confirm dlg-enter-shift-tab": {
+    "burst": {
+     "none | dialog:Delete runner? | @button:Cancel": 1
+    },
+    "paced": {
+     "none | dialog:Delete runner? | @button:Delete": 1
+    }
+   },
+   "antd-confirm dlg-enter-space": {
+    "burst": {
+     "ran Cancel | none | @button:AntD confirm": 1
+    },
+    "paced": {
+     "ran Cancel | none | @button:AntD confirm": 1
+    }
+   },
+   "antd-confirm dlg-enter-tab": {
+    "burst": {
+     "none | dialog:Delete runner? | @button:Cancel": 1
+    },
+    "paced": {
+     "none | dialog:Delete runner? | @button:Delete": 1
+    }
+   },
+   "antd-confirm dlg-enter-tab-enter": {
+    "burst": {
+     "ran Delete | none | @button:AntD confirm": 1
+    },
+    "paced": {
+     "ran Delete | none | @button:AntD confirm": 1
+    }
+   },
+   "antd-dialog dlg-enter": {
+    "burst": {
+     "none | dialog:Edit workspace | @button:Close": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @button:Close": 1
+    }
+   },
+   "antd-dialog dlg-enter-enter": {
+    "burst": {
+     "ran Close | none | @button:AntD dialog": 1
+    },
+    "paced": {
+     "ran Close | none | @button:AntD dialog": 1
+    }
+   },
+   "antd-dialog dlg-enter-escape": {
+    "burst": {
+     "none | none | @button:AntD dialog": 1
+    },
+    "paced": {
+     "none | none | @button:AntD dialog": 1
+    }
+   },
+   "antd-dialog dlg-enter-shift-tab": {
+    "burst": {
+     "none | dialog:Edit workspace | @button:Save": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @button:Save": 1
+    }
+   },
+   "antd-dialog dlg-enter-space": {
+    "burst": {
+     "ran Close | none | @button:AntD dialog": 1
+    },
+    "paced": {
+     "ran Close | none | @button:AntD dialog": 1
+    }
+   },
+   "antd-dialog dlg-enter-tab": {
+    "burst": {
+     "none | dialog:Edit workspace | @input:": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @input:": 1
+    }
+   },
+   "antd-dialog dlg-enter-tab-enter": {
+    "burst": {
+     "none | dialog:Edit workspace | @input:": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @input:": 1
+    }
+   },
+   "antd-menu menu-down-end-enter": {
+    "burst": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-down-enter": {
+    "burst": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter": {
+    "burst": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter-end-enter": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter-enter": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter-home-enter": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter-s-enter": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter-shift-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "antd-menu menu-enter-shift-tab-enter": {
+    "burst": {
+     "ran File | none | @body:darkSwitch themeAdd atta": 1
+    },
+    "paced": {
+     "ran File | none | @body:darkSwitch themeAdd atta": 1
+    }
+   },
+   "antd-menu menu-enter-space": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-enter-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "antd-menu menu-enter-tab-enter": {
+    "burst": {
+     "ran File | none | @body:darkSwitch themeAdd atta": 1
+    },
+    "paced": {
+     "ran File | none | @body:darkSwitch themeAdd atta": 1
+    }
+   },
+   "antd-menu menu-space": {
+    "burst": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-space-down-enter": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-space-enter": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-up-enter": {
+    "burst": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    }
+   },
+   "antd-menu menu-up-home-enter": {
+    "burst": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Add attachment": 1
+    }
+   },
+   "antd-popconfirm pop-enter": {
+    "burst": {
+     "none | tooltip:Delete this task?A r | @button:Delete task": 1
+    },
+    "paced": {
+     "none | tooltip:Delete this task?A r | @button:Delete task": 1
+    }
+   },
+   "antd-popconfirm pop-enter-enter": {
+    "burst": {
+     "none | none | @button:Delete task": 1
+    },
+    "paced": {
+     "none | none | @button:Delete task": 1
+    }
+   },
+   "antd-popconfirm pop-enter-escape": {
+    "burst": {
+     "none | none | @button:Delete task": 1
+    },
+    "paced": {
+     "none | none | @button:Delete task": 1
+    }
+   },
+   "antd-popconfirm pop-enter-shift-tab": {
+    "burst": {
+     "none | tooltip:Delete this task?A r | @button:Switch theme": 1
+    },
+    "paced": {
+     "none | tooltip:Delete this task?A r | @button:Switch theme": 1
+    }
+   },
+   "antd-popconfirm pop-enter-space": {
+    "burst": {
+     "none | none | @button:Delete task": 1
+    },
+    "paced": {
+     "none | none | @button:Delete task": 1
+    }
+   },
+   "antd-popconfirm pop-enter-tab": {
+    "burst": {
+     "none | tooltip:Delete this task?A r | @button:Cancel": 1
+    },
+    "paced": {
+     "none | tooltip:Delete this task?A r | @button:Cancel": 1
+    }
+   },
+   "antd-popconfirm pop-enter-tab-enter": {
+    "burst": {
+     "Answer=cancelled | none | @body:darkSwitch themeDelete t": 1
+    },
+    "paced": {
+     "Answer=cancelled | none | @body:darkSwitch themeDelete t": 1
+    }
+   },
+   "antd-session sub-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-enter-down-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "Picked=claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-session sub-enter-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "Picked=codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-right": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-right-c-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "Picked=codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-right-down-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "Picked=claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-session sub-right-end-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "Picked=claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-session sub-right-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "Picked=codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-right-escape": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | none | @body:darkSwitch themeSession ": 1
+    }
+   },
+   "antd-session sub-right-home-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "Picked=codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-right-left": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "antd-session sub-right-shift-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Switch theme": 1
+    }
+   },
+   "antd-session sub-right-space": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "antd-session sub-right-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @body:darkSwitch themeSession ": 1
+    }
+   },
+   "antd-session sub-right-up-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "Picked=claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-submenu sub-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-enter-down-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-submenu sub-enter-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-right": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-right-c-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-right-down-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-submenu sub-right-end-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "antd-submenu sub-right-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-right-escape": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | none | @body:darkSwitch themeAdd atta": 1
+    }
+   },
+   "antd-submenu sub-right-home-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Codex | menu\u00d71 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-right-left": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "antd-submenu sub-right-shift-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @button:Switch theme": 1
+    }
+   },
+   "antd-submenu sub-right-space": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "antd-submenu sub-right-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @body:darkSwitch themeAdd atta": 1
+    }
+   },
+   "antd-submenu sub-right-up-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "ran Claude | menu\u00d71 | @menuitem:Claude": 1
+    }
+   },
+   "orbit-confirm dlg-enter": {
+    "burst": {
+     "none | alertdialog:Delete runner? | @button:Cancel": 1
+    },
+    "paced": {
+     "none | alertdialog:Delete runner? | @button:Cancel": 1
+    }
+   },
+   "orbit-confirm dlg-enter-enter": {
+    "burst": {
+     "ran Cancel | none | @button:Orbit confirm": 1
+    },
+    "paced": {
+     "ran Cancel | none | @button:Orbit confirm": 1
+    }
+   },
+   "orbit-confirm dlg-enter-escape": {
+    "burst": {
+     "none | none | @button:Orbit confirm": 1
+    },
+    "paced": {
+     "none | none | @button:Orbit confirm": 1
+    }
+   },
+   "orbit-confirm dlg-enter-shift-tab": {
+    "burst": {
+     "none | alertdialog:Delete runner? | @button:Delete": 1
+    },
+    "paced": {
+     "none | alertdialog:Delete runner? | @button:Delete": 1
+    }
+   },
+   "orbit-confirm dlg-enter-space": {
+    "burst": {
+     "ran Cancel | none | @button:Orbit confirm": 1
+    },
+    "paced": {
+     "ran Cancel | none | @button:Orbit confirm": 1
+    }
+   },
+   "orbit-confirm dlg-enter-tab": {
+    "burst": {
+     "none | alertdialog:Delete runner? | @button:Delete": 1
+    },
+    "paced": {
+     "none | alertdialog:Delete runner? | @button:Delete": 1
+    }
+   },
+   "orbit-confirm dlg-enter-tab-enter": {
+    "burst": {
+     "ran Delete | none | @button:Orbit confirm": 1
+    },
+    "paced": {
+     "ran Delete | none | @button:Orbit confirm": 1
+    }
+   },
+   "orbit-dialog dlg-enter": {
+    "burst": {
+     "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ": 1
+    }
+   },
+   "orbit-dialog dlg-enter-enter": {
+    "burst": {
+     "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ": 1
+    }
+   },
+   "orbit-dialog dlg-enter-escape": {
+    "burst": {
+     "none | none | @button:Orbit dialog": 1
+    },
+    "paced": {
+     "none | none | @button:Orbit dialog": 1
+    }
+   },
+   "orbit-dialog dlg-enter-shift-tab": {
+    "burst": {
+     "none | dialog:Edit workspace | @button:Save": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @button:Save": 1
+    }
+   },
+   "orbit-dialog dlg-enter-space": {
+    "burst": {
+     "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ": 1
+    }
+   },
+   "orbit-dialog dlg-enter-tab": {
+    "burst": {
+     "none | dialog:Edit workspace | @button:Close": 1
+    },
+    "paced": {
+     "none | dialog:Edit workspace | @button:Close": 1
+    }
+   },
+   "orbit-dialog dlg-enter-tab-enter": {
+    "burst": {
+     "ran Close | none | @button:Orbit dialog": 1
+    },
+    "paced": {
+     "ran Close | none | @button:Orbit dialog": 1
+    }
+   },
+   "orbit-menu menu-down-end-enter": {
+    "burst": {
+     "Action=command | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=command | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-down-enter": {
+    "burst": {
+     "Action=file | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=file | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "orbit-menu menu-enter-end-enter": {
+    "burst": {
+     "Action=command | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=command | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter-enter": {
+    "burst": {
+     "Action=file | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=file | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter-home-enter": {
+    "burst": {
+     "Action=file | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=file | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter-s-enter": {
+    "burst": {
+     "Action=shell | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=shell | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter-shift-tab": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter-shift-tab-enter": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "orbit-menu menu-enter-space": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=file | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-enter-tab": {
+    "burst": {
+     "none | none | @button:Open context": 1
+    },
+    "paced": {
+     "none | none | @button:Open context": 1
+    }
+   },
+   "orbit-menu menu-enter-tab-enter": {
+    "burst": {
+     "none | dialog:Context | @dialog:Context12,800 of 128,000": 1
+    },
+    "paced": {
+     "none | dialog:Context | @dialog:Context12,800 of 128,000": 1
+    }
+   },
+   "orbit-menu menu-space": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "orbit-menu menu-space-down-enter": {
+    "burst": {
+     "Action=image | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=image | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-space-enter": {
+    "burst": {
+     "Action=file | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=file | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-up-enter": {
+    "burst": {
+     "Action=command | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=command | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu menu-up-home-enter": {
+    "burst": {
+     "Action=file | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "Action=file | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-down-end-enter": {
+    "burst": {
+     "ran /Command | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran /Command | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-down-enter": {
+    "burst": {
+     "ran File | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran File | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-end-enter": {
+    "burst": {
+     "ran /Command | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran /Command | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-enter": {
+    "burst": {
+     "ran File | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran File | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-home-enter": {
+    "burst": {
+     "ran File | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran File | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-s-enter": {
+    "burst": {
+     "ran Shell | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Shell | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-shift-tab": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-shift-tab-enter": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-space": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran File | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-tab": {
+    "burst": {
+     "none | none | @button:Switch theme": 1
+    },
+    "paced": {
+     "none | none | @button:Switch theme": 1
+    }
+   },
+   "orbit-menu-sample menu-enter-tab-enter": {
+    "burst": {
+     "none | none | @button:Switch theme | theme changed": 1
+    },
+    "paced": {
+     "none | none | @button:Switch theme | theme changed": 1
+    }
+   },
+   "orbit-menu-sample menu-space": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:File": 1
+    }
+   },
+   "orbit-menu-sample menu-space-down-enter": {
+    "burst": {
+     "ran Image | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Image | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-space-enter": {
+    "burst": {
+     "ran File | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran File | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-up-enter": {
+    "burst": {
+     "ran /Command | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran /Command | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-menu-sample menu-up-home-enter": {
+    "burst": {
+     "ran File | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran File | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-popconfirm pop-enter": {
+    "burst": {
+     "none | dialog:Delete this task? | @dialog:Delete this task?A run s": 1
+    },
+    "paced": {
+     "none | dialog:Delete this task? | @dialog:Delete this task?A run s": 1
+    }
+   },
+   "orbit-popconfirm pop-enter-enter": {
+    "burst": {
+     "none | none | @button:Delete task": 1
+    },
+    "paced": {
+     "none | dialog:Delete this task? | @dialog:Delete this task?A run s": 1
+    }
+   },
+   "orbit-popconfirm pop-enter-escape": {
+    "burst": {
+     "none | none | @button:Delete task": 1
+    },
+    "paced": {
+     "none | none | @button:Delete task": 1
+    }
+   },
+   "orbit-popconfirm pop-enter-shift-tab": {
+    "burst": {
+     "none | none | @button:Switch theme": 1
+    },
+    "paced": {
+     "none | dialog:Delete this task? | @button:Delete task": 1
+    }
+   },
+   "orbit-popconfirm pop-enter-space": {
+    "burst": {
+     "none | none | @button:Delete task": 1
+    },
+    "paced": {
+     "none | dialog:Delete this task? | @dialog:Delete this task?A run s": 1
+    }
+   },
+   "orbit-popconfirm pop-enter-tab": {
+    "burst": {
+     "none | dialog:Delete this task? | @button:Cancel": 1
+    },
+    "paced": {
+     "none | dialog:Delete this task? | @button:Cancel": 1
+    }
+   },
+   "orbit-popconfirm pop-enter-tab-enter": {
+    "burst": {
+     "Answer=cancelled | none | @button:Delete task": 1
+    },
+    "paced": {
+     "Answer=cancelled | none | @button:Delete task": 1
+    }
+   },
+   "orbit-session sub-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "orbit-session sub-enter-down-enter": {
+    "burst": {
+     "Picked=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-enter-enter": {
+    "burst": {
+     "Picked=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "orbit-session sub-right-c-enter": {
+    "burst": {
+     "Picked=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right-down-enter": {
+    "burst": {
+     "Picked=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right-end-enter": {
+    "burst": {
+     "Picked=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right-enter": {
+    "burst": {
+     "Picked=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right-escape": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-session sub-right-home-enter": {
+    "burst": {
+     "Picked=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right-left": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-session sub-right-shift-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-session sub-right-space": {
+    "burst": {
+     "Picked=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-session sub-right-tab": {
+    "burst": {
+     "none | none | @button:Switch theme": 1
+    },
+    "paced": {
+     "none | none | @button:Switch theme": 1
+    }
+   },
+   "orbit-session sub-right-up-enter": {
+    "burst": {
+     "Picked=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Picked=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "orbit-submenu sub-enter-down-enter": {
+    "burst": {
+     "Action=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-enter-enter": {
+    "burst": {
+     "Action=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "orbit-submenu sub-right-c-enter": {
+    "burst": {
+     "Action=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right-down-enter": {
+    "burst": {
+     "Action=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right-end-enter": {
+    "burst": {
+     "Action=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right-enter": {
+    "burst": {
+     "Action=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right-escape": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-submenu sub-right-home-enter": {
+    "burst": {
+     "Action=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right-left": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-submenu sub-right-shift-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-submenu sub-right-space": {
+    "burst": {
+     "Action=codex | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=codex | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu sub-right-tab": {
+    "burst": {
+     "none | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "none | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu sub-right-up-enter": {
+    "burst": {
+     "Action=claude | none | @button:Session actions": 1
+    },
+    "paced": {
+     "Action=claude | none | @button:Session actions": 1
+    }
+   },
+   "orbit-submenu-sample sub-enter": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "orbit-submenu-sample sub-enter-down-enter": {
+    "burst": {
+     "ran Claude | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Claude | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-enter-enter": {
+    "burst": {
+     "ran Codex | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Codex | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right": {
+    "burst": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    },
+    "paced": {
+     "none | menu\u00d72 | @menuitem:Codex": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-c-enter": {
+    "burst": {
+     "ran Claude | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Claude | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-down-enter": {
+    "burst": {
+     "ran Claude | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Claude | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-end-enter": {
+    "burst": {
+     "ran Claude | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Claude | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-enter": {
+    "burst": {
+     "ran Codex | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Codex | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-escape": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-home-enter": {
+    "burst": {
+     "ran Codex | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Codex | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-left": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-shift-tab": {
+    "burst": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    },
+    "paced": {
+     "none | menu\u00d71 | @menuitem:Provider": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-space": {
+    "burst": {
+     "ran Codex | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Codex | none | @button:Add attachment": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-tab": {
+    "burst": {
+     "none | none | @button:Switch theme": 1
+    },
+    "paced": {
+     "none | none | @button:Switch theme": 1
+    }
+   },
+   "orbit-submenu-sample sub-right-up-enter": {
+    "burst": {
+     "ran Claude | none | @button:Add attachment": 1
+    },
+    "paced": {
+     "ran Claude | none | @button:Add attachment": 1
+    }
+   }
+  },
+  "del: burst as paced": {
+   "antd-confirm dlg-enter": true,
+   "antd-confirm dlg-enter-enter": true,
+   "antd-confirm dlg-enter-escape": true,
+   "antd-confirm dlg-enter-shift-tab": false,
+   "antd-confirm dlg-enter-space": true,
+   "antd-confirm dlg-enter-tab": false,
+   "antd-confirm dlg-enter-tab-enter": true,
+   "antd-dialog dlg-enter": true,
+   "antd-dialog dlg-enter-enter": true,
+   "antd-dialog dlg-enter-escape": true,
+   "antd-dialog dlg-enter-shift-tab": true,
+   "antd-dialog dlg-enter-space": true,
+   "antd-dialog dlg-enter-tab": true,
+   "antd-dialog dlg-enter-tab-enter": true,
+   "antd-menu menu-down-end-enter": true,
+   "antd-menu menu-down-enter": true,
+   "antd-menu menu-enter": true,
+   "antd-menu menu-enter-end-enter": true,
+   "antd-menu menu-enter-enter": true,
+   "antd-menu menu-enter-home-enter": true,
+   "antd-menu menu-enter-s-enter": true,
+   "antd-menu menu-enter-shift-tab": true,
+   "antd-menu menu-enter-shift-tab-enter": true,
+   "antd-menu menu-enter-space": true,
+   "antd-menu menu-enter-tab": true,
+   "antd-menu menu-enter-tab-enter": true,
+   "antd-menu menu-space": true,
+   "antd-menu menu-space-down-enter": true,
+   "antd-menu menu-space-enter": true,
+   "antd-menu menu-up-enter": true,
+   "antd-menu menu-up-home-enter": true,
+   "antd-popconfirm pop-enter": true,
+   "antd-popconfirm pop-enter-enter": true,
+   "antd-popconfirm pop-enter-escape": true,
+   "antd-popconfirm pop-enter-shift-tab": true,
+   "antd-popconfirm pop-enter-space": true,
+   "antd-popconfirm pop-enter-tab": true,
+   "antd-popconfirm pop-enter-tab-enter": true,
+   "antd-session sub-enter": true,
+   "antd-session sub-enter-down-enter": false,
+   "antd-session sub-enter-enter": false,
+   "antd-session sub-right": true,
+   "antd-session sub-right-c-enter": false,
+   "antd-session sub-right-down-enter": false,
+   "antd-session sub-right-end-enter": false,
+   "antd-session sub-right-enter": false,
+   "antd-session sub-right-escape": false,
+   "antd-session sub-right-home-enter": false,
+   "antd-session sub-right-left": false,
+   "antd-session sub-right-shift-tab": false,
+   "antd-session sub-right-space": true,
+   "antd-session sub-right-tab": false,
+   "antd-session sub-right-up-enter": false,
+   "antd-submenu sub-enter": true,
+   "antd-submenu sub-enter-down-enter": false,
+   "antd-submenu sub-enter-enter": false,
+   "antd-submenu sub-right": true,
+   "antd-submenu sub-right-c-enter": false,
+   "antd-submenu sub-right-down-enter": false,
+   "antd-submenu sub-right-end-enter": false,
+   "antd-submenu sub-right-enter": false,
+   "antd-submenu sub-right-escape": false,
+   "antd-submenu sub-right-home-enter": false,
+   "antd-submenu sub-right-left": false,
+   "antd-submenu sub-right-shift-tab": false,
+   "antd-submenu sub-right-space": true,
+   "antd-submenu sub-right-tab": false,
+   "antd-submenu sub-right-up-enter": false,
+   "orbit-confirm dlg-enter": true,
+   "orbit-confirm dlg-enter-enter": true,
+   "orbit-confirm dlg-enter-escape": true,
+   "orbit-confirm dlg-enter-shift-tab": true,
+   "orbit-confirm dlg-enter-space": true,
+   "orbit-confirm dlg-enter-tab": true,
+   "orbit-confirm dlg-enter-tab-enter": true,
+   "orbit-dialog dlg-enter": true,
+   "orbit-dialog dlg-enter-enter": true,
+   "orbit-dialog dlg-enter-escape": true,
+   "orbit-dialog dlg-enter-shift-tab": true,
+   "orbit-dialog dlg-enter-space": true,
+   "orbit-dialog dlg-enter-tab": true,
+   "orbit-dialog dlg-enter-tab-enter": true,
+   "orbit-menu menu-down-end-enter": true,
+   "orbit-menu menu-down-enter": true,
+   "orbit-menu menu-enter": true,
+   "orbit-menu menu-enter-end-enter": true,
+   "orbit-menu menu-enter-enter": true,
+   "orbit-menu menu-enter-home-enter": true,
+   "orbit-menu menu-enter-s-enter": true,
+   "orbit-menu menu-enter-shift-tab": true,
+   "orbit-menu menu-enter-shift-tab-enter": true,
+   "orbit-menu menu-enter-space": false,
+   "orbit-menu menu-enter-tab": true,
+   "orbit-menu menu-enter-tab-enter": true,
+   "orbit-menu menu-space": true,
+   "orbit-menu menu-space-down-enter": true,
+   "orbit-menu menu-space-enter": true,
+   "orbit-menu menu-up-enter": true,
+   "orbit-menu menu-up-home-enter": true,
+   "orbit-menu-sample menu-down-end-enter": true,
+   "orbit-menu-sample menu-down-enter": true,
+   "orbit-menu-sample menu-enter": true,
+   "orbit-menu-sample menu-enter-end-enter": true,
+   "orbit-menu-sample menu-enter-enter": true,
+   "orbit-menu-sample menu-enter-home-enter": true,
+   "orbit-menu-sample menu-enter-s-enter": true,
+   "orbit-menu-sample menu-enter-shift-tab": true,
+   "orbit-menu-sample menu-enter-shift-tab-enter": true,
+   "orbit-menu-sample menu-enter-space": false,
+   "orbit-menu-sample menu-enter-tab": true,
+   "orbit-menu-sample menu-enter-tab-enter": true,
+   "orbit-menu-sample menu-space": true,
+   "orbit-menu-sample menu-space-down-enter": true,
+   "orbit-menu-sample menu-space-enter": true,
+   "orbit-menu-sample menu-up-enter": true,
+   "orbit-menu-sample menu-up-home-enter": true,
+   "orbit-popconfirm pop-enter": true,
+   "orbit-popconfirm pop-enter-enter": false,
+   "orbit-popconfirm pop-enter-escape": true,
+   "orbit-popconfirm pop-enter-shift-tab": false,
+   "orbit-popconfirm pop-enter-space": false,
+   "orbit-popconfirm pop-enter-tab": true,
+   "orbit-popconfirm pop-enter-tab-enter": true,
+   "orbit-session sub-enter": true,
+   "orbit-session sub-enter-down-enter": true,
+   "orbit-session sub-enter-enter": true,
+   "orbit-session sub-right": true,
+   "orbit-session sub-right-c-enter": true,
+   "orbit-session sub-right-down-enter": true,
+   "orbit-session sub-right-end-enter": true,
+   "orbit-session sub-right-enter": true,
+   "orbit-session sub-right-escape": true,
+   "orbit-session sub-right-home-enter": true,
+   "orbit-session sub-right-left": true,
+   "orbit-session sub-right-shift-tab": true,
+   "orbit-session sub-right-space": true,
+   "orbit-session sub-right-tab": true,
+   "orbit-session sub-right-up-enter": true,
+   "orbit-submenu sub-enter": true,
+   "orbit-submenu sub-enter-down-enter": true,
+   "orbit-submenu sub-enter-enter": true,
+   "orbit-submenu sub-right": true,
+   "orbit-submenu sub-right-c-enter": true,
+   "orbit-submenu sub-right-down-enter": true,
+   "orbit-submenu sub-right-end-enter": true,
+   "orbit-submenu sub-right-enter": true,
+   "orbit-submenu sub-right-escape": true,
+   "orbit-submenu sub-right-home-enter": true,
+   "orbit-submenu sub-right-left": true,
+   "orbit-submenu sub-right-shift-tab": true,
+   "orbit-submenu sub-right-space": true,
+   "orbit-submenu sub-right-tab": true,
+   "orbit-submenu sub-right-up-enter": true,
+   "orbit-submenu-sample sub-enter": true,
+   "orbit-submenu-sample sub-enter-down-enter": true,
+   "orbit-submenu-sample sub-enter-enter": true,
+   "orbit-submenu-sample sub-right": true,
+   "orbit-submenu-sample sub-right-c-enter": true,
+   "orbit-submenu-sample sub-right-down-enter": true,
+   "orbit-submenu-sample sub-right-end-enter": true,
+   "orbit-submenu-sample sub-right-enter": true,
+   "orbit-submenu-sample sub-right-escape": true,
+   "orbit-submenu-sample sub-right-home-enter": true,
+   "orbit-submenu-sample sub-right-left": true,
+   "orbit-submenu-sample sub-right-shift-tab": true,
+   "orbit-submenu-sample sub-right-space": true,
+   "orbit-submenu-sample sub-right-tab": true,
+   "orbit-submenu-sample sub-right-up-enter": true
+  }
+ }
+}

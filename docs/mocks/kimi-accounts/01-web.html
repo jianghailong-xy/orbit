@@ -1,0 +1,134 @@
+<!doctype html>
+<!-- Design mock: several Kimi Code accounts on one runner, web Providers page. Every frame is a capture
+     of the real console (vite dev, shipped components and CSS) on synthetic REST data. "现在" is this
+     branch's web; "改后" is the same web with prototype.patch applied (Kimi in ACCOUNT_ENGINES, Add
+     account gated on kimi-account-login/v1, the site per account) — a throwaway prototype of the web
+     half only, not the runner or control-plane work. Marks are drawn into the captures. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kimi Code accounts · web Providers</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1976px; }
+  .cols { display: grid; grid-template-columns: 912px 912px; gap: 38px; align-items: start; }
+  .shot img { display: block; width: 912px; border-radius: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 8px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-notes code, .m-sub code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 10px; }
+  .gap { height: 26px; }
+  .notes2 { display: grid; grid-template-columns: 912px 912px; gap: 38px; align-items: start; }
+  .notes2 .m-notes { margin-top: 0; }
+  .notes2 .m-notes + .m-notes { margin-top: 14px; }
+  .m-notes h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .ask { background: #fff7e6; }
+  .ask .m-n { background: #fa8c16; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Kimi Code 多账号 · web Providers 页：和 Claude Code / Codex / Antigravity 一样「+ Add account」，加账号时先选 kimi.com / kimi.ai</h1>
+  <p class="m-sub zh">可以做：Kimi Code 的整个登录都在 <code>KIMI_CODE_HOME</code> 一个目录里（凭据只存文件，没有钥匙串），和 Codex 的 <code>CODEX_HOME</code>、Claude Code 的 <code>CLAUDE_CONFIG_DIR</code> 一样能一个账号一个目录；runner 的账号槽、登录中继和各端页面都是按同一份引擎名单（<code>ACCOUNT_ENGINES</code>）做的，Kimi 只是还没进名单。下面每张都是真实 web 控制台截图（同一套组件和样式，接口数据是造的）；「改后」是把提案写进组件后的原型截图（<code>prototype.patch</code>，只含 web 部分）。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 入口：Providers 页 → HPC 卡片 → Kimi Code 行</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>一台机器只有一个 Kimi 登录</div>
+        <div class="shot"><img src="01a-today-card.png" alt=""></div>
+        <p class="m-cap zh"><b>A</b> Kimi Code 行只有 ⋯：机器上只能有一个 Kimi 登录，想换号只能 ⋯ → Re-sign in 把它顶掉（换到另一个站点也是顶掉）。<b>B</b> 同样是「Signed in · No quota reported」的 Codex 行，已经有「+ Add account」。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>Kimi 行也有「+ Add account」</div>
+        <div class="shot"><img src="01b-add-account.png" alt=""></div>
+        <p class="m-cap zh"><b>①</b> 位置、样式和 Codex、Antigravity 的一样。只有一个账号时还是一行，副标题照旧写站点（<code>2.1.1 · kimi.ai</code>）。runner 没升级（没声明 <code>kimi-account-login/v1</code>）时不出这个按钮，就是左边现在的样子——旧 runner 会把「加账号」当成重新登录，顶掉 Default。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 加账号：先起名，再选站点</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k state">过程</span>点「+ Add account」</div>
+        <div class="shot"><img src="01c-pick-site.png" alt=""></div>
+        <p class="m-cap zh"><b>②</b> 和其他引擎同一个加账号面板，名字先叫 Account 2，随时可改。<b>③</b> 唯一的不同在这里：Claude / Codex / Antigravity 点开就开始登录，Kimi 先问站点——kimi.com 和 kimi.ai 是两套账号，点哪个就在哪个站点上登录（<code>kimi login --region …</code>）。不预选、不默认，和单账号的 Kimi 登录卡片同一个问题。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k state">过程</span>选了 kimi.com</div>
+        <div class="shot"><img src="01d-device-kimi-com.png" alt=""></div>
+        <p class="m-cap zh"><b>④</b> 设备码这一步就是现有的 Kimi 登录卡片；加账号时提示写成「Sign in with the <b>kimi.com</b> account you are adding」（现在其他引擎写的是「with the other account」，不说站点）。<b>⑤</b> 选错站点一键换，同一个名字在另一个站点重新开始。登录成功后面板自己收起，多出一行新账号。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 两个账号：Default 在 kimi.ai，新加的 Work 在 kimi.com</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>展开</div>
+        <div class="shot"><img src="01e-two-open.png" alt=""></div>
+        <p class="m-cap zh"><b>⑥</b> 分组头和 Claude Code 的一样：「2 of 2 accounts available」。站点不再写在头上——每个账号可以不同。<b>⑦⑧</b> 每个账号的副标题先写站点、再写目录：Default 是原来的 <code>~/.kimi-code</code>，Work 是新加的 <code>~/.orbit/kimi-accounts/5c2e91a0</code>。NEXT 是新会话没指定账号时用哪个；⋯ 里是现成的 Rename / Re-sign in / Pause / Remove。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>收起（默认）</div>
+        <div class="shot"><img src="01f-two-folded.png" alt=""></div>
+        <p class="m-cap zh"><b>⑨</b> 收起时头上替账号们说话，规则和 Claude Code 的分组一样：下一个会话用 Default。Kimi 不报额度，这里写 No quota reported，和现在的 Kimi 行一样。</p>
+      </div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k state">过程</span>Work 的 ⋯ → Re-sign in</div>
+        <div class="shot"><img src="01g-resign-current.png" alt=""></div>
+        <p class="m-cap zh"><b>⑩</b> 重新登录还是那两个站点，Current 标的是<b>这个账号自己</b>的站点（Work 是 kimi.com），不是 Default 的。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>一个账号掉线</div>
+        <div class="shot"><img src="01h-signed-out.png" alt=""></div>
+        <p class="m-cap zh"><b>⑪</b> 掉线只影响那个账号：它这一行出 Sign in，分组头变成「1 of 2 accounts available」，Default 上的会话照常跑。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">说明</div>
+    <div class="notes2">
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>为什么可以（2026-10-08 在 HPC 上核实，Kimi Code 2.1.1）</h4></li>
+          <li><span class="m-n">a</span><span><b>登录整个在一个目录里。</b>Kimi 把登录写进 <code>&lt;KIMI_CODE_HOME&gt;/config.toml</code>（<code>managed:kimi-code</code> provider 和模型列表）和 <code>credentials/&lt;key&gt;.json</code>。凭据存储只有文件一种：CLI 里只有 <code>FileTokenStorage</code>，配置里虽有 <code>keyring</code> 选项但没有实现。所以 macOS runner 也能分开——不像 Claude Code 在 Mac 上那份全机共用的钥匙串。</span></li>
+          <li><span class="m-n">b</span><span><b>实测：两个目录，两个登录。</b>空的 <code>KIMI_CODE_HOME</code> 里 <code>kimi provider list --json</code> 是 <code>{"providers": {}}</code>，同一台机器的 <code>~/.kimi-code</code> 是 kimi.ai 的登录；在临时目录里跑 <code>kimi login --region …</code> 也只写那个目录。</span></li>
+          <li><span class="m-n">c</span><span><b>runner 已经按目录跑 Kimi 会话。</b>每个 Kimi 会话在自己的 overlay 里跑，overlay 借用的是会话环境里 <code>KIMI_CODE_HOME</code> 指的目录（<code>kimi_home.go</code> / <code>kimi_acp.go</code>）。所以把账号目录交给会话，就是 <code>CODEX_HOME</code> / <code>CLAUDE_CONFIG_DIR</code> 那一套。</span></li>
+          <li><span class="m-n">d</span><span><b>是没接，不是接不了。</b>账号槽（<code>account_slot.go</code>）、登录中继（<code>login.go</code>）、移除、控制面和各端都看同一份引擎名单；代码注释原话是「Kimi, OpenCode today simply has no accounts」，Claude Code 多账号那次提交也写了「Not in this change: Kimi slots」。</span></li>
+        </ul>
+        <ul class="m-notes zh">
+          <li><h4>Kimi 和另外三个不一样的地方</h4></li>
+          <li><span class="m-n">e</span><span><b>站点。</b>每个账号各属 kimi.com 或 kimi.ai：加账号先选站点（图 ③），每行写站点（⑦⑧），重新登录时 Current 是这个账号的站点（⑩）。</span></li>
+          <li><span class="m-n">f</span><span><b>没有额度。</b>Orbit 现在不读 Kimi 的额度（单账号也是 No quota reported），所以 Automatic 排不出先后：新会话从 Default 开始，Default 掉线或暂停了才用下一个。</span></li>
+          <li><span class="m-n">g</span><span><b>对话存在账号目录里。</b>Kimi 的会话记录在账号目录的 <code>sessions/</code> 下（Antigravity 的在会话自己的目录里，所以它换账号什么都不用搬）。一个已经说过话的会话换到另一个 Kimi 账号，要把对话搬过去，像 Codex / Claude 各自做的那样。</span></li>
+        </ul>
+      </div>
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>要改的地方（链路）</h4></li>
+          <li><span class="m-n">1</span><span><b>runner</b>：新增 <code>kimi_account_slot.go</code>——账号就是一个 <code>KIMI_CODE_HOME</code>，Default 是 <code>~/.kimi-code</code>，新加的在 <code>&lt;orbit home&gt;/kimi-accounts/&lt;id&gt;</code>；声明 <code>kimi-account-login/v1</code>、<code>kimi-account-remove/v1</code>。登录状态（<code>kimi acp</code> authenticate）和站点（<code>kimi provider list --json</code>）按账号目录各问一次，账号上报带 <code>kimiRegion</code>；会话 meta 记下账号目录（有会话在用时拒绝移除）；新账号目录先建好 <code>sessions/</code>，否则对话只落在会话的临时 overlay 里，进程一退就没了；模型列表像 Antigravity 那样读 Default（Default 没登录就读第一个已登录的账号）；<code>orbit resume</code> 的 Kimi 分支带上账号目录。</span></li>
+          <li><span class="m-n">2</span><span><b>apiserver</b>：migration 加 <code>workspace.kimi_account</code>、<code>session.kimi_account</code> / <code>kimi_account_pinned</code>；<code>ACCOUNT_CHOICE</code> / <code>ACCOUNT_PINNED</code> 和登录、移除、换账号三张 capability 表各加 kimi；心跳 sanitizer 保留账号的 <code>kimiRegion</code>；几处「only Codex, Claude or Antigravity」的报错文案。</span></li>
+          <li><span class="m-n">3</span><span><b>shared</b>：<code>ACCOUNT_ENGINES</code> 加 kimi，<code>ACCOUNT_DIR_VAR.kimi = KIMI_CODE_HOME</code>，<code>RunnerEngineAccount.kimiRegion</code>；<code>accountOfEnv</code> 认出 Kimi 自带凭据的会话（不占任何账号）。</span></li>
+          <li><span class="m-n">4</span><span><b>web</b>：这张图的原型就是改动本身（<code>prototype.patch</code>，约 30 行）：Add account 跟着 <code>kimi-account-login/v1</code> 出现；账号行写站点；Kimi 的加账号面板不自动开始；Current 取账号自己的站点；设备码提示写站点。工作区和输入框的账号选择器跟着名单自动带上 Kimi。</span></li>
+          <li><span class="m-n">5</span><span><b>iOS / macOS / Android</b>：<code>keepsAccounts</code> / <code>canAddAccount</code> 加 Kimi（看 capability），加账号表单接上已有的 Kimi 站点选择。规则同上，动手前另出 iOS 图。</span></li>
+        </ul>
+        <ul class="m-notes zh ask">
+          <li><h4>待你定</h4></li>
+          <li><span class="m-n">①</span><span><b>说过话的会话能不能换 Kimi 账号。</b>建议第一版不搬对话：有对话的 Kimi 会话留在原账号（服务端已有现成的拒绝文案「this session's runner cannot move a conversation to another account yet」），新会话随便选；搬对话另做一项。还是这次一起做？</span></li>
+          <li><span class="m-n">②</span><span><b>要不要读 Kimi 的额度。</b>不读的话 Automatic 只能按「Default → 下一个已登录」的顺序选账号。Kimi CLI 的 <code>/usage</code> 会显示套餐额度（「plan quotas」），可以另开一项研究怎么按账号读。</span></li>
+          <li><span class="m-n">③</span><span><b>范围。</b>建议这次 runner + 控制面 + web 一起上，iOS / macOS / Android 跟进（先出 iOS 图）。还是全部一起？</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
