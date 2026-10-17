@@ -139,11 +139,12 @@ created in its place. It has no container, and nothing starts one while it is fa
 step 3 above.
 
 The manager looks for the recorded volume on each of its passes. Once it is back with its labels, so with the UID,
-owner and runner the manager recorded, the reason becomes `PVC_RESTORED` ("This runner's data volume is back as it was
-recorded. A retry starts the runner on it.") within a few seconds, and the apiserver logs `PVC_RESTORED`. Its owner's
-**Retry** then starts the runner on the restored volume, with the same identity. A volume restored without its labels,
-or any other volume under that name, is not the recorded one: the runner stays `PVC_MISSING`, and the `detail` says
-what is wrong with the volume there.
+owner and runner the manager recorded, and the restore's own containers have gone, the reason becomes `PVC_RESTORED`
+("This runner's data volume is back as it was recorded. A retry starts the runner on it.") within a few seconds, and
+the apiserver logs `PVC_RESTORED`. Its owner's **Retry** then starts the runner on the restored volume, with the same
+identity. While the restore still runs, the runner stays `PVC_MISSING` and the `detail` says the volume is back and
+still held. A volume restored without its labels, or any other volume under that name, is not the recorded one: the
+runner stays `PVC_MISSING`, and the `detail` says what is wrong with the volume there.
 
 ## When something goes wrong
 

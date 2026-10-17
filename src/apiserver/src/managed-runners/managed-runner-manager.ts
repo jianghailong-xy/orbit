@@ -1331,18 +1331,23 @@ export class ManagedRunnerManager {
   /**
    * FAILED with PVC_MISSING: the recorded volume is looked for again, by name. Once it is there as
    * recorded — its UID, owner and runner, bound to the recorded storage, as a restore by the runbook
-   * leaves it — the failure becomes retryable (PVC_RESTORED), and a retry starts the runner on it
-   * through the usual checks. Anything else under the name changes nothing but the operator's detail.
-   * Nothing is created, adopted or removed here.
+   * leaves it — and nothing holds it any more (the restore's own containers have gone), the failure
+   * becomes retryable (PVC_RESTORED), and a retry starts the runner on it through the usual checks.
+   * Anything else under the name changes nothing but the operator's detail. Nothing is created,
+   * adopted or removed here.
    */
   private async volumeBack(mapping: ManagedRunner): Promise<Step> {
     const { terms } = this.backend;
+    const recorded = `${terms.volume} ${mapping.pvcName} (${mapping.pvcUid})`;
     let detail: string;
     try {
-      await this.verifyStorage(mapping);
-      this.log.warn(`managed runner ${mapping.id}: PVC_RESTORED: its recorded ${terms.volume} ${mapping.pvcName} (${mapping.pvcUid}) is back; it can be retried`);
-      await this.commit(mapping, { lastError: { ...managedRunnerReason('PVC_RESTORED'), detail: `${terms.volume} ${mapping.pvcName} (${mapping.pvcUid}) is back as recorded` } });
-      return { done: 'FAILED' };
+      const holders = await this.backend.volumeHolders(await this.verifyStorage(mapping));
+      if (holders.length === 0) {
+        this.log.warn(`managed runner ${mapping.id}: PVC_RESTORED: its recorded ${recorded} is back; it can be retried`);
+        await this.commit(mapping, { lastError: { ...managedRunnerReason('PVC_RESTORED'), detail: `${recorded} is back as recorded` } });
+        return { done: 'FAILED' };
+      }
+      detail = `${recorded} is back as recorded, and still held by ${holders.join(', ')}`;
     } catch (error) {
       if (!(error instanceof ManagedRunnerConflict)) throw error;
       detail = error.code === 'PVC_MISSING' ? error.detail : `a ${terms.volume} under its name is not the recorded one: ${error.code}: ${error.detail}`;

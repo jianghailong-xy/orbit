@@ -24,9 +24,10 @@
  *       attachment that is not its own) waits — VOLUME_IN_USE, nothing created or spent, no startup
  *       deadline running — and completes by itself once the volume is free; on Docker a holder that
  *       comes between that look and the create is the same wait;
- *   (6) a volume lost while asleep fails the wake (PVC_MISSING), not retryable while it is missing or
- *       another volume is under its name; restored as recorded it becomes retryable (PVC_RESTORED),
- *       and the retry starts the runner on it.
+ *   (6) a volume lost while asleep fails the wake (PVC_MISSING), not retryable while it is missing,
+ *       another volume is under its name, or the restored one is still held (by the restore's own
+ *       container); restored as recorded and free it becomes retryable (PVC_RESTORED), and the retry
+ *       starts the runner on it.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -555,8 +556,17 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     assert.equal((await r.service.status(ownerId)).actions.canRetry, false);
     removeImpostor();
 
-    // Restored as recorded (the runbook's restore keeps the identity): retryable.
+    // Restored as recorded (the runbook's restore keeps the identity), while the restore's own container still holds
+    // it: not yet retryable, so no retry can start the runner on a volume still being written.
     restore();
+    r.hold(asleep);
+    assert.equal(await r.manager.reconcile(failed.id), 'FAILED');
+    const restoring = await r.mappingOf(ownerId);
+    assert.equal(codeOf(restoring), 'PVC_MISSING');
+    assert.match((restoring.lastError as { detail: string }).detail, /is back as recorded, and still held by/);
+    assert.equal((await r.service.status(ownerId)).actions.canRetry, false);
+    // Free: retryable.
+    r.release(asleep);
     assert.equal(await r.manager.reconcile(failed.id), 'FAILED');
     const restored = await r.mappingOf(ownerId);
     assert.deepEqual([codeOf(restored), (restored.lastError as { retryable: boolean }).retryable], ['PVC_RESTORED', true]);
