@@ -528,17 +528,30 @@ def step_lose_and_restore(key):
     record("lost-volume.jsonl", {"step": "the wake fails", "status": summarize(failed), "mapping": mapping(key), "pool": pool()})
     status = owner_action(key, "retry")
     record("lost-volume.jsonl", {"step": "the owner's Retry is refused while the volume is missing", "httpStatus": status})
+    # The restore runs in the background (the 17:35Z run at fb93b9403 ran it in the foreground and looked only after it):
+    # the owner's status and what holds the volume are recorded every second until the manager offers the retry, beside
+    # the moment the script ends.
     started = now()
-    record("lost-volume.jsonl", {"step": "restore", **run_script("restore", m["volume"], directory)})
+    sh(f"nohup sh -c 'bash {SCRIPT} restore {m['volume']} {directory}; echo exit=$?' > {directory}.restore.log 2>&1 &")
     t0 = time.time()
     token = login(key)
+    last, ended_at = None, None
     while time.time() - t0 < 300:
         s = summarize(status_of(token))
-        if s["reason"] == "PVC_RESTORED":
+        holders = [h for h in sh(f"docker ps -a --no-trunc --filter volume={m['volume']} --format '{{{{.Names}}}} {{{{.State}}}}'").stdout.split("\n") if h]
+        if ended_at is None and "exit=" in sh(f"cat {directory}.restore.log", check=False).stdout:
+            ended_at = round(time.time() - t0, 1)
+            record("lost-volume.jsonl", {"step": "the restore script ended", "seconds": ended_at,
+                                         "log": sh(f"cat {directory}.restore.log", check=False).stdout.strip().splitlines()})
+        snapshot = {"reason": s["reason"], "canRetry": s["canRetry"], "holders": holders, "detail": ((mapping(key) or {}).get("lastError") or {}).get("detail")}
+        if snapshot != last:
+            record("lost-volume.jsonl", {"step": "watching the restore", "seconds": round(time.time() - t0, 1), **snapshot})
+            last = snapshot
+        if s["reason"] == "PVC_RESTORED" and ended_at is not None:
             break
         time.sleep(1)
-    record("lost-volume.jsonl", {"step": "the manager finds the recorded volume back", "seconds": round(time.time() - t0, 1), "status": s,
-                                 "mapping": mapping(key), "apiserverLog": apiserver_log(started, "PVC_RESTORED|PVC_MISSING")})
+    record("lost-volume.jsonl", {"step": "the manager finds the recorded volume back", "seconds": round(time.time() - t0, 1), "restoreEndedAt": ended_at,
+                                 "status": s, "mapping": mapping(key), "apiserverLog": apiserver_log(started, "PVC_RESTORED|PVC_MISSING")})
     status = owner_action(key, "retry")
     final = follow(key, "after the owner's Retry", ready)
     after = mapping(key)

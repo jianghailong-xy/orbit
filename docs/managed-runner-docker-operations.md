@@ -28,8 +28,8 @@ it like the Postgres backups: private, and off this host.
 
 ```bash
 docker compose exec -T postgres psql -U orbit -d orbit -c "
-  select u.email, m.management_state, m.desired_state, m.generation, m.pvc_name as volume, m.pvc_uid as volume_uid,
-         m.pod_name as container, m.last_error->>'code' as reason, m.last_error->>'detail' as detail
+  select u.email, m.id, m.management_state, m.desired_state, m.generation, m.attempt, m.pvc_name as volume,
+         m.pvc_uid as volume_uid, m.pod_name as container, m.last_error->>'code' as reason, m.last_error->>'detail' as detail
     from managed_runner m join \"user\" u on u.id = m.owner_id order by u.email"
 docker ps -a --filter label=orbit.managed-runner.kind=runner \
   --format '{{.Names}}\t{{.Status}}\tgeneration {{.Label "orbit.managed-runner.generation"}}'
@@ -48,8 +48,11 @@ docker compose logs apiserver | grep -E 'POD_TERMINATED|VOLUME_IN_USE|PVC_MISSIN
 ```
 
 ```text
-managed runner <id>: POD_TERMINATED: container <uid> of generation 3 stopped in READY with exit code 255, not out of memory; starting generation 4 on the same volume in 8 s (attempt 1 of 5)
+WARN [ManagedRunnerManager] managed runner <mapping id>: POD_TERMINATED: container <instance uid> of generation 2 stopped in READY with exit code 255, not out of memory; starting generation 3 on the same volume in 8 s (attempt 1 of 5)
 ```
+
+(the power cut drill's line). `<mapping id>` is the query's `id`, and `attempt` counts the stops and failed starts in a
+row.
 
 The channel's own view, sizes included, without putting the token on a command line:
 
@@ -142,8 +145,12 @@ The manager looks for the recorded volume on each of its passes. Once it is back
 owner and runner the manager recorded, and the restore's own containers have gone, the reason becomes `PVC_RESTORED`
 ("This runner's data volume is back as it was recorded. A retry starts the runner on it.") within a few seconds, and
 the apiserver logs `PVC_RESTORED`. Its owner's **Retry** then starts the runner on the restored volume, with the same
-identity. While the restore still runs, the runner stays `PVC_MISSING` and the `detail` says the volume is back and
-still held. A volume restored without its labels, or any other volume under that name, is not the recorded one: the
+identity. While the restore's containers still hold the volume, the runner stays `PVC_MISSING` and the `detail` says
+the volume is back and still held. Between the script's unpacking and its inspection there is a moment with no
+container, and the manager may already say `PVC_RESTORED` then: the data is complete and its checksums compared by that
+point, and a Retry that comes while the inspection runs waits for it (`VOLUME_IN_USE`). To keep the owner's Retry
+for after the script's last check, disable the account for the restore, as in step 1 above, and enable it again
+afterwards. A volume restored without its labels, or any other volume under that name, is not the recorded one: the
 runner stays `PVC_MISSING`, and the `detail` says what is wrong with the volume there.
 
 ## When something goes wrong

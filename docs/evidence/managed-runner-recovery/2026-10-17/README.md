@@ -97,7 +97,68 @@ what the owner is told to do. Times are UTC, 2026-10-17.
 | A volume lost while asleep, restored by the runbook, 17:35 ([kit/lost-volume.sh](kit/lost-volume.sh)) | b asleep; a backup (125 files); `docker volume rm`; the owner's wake: FAILED `PVC_MISSING` within a second, not retryable, and the owner's Retry answered 409. `volume-backup.sh restore` from 17:35:39 to 17:35:53: recreated with its labels, all 125 checksums equal, six SQLite files and the repository `ok`. **Found here:** the apiserver said `PVC_RESTORED` at 17:35:44, nine seconds before the script had finished, because the script makes the volume, labels and all, before it unpacks into it. A Retry in those seconds would have waited (`VOLUME_IN_USE`, the restore's helper held the volume), but the sentence invited it too early. Fixed in e51574350: `PVC_RESTORED` only once nothing holds the restored volume (the recovery spec's case (6) holds it); the drill ran again on that build (below). The owner's Retry after the script (202): READY at generation 4 on the same volume UID `d71b9de8…`, the same runner, every file, the repository and SQLite as before ([dind/lost-volume.jsonl](dind/lost-volume.jsonl)). |
 | Out of memory, 17:43–17:45 ([kit/oom-drill.sh](kit/oom-drill.sh)) | a READY at generation 3. Its container's memory limit lowered with `docker update` (an operator's test action standing for a runner that outgrows its limit): at 24 MiB the kernel reclaimed cache and the runner went on (no kill); at 8 MiB, at 17:44:51.57, the kernel killed the runner: Docker exit 137, `OOMKilled` true. 17:44:55: `… of generation 3 stopped in READY with exit code 137, out of memory; starting generation 4 on the same volume in 20 s (attempt 2 of 5)`. The owner read `POD_RESTARTING_OUT_OF_MEMORY` ("The runner ran out of memory and stopped, so it is being started again on the same data volume. …") through STARTING; READY at generation 4 at 17:45:54, its container on the profile's own 4 GiB again, the same volume and identity, its data as before ([dind/oom.jsonl](dind/oom.jsonl)). |
 
-**One container per volume.** From 17:17:22 to 17:47:44 the sampler took 3072 samples (24 while the test host was down):
-no data volume ever had more than one container referring to it, a backup's or a restore's helper included. Docker's
-events show each runner's containers one after another, each destroyed before the next was created, e.g. a's
-generation 1 destroyed at 17:29:51.645 and generation 2 created at 17:29:52.119.
+### Again on the final build (e51574350)
+
+The second `/upgrade` ([dind/upgrade-to-e51574350.txt.gz](dind/upgrade-to-e51574350.txt.gz),
+[dind/deployment-after-second-upgrade.txt](dind/deployment-after-second-upgrade.txt)) put the restore fix and a runner
+image built from it (`sha256:980c4679…`) in place; both runners stayed READY through it.
+
+| Drill | What happened |
+| --- | --- |
+| The volume lost and restored again, 18:04 | b asleep, a backup (131 files), `docker volume rm`, the wake: FAILED `PVC_MISSING`, Retry 409. The restore now ran in the background while the driver read the owner's status and what held the volume every second: the restore's helper held it from +1.3 s; at 18:04:21 the apiserver said `PVC_MISSING: volume … is back as recorded, and still held by a container outside this instance`, and the owner was still offered no Retry; the script ended at +10.5 s (all 131 checksums equal, six SQLite files and the repository `ok`, exit 0); `PVC_RESTORED` came at 18:04:31, after it. The owner's Retry (202): READY at generation 6 on the same volume UID and runner. Between the script's two containers there was a moment with neither (the +9.4 s reading): a pass there could have said `PVC_RESTORED` before the inspection, which is why the runbook has the account disabled for a restore. |
+| Graceful restart again, 18:06:42 | a READY at generation 4, up for more than ten minutes, with the writer; b asleep. Back by itself at generation 5 at 18:07:50 (68 s), attempt 1, the same identity, no request of the owner's; the writer's 978 logged rows all there; b woken afterwards. |
+
+**One container per volume.** From 17:17:22 to 18:08:58 the sampler took 5217 samples (44 while the test host was
+down): no data volume ever had more than one container referring to it, a backup's or a restore's helper included
+([dind/one-container-per-volume.json](dind/one-container-per-volume.json)). Docker's lifecycle events show each runner's
+containers one after another, each destroyed before the next was created, e.g. a's generation 1 destroyed at
+17:29:51.645 and generation 2 created at 17:29:52.119.
+
+The runtime code of the final tip differs from the build most drills ran on (fb93b9403) only in `volumeBack` and its
+spec case: `git diff --stat fb93b9403 23595f817 -- src/` lists `managed-runner-manager.ts` and
+`managed-runner-recovery.pg.spec.ts` alone.
+
+## Checks
+
+The branch ends in `git merge --no-ff origin/main` (991f9493c), the commit after this README's. `git merge --no-ff
+origin/project/34ZteKCnYMpKY46f63Leb` answered "Already up to date": the project line is still 1f5bc9cec, this branch's
+base, and origin/main 991f9493c is main's merge of that tip with the same tree, so merging it changes no file and
+`git merge-tree --write-tree` against either tip answers the branch's own tree, no conflict.
+
+These checks ran on 23595f817, an earlier such merge of exactly this code (it lacks only this directory's last
+records, the README's last sections and three doc paragraphs) ([checks/summary.txt](checks/summary.txt)); the evidence
+submission cites the same checks run again on the final merge.
+
+| Check | Result on 23595f817 |
+| --- | --- |
+| The project merge check: `npm run test:compose-topology && npm run prisma:generate && npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web` | exit 0: compose topology 14/14, shared 490/490, apiserver 5316/5316, web 5371/5371 (414 files) |
+| `python3 -B -m unittest discover -s scripts/managed-runner -p '*test*.py'` | 132 tests, OK |
+| `scripts/run-pg-spec.sh` with every managed runner pg spec and `tenant-isolation-runner` | "OK: 13 spec(s) witnessed against PostgreSQL 16.15, no skips": recovery 13, docker-backend 13, account-disabled 5, backend 7, boot 5, capacity 7, existing 3, fencing 16, manager 14, sign-in 12, sleep 10, wake 10, tenant-isolation-runner 725 |
+| OrbitKit `swift test` in `swift:6.1` (the shared fixture's new states) | 3870 tests, 5 skipped (the Linux perf baselines), 0 failures |
+
+## Not shown here
+
+- **Kubernetes on a real cluster.** The Kubernetes half of every rule ran against the fake cluster only. Whether a real
+  node's reboot leaves the kubelet's report of the Pod's stop (a restart) or a Pod that PodGC made terminal (a fence,
+  as before), and the real VolumeAttachment timings of a restart, are for the real-environment tasks (T04, T06).
+- **A real engine session.** The owner's DeepSeek key file was not there; READY came from a placeholder Codex sign-in.
+- **A real power loss.** The power cut killed the test host's Docker while the HPC host's kernel and page cache stayed
+  up, as in D5. The runbook's steps after a real one (hold the runners back, verify the volumes) were not run against
+  a real one.
+- **Running out of memory by itself.** The drill's OOM kill came from lowering a running container's limit with
+  `docker update`; no runner outgrew its limit. Docker keeps a container's OOM mark once any process in it was killed
+  for memory, so a runner SIGKILLed (137) for another reason after a session process was OOM-killed would be reported
+  as out of memory.
+- **A crash loop on real Docker.** The budget running out (`FAILED POD_TERMINATED`/`POD_OUT_OF_MEMORY`) is shown by
+  the pg spec on both backends, not on real Docker.
+- **An administrator's retry for another account**, D5's other proposal, was not added: a restart needs no retry now,
+  and a spent budget or a restored volume is still the owner's Retry.
+- D5's other findings (5–8: the storage budget's disk in Compose, the host's services, the channel's caps, `/tmp`
+  `noexec`) are not this task's.
+- `d7-dind` is stopped, with its data in `/mnt/data/tmp/34hXCW6iauoWaquGQj7DO`; it is to be deleted once this evidence
+  is judged. The real-Docker IT's resources and image were removed. Nothing of an existing deployment and no other
+  container was touched, and the HPC host and its Docker daemon were never restarted.
+
+Account passwords stayed in a 0600 file outside these files. Before committing, every file here, the compressed ones
+included, was scanned for the test deployment's `.env` secrets, the channel tokens of both runs, the runner
+credentials and the account passwords: none is here, and nothing JWT-shaped. The kit holds only its placeholder key.
