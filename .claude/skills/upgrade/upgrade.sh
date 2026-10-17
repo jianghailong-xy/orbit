@@ -165,11 +165,19 @@ fi
 
 # wiki-worker runs the apiserver's image with another command, so naming it builds nothing twice: it
 # keeps this list and the recreate list below the same services.
-echo "==> Building images from source (apiserver and wiki-worker, web)"
+SERVICES="apiserver wiki-worker web"
+# Managed runners stay as this deployment's .env has them: this script never writes .env. A deployment
+# whose .env switched on the managed-runners-docker profile (a fresh install's scripts/install-server.sh
+# does) runs the Docker channel, which is rebuilt and recreated with the rest. Without that profile,
+# Compose does not list the service and nothing is added.
+if $DC config --services 2>/dev/null | grep -qx docker-channel; then
+  SERVICES="$SERVICES docker-channel"
+fi
+echo "==> Building images from source ($SERVICES)"
 if [ "$NO_CACHE" -eq 1 ]; then
-  $DC build --no-cache ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver wiki-worker web
+  $DC build --no-cache ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} $SERVICES
 else
-  $DC build ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver wiki-worker web
+  $DC build ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} $SERVICES
 fi
 
 # `up -d` only recreates containers whose image or config changed. The locally
@@ -186,7 +194,7 @@ if [ "$PULL_BASE" -eq 1 ]; then
   $DC up -d --wait
 else
   echo "==> Recreating changed services (apiserver applies DB migrations on boot)"
-  $DC up -d --wait apiserver wiki-worker web gateway
+  $DC up -d --wait $SERVICES gateway
 fi
 
 echo "==> Stack status"
