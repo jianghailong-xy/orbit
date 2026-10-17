@@ -26,6 +26,8 @@ LABEL org.opencontainers.image.title="Orbit optional managed runner" \
       org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
 # Bootstrap HTTPS trust from Node's bundled public roots before installing Debian's
 # ca-certificates. Snapshot expiry is disabled; apt signature checks remain enabled.
+# apt 3 verifies HTTPS with OpenSSL, whose default CA file (/usr/lib/ssl/cert.pem) does not
+# exist in the slim image until the openssl package arrives: name the bootstrap bundle.
 RUN mkdir -p /etc/ssl/certs \
  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt \
  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \
@@ -33,8 +35,8 @@ RUN mkdir -p /etc/ssl/certs \
       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main' \
       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main' \
       > /etc/apt/sources.list \
- && apt-get update \
- && apt-get install --no-install-recommends -y \
+ && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
+ && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
