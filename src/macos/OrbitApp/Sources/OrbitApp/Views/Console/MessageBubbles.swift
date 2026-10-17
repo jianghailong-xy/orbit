@@ -18,6 +18,9 @@ struct UserBubbleView: View {
     /// Provided by the console's rows (`UserTurnRow`): takes back a steer nothing has read yet, and
     /// says when that has been asked. Nil where there is no console to act through.
     var steer: SteerControls? = nil
+    /// Provided by the console's rows where `SteerDelivery.offersPutBack` says so: the words of a
+    /// message that never reached the engine, back in the composer (`ConsoleModel.putBack`).
+    var onPutBack: (() -> Void)? = nil
     @State private var expanded = false
     @State private var hovering = false
     @State private var copied = false
@@ -99,6 +102,7 @@ struct UserBubbleView: View {
                         .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 meta
+                why
             }
             // Hover over the bubble column (not the full-width row) reveals the meta — web parity.
             // contentShape makes the WHOLE column rect (incl. the 3pt spacing gaps and the meta's
@@ -242,6 +246,7 @@ struct UserBubbleView: View {
                     // and the composer (or that card's Retry) is where it happens.
                     Label(SteerDelivery.state("failed").label, systemImage: "exclamationmark.circle")
                         .font(.orbitMeta).foregroundStyle(.orange)
+                    putBackButton
                 } else if bubble.steer {
                     // A steer is not waiting its turn — it is on its way into the one already
                     // running — and the turn it joined answers something else, so this line is the
@@ -253,6 +258,13 @@ struct UserBubbleView: View {
                     // both, so it cannot be pressed twice.
                     if steer?.withdrawing == true {
                         Text("Withdrawing…").font(.orbitMeta).foregroundStyle(.secondary)
+                    } else if SteerDelivery.state(bubble.delivery).tone == .failed {
+                        // Nobody can say the engine read it ("Couldn't confirm it was read"): said in
+                        // the warning tone, as web's and Android's are. Put back only where all there
+                        // is of it is the receipt (`offersPutBack`).
+                        Label(SteerDelivery.state(bubble.delivery).label, systemImage: "exclamationmark.circle")
+                            .font(.orbitMeta).foregroundStyle(.orange)
+                        putBackButton
                     } else {
                         Text(SteerDelivery.state(bubble.delivery).label)
                             .font(.orbitMeta).foregroundStyle(.secondary)
@@ -286,6 +298,32 @@ struct UserBubbleView: View {
             }
             .frame(height: metaHeight)
             .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+
+    /// The words of a message that never reached the engine, back in the composer — beside the state
+    /// that says so, styled as Withdraw and Cancel are (web parity: `UserBubble`'s and
+    /// `QueuedTurnMeta`'s "Put back in the composer").
+    @ViewBuilder
+    private var putBackButton: some View {
+        if let onPutBack {
+            Button { onPutBack() } label: {
+                Text("Put back in the composer").font(.orbitMeta)
+            }
+            .buttonStyle(.plain).foregroundStyle(.tint)
+            .padding(.leading, 2).contentShape(Rectangle())
+        }
+    }
+
+    /// Why a message only the server's receipt speaks for did not land, in the sender's words, under
+    /// the line that says it did not (web parity: `QueuedTurnMeta`'s `chat-queued-why`).
+    @ViewBuilder
+    private var why: some View {
+        if bubble.receipt,
+           let words = SteerDelivery.failureExplanation(code: bubble.deliveryCode, reason: bubble.deliveryReason),
+           !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text(words).font(.orbitMeta).foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
         }
     }
 
