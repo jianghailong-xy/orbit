@@ -305,3 +305,24 @@ puts it back. Kept:
 - The test server's state in `test-server-t04`.
 
 L0's and T02a's objects were not touched. The VM, the test server, the gate, the replica and the recorder are off.
+
+## Checks
+
+On the landing merge `dc41def86`: this branch's commits `e50755024` (the change) and `a8f897120` (the lab tooling and this
+record) with origin/main `fe7a3c49a`, whose tree is the project line's own (its promotion merge). The project line
+(`2e207ce2f`) was already in the branch and had not moved. One step after another, in a transient unit outside the runner's
+cgroup (`MemoryMax=9G`), with the lab VM off ([kit/gate.sh](kit/gate.sh), [logs/gate-steps.txt](logs/gate-steps.txt),
+[logs/gate-results.txt](logs/gate-results.txt)):
+
+| Step | Result |
+| --- | --- |
+| `npm run test:compose-topology` | 14 of 14 |
+| `npm run prisma:generate`, `npm run build` | exit 0 |
+| `npm test -w @orbit/shared` | 490 of 490 (32 files) |
+| `npm test -w @orbit/apiserver` | 5325 of 5325 |
+| `npm test -w @orbit/web` | 5371 of 5371 (414 files) |
+| managed-runner Python, `python3 -B -m unittest discover -s scripts/managed-runner -p '*test*.py'` | 151 tests OK, `ApiGateTest` among them |
+| every managed-runner pg spec, `scripts/run-pg-spec.sh src/apiserver/src/managed-runners/*.pg.spec.ts` | 12 specs, 119 cases, none failed or skipped: docker-backend 13, account-disabled 5, backend 7, boot 5, capacity 7, existing 3, fencing 16, manager 14, recovery 17, sign-in 12, sleep 10, wake 10 |
+
+No Go, Swift or web code changed, so runner-go's `go test ./...` and the OrbitKit suite were not run. This section and the
+gate's script and logs were added to the merge commit after the gate ran; nothing else changed.
