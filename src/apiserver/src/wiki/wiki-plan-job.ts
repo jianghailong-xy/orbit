@@ -7,6 +7,7 @@ import {
   uuidToBase62,
   WIKI_DOCS_BUILD_JOB,
   WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_REBUILD,
   WIKI_PLAN_SERVER_JOB,
   wikiMaintenanceSettings,
   type NormalizedRunEvent,
@@ -250,6 +251,119 @@ export async function requestWikiPlanBuild(prisma: Db, ask: WikiPlanBuildAsk, no
     return { created: false, jobId: other.id, madeTaskId: null };
   }
   return { created: true, jobId, madeTaskId: await advanceWikiPlanJob(prisma, ask.ownerId, jobId, now) };
+}
+
+/**
+ * The documents of the version in force asked for again (contract `plan.jobs.rebuild`): by its owner on the plan
+ * page, or by an administrator for support, who says why.
+ */
+export interface WikiPlanRebuildAsk {
+  ownerId: string;
+  spaceId: string;
+  /** The space's version in force: the caller has read it. */
+  version: number;
+  trigger: Extract<WikiPlanJobTrigger, 'owner' | 'support'>;
+  requestedByUserId: string;
+  /** An administrator's request: the reason, recorded with it in their Activity row. */
+  support: { reason: string } | null;
+}
+
+/** The Activity row of an administrator's request (contract `plan.jobs.rebuild.support`): theirs, naming the account. */
+export const WIKI_PLAN_BUILD_REQUESTED_ACTIVITY = WIKI_PLAN_REBUILD.activity;
+
+/**
+ * Ask for the documents of the version in force again (contract `plan.jobs.rebuild`). A made build whose task or
+ * wiki_job already ended without its run saying how is ended first, so that it cannot answer. Then, under the space's
+ * row lock: that version's own build that has not ended answers it; otherwise the space's waiting build, pointed at
+ * this version; otherwise a build is recorded — and asked at once, made on the server as a confirmation's is.
+ */
+export async function requestWikiPlanRebuild(prisma: Db, ask: WikiPlanRebuildAsk, now: Date = new Date()): Promise<WikiPlanJobAnswer> {
+  const made = await prisma.wikiPlanJob.findMany({
+    where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', state: 'made' },
+    select: { id: true, taskId: true, jobId: true, ownerId: true },
+  });
+  for (const job of made) await endJobWhoseTaskIsOver(prisma, job, now);
+  const writer = new PlanJobRebuildWriter(prisma);
+  let answer: { jobId: string; created: boolean };
+  try {
+    answer = await writer.requestRebuild(ask);
+  } catch (error) {
+    // A confirmation's request, which takes no lock, recorded the space's waiting build meanwhile: the partial unique
+    // index kept it, and asked again the lock finds it.
+    if ((error as { code?: string }).code !== 'P2002') throw error;
+    answer = await writer.requestRebuild(ask);
+  }
+  return { ...answer, madeTaskId: await advanceWikiPlanJob(prisma, ask.ownerId, answer.jobId, now) };
+}
+
+/** The one writer of a build asked for again: a class only so that its retry is labelled like every other. */
+class PlanJobRebuildWriter {
+  private readonly logger = new Logger('WikiPlanJobs');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async requestRebuild(ask: WikiPlanRebuildAsk): Promise<{ jobId: string; created: boolean }> {
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        await tx.$queryRaw`
+          SELECT "id" FROM "wiki_space" WHERE "id" = ${ask.spaceId}::uuid AND "owner_id" = ${ask.ownerId}::uuid FOR NO KEY UPDATE`;
+        const open = await tx.wikiPlanJob.findFirst({
+          where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', version: ask.version, state: { in: [...OPEN_STATES] } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: { id: true },
+        });
+        const waiting = open
+          ? null
+          : await tx.wikiPlanJob.findFirst({
+            where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', state: { in: [...WAITING_STATES] } },
+            select: { id: true },
+          });
+        let answer: { jobId: string; created: boolean };
+        if (open) {
+          answer = { jobId: open.id, created: false };
+        } else if (waiting) {
+          await tx.wikiPlanJob.updateMany({ where: { id: waiting.id, state: { in: [...WAITING_STATES] } }, data: { version: ask.version } });
+          answer = { jobId: waiting.id, created: false };
+        } else {
+          const created = await tx.wikiPlanJob.create({
+            data: {
+              spaceId: ask.spaceId,
+              ownerId: ask.ownerId,
+              kind: 'build',
+              trigger: ask.trigger,
+              instructions: null,
+              state: 'queued',
+              version: ask.version,
+              requestedByUserId: ask.requestedByUserId,
+            },
+            select: { id: true },
+          });
+          answer = { jobId: created.id, created: true };
+        }
+        if (ask.support) {
+          // What an administrator did to another account's wiki, and why: in the transaction that did it.
+          await tx.activity.create({
+            data: {
+              actorId: ask.requestedByUserId,
+              type: WIKI_PLAN_BUILD_REQUESTED_ACTIVITY,
+              payload: {
+                userId: ask.ownerId,
+                spaceId: ask.spaceId,
+                version: ask.version,
+                planJobId: answer.jobId,
+                created: answer.created,
+                reason: ask.support.reason,
+              },
+              credentialKind: 'LOGIN',
+            },
+          });
+        }
+        return answer;
+      },
+      loggedRetry(this.logger, 'wiki.planRebuild'),
+    );
+  }
 }
 
 /**

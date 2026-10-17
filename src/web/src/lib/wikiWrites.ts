@@ -9,6 +9,7 @@ import type {
   WikiMaintenanceSettings,
   WikiOpInput,
   WikiOpOutcome,
+  WikiPlanBuildResult,
   WikiPlanDecisionResult,
   WikiPlanDocInput,
   WikiPlanGateError,
@@ -197,6 +198,14 @@ export function redraftWikiPlan(spaceId: string, instructions: string | null): P
 /** `POST …/plan/versions/:version/confirm` — the owner's confirmation of the space's draft. */
 export function confirmWikiPlan(spaceId: string, version: number): Promise<WikiPlanVersion> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/versions/${version}/confirm`, { method: 'POST', body: {} });
+}
+
+/**
+ * `POST …/plan/versions/:version/build` — the documents of the version in force asked for again (contract
+ * `plan.jobs.rebuild`), while the server executes the wiki: the build that has not ended answers a second press.
+ */
+export function buildWikiPlan(spaceId: string, version: number): Promise<WikiPlanBuildResult> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/versions/${version}/build`, { method: 'POST', body: {} });
 }
 
 /**
