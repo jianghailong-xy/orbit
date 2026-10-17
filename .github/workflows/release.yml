@@ -24,7 +24,7 @@
 #   (iOS one-time setup — App Store Connect app + API key — is in src/ios/README.md → Release.)
 # Android signing is not a repo secret: environment android-internal (v* tags only) holds secrets
 #   ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD and variables
-#   ANDROID_APPLICATION_ID, ANDROID_CERT_SHA256 (optional ANDROID_FIREBASE_{APP_ID,API_KEY,PROJECT_ID,
+#   ANDROID_APPLICATION_ID, ANDROID_CERT_SHA256 (optional ORBIT_ANDROID_FIREBASE_{APP_ID,API_KEY,PROJECT_ID,
 #   SENDER_ID,ANDROID_PACKAGE}: public Firebase client values, all or none). Only android-build sees them.
 #   (See src/android/docs/release.md.)
 name: Release (macOS DMG + iOS TestFlight + Android APK)
@@ -340,11 +340,11 @@ jobs:
           ORBIT_ANDROID_VERSION_NAME: ${{ steps.version.outputs.version_name }}
           ORBIT_ANDROID_VERSION_CODE: ${{ steps.version.outputs.version_code }}
           ORBIT_ANDROID_SIGNING_PURPOSE: release
-          ORBIT_ANDROID_FIREBASE_APP_ID: ${{ vars.ANDROID_FIREBASE_APP_ID }}
-          ORBIT_ANDROID_FIREBASE_API_KEY: ${{ vars.ANDROID_FIREBASE_API_KEY }}
-          ORBIT_ANDROID_FIREBASE_PROJECT_ID: ${{ vars.ANDROID_FIREBASE_PROJECT_ID }}
-          ORBIT_ANDROID_FIREBASE_SENDER_ID: ${{ vars.ANDROID_FIREBASE_SENDER_ID }}
-          ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE: ${{ vars.ANDROID_FIREBASE_ANDROID_PACKAGE }}
+          ORBIT_ANDROID_FIREBASE_APP_ID: ${{ vars.ORBIT_ANDROID_FIREBASE_APP_ID }}
+          ORBIT_ANDROID_FIREBASE_API_KEY: ${{ vars.ORBIT_ANDROID_FIREBASE_API_KEY }}
+          ORBIT_ANDROID_FIREBASE_PROJECT_ID: ${{ vars.ORBIT_ANDROID_FIREBASE_PROJECT_ID }}
+          ORBIT_ANDROID_FIREBASE_SENDER_ID: ${{ vars.ORBIT_ANDROID_FIREBASE_SENDER_ID }}
+          ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE: ${{ vars.ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE }}
         run: |
           set -euo pipefail
           umask 077
