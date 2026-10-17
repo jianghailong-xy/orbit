@@ -20,7 +20,7 @@ Every picture shows one conversation holding both interrupts, with the two paylo
 | `ios-after-light.png`, `ios-after-dark.png` | iPhone, the change: `Interrupted`, then `Interrupted — the runner restarted` |
 | `mac-before-light.png` | The Mac app's window, before: both rows read `Interrupted` |
 | `mac-after-light.png`, `mac-after-dark.png` | The Mac app's window, the change |
-| `android-after.png` | Android's session page, the change (`android-after-semantics.txt` is its semantics tree) |
+| `android-after.png` | Android's session page, the change, retaken once task 34hGdSoCnMMCn9iYhSwbB stopped the rows printing their raw payload (`android-after-semantics.txt` is its semantics tree; ca24298c6 holds the first picture) |
 | `web-after-light.png` | The web transcript, the change |
 
 `accessibility.txt` lists every iPhone and Mac element whose words begin "Interrupted", before and
@@ -37,8 +37,10 @@ after, as XCUITest read them beside each picture.
   its iOS gate.
 - **Android:** `InterruptRowsTest` (app unit tests) opens the production `MainActivity` session page
   over `ComposerShell`'s fake reads. It renders with Robolectric's native graphics at 411×891 dp,
-  xxhdpi, asserts both rows' titles, and writes the PNG. In the same run, `scripts/verify.sh`
-  passed: 3141 local tests, lint and the debug APK.
+  xxhdpi, asserts both rows' titles and that neither row prints its payload, and writes the PNG.
+  The first picture's run also passed `scripts/verify.sh`: 3141 local tests, lint and the debug APK.
+  The picture here was retaken in run 38999624606, which ran `InterruptRowsTest` alone from the
+  never-merged branch `probe/interrupt-payload-after`.
 - **Web:** the `Transcript` component's markup for the same conversation, styled by `index.css` and
   photographed with headless Chromium. `Transcript.test.tsx` pins both rows'
   words (`npx vitest run src/components/Transcript.test.tsx`).
@@ -47,6 +49,3 @@ after, as XCUITest read them beside each picture.
 
 - The iPhone pictures come from the simulator, not the owner's phone. The Android picture is a
   Robolectric rendering, not an emulator or device screenshot.
-- Android still prints each interrupt row's raw payload (`{"requestId":…}`, `{"reason":"runner_restart"}`)
-  under the row's title. That line was there before this change, for every interrupt, and it is left
-  as it was.
