@@ -7,7 +7,7 @@
 #   clock.tsv      host_before_ns, device_ns, host_after_ns every 15 s: device clock − host clock lies in
 #                  [device − after, device − before]
 #   orbitpush.log  logcat -v epoch -s OrbitPush: eventId, the server's sentAt and FCM's sentTime per receipt
-#   events.log     logcat -v epoch -b events, Orbit's lines only (notification_enqueue/cancel/clicked,
+#   events.log     logcat -v epoch -b events, Orbit's lines only (notification_enqueue/canceled/clicked,
 #                  wm_on_*_called for its Activity); other apps' lines are filtered out on the phone
 #   screen/        screenrecord --bugreport segments; every frame carries the device time
 set -euo pipefail

@@ -356,7 +356,7 @@ schedules. The following steps remain even if every local check succeeds:
    uncertainty. A foreground-suppressed system banner needs actual in-app evidence.
    Device sources: the `OrbitPush` receipt line (`adb logcat -v epoch -s OrbitPush`:
    eventId, the server's `sentAt`, FCM's `sentTime`, priorities), the system event
-   log (`adb logcat -b events`: `notification_enqueue`, `notification_cancel`,
+   log (`adb logcat -b events`: `notification_enqueue`, `notification_canceled`,
    `notification_clicked`, `wm_on_resume_called`) and a frame-timestamped screen
    recording (`screenrecord --bugreport`), mapped to one collector time line with
    the offset bounds of a01-errata-v2 §6. `scripts/push-p07-collect.sh SERIAL DIR`
