@@ -1023,3 +1023,23 @@ func TestCursorAccountsAreKeptOnlyOnLinux(t *testing.T) {
 		t.Fatalf("on macOS Default's sign-in = %+v", got)
 	}
 }
+
+// D5 (owner, 2026-10-17): whether Cursor continues a conversation under another account or key is not known
+// yet (§13.2), so this runner does not declare cursor-account-move/v1, and the control plane refuses a Cursor
+// CLI session that has talked another account or key here. A session's conversation stays in its own
+// directory whichever it runs on (cursor_launch.go), so once two real identities show it continues, the
+// declaration is all a move needs.
+func TestCursorRunnerDoesNotDeclareAccountMove(t *testing.T) {
+	declared := map[string]bool{}
+	for _, capability := range strings.Split(runnerCapabilitiesV1, ",") {
+		declared[capability] = true
+	}
+	for _, other := range []string{"codex-account-move/v1", "claude-account-move/v1", "kimi-account-move/v1"} {
+		if !declared[other] {
+			t.Fatalf("this runner no longer declares %s (%q)", other, runnerCapabilitiesV1)
+		}
+	}
+	if declared["cursor-account-move/v1"] {
+		t.Fatalf("this runner declares cursor-account-move/v1 before two real identities showed a Cursor conversation continues (D5): %q", runnerCapabilitiesV1)
+	}
+}
