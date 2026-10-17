@@ -78,6 +78,13 @@ Every request needs `Authorization: Bearer <token>`. Anything else is refused wi
   or never started — is the report the manager records as the stop proof; it then removes the
   container by UID, and only once it is gone and nothing refers to the volume does it release
   compute or start the next generation.
+- **A new image.** An upgrade rebuilds the image and restarts the channel on a configuration
+  naming its new ID (the `/upgrade` skill; docs/self-hosting.md, "What an upgrade does"). Containers
+  made from the previous image stay this instance's, read, stopped and removed by UID as before;
+  only the configured image is made or started from then on, so a request naming the previous one
+  is `IMAGE_REFUSED`, and a container of it that was made and never started is removed, never
+  started, and made again from the current image. A runner's next container waits, as any next
+  generation does, until its previous container is gone and nothing refers to the volume.
 
 ## Disk limit
 
@@ -147,7 +154,8 @@ In a Compose deployment, `scripts/install-server.sh` writes both files, the toke
 socket are made there too), mounted at `/var/lib/orbit-managed-runners` in `docker-channel` and,
 read-only, in the apiserver; the network is `orbit-managed-runners`, with inter-container traffic
 off, and a runner reaches the apiserver through the gateway's published port at that network's
-gateway address.
+gateway address. Each upgrade rebuilds the image and names its new ID in both files, then recreates
+the apiserver and, after it, the channel.
 
 Tests: `scripts/managed-runner/docker_channel_test.py` (an in-memory Docker Engine, the real HTTP
 server) and, on real Docker, `scripts/managed-runner/docker-backend-it.py`, which runs the apiserver's

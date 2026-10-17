@@ -24,7 +24,14 @@
  *   (8) a Kubernetes mapping in the same database is neither listed nor driven by the Docker manager;
  *   (9) the channel unreachable is a backoff, a volume over its disk limit a FAILED with that reason;
  *  (10) the channel unreachable for many passes spends nothing of a READY or DRAINING runner, which
- *       goes on as it was once the channel answers again.
+ *       goes on as it was once the channel answers again;
+ *  (11) an upgrade's new managed runner image (/upgrade, "Implementation record: image upgrades"): an
+ *       apiserver whose profile names it makes and changes nothing while the channel still serves the
+ *       previous one; the container of the previous image goes on running, busy or not, and is never
+ *       drained for its image; after its next sleep (the same stop proof, compute back only once it is
+ *       removed) the wake makes the next generation from the new image, on the same volume and runner;
+ *  (12) why an upgrade recreates the apiserver before the channel: a channel already on the new image
+ *       refuses the previous apiserver's creates, and the runner it was starting fails.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -46,6 +53,7 @@ import {
 import { testDockerRunnerProfile } from '../test-support/docker-runner-profile.fixture';
 import { FakeDockerChannel } from '../test-support/fake-docker-channel';
 import { DockerBackend } from './docker-backend';
+import { ManagedRunnerConflict } from './managed-runner-backend';
 import { managedRunnerInstanceVerdict } from './managed-runner-instance';
 import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
 import type { DockerRunnerProfile } from './managed-runner-profile';
@@ -77,14 +85,28 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
   await verifyCoordinatorPgIdentity(sql);
 
   function world(capacity?: DockerRunnerProfile['capacity']) {
-    const profile = testDockerRunnerProfile({ clusterKey: `docker-${randomUUID().slice(0, 8)}`, capacity });
+    let profile = testDockerRunnerProfile({ clusterKey: `docker-${randomUUID().slice(0, 8)}`, capacity });
     const channel = new FakeDockerChannel(profile.docker.instanceId, profile.runner.image);
-    const backend = new DockerBackend(channel, profile);
     const clock = { ms: Date.now() };
     const now = () => new Date(clock.ms);
-    const manager = new ManagedRunnerManager(prisma, backend, profile, { holder: 'docker-replica', now, random: () => 0.5, log: quiet });
-    const runtime: ManagedRunnerRuntime = { available: true, profile, manager, worker: new ManagedRunnerWorker(manager, 60_000, quiet) };
-    const service = new ManagedRunnerService(prisma, ON, runtime);
+    let backend: DockerBackend;
+    let manager: ManagedRunnerManager;
+    let service: ManagedRunnerService;
+    let starts = 0;
+    /** The apiserver started on `profile`: a process of its own, whose manager has no capacity pool yet. */
+    const start = () => {
+      starts += 1;
+      backend = new DockerBackend(channel, profile);
+      manager = new ManagedRunnerManager(prisma, backend, profile, { holder: `docker-replica-${starts}`, now, random: () => 0.5, log: quiet });
+      const runtime: ManagedRunnerRuntime = { available: true, profile, manager, worker: new ManagedRunnerWorker(manager, 60_000, quiet) };
+      service = new ManagedRunnerService(prisma, ON, runtime);
+    };
+    start();
+    /** An upgrade's apiserver, recreated on a profile that names `image`. */
+    const upgradeApiserver = (image: string) => {
+      profile = { ...profile, runner: { ...profile.runner, image } };
+      start();
+    };
     const advance = (ms: number) => void (clock.ms += ms);
     const mappingOf = async (ownerId: string): Promise<ManagedRunner> => (await db.managedRunner.findUnique({ where: { ownerId } }))!;
 
@@ -166,7 +188,16 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
       return outcomes;
     }
 
-    return { profile, channel, backend, now, advance, manager, service, mappingOf, heartbeat, drive, owner, readyRunner, accepted, reserved, settle };
+    return {
+      get profile() { return profile; },
+      channel,
+      get backend() { return backend; },
+      now,
+      advance,
+      get manager() { return manager; },
+      get service() { return service; },
+      upgradeApiserver, mappingOf, heartbeat, drive, owner, readyRunner, accepted, reserved, settle,
+    };
   }
 
   const computeHeld = { cpu_millis_reserved: 1000, memory_bytes_reserved: 2 * GiB, ephemeral_bytes_reserved: 512 * 2 ** 20, pods_reserved: 1, attachments_reserved: 1, active_users_reserved: 1 };
@@ -398,5 +429,72 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
     assert.deepEqual([draining.managementState, draining.attempt], ['DRAINING', 0]);
     w.channel.exit(mapping.runnerId, 0);
     assert.equal((await w.settle(ownerId, 'SLEEPING')).at(-1), 'SLEEPING');
+  });
+
+  await t.test('(11) an upgrade\'s new image: the running container is left as it is, and the next generation after a sleep is made from it', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.readyRunner('image-switch');
+    const previous = w.profile.runner.image;
+    const next = `sha256:${'e'.repeat(64)}`;
+    const name = `mr-${mapping.runnerId}`;
+    const onTheVolume = () => [...w.channel.containers.values()].filter((c) => c.volume === mapping.pvcName);
+    assert.equal(w.channel.containers.get(name)!.request.image, previous);
+
+    // The upgrade recreates the apiserver first, on a profile naming the new image, while the channel still serves
+    // the previous one: each of its manager's passes stops at the mismatch, before any mapping, so nothing is made,
+    // asked or written, and the runner goes on as it was.
+    w.upgradeApiserver(next);
+    const before = w.channel.calls.length;
+    await assert.rejects(w.manager.dueMappings(500), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'DOCKER_CHANNEL_MISMATCH');
+    assert.deepEqual(w.channel.calls.slice(before), ['info'], 'it only asked the channel what it serves');
+    assert.equal((await w.mappingOf(ownerId)).revision, mapping.revision, 'nothing written');
+
+    // The channel restarts on the new image. The container of the previous one is still this instance's: READY on
+    // the same container, nothing fenced or stopped, and, busy past the idle interval, not drained for its image.
+    w.channel.image = next;
+    assert.ok((await w.manager.dueMappings(500)).includes(mapping.id));
+    w.advance(w.profile.lifecycle.idleSeconds * 1000 + 1_000);
+    await w.heartbeat(mapping.runnerId, { activeTurns: 1, idleSeconds: 0 });
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    const busy = await w.mappingOf(ownerId);
+    assert.deepEqual({ state: busy.managementState, podUid: busy.podUid, generation: busy.generation, lastError: busy.lastError },
+      { state: 'READY', podUid: mapping.podUid, generation: 1, lastError: null });
+    assert.deepEqual([w.channel.containers.get(name)!.status, w.channel.stopRequests], ['running', []]);
+
+    // Its next sleep is any sleep, (2)'s: drained once idle, Docker's report of the exit, removal by UID, and compute
+    // back only once the container is gone.
+    await w.accepted(ownerId);
+    w.channel.exit(mapping.runnerId, 0);
+    assert.deepEqual(pick(await w.reserved(), COMPUTE_KEYS), computeHeld, 'exited, not yet removed: compute still held');
+    const outcomes = await w.settle(ownerId, 'SLEEPING');
+    assert.equal(outcomes.at(-1), 'SLEEPING', outcomes.join(' → '));
+    const asleep = await w.mappingOf(ownerId);
+    assert.deepEqual([(asleep.fencingReceipt as { kind: string }).kind, asleep.generation, onTheVolume().length], ['OBSERVED_STOP', 2, 0]);
+    assert.deepEqual(pick(await w.reserved(), COMPUTE_KEYS), computeFree);
+
+    // The wake makes generation 2 from the new image, on the same volume, for the same runner.
+    assert.ok(await recordManagedDemand(prisma, mapping.runnerId, w.now()));
+    assert.equal((await w.drive(ownerId)).at(-1), 'READY');
+    const awake = await w.mappingOf(ownerId);
+    const made = w.channel.containers.get(name)!;
+    assert.deepEqual({ image: made.request.image, generation: made.generation, volumeUid: made.volumeUid, runnerId: made.runnerId },
+      { image: next, generation: 2, volumeUid: mapping.pvcUid, runnerId: mapping.runnerId });
+    assert.deepEqual({ runnerId: awake.runnerId, pvcName: awake.pvcName, pvcUid: awake.pvcUid, podUid: awake.podUid },
+      { runnerId: mapping.runnerId, pvcName: mapping.pvcName, pvcUid: mapping.pvcUid, podUid: made.uid });
+    assert.equal(w.channel.count('ensureVolume'), 1, 'the volume was never made again');
+    assert.equal(onTheVolume().length, 1);
+    assert.deepEqual(pick(await w.reserved(), COMPUTE_KEYS), computeHeld);
+  });
+
+  await t.test('(12) why an upgrade recreates the apiserver first: a channel already on the new image refuses the previous apiserver', async () => {
+    const w = world();
+    await w.readyRunner('running-apiserver');
+    const ownerId = await w.owner('waking-while-upgraded');
+    await w.service.ensure(ownerId, 'ensure-waking');
+    w.channel.image = `sha256:${'e'.repeat(64)}`;
+    const outcomes = await w.drive(ownerId);
+    assert.equal(outcomes.at(-1), 'FAILED', outcomes.join(' → '));
+    assert.equal(((await w.mappingOf(ownerId)).lastError as { code: string }).code, 'CONTAINER_GUARD_UNVERIFIED');
+    assert.equal(w.channel.count('createContainer'), 1, 'only the running apiserver\'s first runner was made');
   });
 });
