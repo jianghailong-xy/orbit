@@ -18,9 +18,10 @@ import { ManagedRunnerController } from './managed-runner.controller';
 import { ManagedRunnerService } from './managed-runner.service';
 
 /**
- * Managed runners (docs/managed-runner-design.md). The runtime — profile, Kubernetes client, manager
- * and reconcile loop — is built only when the gate is on; off, the factory returns null without
- * reading a profile or a kubeconfig, and the status facade and the refusing guard are all there is.
+ * Managed runners (docs/managed-runner-design.md). The runtime — profile, run backend (the Kubernetes
+ * client under KubernetesBackend), manager and reconcile loop — is built only when the gate is on;
+ * off, the factory returns null without reading a profile or a kubeconfig, and the status facade and
+ * the refusing guard are all there is.
  * The gate itself comes from the global ManagedRunnerGateModule.
  *
  * Global for two exports, so their callers' modules need no import of this one: the sign-in step
