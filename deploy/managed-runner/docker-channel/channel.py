@@ -699,7 +699,7 @@ class Channel:
         self.host_name = info.get("Name") or socket.gethostname()
         configured = self.config["limits"].get("maxContainers")
         self.max_containers = configured or default_max_containers(info)
-        log(f"at most {self.max_containers} containers of this instance"
+        log(f"containers of this instance: at most {self.max_containers}"
             + ("" if configured else " (one per CPU and per GiB of this host's memory, whichever is fewer)"))
         engine = re.match(r"(\d+)\.", info.get("ServerVersion") or "")
         if engine and int(engine.group(1)) < EXEC_TMPFS_ENGINE:

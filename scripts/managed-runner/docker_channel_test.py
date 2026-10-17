@@ -1073,7 +1073,7 @@ class ListingAndHostTest(ChannelFixture):
         said = []
         self.ch.log = said.append
         self.channel.prepare()  # Docker 29, no probe path, a data root this process cannot see
-        self.assertIn("at most 8 containers of this instance (one per CPU and per GiB of this host's memory, whichever is fewer)", said)
+        self.assertIn("containers of this instance: at most 8 (one per CPU and per GiB of this host's memory, whichever is fewer)", said)
         self.assertTrue(any("measures the disk under" in line and self.config["stateDir"] in line for line in said), said)
         self.assertFalse(any("TmpfsOptions" in line for line in said), "Docker 29 makes /tmp executable")
         said.clear()
@@ -1083,7 +1083,7 @@ class ListingAndHostTest(ChannelFixture):
         self.ch.Channel(self.ch.parse_config({**self.config_value(Path(self.scratch.name)), "diskProbePath": str(probe),
                                               "limits": {**self.config_value(Path(self.scratch.name))["limits"], "maxContainers": 3}}),
                         self.docker, TOKEN).prepare()
-        self.assertIn("at most 3 containers of this instance", said)
+        self.assertIn("containers of this instance: at most 3", said)
         self.assertTrue(any("Docker 26.1.4 ignores TmpfsOptions.Options" in line for line in said), said)
         self.assertFalse(any("measures the disk under" in line for line in said), "a probe path is set")
 
