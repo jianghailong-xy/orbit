@@ -777,6 +777,10 @@ func TestAntigravityContractInterruptedToolGetsResult(t *testing.T) {
 		t.Fatalf("the command is not running: %v", err)
 	}
 	agyPID, _ := c.onlyAgy()
+	// agy starts the command a moment before it streams the step that announces it, so the pid files
+	// can be there while the runner has no call to answer yet. Stop comes once the call is on its
+	// card, the way a person presses it.
+	waitFor(t, "the run_command call relayed as a tool_use", func() bool { return len(c.eventsOf("t1", evToolUse)) == 1 })
 	if results := c.eventsOf("t1", evToolResult); len(results) != 0 {
 		t.Fatalf("the command has a result while it runs: %v", results)
 	}
