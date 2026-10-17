@@ -1813,8 +1813,10 @@ struct TranscriptItemView: View {
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
-        case .interrupt:
-            Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        case .interrupt(_, _, let runnerRestart):
+            // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
+            Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
+                .font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
                 DshRepairCardView(console: console, repair: repair)

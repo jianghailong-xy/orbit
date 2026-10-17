@@ -96,7 +96,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
         "tool_result" -> "Tool output"
-        "interrupt" -> "Interrupted"
+        // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
+        "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
         "error", "auth_error" -> "Error"
         "notice" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
