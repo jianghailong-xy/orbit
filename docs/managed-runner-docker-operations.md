@@ -36,8 +36,20 @@ docker ps -a --filter label=orbit.managed-runner.kind=runner \
 docker volume ls --filter label=orbit.managed-runner.kind=data
 ```
 
-`detail` is the operator's half of a failure: for example `container <uid> is exited (exit 137; OOM-killed)`.
-Accounts see the reason's sentence, never the detail, and the apiserver does not log a runner that failed.
+`detail` is the operator's half of a reason: for example `container <uid> is exited (exit 137; OOM-killed)`.
+Accounts see the reason's sentence, never the detail. Running out of memory has reasons of its own
+(`POD_RESTARTING_OUT_OF_MEMORY`, `POD_OUT_OF_MEMORY`), so its owner sees that too.
+
+The apiserver logs every stop of a runner's container, one warning each, with its exit code, whether it ran out of
+memory, and what the manager does next:
+
+```bash
+docker compose logs apiserver | grep -E 'POD_TERMINATED|VOLUME_IN_USE|PVC_MISSING|PVC_RESTORED'
+```
+
+```text
+managed runner <id>: POD_TERMINATED: container <uid> of generation 3 stopped in READY with exit code 255, not out of memory; starting generation 4 on the same volume in 8 s (attempt 1 of 5)
+```
 
 The channel's own view, sizes included, without putting the token on a command line:
 
@@ -51,7 +63,7 @@ printf 'header = "Authorization: Bearer %s"\n' "$(cat data/managed-runners/token
 Back up a volume while its runner sleeps. Then no container refers to it and nothing writes to it. A runner sleeps on
 its own after an hour with nothing to do (`lifecycle.idleSeconds` in `profile.json`), and its owner can put an idle
 one to sleep (`POST /api/managed-runner/sleep`). Never stop a runner's container with `docker stop` to back it up:
-the manager takes the stop for a failure, and the owner has to press Retry.
+the manager takes the stop for a crash and starts the runner again at once, on the same volume.
 
 ```bash
 V=mr-data-<runner uuid>
@@ -69,11 +81,11 @@ The script refuses a volume that any container refers to. It writes into `$B`:
 It reads the volume from a throwaway container of the managed runner image, with no network and the volume
 mounted read-only.
 
-While that container runs, the runner cannot start. A message or task that wakes it in that window fails it at once,
-with `DOCKER_CHANNEL_REFUSED` (detail `HTTP 409 VOLUME_IN_USE`), and it stays failed until its owner presses Retry,
-even after the backup has finished. The drill measured this: the wake failed 3 s after the request. To avoid it, back
-up when the account is quiet. For a long backup, hold the runner asleep by disabling the account, as for a restore
-(below).
+While that container runs, the runner cannot start. A message or task that wakes it in that window waits: the
+manager starts no container while another one refers to the volume. Its owner sees "Something else is using this
+runner's data volume, such as a backup", the apiserver logs `VOLUME_IN_USE` once, and the runner starts by itself once
+the backup's container is gone. No attempt is spent and its startup deadline does not run meanwhile. To keep a long
+backup from delaying a wake, back up when the account is quiet.
 
 Copy `$B` off this host, together with `data/managed-runners` and the Postgres backups.
 
@@ -93,9 +105,8 @@ database in WAL mode cannot be opened on the read-only volume the backup reads.
 
 ## Restore a runner's volume
 
-Restore only while the runner sleeps, and keep it asleep until the restore is done. A runner woken while its volume is
-missing fails with `PVC_MISSING`. Nothing moves a runner on from that state today, a Retry included, even once the
-volume is back. So:
+Restore only while the runner sleeps, and keep it asleep until the restore is done: a runner woken while its volume
+is missing fails with `PVC_MISSING` (if that has happened already, see [After `PVC_MISSING`](#after-pvc_missing)). So:
 
 1. **Hold the runner asleep.** Disable the account (**Admin → Users → Disable**): a disabled account's runner is
    never woken, and a running one is put to sleep. This also signs the account out. An administrator's own account
@@ -120,6 +131,20 @@ runner then woke on it as its next generation. Every file had the checksum it ha
 files and two repositories were `ok`, the rows and the dump digest were the same, and so were the repository's HEAD
 and the runner's identity.
 
+### After `PVC_MISSING`
+
+A runner whose volume was lost (a `docker volume prune`, say) and that something woke anyway fails with `PVC_MISSING`:
+"This runner's recorded data volume is gone". It cannot be retried while the volume is missing, and nothing is ever
+created in its place. It has no container, and nothing starts one while it is failed, so restore the volume as in
+step 3 above.
+
+The manager looks for the recorded volume on each of its passes. Once it is back with its labels, so with the UID,
+owner and runner the manager recorded, the reason becomes `PVC_RESTORED` ("This runner's data volume is back as it was
+recorded. A retry starts the runner on it.") within a few seconds, and the apiserver logs `PVC_RESTORED`. Its owner's
+**Retry** then starts the runner on the restored volume, with the same identity. A volume restored without its labels,
+or any other volume under that name, is not the recorded one: the runner stays `PVC_MISSING`, and the `detail` says
+what is wrong with the volume there.
+
 ## When something goes wrong
 
 ### A runner's volume is over its limit
@@ -139,8 +164,10 @@ the write rate times the interval. Measured:
 
 Each check makes Docker walk every volume on the host, so a short interval costs disk reads on a busy host.
 
-What the account sees: the runner fails (`POD_TERMINATED`; the detail says `stopped: its volume held … bytes, over its
-… limit`). Its owner's Retry then fails with `VOLUME_OVER_LIMIT` until one of these is done:
+What the account sees: the channel's stop is a stop like any other, so the manager starts the runner again, and the
+channel refuses that container. The runner fails with `VOLUME_OVER_LIMIT` (its `detail`: `… holds … bytes, over its …-byte
+limit`; the log's `POD_TERMINATED` line has the stop). It stays failed until one of these is done, and its owner then
+presses Retry:
 
 - **Raise its limit.** Add the volume to `volumeLimitOverrides` in `data/managed-runners/channel.json`, then restart
   only the channel (`docker compose up -d --force-recreate docker-channel`). Its owner presses Retry. A malformed
@@ -178,7 +205,7 @@ What to do:
 2. Free space without touching the data volumes: `docker builder prune` and dangling images (`docker image prune`).
    **Never run `docker volume prune`.** A sleeping runner's volume has no container, so the prune deletes it. That
    runner then fails with `PVC_MISSING` at its next wake, and only a restore of the volume (above) can bring the data
-   back.
+   back; then its owner can retry it.
 3. Restart the apiserver (`docker compose restart apiserver`). The manager measures the storage it may hand out once,
    when it starts, so new accounts keep waiting until it measures again. The measurement is of the disk under
    `data/managed-runners`, not of Docker's data root (`/var/lib/docker`): keep the checkout on the same filesystem as
@@ -195,11 +222,21 @@ HPC host with a 512 MiB limit: the allocating process was killed at the limit (`
 
 - **The runner process survived** (the usual case). The container keeps running; the session that ran out of memory
   fails.
-- **The runner process was the one killed.** The container exits 137, and the runner fails `POD_TERMINATED` with the
-  detail `… (exit 137; OOM-killed)`. Its owner presses Retry.
+- **The runner process was the one killed.** The container exits 137 and Docker marks it OOM-killed. The manager logs
+  `… with exit code 137, out of memory; starting generation …` and starts the runner again on the same volume. Until
+  it is up, its owner reads "The runner ran out of memory and stopped, so it is being started again on the same data
+  volume." If it keeps running out, `lifecycle.maxAttempts` stops in a row (5 by default), it fails with
+  `POD_OUT_OF_MEMORY` ("The runner kept running out of memory …"), and its owner presses Retry once runners have more
+  memory (below).
 
-To check it: `docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}}' mr-<runner uuid>` (until a Retry removes
-the container), the `detail` in the query above, or `memory.events` of the container's cgroup.
+Docker keeps a container's OOM mark once any process in it was killed for memory. The manager says "out of memory"
+only for a runner that itself ended killed (exit 137), so a container whose session process was killed earlier and
+that stops at a host restart (exit 0 or 255) is not reported as out of memory; one killed (137) for another reason after
+such a kill is.
+
+To check it: the apiserver's log line, the reason or `detail` in the query above, `memory.events` of the container's
+cgroup, or `docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}}' mr-<runner uuid>` until the restart removes
+the container.
 
 To give runners more memory:
 
@@ -216,7 +253,8 @@ The apiserver cannot create, start, stop or remove anything:
 - Running runners go on: they talk to the apiserver, not to the channel.
 - A runner that is being started or woken retries on a backoff. After `lifecycle.maxAttempts` (5) failures in a row,
   it fails with `RETRY_EXHAUSTED`, and its owner presses Retry. That takes about a minute and a half with the
-  defaults: in the drill, a 62 s outage used four of the five attempts.
+  defaults: in the drill, a 62 s outage used four of the five attempts. A runner being started again after a stop
+  counts that stop as one of them.
 - An apiserver started while the channel is down logs `managed runner pass failed` on every pass, until the channel
   is back.
 
@@ -240,7 +278,7 @@ the apiserver is back.
 
 When it starts, it picks up where the database says each runner is:
 
-- a runner whose container exited meanwhile fails `POD_TERMINATED` (its owner presses Retry);
+- a runner whose container exited meanwhile is started again, the next generation on the same volume;
 - a runner that was draining goes to sleep.
 
 Bring it back with `docker compose up -d apiserver`. Nothing else is needed.
@@ -250,12 +288,18 @@ Bring it back with `docker compose up -d apiserver`. Nothing else is needed.
 The Compose services come back by their restart policy. Managed runner containers do not: their restart policy is
 `no`, so that each generation starts only through the manager.
 
-- **A runner that was running** fails with `POD_TERMINATED` once the apiserver is back. The manager records Docker's
-  own report (the exit code and `FinishedAt`) as the proof that the old container stopped. Its owner presses
-  **Retry**: the next generation starts on the same volume, and the exited container is removed.
+- **A runner that was running** is started again by itself once the apiserver is back. The manager records Docker's
+  own report of the old container's exit (its exit code and `FinishedAt`) as the proof that it stopped, and logs it
+  (`POD_TERMINATED … with exit code 255, not out of memory; starting generation …`). After a short backoff it removes
+  that container and starts the next generation on the same volume, with the same runner identity. Meanwhile its owner
+  reads "The runner instance stopped, so it is being started again on the same data volume." Nobody presses Retry.
 - **A runner that was asleep** stays asleep and wakes normally.
-- **Compute.** The failed runner's compute share stays reserved until the Retry.
+- **Compute.** Each runner's compute share stays reserved through its restart.
 - **Data.** Each runner's data is as its last write left it.
+- **A runner that keeps stopping** is not started again for ever. After `lifecycle.maxAttempts` stops in a row (5 by
+  default, failed starts included) it fails with `POD_TERMINATED`, and its owner presses Retry. A runner that stayed up
+  for twice `lifecycle.backoffMaxSeconds` (10 minutes by default) starts that count again, so a host restart is its
+  first.
 
 Measured in the drills, on an isolated Docker host: one runner ready with a SQLite writer running, one just put to
 sleep, and two restarts (a restart of the Docker host, and a power cut of it).
@@ -282,9 +326,10 @@ also loses what the kernel had not written to disk, and restarts the kernel itse
 2. **Bring Docker up and look at it.** Run `systemctl status docker` and `docker info`, then
    `docker compose ps` (`unhealthy`?) and `docker compose logs postgres | tail` (PostgreSQL replays its WAL by
    itself; a corrupt cluster goes to the [Postgres runbook](postgres-backup-restore.md)).
-3. **List the runners** with the query above. Those that were running are `FAILED` `POD_TERMINATED`. Do not press
-   Retry yet.
-4. **Check each data volume before its runner starts.** While the runner is still down:
+3. **Hold the runners back, if you want to check their volumes first.** As soon as the apiserver is up, the manager
+   starts every runner that was running again, within seconds. Nothing starts one while the apiserver is down, so stop
+   it at once: `docker compose stop apiserver`. The runners' exited containers stay where they are.
+4. **Check each data volume.** List the runners with the query above, then for each volume:
 
    ```bash
    scripts/managed-runner/volume-backup.sh verify "$V"
@@ -292,8 +337,10 @@ also loses what the kernel had not written to disk, and restarts the kernel itse
 
    This runs `PRAGMA integrity_check` on every SQLite file and `git fsck` on every repository in the volume, as the
    runner's user, where it is. The runner's exited container may still refer to the volume; a running one is refused.
-   A volume that fails: restore its last backup (above) before its owner presses Retry.
-5. **Then the owners press Retry.** Sleeping runners need nothing.
+5. **Start the apiserver again** (`docker compose start apiserver`). The runners that were running start again by
+   themselves on their volumes, and sleeping runners need nothing. For a volume that failed its check, disable that
+   account straight away (its runner then goes to sleep, or is put to sleep if it already started), restore the
+   volume's last backup as [above](#restore-a-runners-volume), and enable the account again.
 
 #### A runner's container vanished without Docker's report
 
