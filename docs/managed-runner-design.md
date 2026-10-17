@@ -811,3 +811,18 @@ The local evidence is `managedRunnerDisplay.spec.ts`, `managed-runner-states-fix
 `ManagedRunnerNotice.test.tsx`, `App.managedRunner.test.tsx`, `WorkspaceView.managedRunner.test.tsx`
 and `SetupPage.test.tsx`, and OrbitKit's `ManagedRunnerFixtureTests`, `ManagedRunnerLogicTests`,
 `ManagedRunnerAPIClientTests` and `ManagedRunnerWiringTests`.
+
+## Implementation record: single-machine lab
+
+Recorded 2026-10-17 for the lab task. The owner authorized one KVM virtual machine on the shared
+HPC host as the authorized isolated test environment: one physical machine, one node, one failure
+domain. [The lab page](managed-runner-lab.md) records its versions, names, memory measurements,
+operation and smoke results; the scripts are in `scripts/managed-runner/lab/`.
+
+| Area | As built |
+| --- | --- |
+| Stack | Ubuntu 26.04.1 LTS with kernel 7.0.0-34-generic (kernel RBD), k3s v1.36.5+k3s1, Ceph 20.2.4 under cephadm, Ceph-CSI v3.18.0 deployed by Ceph-CSI Operator v1.1.0, every download and image pinned by checksum or digest. |
+| Topology | Ceph runs beside k3s in the same VM, outside Kubernetes, so k3s consumes it as an external backend. Three OSDs on three virtual disks; pool `orbit-mr-rbd` size 3, `min_size` 2, CRUSH failure domain `osd`. |
+| Profile | StorageClass `runner-data` rendered from `deploy/managed-runner/storage/storageclass.template.json` by `ceph_rbd.render`, with the storage profile fields required above; `clusterID` is the FSID, which also names the operator's ClientProfile. The CSI identity has exactly the documented pool-scoped caps; its key is `aes256k`, the only cipher a fresh 20.2.4 cluster allows, which the 7.0 kernel maps without a downgraded key. |
+| Observed | Pod recreation and a VM stop/start kept file, Git and SQLite data (`integrity_check` ok, row hashes equal). A second, differently named Pod on the same node ran on the RWO claim and wrote to it, so RWO is not single-Pod protection here either; a ReadWriteOncePod claim's second Pod stayed Pending. |
+| Not covered | The multi-node parts of criteria 2 and 8; no admission guard, fencing, Rook or CSI snapshots are installed. `ceph-rbd-verify.py`'s live phases need two nodes and were not run. |
