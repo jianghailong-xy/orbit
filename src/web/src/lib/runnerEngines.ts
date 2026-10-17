@@ -1,4 +1,5 @@
 import { AgentProvider, ENGINE_CLI_NAMES, type ReportedEngine, type RunnerEngineUpdate } from '@orbit/shared';
+import { runnerKnowsCursor, type CursorRunnerFacts } from './cursorRuntime';
 
 /**
  * Facts about a runner's engine CLIs that more than one place needs, owned by none of them.
@@ -22,13 +23,16 @@ export const ENGINE_CLI_NAME: Record<ReportedEngine, string> = {
 };
 
 /**
- * Whether the web draws this engine at all: every engine but Cursor CLI, which is registered (project P1)
- * and has no screens here until P7a builds the owner's design board. Every list of engines these pages
- * offer leaves it out — the pickers, the Infrastructure cards, a runner's rows and the attention list —
- * and a runner's report of it is not drawn.
+ * Whether the web draws this engine at all, given the runners in view — the account's, wherever a page
+ * has them, else the one it is about. Every engine but Cursor CLI always; Cursor CLI once one of those
+ * runners knows it (runnerKnowsCursor: it declares `provider:cursor` or reports the engine), which is
+ * the order its rollout keeps: the runners and what they declare first, then the entrances (project
+ * P9). Until then every list of engines these pages offer leaves it out — the pickers, the
+ * Infrastructure cards, a runner's rows, the vendor gallery and the attention list — and the web looks
+ * as it did before Cursor CLI; from then on a machine that predates it says so on its row.
  */
-export function webShowsEngine(engine: string): boolean {
-  return engine !== AgentProvider.CURSOR;
+export function webShowsEngine(engine: string, runners: readonly CursorRunnerFacts[] | null | undefined): boolean {
+  return engine !== AgentProvider.CURSOR || !!runners?.some(runnerKnowsCursor);
 }
 
 const MINUTE = 60_000;
@@ -61,10 +65,15 @@ export function ago(iso: string, now: number): string {
  * `quiet` is a footnote in the meta line. `warn` means this machine has actually drifted and only
  * a person can say why, so it earns colour and a panel. Everything routine stays quiet — a job
  * that reports success loudly is a job people learn to stop reading.
+ *
+ * `pinned` is an engine Orbit keeps on one build rather than the newest (Cursor CLI, whose version a
+ * runner release moves): its routine note says so, since "checked" alone would read as "and it is the
+ * latest".
  */
 export function updateNoteOf(
   update: RunnerEngineUpdate | undefined,
   now: number = Date.now(),
+  pinned = false,
 ): { tone: 'quiet' | 'warn'; text: string } | null {
   if (!update) return null;
   // Orbit deliberately isn't updating this one. There is more than one reason it might not be
@@ -108,7 +117,7 @@ export function updateNoteOf(
     // did nothing but ask.
     return {
       tone: 'quiet',
-      text: `${update.status === 'checked' ? 'checked' : 'updated'} ${ago(update.at, now)}`,
+      text: `${pinned ? 'pinned · ' : ''}${update.status === 'checked' ? 'checked' : 'updated'} ${ago(update.at, now)}`,
     };
   }
   // Nothing has landed in a week and no drift is being measured — an old runner, or one whose

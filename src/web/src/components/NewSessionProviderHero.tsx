@@ -21,7 +21,8 @@ export function BrandMark({ choice, size }: { choice: Pick<EngineChoice, 'brand'
         height: size,
         borderRadius: Math.round(size * 0.26),
         background: `linear-gradient(135deg, ${choice.brand.from}, ${choice.brand.to})`,
-        border: choice.glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
+        // A near-black tile keeps an edge against a dark page (Antigravity's, and Cursor's cube).
+        border: choice.glyphKey === 'antigravity' || choice.glyphKey === 'cursor-api' ? '1px solid rgba(255,255,255,0.16)' : undefined,
         boxShadow: size >= 40 ? `0 8px 22px ${hexAlpha(choice.brand.to, 0.34)}` : undefined,
       }}
     >
