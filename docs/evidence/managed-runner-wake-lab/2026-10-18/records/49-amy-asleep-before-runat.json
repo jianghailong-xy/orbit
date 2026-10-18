@@ -1,0 +1,94 @@
+{
+  "at": "2026-10-18T01:23:49.301+00:00",
+  "changes": [
+    [
+      "2026-10-18T01:22:05.822+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 10,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 6,
+        "management_state": "STARTING",
+        "pod": "ebabead3",
+        "reason": null,
+        "revision": 91
+      }
+    ],
+    [
+      "2026-10-18T01:22:13.443+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 10,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 6,
+        "management_state": "READY",
+        "pod": "ebabead3",
+        "reason": null,
+        "revision": 92
+      }
+    ],
+    [
+      "2026-10-18T01:23:13.907+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 10,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 6,
+        "management_state": "DRAINING",
+        "pod": "ebabead3",
+        "reason": null,
+        "revision": 93
+      }
+    ],
+    [
+      "2026-10-18T01:23:39.507+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 10,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 6,
+        "management_state": "DRAINING",
+        "pod": "ebabead3",
+        "reason": null,
+        "revision": 93
+      }
+    ],
+    [
+      "2026-10-18T01:23:43.855+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 10,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 6,
+        "management_state": "DRAINING",
+        "pod": "ebabead3",
+        "reason": null,
+        "revision": 96
+      }
+    ],
+    [
+      "2026-10-18T01:23:49.301+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 10,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 7,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 97
+      }
+    ]
+  ],
+  "owner": "amy",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

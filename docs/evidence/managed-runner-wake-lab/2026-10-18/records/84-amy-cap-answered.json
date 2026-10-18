@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:53:27.87",
+    "ingested_at": "2026-10-18T01:53:28.111788+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 66,
+    "session_id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-CAP",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:53:27Z",
+      "kind": "text",
+      "messages": 20,
+      "n": 18,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T00:42:26.614",
+    "engine": "claude",
+    "id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-S1 hello from amy's first session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:53:28.322",
+      "client_turn_id": "cf70cc87-f380-42eb-8aa2-01eda2737cae",
+      "content": "T06-AMY-CAP a message while the pool is full",
+      "created_at": "2026-10-18T01:51:48.714",
+      "delivered_at": "2026-10-18T01:53:27.781",
+      "id": "01a14cb5-3dea-7358-a58e-15df16e7d0cc",
+      "kind": "message",
+      "seq": 7,
+      "status": "ANSWERED"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-18T00:40:51.907+00:00",
+  "heartbeat": 201,
+  "owner": "root",
+  "runner": {
+    "id": "34hlvKXUGWP9yj0k1qGS5",
+    "name": "root-selfhost",
+    "online": true,
+    "status": "ONLINE"
+  },
+  "workspace": {
+    "id": "34hlvKbO5Q7geXvHcAaDn",
+    "name": "selfhost",
+    "runnerId": "34hlvKXUGWP9yj0k1qGS5",
+    "workDir": "/srv/selfhost"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "action": "sleep",
+  "answer": {
+    "code": "MANAGED_RUNNER_BUSY",
+    "message": "This managed runner has work in flight or waiting, and sleep never interrupts work. Try again once it is done.",
+    "work": [
+      "BACKGROUND_WORK"
+    ]
+  },
+  "at": "2026-10-18T01:13:52.048+00:00",
+  "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 60
+  },
+  "owner": "amy",
+  "status": 409
+}
