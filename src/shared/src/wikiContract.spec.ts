@@ -194,6 +194,61 @@ const CONTRACT: any = JSON.parse(readFileSync(path.join(ROOT, 'contracts/wiki.co
 /** The object-valued keys of a contract map, in the order the file writes them. */
 const keysOf = (map: Record<string, unknown>): string[] => Object.keys(map);
 
+/**
+ * Every key an object of `text` (valid JSON) writes twice, as `$.path.key`. JSON.parse keeps only the last of
+ * two, so the first is never read; this walks the text key by key, as Python's object_pairs_hook would.
+ */
+function duplicateKeys(text: string): string[] {
+  const found: string[] = [];
+  let i = 0;
+  const space = (): void => {
+    while (/\s/.test(text[i] ?? '')) i += 1;
+  };
+  const string = (): string => {
+    const start = i;
+    i += 1;
+    while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    i += 1;
+    return JSON.parse(text.slice(start, i)) as string;
+  };
+  const value = (at: string): void => {
+    space();
+    if (text[i] === '{') {
+      i += 1;
+      const keys = new Set<string>();
+      space();
+      while (text[i] !== '}') {
+        const key = string();
+        if (keys.has(key)) found.push(`${at}.${key}`);
+        keys.add(key);
+        space();
+        i += 1;
+        value(`${at}.${key}`);
+        space();
+        if (text[i] === ',') i += 1;
+        space();
+      }
+      i += 1;
+    } else if (text[i] === '[') {
+      i += 1;
+      space();
+      for (let n = 0; text[i] !== ']'; n += 1) {
+        value(`${at}[${n}]`);
+        space();
+        if (text[i] === ',') i += 1;
+        space();
+      }
+      i += 1;
+    } else if (text[i] === '"') {
+      string();
+    } else {
+      while (i < text.length && !/[,\]}\s]/.test(text[i])) i += 1;
+    }
+  };
+  value('$');
+  return found;
+}
+
 describe('wiki contract', () => {
   it('is version 1 of orbit.wiki, and every file it points at exists', () => {
     expect(CONTRACT.name).toBe('orbit.wiki');
@@ -209,6 +264,15 @@ describe('wiki contract', () => {
     ]) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
+  });
+
+  it('writes each key of an object once, so no sentence is lost to the one after it', () => {
+    // 2026-10-09 to 10-19: docs.build.server held two "nul" keys, and nobody read the first sentence.
+    expect(duplicateKeys(readFileSync(path.join(ROOT, 'contracts/wiki.contract.json'), 'utf8'))).toEqual([]);
+    expect(duplicateKeys('{"a": {"b": 1, "b": [2, {"c": "\\"}", "c": 3}]}, "d": [{"c": 4}]}')).toEqual([
+      '$.a.b',
+      '$.a.b[1].c',
+    ]);
   });
 
   it('stores the wiki in the nine tables the project names', () => {
