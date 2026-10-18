@@ -246,10 +246,11 @@ struct ComposerView: View {
         return models
     }
 
-    /// The model row the session is on: its model value, except that a Cursor CLI value carries its
+    /// The model row the session is on: its model value, except that a Cursor CLI variant carries its
     /// settings beside the model (`claude-opus-5-5[context=1m]`), which the Context and Speed rows say.
     private var menuModelID: String {
-        console.engine == CursorRuntime.engine ? CursorRuntime.modelBase(console.modelID) : console.modelID
+        console.engine == CursorRuntime.engine
+            ? CursorRuntime.pick(console.modelID, catalog: console.modelCatalog).model : console.modelID
     }
 
     /// Every mode, on every engine. A mode this engine cannot honor is still the user's stored
@@ -790,50 +791,37 @@ struct ComposerView: View {
         #endif
     }
 
-    /// The catalogue row of the Cursor CLI model this session is on, Auto aside: what its Context and
-    /// Speed rows offer.
-    private var cursorModelRow: RunnerModelInfo? {
+    /// The session's Cursor CLI model read against the runner's catalogue, Auto aside: the model, its row
+    /// and the settings its value names (`CursorRuntime.pick`).
+    private var cursorPick: CursorRuntime.Pick? {
         guard console.engine == CursorRuntime.engine, !cursorAuto else { return nil }
-        return console.modelCatalog?.modelInfo(for: CursorRuntime.engine, model: console.modelID)
+        return CursorRuntime.pick(console.modelID, catalog: console.modelCatalog)
     }
 
-    /// Cursor CLI's Context and Speed (board iOS 5 ②): settings of the model in the runner's catalogue,
-    /// carried in the session's model value — `claude-opus-5-5[context=1m,fast=true]`, the coordinator's
-    /// convention of 2026-10-18 — while its effort stays in the effort field. Only the settings the model
+    /// Cursor CLI's Context and Speed (board iOS 5 ②, web `cursorSettingRows`): settings of the model in the
+    /// runner's catalogue, carried in the session's model value — `claude-opus-5-5[context=1m,fast=true]`,
+    /// shared `cursorModels.ts` — while its effort stays in the effort field. Only the settings the model
     /// takes.
-    @ViewBuilder private func cursorSettingMenus(_ row: RunnerModelInfo) -> some View {
-        if let context = CursorRuntime.parameter(row, CursorRuntime.contextParameter) {
-            let current = CursorRuntime.currentValue(context, model: console.modelID)
+    @ViewBuilder private func cursorSettingMenus(_ pick: CursorRuntime.Pick) -> some View {
+        ForEach(CursorRuntime.settingRows(pick), id: \.id) { row in
             Menu {
-                ForEach(context.values, id: \.value) { option in
-                    Button { pickCursorSetting(context.id, option.value, row: row) } label: {
-                        menuItemLabel(CursorRuntime.valueLabel(context, option.value), selected: option.value == current)
+                ForEach(row.values, id: \.value) { option in
+                    Button { pickCursorSetting(row.id, option.value, pick: pick) } label: {
+                        menuItemLabel(option.label ?? option.value, selected: option.value == row.value)
                     }
                 }
             } label: {
-                menuSubmenuLabel("Context", value: current.map { CursorRuntime.valueLabel(context, $0) } ?? "")
-            }
-        }
-        if let fast = CursorRuntime.parameter(row, CursorRuntime.fastParameter) {
-            let current = CursorRuntime.currentValue(fast, model: console.modelID) ?? "false"
-            Menu {
-                ForEach(fast.values, id: \.value) { option in
-                    Button { pickCursorSetting(fast.id, option.value, row: row) } label: {
-                        menuItemLabel(CursorRuntime.speedLabel(fast, option.value), selected: option.value == current)
-                    }
-                }
-            } label: {
-                menuSubmenuLabel("Speed", value: CursorRuntime.speedLabel(fast, current))
+                menuSubmenuLabel(row.title, value: row.label)
             }
         }
     }
 
-    /// A Cursor CLI model's setting picked: the session's model value carries it, applied and remembered
-    /// as a model pick is.
-    private func pickCursorSetting(_ id: String, _ value: String, row: RunnerModelInfo) {
-        var settings = CursorRuntime.modelParameters(console.modelID)
+    /// A Cursor CLI model's setting picked: the session's model value carries it — one back at the model's
+    /// own default is taken out of it — applied and remembered as a model pick is.
+    private func pickCursorSetting(_ id: String, _ value: String, pick: CursorRuntime.Pick) {
+        var settings: [String: String?] = pick.parameters.mapValues { Optional($0) }
         settings[id] = value
-        let model = CursorRuntime.withParameters(CursorRuntime.modelBase(console.modelID), settings, row: row)
+        let model = CursorRuntime.encodeModel(pick.model, settings, row: pick.row)
         let clampedPermissionMode = console.selectModel(model)
         app.rememberDefaultModel(model, engine: console.engine, provider: console.provider)
         let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
@@ -848,9 +836,7 @@ struct ComposerView: View {
 
     /// The chip's words for a Cursor CLI model's settings — "1M", "Fast" — after its effort.
     private var cursorChipSettings: [String] {
-        guard console.engine == CursorRuntime.engine, !cursorAuto else { return [] }
-        return CursorRuntime.chipParameters(
-            console.modelID, row: console.modelCatalog?.modelInfo(for: CursorRuntime.engine, model: console.modelID))
+        CursorRuntime.chipSettings(CursorRuntime.settingRows(cursorPick))
     }
 
     /// Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto: it
@@ -1022,8 +1008,8 @@ struct ComposerView: View {
                 } label: {
                     menuSubmenuLabel("Effort", value: console.effort.label)
                 }
-                if let row = cursorModelRow {
-                    cursorSettingMenus(row)
+                if let pick = cursorPick {
+                    cursorSettingMenus(pick)
                 }
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"

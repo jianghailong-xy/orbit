@@ -297,10 +297,9 @@ public enum AgentDefaults {
         let judge = catalogued ? engine : row.map { nativeEngine($0.runtime) } ?? engine
         guard let offered = catalog?.models(for: judge), !offered.isEmpty else { return model }
         if let reported = runtimeDefaults?[judge], reported == model { return model }
-        // A Cursor CLI value carries its settings beside the model (`claude-opus-5-5[context=1m]`): live
-        // while its model is.
-        let listed = judge == CursorRuntime.engine ? CursorRuntime.modelBase(model) : model
-        return offered.contains { $0.id == listed } ? model : nil
+        // A Cursor CLI variant (`claude-opus-5-5[context=1m]`) is live while its model is.
+        let named = judge == CursorRuntime.engine ? CursorRuntime.decodeModel(model).model : model
+        return offered.contains { $0.id == model || $0.id == named } ? model : nil
     }
 
     /// The key a model picked for `engine` on `provider` is remembered under in
@@ -410,9 +409,10 @@ public enum AgentDefaults {
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
         for provider in ["claude", "codex", "kimi", "opencode", "antigravity", "dsh", "cursor"] {
             let models: [ModelOption] = catalog?.models(for: provider) ?? []
-            // Cursor CLI's values carry their settings beside the model: named by their model.
-            let listed = provider == CursorRuntime.engine ? CursorRuntime.modelBase(id) : id
-            if let name = models.first(where: { $0.id == listed })?.name { return name }
+            if let name = models.first(where: { $0.id == id })?.name { return name }
+            // A Cursor CLI variant is named by its model.
+            if provider == CursorRuntime.engine,
+               let name = models.first(where: { $0.id == CursorRuntime.decodeModel(id).model })?.name { return name }
         }
         return friendlyName(id)
     }
@@ -435,10 +435,13 @@ public enum AgentDefaults {
     public static func friendlyName(_ id: String, engine: String, provider: String?,
                                     catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
-        // A Cursor CLI value is named by its model; its settings are the chip's to say.
-        let listed = engine == CursorRuntime.engine ? CursorRuntime.modelBase(id) : id
-        if let name = models(engine: engine, provider: provider, catalog: catalog, configured: configured)
-            .first(where: { $0.id == listed })?.name {
+        let offered = models(engine: engine, provider: provider, catalog: catalog, configured: configured)
+        if let name = offered.first(where: { $0.id == id })?.name {
+            return name
+        }
+        // A Cursor CLI variant is named by its model; its settings are the chip's to say.
+        if engine == CursorRuntime.engine,
+           let name = offered.first(where: { $0.id == CursorRuntime.decodeModel(id).model })?.name {
             return name
         }
         // The empty id is every model-less runtime's "it picks for itself", which the id alone

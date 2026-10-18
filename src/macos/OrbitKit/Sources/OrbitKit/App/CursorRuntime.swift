@@ -167,83 +167,127 @@ public enum CursorRuntime {
     public static let contextUnavailable =
         "\(name) doesn’t report how much of the window a session has used, so there is no reading to show."
 
-    /// Whether `model` is Auto: its catalogue's `default`, or no model named at all, which runs as Auto.
+    /// Whether `model` is Auto: its catalogue's `default`, or no model named at all, which runs as Auto
+    /// (web `cursorAuto`, read off the model the value names).
     public static func isAuto(_ model: String?) -> Bool {
-        let model = model ?? ""
-        return model.isEmpty || modelBase(model) == autoModel
+        let name = decodeModel(model).model
+        return name.isEmpty || name == autoModel
     }
 
-    // MARK: - a model's settings (the coordinator's convention for board iOS 5 ②④, 2026-10-18)
+    // MARK: - a model's settings (shared `cursorModels.ts`, contract §10)
 
-    /// The settings a session's Cursor model value carries beside its model: the context and the speed,
-    /// each a parameter of the model in the runner's catalogue. Its effort stays in the session's effort
-    /// field, and Auto takes none.
+    /// The settings a Cursor model value carries, by Cursor's option ids: the context size and the fast
+    /// lane (shared `CURSOR_VARIANT_PARAMETERS`). Its effort stays in the session's effort field, and Auto
+    /// takes none.
+    public static let variantParameters = ["context", "fast"]
     public static let contextParameter = "context"
     public static let fastParameter = "fast"
 
+    /// One `id=value` of a variant (shared `PAIR`): neither side empty, nor holding what the syntax itself is
+    /// made of.
+    private static func pair<S: StringProtocol>(_ text: S) -> (id: String, value: String)? {
+        let sides = text.split(separator: "=", omittingEmptySubsequences: false)
+        func plain(_ side: S.SubSequence) -> Bool {
+            !side.isEmpty && !side.contains { $0.isWhitespace || "=,[]".contains($0) }
+        }
+        guard sides.count == 2, plain(sides[0]), plain(sides[1]) else { return nil }
+        return (String(sides[0]), String(sides[1]))
+    }
+
+    /// Reads a Cursor model value (shared `decodeCursorModel`): `name[id=value,…]`, with at least one setting,
+    /// is the model `name` with those settings; anything else is a model's name as it stands, naming no
+    /// settings — `default[]`, Claude Code's `claude-opus-5[1m]`, a malformed or repeated setting.
+    public static func decodeModel(_ value: String?) -> (model: String, parameters: [String: String]) {
+        let text = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let asIs = (model: text, parameters: [String: String]())
+        guard let open = text.firstIndex(of: "["), open != text.startIndex, text.hasSuffix("]"),
+              text.firstIndex(of: "]") == text.index(before: text.endIndex),
+              text.lastIndex(of: "[") == open else { return asIs }
+        var parameters: [String: String] = [:]
+        let inside = text[text.index(after: open)..<text.index(before: text.endIndex)]
+        for piece in inside.split(separator: ",", omittingEmptySubsequences: false) {
+            guard let (id, value) = pair(piece), parameters[id] == nil else { return asIs }
+            parameters[id] = value
+        }
+        return (String(text[..<open]), parameters)
+    }
+
+    /// Writes a Cursor model value (shared `encodeCursorModel`): the model's bare name, followed by the
+    /// settings given, in the order of their ids. A setting with no value, one at the model's own default
+    /// (where its catalogue row says what that is) and one the syntax can't hold are left out; Auto, or no
+    /// model at all, takes none.
+    public static func encodeModel(_ model: String, _ parameters: [String: String?] = [:],
+                                   row: RunnerModelInfo? = nil) -> String {
+        let name = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty || name == autoModel { return name }
+        var defaults: [String: String] = [:]
+        for parameter in row?.parameters ?? [] { defaults[parameter.id] = parameter.defaultValue }
+        let pairs = parameters.compactMap { id, value -> (String, String)? in
+            guard let value, value != defaults[id], pair("\(id)=\(value)") != nil else { return nil }
+            return (id, value)
+        }.sorted { $0.0 < $1.0 }
+        return pairs.isEmpty ? name : "\(name)[\(pairs.map { "\($0.0)=\($0.1)" }.joined(separator: ","))]"
+    }
+
     /// The model a Cursor model value names, without the settings it carries: `claude-opus-5-5[context=1m]`
     /// is `claude-opus-5-5`.
-    public static func modelBase(_ model: String) -> String {
-        model.firstIndex(of: "[").map { String(model[..<$0]) } ?? model
+    public static func modelBase(_ model: String) -> String { decodeModel(model).model }
+
+    /// A Cursor CLI session's model value read against the runner's catalogue (web `cursorModelPick`): the
+    /// model the menu checks, its row, and the settings the value names beside it. A value the catalogue
+    /// lists as it stands is a model of its own.
+    public struct Pick: Equatable, Sendable {
+        public let model: String
+        public let row: RunnerModelInfo?
+        public let parameters: [String: String]
     }
 
-    /// The settings a Cursor model value carries, in Cursor's own bracket notation
-    /// (`claude-opus-5-5[context=1m,fast=true]`), by id.
-    public static func modelParameters(_ model: String?) -> [String: String] {
-        guard let model, let open = model.firstIndex(of: "[") else { return [:] }
-        var inside = model[model.index(after: open)...]
-        if inside.hasSuffix("]") { inside = inside.dropLast() }
-        var out: [String: String] = [:]
-        for pair in inside.split(separator: ",") {
-            let parts = pair.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            if parts.count == 2, !parts[0].isEmpty { out[parts[0]] = parts[1] }
+    public static func pick(_ value: String, catalog: RunnerModelCatalog?) -> Pick {
+        let row = catalog?.modelInfo(for: engine, model: value)
+        if let row, row.value == value { return Pick(model: value, row: row, parameters: [:]) }
+        let decoded = decodeModel(value)
+        return Pick(model: decoded.model, row: row, parameters: decoded.parameters)
+    }
+
+    /// A row of the model menu for one of a Cursor model's own settings (web `CursorSettingRow`): what it is
+    /// called there, the value in effect — the one the model value names when the model offers it, else the
+    /// model's own — and the values to pick from, as the runner's catalogue lists them.
+    public struct SettingRow: Equatable, Sendable {
+        public let id: String
+        public let title: String
+        public let value: String
+        public let label: String
+        public let defaultValue: String
+        public let values: [RunnerModelParameterValue]
+    }
+
+    /// The menu's rows for a Cursor model's context size and fast lane, in the board's order (web
+    /// `cursorSettingRows`): Context, then Speed — Cursor's `fast`, which reads Standard or Fast as every
+    /// engine's Speed row does — each only where the model's row lists it. Auto has none.
+    public static func settingRows(_ pick: Pick?) -> [SettingRow] {
+        guard let pick else { return [] }
+        return [(contextParameter, "Context"), (fastParameter, "Speed")].compactMap { id, title in
+            guard let parameter = pick.row?.parameters?.first(where: { $0.id == id }) else { return nil }
+            let values = parameter.values.filter { !$0.value.isEmpty }.map { option in
+                id == fastParameter && option.value != "true"
+                    ? RunnerModelParameterValue(value: option.value, label: "Standard") : option
+            }
+            guard !values.isEmpty else { return nil }
+            let defaultValue = parameter.defaultValue ?? ""
+            let named = pick.parameters[id]
+            let value = named.flatMap { named in values.contains { $0.value == named } ? named : nil } ?? defaultValue
+            let label = values.first { $0.value == value }?.label ?? value
+            return SettingRow(id: id, title: title, value: value, label: label, defaultValue: defaultValue,
+                              values: values)
         }
-        return out
     }
 
-    /// `base` carrying `settings`, in the catalogue's order of them: a value at the model's own default is
-    /// left out, so a model on every default is its bare name.
-    public static func withParameters(_ base: String, _ settings: [String: String], row: RunnerModelInfo?) -> String {
-        let set = (row?.parameters ?? []).compactMap { parameter -> String? in
-            guard let value = settings[parameter.id], value != parameter.defaultValue else { return nil }
-            return "\(parameter.id)=\(value)"
+    /// What the chip says after a Cursor model's effort (web `cursorChipSettings`, the board's "Claude Opus 5.5
+    /// High · 1M · Fast"): a context other than the model's own, then the fast lane when it is on.
+    public static func chipSettings(_ rows: [SettingRow]) -> [String] {
+        rows.compactMap { row in
+            (row.id == fastParameter ? row.value == "true" : row.value != row.defaultValue) ? row.label : nil
         }
-        return set.isEmpty ? base : "\(base)[\(set.joined(separator: ","))]"
-    }
-
-    /// One of a catalogue row's settings, by its id: the context, the speed.
-    public static func parameter(_ row: RunnerModelInfo?, _ id: String) -> RunnerModelParameter? {
-        row?.parameters?.first { $0.id == id }
-    }
-
-    /// A setting's value as its row names it: "1M", "Fast".
-    public static func valueLabel(_ parameter: RunnerModelParameter, _ value: String) -> String {
-        parameter.values.first { $0.value == value }?.label ?? value
-    }
-
-    /// What the model menu's Speed row calls the fast lane off and on (the board's Standard / Fast).
-    public static func speedLabel(_ parameter: RunnerModelParameter, _ value: String) -> String {
-        value == "true" ? valueLabel(parameter, value) : "Standard"
-    }
-
-    /// The value a session's model value sets for `parameter`, else the model's own default.
-    public static func currentValue(_ parameter: RunnerModelParameter, model: String?) -> String? {
-        modelParameters(model)[parameter.id] ?? parameter.defaultValue
-    }
-
-    /// The chip's words after the model's name and effort (the board's "Opus 5.5 High · 1M · Fast"): a
-    /// context the session set away from the model's default, and Fast while the fast lane is on.
-    public static func chipParameters(_ model: String?, row: RunnerModelInfo?) -> [String] {
-        let set = modelParameters(model)
-        var out: [String] = []
-        if let context = parameter(row, contextParameter), let value = set[contextParameter],
-           value != context.defaultValue {
-            out.append(valueLabel(context, value))
-        }
-        if let fast = parameter(row, fastParameter), (set[fastParameter] ?? fast.defaultValue) == "true" {
-            out.append(valueLabel(fast, "true"))
-        }
-        return out
     }
 
     // MARK: - permission modes (D6)

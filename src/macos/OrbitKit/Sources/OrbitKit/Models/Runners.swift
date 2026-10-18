@@ -190,10 +190,12 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "cursor": rows = cursor
         default: rows = claude
         }
-        // A Cursor CLI model value carries its settings beside the model (`claude-opus-5-5[context=1m]`):
-        // its row is its model's.
-        let key = provider == CursorRuntime.engine ? CursorRuntime.modelBase(model) : model
-        return rows?.first { $0.value == key }
+        if let row = rows?.first(where: { $0.value == model }) { return row }
+        // A Cursor CLI variant the catalogue doesn't list as it stands (`claude-opus-5-5[context=1m]`) is its
+        // model's row (shared `runnerCatalogRow`); another engine's brackets are its own ids.
+        guard provider == CursorRuntime.engine else { return nil }
+        let name = CursorRuntime.decodeModel(model).model
+        return rows?.first { $0.value == name }
     }
 
     /// Runtimes whose reasoning levels are declared per model: Codex efforts, OpenCode variants,
