@@ -17,13 +17,28 @@ const README = '# probe repo\nThe secret word in this README is TANGERINE.\n';
 // pids whose command line contains `needle` (to see whether a tool's process outlived a cancel or crash)
 function pidsMatching(needle) {
   const out = [];
-  for (const d of readdirSync('/proc')) {
-    if (!/^\d+$/.test(d)) continue;
-    try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' '); if (c.includes(needle) && !c.includes('pidsMatching')) out.push(Number(d)); } catch {}
+  if (process.platform === 'linux') {
+    for (const d of readdirSync('/proc')) {
+      if (!/^\d+$/.test(d)) continue;
+      try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' '); if (c.includes(needle) && !c.includes('pidsMatching')) out.push(Number(d)); } catch {}
+    }
+  } else {
+    // darwin: no /proc; `ps -axo pid=,command=` covers the harness user's processes.
+    const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+    for (const line of (r.stdout ?? '').split('\n')) {
+      const i = line.indexOf(' ');
+      if (i <= 0) continue;
+      const pid = Number(line.slice(0, i).trim());
+      const cmd = line.slice(i + 1);
+      if (Number.isInteger(pid) && cmd.includes(needle) && !cmd.includes('pidsMatching')) out.push(pid);
+    }
   }
   return out;
 }
 const killAll = pids => { for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch {} } };
+
+// A strace wrap on Linux (macOS has no strace); returns undefined there.
+const straceWrap = file => process.platform === 'linux' ? ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', file] : undefined;
 
 // `env | sort` output: names, plus the few values that matter here (paths are redacted later).
 function envDump(file) {
@@ -38,9 +53,10 @@ function envDump(file) {
 function orbitMcp() {
   const e = process.env;
   if (!e.ORBIT_SESSION_ID) return null;
+  const orbitBin = process.platform === 'darwin' ? '/Users/long/.orbit/bin/orbit' : '/usr/local/bin/orbit';
   const pairs = [['ORBIT_SESSION_ID', e.ORBIT_SESSION_ID], ['ORBIT_AGENT_ID', e.ORBIT_AGENT_ID], ['ORBIT_TASK_ID', e.ORBIT_TASK_ID], ['ORBIT_HOME', e.ORBIT_HOME ?? '/root/.orbit'],
     ['ORBIT_MCP_PERMISSION_PROMPT', '0'], ['ORBIT_ALLOW_ORCHESTRATION', '0'], ['ORBIT_WATCHES', 'off'], ['ORBIT_WIKI', 'off'], ['ORBIT_RUNNER_CHILD', '1']];
-  return { name: 'orbit', command: '/usr/local/bin/orbit', args: ['mcp'], env: pairs.filter(([, v]) => v).map(([name, value]) => ({ name, value })) };
+  return { name: 'orbit', command: orbitBin, args: ['mcp'], env: pairs.filter(([, v]) => v).map(([name, value]) => ({ name, value })) };
 }
 
 // Records every permission request with the answer given; `choose(msg)` returns an optionId.
@@ -84,7 +100,7 @@ export const real = [
         return 'allow-once';
       });
       const straceFile = join(ctx.dir, 'turns.strace');
-      const p = ctx.acp({ slot, cwd: work, env, label: 'turns', onRequest: policy, wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', straceFile] });
+      const p = ctx.acp({ slot, cwd: work, env, label: 'turns', onRequest: policy, wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work, servers);
       if (!ctx.check('session opens with the p0probe and orbit MCP servers injected', !!n.result?.sessionId, n.error)) return;
@@ -314,9 +330,13 @@ export const real = [
       writeFileSync(join(slot.home, '.bash_profile'), 'export ORBIT_P0_PROFILE_HOME=account\n');
       const wrapper = join(ctx.dir, 'bin', 'orbit-bash');
       mkdirSync(join(ctx.dir, 'bin'), { recursive: true });
+      // The wrapper logs its own invocations (P0b): macOS has no strace, so the "which shell ran the
+      // commands, with -c or -ilc" checks read this log there.
+      const wrapperRan = join(ctx.dir, 'wrapper-ran.log');
       writeFileSync(wrapper, '#!/bin/sh\n' +
         '# Orbit: the shell Cursor CLI runs an agent\'s commands in. The CLI itself runs with a HOME of\n' +
         '# the session\'s own; its commands get the real one back, without the CLI\'s own variables.\n' +
+        `printf '%s\n' "$*" >> '${wrapperRan}'\n` +
         `HOME='${realHome.replace(/'/g, `'"'"'`)}'\n` +
         'export HOME\n' +
         'unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR\n' +
@@ -329,18 +349,19 @@ export const real = [
       await ctx.initialize(q);
       const qn = await ctx.newSession(q, work);
       await q.dispose();
-      const authFile = join(ex.xdgConfig, 'cursor', 'auth.json');
+      const authFile = process.platform === 'darwin' ? join(ex.home, '.cursor', 'auth.json') : join(ex.xdgConfig, 'cursor', 'auth.json');
       if (!ctx.check('a token is exchanged from the key without a prompt (file store, session/new)', !!qn.result && existsSync(authFile))) return;
       const token = JSON.parse(readFileSync(authFile, 'utf8')).accessToken;
       ctx.red.secret(token, 'ACCESS_TOKEN');
       rmSync(authFile);
       // P3's fixed layer (§16.3): no XDG_* variables, credentials in memory, no browser, direnv or debug log.
+      const user = process.env.USER ?? 'root';
       const env = cursorEnv(slot, { layout: 'config-data', apiKey: ctx.key, store: 'memory', extra: { SHELL: wrapper, CURSOR_AUTH_TOKEN: token,
-        DIRENV_DISABLE: '1', CURSOR_AGENT_DISABLE_DEBUG_LOG: '1', USER: 'root', LOGNAME: 'root' } });
+        DIRENV_DISABLE: '1', CURSOR_AGENT_DISABLE_DEBUG_LOG: '1', USER: user, LOGNAME: user } });
       const asked = [];
       const straceFile = join(ctx.dir, 'turn.strace');
       const p = ctx.acp({ slot, cwd: work, env, label: 'wrapper', onRequest: recordingPolicy(asked, () => 'allow-once'),
-        wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', straceFile] });
+        wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work);
       if (!ctx.check('session/new succeeds with both CURSOR_API_KEY and CURSOR_AUTH_TOKEN set', !!n.result?.sessionId, n.error)) return;
@@ -354,16 +375,22 @@ export const real = [
       const st = parseStrace(straceFile);
       const shells = st.execs.filter(e => e.ok && (/bash/.test(e.path) || e.path === '/bin/sh' || e.path === '/usr/bin/sh'))
         .map(e => `${e.path.replace(ctx.dir, '<RUN>')} ${e.argv.slice(1, 4).join(' ')}`.trim());
+      // On macOS (no strace) the wrapper's own log stands in for the execve trace.
+      const wrapperInvocations = existsSync(wrapperRan) ? readFileSync(wrapperRan, 'utf8').trim().split('\n').filter(Boolean) : [];
+      const ranWrapper = process.platform === 'darwin' ? wrapperInvocations.length > 0 : shells.some(x => x.includes('orbit-bash'));
+      const ranSnapshotAndCommand = process.platform === 'darwin'
+        ? wrapperInvocations.some(x => /\s-(il|li)c\b/.test(x)) && wrapperInvocations.some(x => /\s-c\b/.test(x))
+        : shells.some(x => x.includes('orbit-bash') && /\s-(il|li)c\b/.test(x)) && shells.some(x => x.includes('orbit-bash') && /\s-c\b/.test(x));
       const removed = ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN', 'XDG_CONFIG_HOME', 'CURSOR_CONFIG_DIR', 'CURSOR_DATA_DIR'];
       const cliVars = names.filter(x => /CURSOR|AGENT|XDG|DIRENV|NO_OPEN_BROWSER|SHELL|ORBIT/.test(x));
       ctx.note('agent command environment under SHELL=<RUN>/bin/orbit-bash', { stopReason: t.response.result?.stopReason, probe, names, cursorAndOrbitNames: cliVars,
-        shellsExecuted: [...new Set(shells)], permissionRequests: asked.map(a => a.title), answer: textOf(t.updates, 'agent_message_chunk').slice(-200) });
+        shellsExecuted: [...new Set(shells)], wrapperInvocations, permissionRequests: asked.map(a => a.title), answer: textOf(t.updates, 'agent_message_chunk').slice(-200) });
       ctx.note('variables the CLI process had that the commands do not see', Object.keys(env).filter(k => !names.includes(k)).sort());
       ctx.note('files in the stand-in for the runner user\'s HOME after the turn', ctx.tree(realHome));
       ctx.check('both commands ran', Object.keys(probe).length > 0 && names.length > 0, { probe: Object.keys(probe), names: names.length });
-      ctx.check('the CLI starts orbit-bash (a #!/bin/sh script whose path names bash) for the agent\'s commands', shells.some(x => x.includes('orbit-bash')), [...new Set(shells)]);
-      ctx.check('…for the login-shell snapshot (-ilc) as well as for each command (-c)',
-        shells.some(x => x.includes('orbit-bash') && /\s-(il|li)c\b/.test(x)) && shells.some(x => x.includes('orbit-bash') && /\s-c\b/.test(x)), [...new Set(shells)]);
+      ctx.check('the CLI starts orbit-bash (a #!/bin/sh script whose path names bash) for the agent\'s commands', ranWrapper, [...new Set(shells)]);
+      ctx.check('…for the login-shell snapshot (-ilc) as well as for each command (-c)', ranSnapshotAndCommand,
+        process.platform === 'darwin' ? wrapperInvocations : [...new Set(shells)]);
       ctx.check('agent commands see the runner user\'s HOME (the wrapper\'s), not the CLI\'s account HOME', probe.HOME === realHome, probe.HOME);
       ctx.check('…and its login profile, not the account HOME\'s', probe.PROFILE === 'real', probe.PROFILE);
       ctx.check('…and none of CURSOR_API_KEY, CURSOR_AUTH_TOKEN, XDG_CONFIG_HOME, CURSOR_CONFIG_DIR, CURSOR_DATA_DIR', names.length > 0 && !names.some(x => removed.includes(x)), names.filter(x => removed.includes(x)));
@@ -597,7 +624,7 @@ export const real = [
       const disableProjectConfigs = args.includes('--disable-project-configs');
       const straceFile = join(ctx.dir, 'turn.strace');
       const p = ctx.acp({ slot, cwd: repo, label: 'repo', args, onRequest: recordingPolicy(asked, () => 'allow-once'), envOpts: { store: 'memory' },
-        wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve', '-o', straceFile] });
+        wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, repo);
       if (!ctx.check(`session/new succeeds with ${args.join(' ') || 'no flags'}`, !!n.result?.sessionId, n.error ?? { exit: p.exit, stderr: p.stderr.slice(-300) })) return;

@@ -1,0 +1,56 @@
+{
+ "name": "macos-quarantine",
+ "runId": "2026-10-17T08-37-19-553Z",
+ "startedAt": "2026-10-17T08:40:59.951Z",
+ "finishedAt": "2026-10-17T08:41:04.553Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/macos-quarantine.ndjson",
+ "protocolLines": 0,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "the CLI runs under a stamped quarantine attribute (launcher + node are not assessed as apps)",
+   "ok": true,
+   "detail": {
+    "status": 0,
+    "signal": null,
+    "out": "2026.10.14-941492e",
+    "err": "",
+    "quarantine": "0083;69e2b4c1;Safari;<UUID_1>"
+   }
+  },
+  {
+   "name": "an unsigned bare Mach-O compiles and runs without quarantine",
+   "ok": true
+  },
+  {
+   "name": "the same binary with a stamped quarantine attribute still runs (exec-level Gatekeeper does not block bare Mach-O on macOS 27)",
+   "ok": true,
+   "detail": {
+    "status": 0,
+    "signal": null
+   }
+  },
+  {
+   "name": "removing the attribute also runs (the attribute is irrelevant either way)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "attributes on the curl-downloaded tarball": {
+   "tarballQuarantine": null,
+   "tarballProvenance": "set"
+  },
+  "one-off observation (not reproduced)": "2026-10-17 ~01:08Z the FIRST quarantined unsigned binary executed on this machine hung for 2.5 min (state S, 0 CPU) until killed; every later attempt, with fresh UUIDs and fresh binaries, ran instantly. Consistent with a cold first assessment in syspolicyd (the machine had never assessed anything since boot).",
+  "xattr state after the run": {
+   "launcher": "0083;69e2b4c1;Safari;<UUID_1>",
+   "node": "0083;69e2b4c1;Safari;<UUID_1>"
+  }
+ }
+}

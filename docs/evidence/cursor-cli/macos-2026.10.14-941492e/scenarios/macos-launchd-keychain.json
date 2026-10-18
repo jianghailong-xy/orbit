@@ -1,0 +1,38 @@
+{
+ "name": "macos-launchd-keychain",
+ "runId": "2026-10-17T08-37-19-553Z",
+ "startedAt": "2026-10-17T08:41:04.558Z",
+ "finishedAt": "2026-10-17T08:41:24.632Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/macos-launchd-keychain.ndjson",
+ "protocolLines": 0,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "in a launchd Aqua session a keychain write with the real HOME completes",
+   "ok": true
+  },
+  {
+   "name": "…and with a foreign HOME it hangs (the dialog appears on the GUI console)",
+   "ok": true
+  },
+  {
+   "name": "the CLI startup probe (SSH-assumed, default store) passes with the real HOME",
+   "ok": true
+  },
+  {
+   "name": "…and with a foreign HOME the CLI exits 1 \"Your macOS login keychain is locked\"",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "launchd job output": "security-add+real-HOME       exit=0 ms=39\nsecurity-add+bogus-HOME      exit=signal SIGTERM ms=8057\ncli-probe+real-HOME          exit=0 ms=724 err=\ncli-probe+bogus-HOME         exit=1 ms=3425 err=\u001b[33mError: Your macOS login keychain is locked.\u001b[0m | Run \u001b[36msecurity unlock-keychain\u001b[0m and try a\n== job done\n",
+  "real cursor dirs restored": true
+ }
+}

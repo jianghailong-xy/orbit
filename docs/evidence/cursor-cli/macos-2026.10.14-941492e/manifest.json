@@ -1,0 +1,23 @@
+{
+ "login-timing/README.md": "6a420fab37fa1131ed70097671a001bbcdd3111caae27186d4db8d80979b878a",
+ "login-timing/login-default-store.txt": "26e14daa3ca706db1ff7bedff805c1667317ce8845852ee4b810aaf750582c27",
+ "login-timing/login-file-store.txt": "d74020038245f92524849ef86c5ecfc23ccc4e9becaae73ffdb69b7e5ea332a4",
+ "probe/store-probe-summary.json": "4f38cf5913241c7be6fdf1f068519627ac610a7d9a11cef9a761c3d642772d72",
+ "protocol/debug-log-location.ndjson": "036aba7e1e00f190edf1041bf74843f0ba88d917e6022e8fb61594e45476d592",
+ "protocol/failure-shapes-without-prompt.ndjson": "22319269c5db579e7cd83b343bb1aa240ab94dca33035fd1dd20630a3684f544",
+ "protocol/install-and-version.ndjson": "5f0e8e6f58fd946c1706fc647c6f146f4e745c5a9eccea1dc6451ed50c1e4dde",
+ "protocol/login-link-and-logout.ndjson": "72ebc4a40c04c3370c0c9d0ab0f390c0c90d4ece13c095ef0a320699e880d361",
+ "protocol/macos-launchd-keychain.ndjson": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "protocol/macos-quarantine.ndjson": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "protocol/process-signals.ndjson": "f9fd91d669e50ad44cd743dc208180c1e52bcbdf2ab291c7dd348e2c15b049e2",
+ "protocol/signed-out-handshake.ndjson": "3c7a3a5408d689b9aff154060fc54ee172e5908822bb5385bd650fefc1668d5f",
+ "scenarios/debug-log-location.json": "8e2e370bf152d7586b14bca37409d1368c6e84bcde3d9f783037e8ffd6205c7c",
+ "scenarios/failure-shapes-without-prompt.json": "e2248a2669a909a584f90763c13d84e1a140a5b3bd13edc3476d293aeb2c3df5",
+ "scenarios/install-and-version.json": "f18ded593e51976f18fc3160db39c6eaca46afca57a98659899c510e70a8f609",
+ "scenarios/login-link-and-logout.json": "595348bd94e616b7b3533ba885196c7635fa6a1246e66d12d54c658e96030acc",
+ "scenarios/macos-launchd-keychain.json": "e24665c0582ca65ee8391ce217f038c81c0873f706b88afb8581c528b26dc606",
+ "scenarios/macos-quarantine.json": "f144141d87e5f34af3766a737f16ccca0b3dd2f881d0ed38b956e2f5c9c76997",
+ "scenarios/process-signals.json": "b1cd01ba0e08001fb2f8fcfe53fa45ac63a28551d85749bd51c5685fd0b2cd29",
+ "scenarios/signed-out-handshake.json": "36fb9ecbe166a493bc0c1b4d7e334962c92ade33d1bfa89b8846c74b19ffac36",
+ "summary.json": "f9d8db635405cbadb73c8d6a5c0613d302e5e85cf4a7b5ab362bff21d50c5f25"
+}
