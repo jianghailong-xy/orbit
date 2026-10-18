@@ -27,7 +27,7 @@ import java.time.Instant
 /**
  * PROBE ONLY (task 34hJZMKsulMrCDCAtPOIU, probe branch; not merged): the merge recovery review in the repair loop's states, light
  * and dark, as PNGs beside the board (docs/mocks/merge-recovery-repair-loop-ios.html). ①–⑤ are the board's demo data, ⑥ the real
- * case, and "failed" the repair row's sixth state. Written to $C3_SHOTS, else src/android/build/evidence/c3-merge-recovery.
+ * case, "failed" the repair row's sixth state, and "unfinished-failed" an unfinished repair whose session failed. Written to $C3_SHOTS, else src/android/build/evidence/c3-merge-recovery.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w393dp-h852dp-xxhdpi")
@@ -93,6 +93,9 @@ class MergeRecoveryShotsTest {
                     "sourceSha":"${pad("e4b9d0e1")}"}]""")), repair("AWAITING_INPUT"), "mergeStatus" to JsonPrimitive("error"),
                 "mergeError" to JsonPrimitive("every commit of this session is already on origin/main — nothing is left to merge")),
             "7-failed" to detail(conflict, repair("FAILED", "error" to JsonPrimitive("The model provider rejected the request"))),
+            "8-unfinished-failed" to detail(recovery("REPAIR_IN_PROGRESS", 8, "previewId" to JsonPrimitive("77b0c1"),
+                "conflicts" to JsonArray(listOf(JsonPrimitive(files[1])))), repair("FAILED", "error" to JsonPrimitive("The model provider rejected the request")),
+                "mergeStatus" to JsonPrimitive("error"), "mergeError" to JsonPrimitive("finish and commit the repair before checking again")),
         )
         val out = File(System.getenv("C3_SHOTS") ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .first { File(it, "src/android/settings.gradle.kts").isFile }.resolve("src/android/build/evidence/c3-merge-recovery").path).also { it.mkdirs() }
