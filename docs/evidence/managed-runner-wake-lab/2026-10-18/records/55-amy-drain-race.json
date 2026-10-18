@@ -1,0 +1,80 @@
+{
+ "log": [
+  {
+   "at": "2026-10-18T01:38:06.273+00:00",
+   "mapping": {
+    "management_state": "READY",
+    "desired_state": "RUNNING",
+    "generation": 9,
+    "revision": 140,
+    "demand_revision": 27,
+    "drain_demand_revision": null,
+    "drain": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:38:52.772+00:00",
+   "mapping": {
+    "management_state": "DRAINING",
+    "desired_state": "SLEEPING",
+    "generation": 9,
+    "revision": 141,
+    "demand_revision": 27,
+    "drain_demand_revision": 27,
+    "drain": "asked"
+   }
+  },
+  {
+   "at": "2026-10-18T01:38:52.810+00:00",
+   "sent": {
+    "at": "2026-10-18T01:38:52.772+00:00",
+    "kind": "turn",
+    "session": "34hlxjW1Gs60pKc1WJR04",
+    "status": 201,
+    "answer": {
+     "id": null,
+     "status": null,
+     "seq": 5,
+     "code": null,
+     "message": null
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:38:53.055+00:00",
+   "mapping": {
+    "management_state": "READY",
+    "desired_state": "RUNNING",
+    "generation": 9,
+    "revision": 142,
+    "demand_revision": 28,
+    "drain_demand_revision": null,
+    "drain": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:39:53.420+00:00",
+   "mapping": {
+    "management_state": "DRAINING",
+    "desired_state": "SLEEPING",
+    "generation": 9,
+    "revision": 143,
+    "demand_revision": 28,
+    "drain_demand_revision": 28,
+    "drain": "asked"
+   }
+  },
+  {
+   "at": "2026-10-18T01:40:20.642+00:00",
+   "mapping": {
+    "management_state": "DRAINING",
+    "desired_state": "SLEEPING",
+    "generation": 9,
+    "revision": 143,
+    "demand_revision": 28,
+    "drain_demand_revision": 28,
+    "drain": "accepted"
+   }
+  }
+ ]
+}

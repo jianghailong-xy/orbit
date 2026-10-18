@@ -1,0 +1,16 @@
+{
+ "readAt": "2026-10-17T08:54:02.585Z",
+ "host": {
+  "cpus": 24,
+  "memoryGiB": 15,
+  "diskTotalGiB": 914.8,
+  "diskFreeGiB": 12.4
+ },
+ "defaultsFor1CpuAnd2GiBRunners": {
+  "cpuMillis": 18000,
+  "memoryGiB": 11.25,
+  "runners": 5,
+  "storageUsableGiB": 12.4,
+  "storageHeadroomGiB": 91.5
+ }
+}

@@ -1,0 +1,231 @@
+{
+  "at": "2026-10-17T23:13:21.296+00:00",
+  "bootstrapSecret": {
+    "createdAt": "2026-10-17T23:12:29Z",
+    "generation": "1"
+  },
+  "boundToTheManagedRunner": true,
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "created_at": "2026-10-17T23:12:24.33",
+    "enable_worktree": true,
+    "id": "01a14c23-4d0a-7121-bc95-6c4f8a425d51",
+    "name": "Default",
+    "position": null,
+    "runner_id": "01a14c23-4d07-7679-812d-f74876266c72",
+    "target_runner_id": "01a14c23-4d07-7679-812d-f74876266c72",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+    "ensure": false,
+    "kind": "modelUnavailable",
+    "moving": true,
+    "retry": false,
+    "signIn": true,
+    "startsNewSession": false,
+    "title": "Your managed runner needs a model"
+  },
+  "mapping": {
+    "attempt": 0,
+    "createdAt": "2026-10-17T23:12:24.331+00:00",
+    "desired_state": "RUNNING",
+    "generation": 1,
+    "id": "01a14c23-4d0b-760d-b071-88a7e3b7090f",
+    "initial_provider": null,
+    "last_error": {
+      "code": "MODEL_UNAVAILABLE",
+      "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+      "retryable": true
+    },
+    "management_state": "STARTING",
+    "node_name": "orbit-mr-lab",
+    "pod_uid": "b7338697-f02d-4a61-a83a-cc8736147c79",
+    "pv_uid": "724fc753-e395-495b-bcb3-e2ef9d881aab",
+    "pvc_name": "mr-data-01a14c23-4d07-7679-812d-f74876266c72",
+    "pvc_uid": "4ede0589-3cb3-44a8-bc3e-f7b414b71681",
+    "state_entered_at": "2026-10-17T23:12:29.597+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-fcf2a14e-ee95-4adf-bba0-ac1d2d119794"
+  },
+  "owner": "dora",
+  "pod": {
+    "containers": [
+      {
+        "name": "private-volume-directories",
+        "ready": true,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://1ee46c99e3cb0c709e575b20117ed4800800a79b340eb0115408fb935f476e6e",
+            "exitCode": 0,
+            "finishedAt": "2026-10-17T23:12:38Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-17T23:12:37Z"
+          }
+        }
+      },
+      {
+        "name": "runner",
+        "ready": true,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-17T23:12:38Z"
+          }
+        }
+      }
+    ],
+    "createdAt": "2026-10-17T23:12:29Z",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "startTime": "2026-10-17T23:12:29Z",
+    "uid": "b7338697-f02d-4a61-a83a-cc8736147c79"
+  },
+  "pv": {
+    "createdAt": "2026-10-17T23:12:25Z",
+    "driver": "rbd.csi.ceph.com",
+    "fsType": "ext4",
+    "image": "csi-vol-fcf2a14e-ee95-4adf-bba0-ac1d2d119794",
+    "uid": "724fc753-e395-495b-bcb3-e2ef9d881aab"
+  },
+  "pvc": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "createdAt": "2026-10-17T23:12:24Z",
+    "phase": "Bound",
+    "storageClass": "runner-data",
+    "uid": "4ede0589-3cb3-44a8-bc3e-f7b414b71681"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-maintenance-run/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-17T23:12:24.327",
+    "id": "01a14c23-4d07-7679-812d-f74876266c72",
+    "last_heartbeat_at": "2026-10-17T23:13:09.482",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "version": "managed-292b2eb4308b622b5f7b7d40f7c542d55c1091c9"
+  },
+  "runnerEngines": [
+    {
+      "auth": "no",
+      "engine": "claude",
+      "installationError": null,
+      "installed": true,
+      "version": "2.1.300 (Claude Code)"
+    },
+    {
+      "auth": "no",
+      "engine": "codex",
+      "installationError": null,
+      "installed": true,
+      "version": "codex-cli 0.158.0"
+    },
+    {
+      "auth": "unknown",
+      "engine": "kimi",
+      "installationError": null,
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "opencode",
+      "installationError": null,
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "antigravity",
+      "installationError": null,
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "dsh",
+      "installationError": "DSH_NOT_INSTALLED",
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "cursor",
+      "installationError": "CURSOR_NOT_INSTALLED",
+      "installed": false,
+      "version": null
+    }
+  ],
+  "signIns": [
+    {
+      "at": "2026-10-17T23:12:24.285+00:00",
+      "ms": 54.8,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T23:13:09.482Z",
+    "managementState": "STARTING",
+    "reason": {
+      "code": "MODEL_UNAVAILABLE",
+      "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+      "retryable": true
+    },
+    "runnerId": "34hjkjiVESUBoVp9PV5Va",
+    "usable": false,
+    "workspaceId": "34hjkjinEmKqKFiWEM4Ej"
+  }
+}

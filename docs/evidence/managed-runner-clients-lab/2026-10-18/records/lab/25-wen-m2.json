@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T06:06:49.838",
+    "ingested_at": "2026-10-18T06:06:49.933823+00:00",
+    "ingested_by_runner_id": "01a14d97-23a7-747d-9f18-2512a70f4fff",
+    "seq": 32,
+    "session_id": "01a14d98-1f13-724a-8623-3251ac6978e4",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T07-WEN-M2",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T06:06:49Z",
+      "kind": "text",
+      "messages": 8,
+      "n": 5,
+      "tool": null
+    }
+  ],
+  "owner": "wen",
+  "session": {
+    "assigned_runner_id": "01a14d97-23a7-747d-9f18-2512a70f4fff",
+    "created_at": "2026-10-18T05:59:37.491",
+    "engine": "claude",
+    "id": "01a14d98-1f13-724a-8623-3251ac6978e4",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T07-WEN-S1 a first session from the web composer while the runner waits for capa"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T06:06:49.953",
+      "client_turn_id": "41612360-fb96-4a11-aad6-3c4e80a12b95",
+      "content": "T07-WEN-M2 wake again, the web now reads the status at once",
+      "created_at": "2026-10-18T06:05:22.218",
+      "delivered_at": "2026-10-18T06:06:49.559",
+      "id": "01a14d9d-61aa-7604-8c15-1d97679d6a7d",
+      "kind": "message",
+      "seq": 3,
+      "status": "ANSWERED"
+    }
+  ]
+}

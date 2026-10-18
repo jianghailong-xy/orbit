@@ -1,0 +1,4 @@
+{"at": "2026-10-18T05:53:36.811Z", "kind": "api-write", "method": "POST", "path": "/api/auth/login", "body": "(not logged)"}
+{"at": "2026-10-18T05:53:36.865Z", "kind": "signed-in", "url": "http://127.0.0.1:5873/"}
+{"at": "2026-10-18T05:53:36.903Z", "kind": "seen", "shot": "001-page.png", "path": "/", "notice": null, "composer": null, "answers": [], "register": false, "loading": false}
+{"at": "2026-10-18T05:53:37.645Z", "kind": "seen", "shot": "002-composer.png", "path": "/sessions/34htasQH9ZMfYI7kB46z6", "notice": null, "composer": {"placeholder": "This session is ending and cannot accept messages right now.", "hero": false, "modelChip": "claude-opus-5Default", "sendEnabled": null}, "answers": [], "register": false, "loading": false}

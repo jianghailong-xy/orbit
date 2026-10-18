@@ -1230,6 +1230,28 @@ export const WIKI_PLAN_REDRAFT_ALREADY = 'A draft is already on its way';
 /** The gate refused an accepted change on the plan it now meets (the plan moved since it was proposed). */
 export const WIKI_PLAN_ACCEPT_REFUSED = 'This change no longer passes the plan check, so nothing was confirmed:';
 
+// ── Update documents (contract `plan.jobs.rebuild`, owner's call 2026-10-17) ────────────────────
+
+/** The version in force's action: its documents asked for again — what never got written, and what went out of date. */
+export const WIKI_PLAN_UPDATE_DOCS = 'Update documents';
+export const wikiPlanUpdateAsked = (version: number): string => `Updating the documents of v${version}`;
+export const WIKI_PLAN_UPDATE_ALREADY = 'The documents are already being written';
+export const WIKI_PLAN_UPDATE_FAILED = 'Couldn’t update the documents';
+
+/**
+ * Whether the plan page offers Update documents on the version it shows: the version in force, while the server
+ * executes the account's wiki — drawn then, and pressable (`ready`) only while no build of it is queued, held or
+ * running (`busy`, the job's card says what it is doing). Null draws nothing: another version, or the runner's path,
+ * where a build is asked for by a confirmation alone (`plan.jobs.rebuild.when`).
+ */
+export function wikiPlanUpdateDocs(
+  state: Pick<WikiPlanState, 'job' | 'confirmed'>,
+  context: { inForce: boolean; serverExecutes: boolean },
+): 'ready' | 'busy' | null {
+  if (!context.inForce || !context.serverExecutes || !state.confirmed) return null;
+  return wikiPlanBuildJob(state) ? 'busy' : 'ready';
+}
+
 // ── Redraft… (mock 21 ⑧, 22 ⑧) ──────────────────────────────────────────────────────────────────
 
 export const WIKI_PLAN_REDRAFT_TITLE = 'Redraft the plan';

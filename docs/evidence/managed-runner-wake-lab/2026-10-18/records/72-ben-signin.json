@@ -1,0 +1,17 @@
+{
+  "created": false,
+  "owner": "ben",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "signIn": {
+    "at": "2026-10-18T01:49:21.025+00:00",
+    "ms": 56.6,
+    "status": 201
+  },
+  "user": {
+    "email": "t06-ben@lab.invalid",
+    "id": "34hlvKHnAEGtQdcF0HL0d"
+  }
+}

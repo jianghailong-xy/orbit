@@ -1,0 +1,7 @@
+limit: memory, in 07191c4093bd as 10001:10001 at 2026-10-17T13:24:42Z
+memory.max: 536870912, memory.swap.max: 0, memory.current: 82800640
+memory.events before: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0 
+the allocating process held 448 MiB at its last report, then was killed by SIGKILL
+memory.events after: low 0 high 0 max 169 oom 1 oom_kill 1 oom_group_kill 0 
+memory.peak: 536870912
+the runner is still there: 1 process(es) of orbit run

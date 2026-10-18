@@ -12,6 +12,7 @@ import {
   EditOutlined,
   ExclamationCircleFilled,
   EllipsisOutlined,
+  FileSyncOutlined,
   HolderOutlined,
   LockOutlined,
   PlusOutlined,
@@ -112,6 +113,9 @@ import {
   WIKI_PLAN_STATUS_LABELS,
   WIKI_PLAN_TITLE,
   WIKI_PLAN_OP_LABELS,
+  WIKI_PLAN_UPDATE_ALREADY,
+  WIKI_PLAN_UPDATE_DOCS,
+  WIKI_PLAN_UPDATE_FAILED,
   WIKI_PLAN_WHY,
   WIKI_PLAN_WRITTEN_FOR,
   wikiPlanAcceptConfirms,
@@ -171,6 +175,8 @@ import {
   wikiPlanSourceLines,
   wikiPlanSourcesSummary,
   wikiPlanTime,
+  wikiPlanUpdateAsked,
+  wikiPlanUpdateDocs,
   wikiPlanVersionLabel,
   wikiPlanVersionRows,
   WIKI_PLAN_WRITING_NOW,
@@ -185,6 +191,7 @@ import {
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   acceptWikiPlanProposal,
+  buildWikiPlan,
   confirmWikiPlan,
   decideWikiPlanProposal,
   editWikiPlan,
@@ -311,6 +318,9 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   });
   const confirm = useWikiWrite(({ version }: { version: number }) => confirmWikiPlan(spaceId, version));
   const draft = useWikiWrite(() => redraftWikiPlan(spaceId, null));
+  // The version in force's documents asked for again (contract `plan.jobs.rebuild`): while the server executes the wiki.
+  const update = useWikiWrite(({ version }: { version: number }) => buildWikiPlan(spaceId, version));
+  const updateDocs = wikiPlanUpdateDocs(plan, { inForce, serverExecutes: page.serverExecutes });
   const diff = comparing && shown && page.base ? wikiPlanDiff(shown, page.base) : null;
   const canEdit = !!shown && (shown.status === 'draft' || inForce) && wikiPlanNewest(plan)?.version === shown.version;
   const showsChanges = !!shown && shown.status !== 'superseded' && plan.proposals.length > 0;
@@ -331,6 +341,15 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
       message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);
     } catch (error) {
       message.error("Couldn't draft the plan", error instanceof Error ? error.message : undefined);
+    }
+  };
+  const onUpdate = async () => {
+    if (!shown) return;
+    try {
+      const answer = await update.mutateAsync({ version: shown.version });
+      message.success(answer.created ? wikiPlanUpdateAsked(shown.version) : WIKI_PLAN_UPDATE_ALREADY);
+    } catch (error) {
+      message.error(WIKI_PLAN_UPDATE_FAILED, error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -389,6 +408,11 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
             {shown.status !== 'superseded' && (
               <Button icon={<SyncOutlined />} onClick={() => setRedrafting(true)} disabled={!!open}>
                 {WIKI_PLAN_REDRAFT}
+              </Button>
+            )}
+            {updateDocs && (
+              <Button icon={<FileSyncOutlined />} onClick={onUpdate} disabled={updateDocs === 'busy' || update.isPending} loading={update.isPending}>
+                {WIKI_PLAN_UPDATE_DOCS}
               </Button>
             )}
             {moreItems.length > 0 && (

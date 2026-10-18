@@ -1,0 +1,28 @@
+{
+  "afterRestore": {
+    "answer": "pod/t02a-outage-unmanaged",
+    "exit": 0
+  },
+  "attempts": [
+    {
+      "admitted": false,
+      "answer": "Error from server (InternalError): error when creating \"STDIN\": Internal error occurred: failed calling webhook \"pods.managed-runner.orbit.dev\": failed to call webhook: an error on the server (\"unknown\") has prevented the request from succeeding",
+      "at": "2026-10-17T19:54:56.390+00:00",
+      "case": "unlabelled Pod on the claim, by the cluster admin, while the guard cannot answer",
+      "identity": "lab cluster-admin",
+      "labels": null,
+      "name": "t02a-second-outage",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "answer": "pod/t02a-outage-unmanaged",
+      "at": "2026-10-17T19:54:56.493+00:00",
+      "case": "a Pod on no managed claim (dry run), while the guard cannot answer",
+      "exit": 0
+    }
+  ],
+  "restoreStartedAt": "2026-10-17T19:54:56.590+00:00",
+  "restoredAt": "2026-10-17T19:54:56.716+00:00",
+  "stoppedAt": "2026-10-17T19:54:44.043+00:00",
+  "what": "PostgreSQL container orbit-mr-lab-pg stopped"
+}

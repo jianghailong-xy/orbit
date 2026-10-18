@@ -1,0 +1,14 @@
+{"at":"2026-10-18T05:54:19.824Z","kind":"api-write","method":"POST","path":"/api/auth/login","body":"(not logged)"}
+{"at":"2026-10-18T05:54:19.874Z","kind":"signed-in","url":"http://127.0.0.1:5873/"}
+{"at":"2026-10-18T05:54:19.917Z","kind":"seen","shot":"001-page.png","path":"/","notice":null,"composer":null,"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:54:20.660Z","kind":"seen","shot":"002-composer.png","path":"/sessions/34htasQH9ZMfYI7kB46z6","notice":null,"composer":{"placeholder":"This session is ending and cannot accept messages right now.","hero":false,"modelChip":"claude-opus-5Default","sendEnabled":null},"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:54:36.863Z","kind":"act","order":{"kind":"goto","arg":"/workspaces/34htasHVEnwCfDe1K58bE/new","at":"2026-10-18T05:54:36.407Z"},"result":{"url":"http://127.0.0.1:5873/workspaces/34htasHVEnwCfDe1K58bE/new"}}
+{"at":"2026-10-18T05:54:37.609Z","kind":"seen","shot":"003-composer-ready.png","path":"/workspaces/34htasHVEnwCfDe1K58bE/new","notice":null,"composer":{"placeholder":"Send this workspace a task…","hero":true,"modelChip":"claude-opus-5Default","sendEnabled":false},"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:54:41.158Z","kind":"act","order":{"kind":"shot","arg":"unset-selfhost-draft","at":"2026-10-18T05:54:41.034Z"},"result":{"shot":"004-unset-selfhost-draft.png"}}
+{"at":"2026-10-18T05:54:41.881Z","kind":"act","order":{"kind":"goto","arg":"/sessions/34htasQH9ZMfYI7kB46z6","at":"2026-10-18T05:54:41.360Z"},"result":{"url":"http://127.0.0.1:5873/sessions/34htasQH9ZMfYI7kB46z6"}}
+{"at":"2026-10-18T05:54:42.646Z","kind":"seen","shot":"005-composer.png","path":"/sessions/34htasQH9ZMfYI7kB46z6","notice":null,"composer":{"placeholder":"This session is ending and cannot accept messages right now.","hero":false,"modelChip":"claude-opus-5Default","sendEnabled":null},"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:54:46.202Z","kind":"act","order":{"kind":"shot","arg":"unset-session-deep-link","at":"2026-10-18T05:54:45.987Z"},"result":{"shot":"006-unset-session-deep-link.png"}}
+{"at":"2026-10-18T05:54:46.931Z","kind":"act","order":{"kind":"goto","arg":"/infrastructure","at":"2026-10-18T05:54:46.311Z"},"result":{"url":"http://127.0.0.1:5873/infrastructure"}}
+{"at":"2026-10-18T05:54:46.965Z","kind":"console-error","text":"Failed to load resource: the server responded with a status of 404 (Not Found)"}
+{"at":"2026-10-18T05:54:47.669Z","kind":"seen","shot":"007-page.png","path":"/infrastructure","notice":null,"composer":null,"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:54:52.643Z","kind":"act","order":{"kind":"shot","arg":"unset-infrastructure","at":"2026-10-18T05:54:52.240Z"},"result":{"shot":"008-unset-infrastructure.png"}}

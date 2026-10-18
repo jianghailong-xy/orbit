@@ -136,7 +136,7 @@ final class BackgroundJobsWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("let wakeNote: String? = queued == nil ? b.note : b.text"),
                       "a delivered wake is no longer read off the note the apiserver recorded")
         let branch = try section(row, from: "BackgroundWakeText.parse(wakeNote)",
-                                 to: "UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer)")
+                                 to: "UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)")
 
         XCTAssertTrue(branch.contains("attached: attachedRest(background)"),
                       "whatever the card did not take rides in the card, because nobody typed this "

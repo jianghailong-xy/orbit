@@ -1,0 +1,5 @@
+unit orbit-mr-lab: memory.current 3422 MiB, memory.peak 4035 MiB, swap 310 MiB, memory.max 6979321856
+host: MemAvailable 7085 MiB, SwapFree 33707 MiB
+02:34:03Z ACPI shutdown requested; waiting up to 600 s
+02:34:18Z orbit-mr-lab stopped after 15 s
+host: MemAvailable 10512 MiB

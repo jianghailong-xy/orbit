@@ -1,0 +1,128 @@
+== effective configuration 6-before-final at 2026-10-17T14:36:19Z, checkout f899e5fe6d5c851778b11f912d4510cd9314d707 (d6-on-d6)
+-- .env (mode 600, sha256 1a42b78d92016c749d68d8258c3af73689eae3a9a95fb60e2a8c9476c3ce68eb; secrets redacted)
+DATABASE_URL="postgresql://orbit:orbit@localhost:5432/orbit?schema=public"
+JWT_SECRET=<redacted>
+PROVIDER_SECRET_KEY=<redacted>
+PORT=3000
+PUBLIC_ORIGIN="http://localhost:2086"
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+COMPOSE_PROFILES=managed-runners-docker
+-- data/ (two levels)
+data
+data/managed-runners
+data/managed-runners/channel.json
+data/managed-runners/channel.sock
+data/managed-runners/profile.json
+data/managed-runners/state
+data/managed-runners/token
+data/pg-archive
+data/pg-archive/base
+data/pg-archive/wal
+data/postgres
+data/postgres/PG_VERSION
+data/postgres/base
+data/postgres/global
+data/postgres/pg_commit_ts
+data/postgres/pg_dynshmem
+data/postgres/pg_hba.conf
+data/postgres/pg_ident.conf
+data/postgres/pg_logical
+data/postgres/pg_multixact
+data/postgres/pg_notify
+data/postgres/pg_replslot
+data/postgres/pg_serial
+data/postgres/pg_snapshots
+data/postgres/pg_stat
+data/postgres/pg_stat_tmp
+data/postgres/pg_subtrans
+data/postgres/pg_tblspc
+data/postgres/pg_twophase
+data/postgres/pg_wal
+data/postgres/pg_xact
+data/postgres/postgresql.auto.conf
+data/postgres/postgresql.conf
+data/postgres/postmaster.opts
+data/postgres/postmaster.pid
+-- data/managed-runners
+total 24
+drwx------    3 root     root          4096 Oct 17 14:27 .
+drwx------    5 root     root          4096 Oct 17 13:55 ..
+-rw-------    1 root     root           655 Oct 17 14:27 channel.json
+srw-------    1 root     root             0 Oct 17 14:27 channel.sock
+-rw-------    1 root     root          1019 Oct 17 14:27 profile.json
+drwx------    5 root     root          4096 Oct 17 13:59 state
+-rw-------    1 root     root            65 Oct 17 13:43 token
+-- channel.json (sha256 b0e2de27098997bc1076057144ab6a85175fd9963b50fe879927d236e61e7fc2)
+{
+  "schemaVersion": 1,
+  "instanceId": "orbit-6742fb0e",
+  "listen": { "unixSocket": "/var/lib/orbit-managed-runners/channel.sock" },
+  "tokenFile": "/var/lib/orbit-managed-runners/token",
+  "dockerSocket": "/var/run/docker.sock",
+  "stateDir": "/var/lib/orbit-managed-runners/state",
+  "image": "sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394",
+  "network": "orbit-managed-runners",
+  "limits": {
+    "maxCpuMillis": 4000,
+    "maxMemoryBytes": 8589934592,
+    "maxPids": 4096,
+    "maxTmpBytes": 2147483648,
+    "maxVolumeBytes": 107374182400,
+    "maxConcurrent": 8
+  },
+  "stopGraceSeconds": 240,
+  "diskCheckSeconds": 120
+}
+-- profile.json (sha256 a9ceffa7aeb62ee1ebe97ba247e5be74e073b18c7837c52d99b964eebda60340)
+{
+  "schemaVersion": 1,
+  "valueKind": "actual",
+  "backend": "docker",
+  "environmentId": "orbit-6742fb0e",
+  "clusterKey": "orbit-6742fb0e",
+  "resourceProfileId": "docker-default",
+  "docker": {
+    "instanceId": "orbit-6742fb0e",
+    "channel": { "socketPath": "/var/lib/orbit-managed-runners/channel.sock" },
+    "tokenFile": "/var/lib/orbit-managed-runners/token"
+  },
+  "storage": { "capacity": "20Gi" },
+  "runner": {
+    "image": "sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394",
+    "serverUrl": "http://172.19.0.1:2086",
+    "maxConcurrent": 2,
+    "tmpSizeLimit": "1Gi",
+    "resources": { "cpu": "2", "memory": "4Gi", "pids": 4096 }
+  },
+  "lifecycle": {
+    "maxAttempts": 5,
+    "backoffBaseSeconds": 10,
+    "backoffMaxSeconds": 300,
+    "startupDeadlineSeconds": 1800,
+    "requestTimeoutSeconds": 60,
+    "leaseSeconds": 60,
+    "pollIntervalSeconds": 5,
+    "heartbeatFreshSeconds": 120,
+    "idleSeconds": 3600,
+    "capacityRetrySeconds": 60,
+    "drainSeconds": 600
+  }
+}
+-- apiserver: managed runner environment
+ORBIT_MANAGED_RUNNERS_PROFILE=/var/lib/orbit-managed-runners/profile.json
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+-- apiserver: container e4255ed4f6d9ac0ae10a3c3650d353228a5805c28860bc405243160b935af52b image sha256:620c1be96560b722f2911617a34fba018707b69371bf4be0ff1f423fa8a58a78 started 2026-10-17T14:27:40.76200942Z
+-- apiserver: what it said about managed runners
+[32m[Nest] 117  - [39m10/17/2026, 2:27:45 PM [32m    LOG[39m [38;5;3m[ManagedRunners] [39m[32mmanaged runners are enabled in orbit-6742fb0e (Docker instance orbit-6742fb0e)[39m
+-- docker-channel: container 1d5eee98d0b18dc986582d1e3006c2dc4521734da0dd7504f0f6acd8d681338d image sha256:7c90fcddc6f6908a5ab2e18bd5562d36d67d47b041353f696a0edbfc827371d3 started 2026-10-17T14:27:52.589610542Z
+-- docker-channel: what it serves
+2026-10-17T14:27:53Z orbit-docker-channel: instance orbit-6742fb0e serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394, network orbit-managed-runners
+-- docker compose ps
+orbit-apiserver	sha256:620c1be96560b722f2911617a34fba018707b69371bf4be0ff1f423fa8a58a78	Up 8 minutes (healthy)
+orbit-docker-channel	sha256:7c90fcddc6f6908a5ab2e18bd5562d36d67d47b041353f696a0edbfc827371d3	Up 8 minutes (healthy)
+orbit-gateway	nginx:alpine	Up 36 minutes (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 36 minutes
+orbit-postgres	postgres:16-alpine	Up 40 minutes (healthy)
+orbit-web	orbit-web	Up 3 minutes (healthy)
+orbit-wiki-worker	sha256:d401efa5ee2539364541de396b017bb9c62a6370dddc96f9fe8c2ee80b44c311	Up 36 minutes

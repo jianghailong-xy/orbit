@@ -1,0 +1,6 @@
+strip 2026-10-17T22:08:56.667Z
+pod/mr-01a14bdc-ead8-73ba-9322-286ff7b293dd patched
+force-delete 2026-10-17T22:08:56.706Z
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "mr-01a14bdc-ead8-73ba-9322-286ff7b293dd" force deleted from orbit-mr-test namespace
+gone? Error from server (NotFound): pods "mr-01a14bdc-ead8-73ba-9322-286ff7b293dd" not found 2026-10-17T22:08:56.784Z

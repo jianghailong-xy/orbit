@@ -1,0 +1,107 @@
+{
+  "a": "alice",
+  "aAfter": {
+    "generation": 5,
+    "management_state": "READY",
+    "pod_uid": "90d90b21-a39c-4f34-942c-4eae8468f283",
+    "pvc_uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f",
+    "revision": 73
+  },
+  "aBefore": {
+    "generation": 5,
+    "management_state": "READY",
+    "pod_uid": "90d90b21-a39c-4f34-942c-4eae8468f283",
+    "pvc_uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f",
+    "revision": 73
+  },
+  "aUnchanged": true,
+  "admission": [
+    {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+      "case": "B's fixed name and identity, A's volume",
+      "exit": 1
+    },
+    {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_OWNER: the Pod does not name the owner and runner of this volume",
+      "case": "A's fixed name and volume, B as the owner",
+      "exit": 1
+    }
+  ],
+  "answers": [
+    {
+      "case": "B reads its managed runner: its own, never A's",
+      "code": null,
+      "isA": false,
+      "message": null,
+      "route": "GET /api/managed-runner",
+      "runnerId": "34hhHGaIO4wyXGkYmA2OC",
+      "status": 200
+    },
+    {
+      "case": "B's retry at A's revision",
+      "code": "MANAGED_RUNNER_REVISION_CONFLICT",
+      "message": "The managed runner changed since it was read; read it again and decide again.",
+      "route": "POST /api/managed-runner/retry",
+      "status": 409
+    },
+    {
+      "case": "B's sleep at A's revision",
+      "code": "MANAGED_RUNNER_REVISION_CONFLICT",
+      "message": "The managed runner changed since it was read; read it again and decide again.",
+      "route": "POST /api/managed-runner/sleep",
+      "status": 409
+    },
+    {
+      "case": "B reads A's runner",
+      "code": null,
+      "message": "runner not found",
+      "route": "GET /api/runners/34hhHGaURmNogm0ktFTh5",
+      "status": 404
+    },
+    {
+      "case": "B rotates A's runner's token",
+      "code": null,
+      "message": "runner not found",
+      "route": "POST /api/runners/34hhHGaURmNogm0ktFTh5/rotate-token",
+      "status": 404
+    },
+    {
+      "case": "B deletes A's runner",
+      "code": null,
+      "message": "runner not found",
+      "route": "DELETE /api/runners/34hhHGaURmNogm0ktFTh5",
+      "status": 404
+    },
+    {
+      "case": "B reads A's default workspace",
+      "code": null,
+      "message": "workspace not found",
+      "route": "GET /api/workspaces/34hhHGamc57CWJMAWb0c8",
+      "status": 404
+    },
+    {
+      "case": "B deletes A's default workspace",
+      "code": null,
+      "message": "workspace not found",
+      "route": "DELETE /api/workspaces/34hhHGamc57CWJMAWb0c8",
+      "status": 404
+    },
+    {
+      "case": "B's runner credential naming A's instance",
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "message": "Pod 90d90b21-a39c-4f34-942c-4eae8468f283 is not the instance authorized for generation 5.",
+      "route": "GET /api/runner/me",
+      "status": 403
+    },
+    {
+      "case": "B's runner credential naming A's instance, claiming",
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "message": "Pod 90d90b21-a39c-4f34-942c-4eae8468f283 is not the instance authorized for generation 5.",
+      "route": "GET /api/runner/sessions/claim",
+      "status": 403
+    }
+  ],
+  "at": "2026-10-17T22:15:11.771+00:00",
+  "b": "bob",
+  "bCredentialSha256Prefix": "bffa239ef1d9"
+}

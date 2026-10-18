@@ -141,4 +141,34 @@ public enum SteerDelivery {
         return offersWithdraw(delivery: bubble.delivery,
                               withdrawable: bubble.pending || bubble.withdrawable)
     }
+
+    /// Whether this bubble offers "Put back in the composer": words the reader typed
+    /// (`ComposerLogic.restorableText`) that never reached the engine — `failed`, or drained unrun
+    /// when the run ended (`undelivered`) — or that only the server's receipt says did not land
+    /// (`receipt`, `unconfirmed` included). Not a message the conversation holds as `unconfirmed`: it
+    /// may have been acted on, and its words back in the box invite doing the work twice. Web
+    /// parity: `Transcript.tsx`'s `UserBubble` puts back `failed` alone, `QueuedTurnMeta` any receipt.
+    public static func offersPutBack(_ bubble: UserBubble) -> Bool {
+        (bubble.undelivered || bubble.receipt) && ComposerLogic.restorableText(of: bubble) != nil
+    }
+
+    /// Why a message did not land, in the sender's words rather than the protocol's: what stopped
+    /// reading it. The receipt's own reason stands in for a code these words do not cover. Web
+    /// parity: `steerDelivery.ts`'s `deliveryFailureExplanation`.
+    public static func failureExplanation(code: String?, reason: String?) -> String? {
+        switch code {
+        case "CURRENT_WORK_TARGET_COMPLETED":
+            return "The turn finished before it was read."
+        case "CURRENT_WORK_INTERRUPTED":
+            return "The turn was interrupted before it was read."
+        case "CURRENT_WORK_SESSION_ENDED", "CURRENT_WORK_SESSION_FINALIZED":
+            return "The session ended before it was read."
+        case "CURRENT_WORK_SESSION_REAPED":
+            return "The runner disappeared while it was being delivered."
+        case "CURRENT_WORK_RUNTIME_REJECTED":
+            return "The engine rejected it."
+        default:
+            return reason
+        }
+    }
 }

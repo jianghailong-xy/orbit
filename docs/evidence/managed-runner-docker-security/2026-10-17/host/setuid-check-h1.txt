@@ -1,0 +1,13 @@
+as: uid=10001(orbit) gid=10001(orbit) groups=10001(orbit); NoNewPrivs: 1
+--- /usr/bin/mount (setuid root) -t tmpfs none /mnt
+mount: /mnt: must be superuser to use mount.
+       dmesg(1) may have more information after failed mount system call.
+exit=32
+--- /usr/bin/su -c id root (setuid root; no password given)
+Password: su: Authentication failure
+
+exit=1
+--- /usr/bin/newgrp root (setuid root)
+newgrp: getline() failed: Inappropriate ioctl for device
+Password: 
+exit=1

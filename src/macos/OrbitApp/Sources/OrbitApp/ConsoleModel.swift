@@ -1817,7 +1817,9 @@ final class ConsoleModel {
     /// Work for a managed runner that is not up asks it to wake: read its state now rather than at
     /// the next poll, so the console says it is waking.
     private func managedWorkSent() {
-        guard managed != nil, runnerOnline != true, let managedRunner else { return }
+        // Up is the managed status's own READY: a runner that has just gone to sleep still reads
+        // online until its last heartbeat goes stale, while its status already says it sleeps.
+        guard let managed, managed.display.kind != .available, let managedRunner else { return }
         Task { await managedRunner.load() }
     }
 
@@ -3578,6 +3580,30 @@ final class ConsoleModel {
                 onToast(ToastRequest(message: "Couldn't withdraw the message",
                                      detail: APIClient.failureReason(error), tone: .error))
             }
+        }
+    }
+
+    /// "Put back in the composer" (web parity: `restoreUndelivered`, and `takeBackUndelivered` for a
+    /// receipt): the words of a message that never reached the engine, back in the box under any
+    /// draft as a withdrawal hands them back — an explicit press, so a draft keeps its place above
+    /// them. Nothing is sent. The conversation's own bubble stays, the record of what happened; a
+    /// row at the tail goes, and one the server still lists — a delivery's receipt — is discarded
+    /// there too, or the next listing would bring it back. Attachments aren't rehydrated (the
+    /// composer needs their bytes), as with Cancel. Offered where `SteerDelivery.offersPutBack` says.
+    func putBack(_ bubble: UserBubble) async {
+        guard let words = ComposerLogic.restorableText(of: bubble) else { return }
+        let body = bubble.shell ? "!" + words : words
+        composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? body : composerText + "\n\n" + body
+        guard reducer.state.queued.contains(where: { $0.id == bubble.id }) else { return }
+        reducer.removeQueued(id: bubble.id)
+        publishStateNow()
+        guard bubble.delivery != nil, let turnId = bubble.turnId else { return }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+        } catch {
+            onToast(ToastRequest(message: "Couldn't discard the message",
+                                 detail: APIClient.failureReason(error), tone: .error))
         }
     }
 

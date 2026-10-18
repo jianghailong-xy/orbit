@@ -270,6 +270,8 @@ test('the owner channel refuses a personal access token door by door and field b
     { route: 'POST /wiki/spaces/:id/plan/edits', path: `/wiki/spaces/${spaceId}/plan/edits`, body: {}, login: 422 },
     { route: 'POST /wiki/spaces/:id/plan/versions/:version/confirm', path: `/wiki/spaces/${spaceId}/plan/versions/1/confirm`, body: {}, login: 404 },
     { route: 'POST /wiki/spaces/:id/plan/redraft', path: `/wiki/spaces/${spaceId}/plan/redraft`, body: {}, login: 200 },
+    // The server executes no account here (ORBIT_WIKI_EXECUTOR unset): the door answers a login WIKI_RUNNER_EXECUTES.
+    { route: 'POST /wiki/spaces/:id/plan/versions/:version/build', path: `/wiki/spaces/${spaceId}/plan/versions/1/build`, body: {}, login: 409 },
     { route: 'POST /wiki/plan-proposals/:id/decide', path: `/wiki/plan-proposals/${nobody()}/decide`, body: { action: 'reject' }, login: 404 },
   ];
 

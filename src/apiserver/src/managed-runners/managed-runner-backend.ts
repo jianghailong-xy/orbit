@@ -11,9 +11,10 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *
  *   kubernetes   KubernetesBackend (kubernetes-backend.ts): a Ceph RBD filesystem PVC, the bootstrap
  *                Secret of each generation, and one bare Pod under a fixed name.
- *   docker       named, not implemented: one host's local volume and container (task D2). A profile
- *                that chooses it leaves the feature unavailable (managed-runner-profile.ts); nothing
- *                is run on Kubernetes in its place.
+ *   docker       DockerBackend (docker-backend.ts): one host's local named volume, the credential of
+ *                each generation and one container under a fixed name, all through the restricted
+ *                Docker channel (deploy/managed-runner/docker-channel); the apiserver never holds the
+ *                Docker socket.
  *
  * A backend observes and acts; it decides nothing and writes no database row. The manager reads an
  * observation, decides, records what it is about to do on the mapping (a pending resource operation),
@@ -38,21 +39,27 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *     gives it a UID it never reuses (Kubernetes: the Pod UID, which the runner reads through the
  *     Downward API). The manager records that UID, and the runner door authorizes only the recorded
  *     generation and UID (managed-runner-instance.ts), so it has to be a canonical UUID.
- *   - Stopping. No method stops a running instance. An instance stops by itself — it accepted a
- *     sleep request in its heartbeat, or its owner's account was disabled and the runner door
- *     refuses it — and nothing is forced (docs/managed-runner-design.md, "Implementation record:
- *     capacity, wake and sleep"). The backend reports that stop: `ManagedInstance.terminated`, and
- *     `stopConfirmed` when the host itself vouches every process ended, which is half a stop proof.
+ *   - Stopping. An instance stops by itself — it accepted a sleep request in its heartbeat, or its
+ *     owner's account was disabled and the runner door refuses it (docs/managed-runner-design.md,
+ *     "Implementation record: capacity, wake and sleep"). The backend reports that stop:
+ *     `ManagedInstance.terminated`, and `stopConfirmed` when the host itself vouches every process
+ *     ended, which is half a stop proof; `exit` says how it ended (exit code, out of memory), for
+ *     the log and the owner's reason. Only a backend whose host reports every stop it makes may
+ *     also stop an instance (`stopInstance`, Docker), and the manager asks it only for a drain that
+ *     overran its drain time. A stop asked for is never a proof: the same report and removal are
+ *     waited for. Kubernetes has no such call — a deleted Pod on an unreachable node proves nothing.
  *   - Removal by UID. An instance or a credential is removed only by the UID it was observed with,
  *     so a successor under the same name is never removed; and an instance only once its stop is
  *     proven (the manager's gate).
  *   - Release. A volume is released when nothing holds it any more (`volumeHolders` is empty —
  *     Kubernetes: no VolumeAttachment names its PV). The gate needs that before the next generation
- *     starts or compute goes back to the pool.
+ *     starts or compute goes back to the pool, and no instance is created on a volume something
+ *     still holds: a host that refuses an instance for that is answered with ManagedVolumeHeld.
  *   - Capacity. The backend names its pool (`location`, which is also where a new mapping's volume
  *     lives) and where its budget comes from (`capacityBudget`): configuration, never usage the
  *     infrastructure reports. A runner's share (`computeShare`, `storageShare`) is what one instance
- *     and one volume reserve.
+ *     and one volume reserve. A host that caps its instances says so in that budget, and answers an
+ *     instance past the cap with ManagedInstanceLimit.
  *
  * An observation goes back only to the backend that made it, which may read its own fields of it.
  */
@@ -127,8 +134,13 @@ export interface ManagedInstance {
   /** Terminated, and the host itself reported every process of it ended (Kubernetes: the kubelet's
    *  terminal container states, with no sign the control plane declared it on the node's behalf). */
   readonly stopConfirmed: boolean;
-  /** Its removal was asked and it is not gone yet. */
+  /** Its removal was asked and is under way: it goes without the manager doing more. (A Kubernetes
+   *  Pod that has ended and that the manager's stop-report finalizer holds is not being removed: it
+   *  waits for `removeInstance`.) */
   readonly removing: boolean;
+  /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
+   *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
+  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */
@@ -140,10 +152,19 @@ export interface ManagedFencingReceipt {
 
 /** What a failed backend call means for the manager. */
 export type ManagedRunnerBackendFailure =
-  /** Worth another attempt later, once whatever it may have done has been read back. */
-  | { readonly retryable: true }
-  /** A definite refusal: the mapping fails with `code` (a reason the manager's table words). */
-  | { readonly retryable: false; readonly code: string; readonly detail: string; readonly log: string };
+  /**
+   * Worth another attempt later, once whatever it may have done has been read back. `unreachable`:
+   * no request reached the infrastructure at all — the connection could not be made (Kubernetes: no
+   * TLS session with the API server; Docker: no connection to the channel) — so nothing was tried.
+   */
+  | { readonly retryable: true; readonly unreachable?: true }
+  /**
+   * A definite refusal: the mapping fails with `code` (a reason the manager's table words). With
+   * `waitForRoom`, a cap on what the environment may hold refused a create and nothing was made
+   * (Kubernetes: a namespace ResourceQuota): not a failure — the manager waits for room, as it does at
+   * the Docker channel's cap on containers (ManagedInstanceLimit).
+   */
+  | { readonly retryable: false; readonly code: string; readonly detail: string; readonly log: string; readonly waitForRoom?: true };
 
 /**
  * What the infrastructure holds is not what the mapping recorded, or is not safe to use: an operator
@@ -159,6 +180,32 @@ export class ManagedRunnerConflict extends Error {
   }
 }
 
+/**
+ * The host refused an instance because something else still refers to its volume (Docker: another
+ * container, such as a backup's helper). Not a failure: the manager waits until the volume is free,
+ * as it waits for a predecessor's volume to be released, and creates the instance then.
+ */
+export class ManagedVolumeHeld extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ManagedVolumeHeld';
+  }
+}
+
+/**
+ * The host refused an instance because it makes no more until one of its others is removed (Docker:
+ * the channel's `limits.maxContainers`, which counts every container of the instance in any state),
+ * and made none. Not a failure: the budget keeps the pool below that cap, so only a container the
+ * pool does not count or a cap lowered under running runners gets here, and the manager waits for
+ * room as it waits for a held volume.
+ */
+export class ManagedInstanceLimit extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ManagedInstanceLimit';
+  }
+}
+
 export interface ManagedRunnerBackend {
   readonly name: ManagedRunnerBackendName;
   readonly terms: ManagedRunnerBackendTerms;
@@ -169,8 +216,8 @@ export interface ManagedRunnerBackend {
   names(runnerId: string): { volume: string; instance: string; credential: string };
 
   // ── capacity ──
-  /** The pool's totals, from configuration. */
-  capacityBudget(): CapacityBudget;
+  /** The pool's totals: from configuration, or (Docker) derived from the host where it does not say. */
+  capacityBudget(): CapacityBudget | Promise<CapacityBudget>;
   /** What one running instance reserves from the pool. */
   computeShare(): ComputeAmounts;
   /** What one data volume reserves from the pool, for as long as it exists. */
@@ -212,6 +259,12 @@ export interface ManagedRunnerBackend {
   instanceProblem(instance: ManagedInstance, mapping: ManagedRunner): string | null;
   /** Remove the recorded instance (`mapping.podUid`), by that UID. Called only once its stop is proven. */
   removeInstance(mapping: ManagedRunner): Promise<void>;
+  /**
+   * Ask the recorded instance (`mapping.podUid`) to stop: its runner is signalled, given its grace and
+   * then killed. Only for a backend whose host reports every stop it makes (Docker); absent for one
+   * that cannot vouch for a stop it asked for (Kubernetes). Never a proof: `stopConfirmed` is.
+   */
+  stopInstance?(mapping: ManagedRunner): Promise<void>;
 
   // ── stop proof ──
   /** The recorded proof of an instance's own stop. The caller has checked `stopConfirmed`. */

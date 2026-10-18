@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-17T23:42:06.660+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:41:25.816+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "PROVISIONING",
+        "pod": null,
+        "reason": null,
+        "revision": 4,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:41:26.865+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "STARTING",
+        "pod": "db8ad210",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:42:03.517+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:42:02.568",
+        "management_state": "STARTING",
+        "pod": "db8ad210",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:42:06.660+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:42:02.568",
+        "management_state": "STARTING",
+        "pod": "db8ad210",
+        "reason": "MODEL_UNAVAILABLE",
+        "revision": 12,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "ivy",
+  "reached": {
+    "reason": "MODEL_UNAVAILABLE",
+    "state": "STARTING"
+  }
+}
