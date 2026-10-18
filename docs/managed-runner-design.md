@@ -770,6 +770,20 @@ LimitRange, and the pool's headroom against the test pool's actual safe usable c
 budget values the test owner supplies; drain timing with real long landings; and managers on several
 replicas sharing one pool.
 
+Verified in the single-machine lab by T06 on 2026-10-18 ([evidence](evidence/managed-runner-wake-lab/2026-10-18/README.md),
+[the lab page](managed-runner-lab.md#wake-sleep-and-capacity-t06)), with two replicas sharing a pool budgeted for one runner and
+fake-model.py as the model: 22 real scales to zero (the runner's exit 0 and the kubelet's report, the Pod removed, the detach; 35–41 s from
+the drain request to SLEEPING) and the starts after them on the same PVC and runner row; wakes by a message, a task's Run Now, a held
+wakeup and a task's run time; no sleep through a long turn or a runner-hosted background job; eight demands making one start; a drain
+called off by a message; a crash while starting restarted by itself and a quota refusal retried by the owner; capacity waits for a new
+account and for a wake; disabled accounts; and the switch unset and `false` with all of this pending. Real capacity exhaustion at the
+scheduler or a LimitRange and a long landing during a drain were not reached.
+
+One finding was fixed there. A woken instance claims at once, while its first heartbeat waits for its 30-second ticker, so the runner
+row's `lastHeartbeatAt` was still from before the sleep and the reaper finalized the instance's first run as `runner offline` within a
+second of its claim. The reaper now takes the run's claim (`run_claimed_at`) inside its 90-second window as presence, in its sweep and in
+the finalizing write's WHERE (`reaper.service.ts`, `reaper-claim-presence.spec.ts`).
+
 The local evidence is `managed-runner-capacity.pg.spec.ts`, `managed-runner-sleep.pg.spec.ts`,
 `managed-runner-wake.pg.spec.ts` and `managed-runner-existing.pg.spec.ts`, each run with
 `scripts/run-pg-spec.sh <spec>`; the profile and status specs in the unit suite; and
@@ -809,6 +823,13 @@ worker's poll interval bounds it); a re-enabled account's wake on a real cluster
 PVC; and a disabled account's Pod that never started (Pending: unschedulable or image pull), which
 nothing stops — it stays DRAINING with its compute reserved until an operator acts, as a Pod that hit
 `STARTUP_TIMEOUT` stays FAILED.
+
+Verified in the lab by T06 on 2026-10-18 ([evidence](evidence/managed-runner-wake-lab/2026-10-18/README.md), section 8): a mapping waiting
+for capacity went to sleep 1.7 s after its owner was disabled, nothing having been made; a running instance (twice, once still STARTING)
+went DRAINING 1.8 and 3.2 s after the disable, exited on its own with its claims refused, and slept 37–39 s after it with its PVC kept;
+a held wakeup and a task's run time that came due while disabled were recorded and woke nothing, with no connection to the cluster; and
+enabled again, the waiting work had the runner's next Pod 4.4 s later, on the same PVC, PV and runner row, and was answered 28 s after. Not reached
+there: a runner whose session slots were all busy, and a disabled account's Pod that never started.
 
 The local evidence is `managed-runner-account-disabled.pg.spec.ts`, case (8) of
 `managed-runner-wake.pg.spec.ts` and the disabled accounts seeded in

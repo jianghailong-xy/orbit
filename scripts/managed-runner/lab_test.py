@@ -192,5 +192,94 @@ class ApiGateTest(unittest.TestCase):
             self.assertEqual([entry["end"] for entry in log][2:4], ["answer lost", "answer lost"])
 
 
+class FakeModelTest(unittest.TestCase):
+    """lab/fake-model.py (T03, T06) on a loopback port: its triggers, in the request shape Claude Code 2.1.300 sends,
+    whose every request ends with a `system` message."""
+
+    SYSTEM = {"role": "system", "content": [{"type": "text", "text": "a reminder"}]}
+
+    def setUp(self):
+        import socket
+        import subprocess
+        import sys
+        import time
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            self.port = probe.getsockname()[1]
+        self.log = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False).name
+        self.server = subprocess.Popen([sys.executable, "-I", str(LAB / "fake-model.py"), str(self.port), self.log])
+        for _ in range(100):
+            try:
+                with socket.create_connection(("127.0.0.1", self.port), timeout=0.2):
+                    break
+            except OSError:
+                time.sleep(0.05)
+
+    def tearDown(self):
+        self.server.terminate()
+        self.server.wait(10)
+        Path(self.log).unlink()
+
+    def ask(self, messages, stream=True):
+        import urllib.request
+        body = {"model": "m", "stream": stream, "messages": messages + [self.SYSTEM],
+                "tools": [{"name": "mcp__orbit__bg_run"}, {"name": "mcp__orbit__schedule_wakeup"}]}
+        request = urllib.request.Request(f"http://127.0.0.1:{self.port}/anthropic/v1/messages?beta=true",
+                                         data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        text = urllib.request.urlopen(request, timeout=10).read().decode()
+        if not stream:
+            return json.loads(text)["content"]
+        blocks, partial = [], {}
+        for line in text.splitlines():
+            if not line.startswith("data: "):
+                continue
+            event = json.loads(line[6:])
+            if event["type"] == "content_block_start":
+                blocks.append(dict(event["content_block"]))
+            elif event["type"] == "content_block_delta" and event["delta"]["type"] == "input_json_delta":
+                partial[len(blocks) - 1] = partial.get(len(blocks) - 1, "") + event["delta"]["partial_json"]
+            elif event["type"] == "content_block_delta":
+                blocks[-1]["text"] = blocks[-1].get("text", "") + event["delta"]["text"]
+        for index, raw in partial.items():
+            blocks[index]["input"] = json.loads(raw)
+        return blocks
+
+    @staticmethod
+    def user(text):
+        return {"role": "user", "content": [{"type": "text", "text": text}]}
+
+    def test_a_background_job_is_one_bg_run_call_and_its_result_is_answered(self):
+        first = self.user("T06-X FAKE-BG 7 start a job")
+        [call] = self.ask([first])
+        self.assertEqual((call["type"], call["name"]), ("tool_use", "mcp__orbit__bg_run"))
+        self.assertEqual(call["input"], {"command": "sleep 7", "kind": "job", "wakeOnExit": True})
+        called = {"role": "assistant", "content": [{"type": "tool_use", "id": call["id"], "name": call["name"], "input": call["input"]}]}
+        result = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": call["id"],
+                                               "content": [{"type": "text", "text": "Started job bgj_1"}]}]}
+        [answer] = self.ask([first, called, result])
+        self.assertEqual(answer["type"], "text")
+        self.assertIn("tool result received: Started job bgj_1", answer["text"])
+        # The trigger again in the same conversation (a later turn): no second job.
+        [again] = self.ask([first, called, result, {"role": "assistant", "content": [answer]}, first])
+        self.assertEqual(again["type"], "text")
+        self.assertIn("Answering: T06-X", again["text"])
+
+    def test_a_wakeup_is_a_schedule_wakeup_call_with_its_own_marker(self):
+        [call] = self.ask([self.user("FAKE-WAKEUP 240 amy1 later")], stream=False)
+        self.assertEqual(call["name"], "mcp__orbit__schedule_wakeup")
+        self.assertEqual(call["input"]["delaySeconds"], 240)
+        self.assertTrue(call["input"]["prompt"].startswith("T06-WOKE-AMY1: "))
+
+    def test_an_overloaded_provider_fails_the_first_n_requests_then_answers(self):
+        message = [self.user("T06-RT FAKE-APIERR 2 rt1 a question")]
+        texts = [self.ask(message)[0]["text"] for _ in range(3)]
+        for text in texts[:2]:
+            # What the control plane reads as a retryable failure (@orbit/shared isRetryableApiErrorText).
+            self.assertRegex(text, r"^API Error: 529 \{")
+        self.assertIn("Answering: T06-RT", texts[2])
+        kinds = [json.loads(line)["kind"] for line in Path(self.log).read_text().splitlines()]
+        self.assertEqual(kinds, ["api_error", "api_error", "text"])
+
+
 if __name__ == "__main__":
     unittest.main()
