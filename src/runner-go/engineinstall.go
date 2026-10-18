@@ -66,9 +66,13 @@ type installRelay struct {
 }
 
 // start runs the install for `engine` and reports progress through `report`, which is called off
-// the heartbeat goroutine (the installer takes minutes). `after` runs once the outcome is
-// reported, so the caller can re-probe what actually ended up on disk.
-func (r *installRelay) start(engine string, report func(InstallResultRequest), after func()) {
+// the heartbeat goroutine (the installer takes minutes). Once the installer is done, `health`
+// re-reads the engine from what actually ended up on disk, the outcome is reported, and `beat` sends
+// the heartbeat that carries what it found, at once. In that order because the control plane retires
+// a finished install as soon as a heartbeat says the engine is installed, and a Reinstall's engine was
+// installed before it started: a beat still carrying the probe from before the install would retire it
+// on the old state, and one up to half a minute away would leave the row on it until then.
+func (r *installRelay) start(engine string, report func(InstallResultRequest), health *engineHealthProbe, beat func()) {
 	spec, ok := specFor(engine)
 	if !ok {
 		report(InstallResultRequest{Status: installFailed, Message: "unknown engine: " + engine})
@@ -89,14 +93,18 @@ func (r *installRelay) start(engine string, report func(InstallResultRequest), a
 			r.mu.Lock()
 			r.running = false
 			r.mu.Unlock()
-			if after != nil {
-				after()
+			if beat != nil {
+				beat()
 			}
 		}()
 		// Publish what is about to run before running it: the install takes minutes, and the row
 		// showing the exact command is what makes the wait (and any failure) legible.
 		report(InstallResultRequest{Status: installInstalling, Command: spec.installCmd})
-		report(installEngineNow(spec))
+		res := installEngineNow(spec)
+		if health != nil {
+			health.refreshEngine(spec.bin)
+		}
+		report(res)
 	}()
 }
 
@@ -218,10 +226,11 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		}
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
 	}
+	// The pinned build, put in place of another build in its directory too: a person asked.
 	if spec.bin == providerCursor {
 		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
 		defer cancel()
-		if err := installCursor(ctx, proxyVars); err != nil {
+		if err := reinstallCursor(ctx, proxyVars); err != nil {
 			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: err.Error()}
 		}
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}

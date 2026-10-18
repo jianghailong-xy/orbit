@@ -47,8 +47,7 @@ export function isKimiRegion(value: unknown): value is KimiRegion {
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
-  // Cursor CLI is signed in through the relay, but its install is not relayed yet.
-  return (isLoginEngine(value) && value !== 'cursor') || value === 'dsh' || value === 'opencode';
+  return isLoginEngine(value) || value === 'dsh' || value === 'opencode';
 }
 
 /**
