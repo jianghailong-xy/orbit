@@ -68,6 +68,11 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// ones included (the Infrastructure page's API keys); the catalogue lists enabled keys alone, and
     /// nil reads as on.
     public var enabled: Bool? = nil
+    /// A Cursor key only: what Cursor CLI on one of the owner's runners last answered when asked with the
+    /// key it holds now (`agent models`): `VALID`, `INVALID` or `UNREACHABLE` (shared
+    /// `CursorKeyCheckState`) — and when. Both nil until a runner has checked it, and on every other key.
+    public var keyCheckState: String? = nil
+    public var keyCheckedAt: String? = nil
     public var id: String { slug }
 
     private enum CodingKeys: String, CodingKey {
@@ -76,6 +81,7 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         case engines
         case baseUrl, hasApiKey
         case enabled
+        case keyCheckState, keyCheckedAt
     }
 
     public init(slug: String, label: String, runtime: String? = nil,
@@ -97,5 +103,29 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.hasApiKey = hasApiKey
         self.enabled = enabled
         self.engines = engines
+    }
+}
+
+/// The answer to Check Again on a saved Cursor key (POST /providers/mine/:id/key-check, shared
+/// `CursorKeyRecheckAnswer`): what this check came to, in a sentence a client may show as it stands,
+/// and the key's last check as it stands after it.
+public struct CursorKeyRecheckAnswer: Codable, Equatable, Sendable {
+    public let ok: Bool
+    /// VALID, INVALID, UNREACHABLE — or NO_RUNNER: no runner of the owner's could ask.
+    public let keyCheck: String
+    public let message: String
+    /// Whether this check's answer was kept on the key: never for NO_RUNNER.
+    public let recorded: Bool
+    public let keyCheckState: String?
+    public let keyCheckedAt: String?
+
+    public init(ok: Bool, keyCheck: String, message: String, recorded: Bool, keyCheckState: String?,
+                keyCheckedAt: String?) {
+        self.ok = ok
+        self.keyCheck = keyCheck
+        self.message = message
+        self.recorded = recorded
+        self.keyCheckState = keyCheckState
+        self.keyCheckedAt = keyCheckedAt
     }
 }

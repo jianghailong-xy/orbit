@@ -154,19 +154,36 @@ public enum RunnerPageFormat {
     // MARK: Engines
 
     /// The engines a runner reports on, in the order its page lists them — runnerEngines.ts
-    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported, but not one
-    /// these apps don't draw yet (`ProviderEngines.appleShowsEngine`). A runner predating Antigravity
-    /// keeps its row too, so the page can explain that it needs an update.
+    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported; Cursor CLI last,
+    /// after DeepSeek Harness (board iOS 2 ②), once a runner of the account knows it
+    /// (`ProviderEngines.appleShowsEngine`, `fleet` — this runner alone without one). A runner predating
+    /// Antigravity, or Cursor CLI, keeps its row too, so the page can explain that it needs an update.
     public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"]
 
-    public static func engines(_ runner: Runner) -> [RunnerEngineHealth] {
+    public static func engines(_ runner: Runner, fleet: [Runner]? = nil) -> [RunnerEngineHealth] {
         var reported = runner.engines ?? []
         if !reported.contains(where: { $0.engine == "antigravity" }) {
             reported.append(RunnerEngineHealth(engine: "antigravity", installed: runner.antigravity?.installed,
                                                version: runner.antigravity?.version))
         }
         let known = engineOrder.compactMap { engine in reported.first { $0.engine == engine } }
-        return known + reported.filter { !engineOrder.contains($0.engine) && ProviderEngines.appleShowsEngine($0.engine) }
+        let others = reported.filter { !engineOrder.contains($0.engine) && $0.engine != CursorRuntime.engine }
+        guard showsCursor(runner, fleet: fleet) else { return known + others }
+        return known + others + [reported.first { $0.engine == CursorRuntime.engine }
+            ?? RunnerEngineHealth(engine: CursorRuntime.engine)]
+    }
+
+    /// Whether a machine's page draws Cursor CLI: once a runner of the account knows it — this one alone
+    /// where no list of the account's runners is in view.
+    public static func showsCursor(_ runner: Runner, fleet: [Runner]? = nil) -> Bool {
+        ProviderEngines.appleShowsEngine(CursorRuntime.engine, runners: fleet ?? [runner])
+    }
+
+    /// The Engines section's footer: Cursor CLI's half sentence beside the others' where its row is drawn
+    /// (board iOS 2 ②) — its version is the one Orbit pins, not the latest every 30 minutes.
+    public static func enginesFooter(_ runner: Runner, fleet: [Runner]? = nil, offline: Bool) -> String {
+        if offline { return RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER }
+        return showsCursor(runner, fleet: fleet) ? CursorRuntime.machineEnginesFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER
     }
 
     /// The CLI's own product name, as every list of engines says it (shared `ENGINE_CLI_NAMES`, web's
@@ -184,6 +201,7 @@ public enum RunnerPageFormat {
     /// directory of its own, a Kimi Code account a KIMI_CODE_HOME of its own.
     public static func keepsAccounts(_ engine: String) -> Bool {
         engine == "claude" || engine == "codex" || engine == "antigravity" || engine == "kimi"
+            || engine == CursorRuntime.engine
     }
 
     /// Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web `runsOnEnvKey`):
@@ -253,6 +271,11 @@ public enum RunnerPageFormat {
             guard let label = state.label else { return Status(text: "Uses API keys", tone: .muted) }
             return Status(text: label, tone: state == .notInstalled ? .muted : .warn)
         }
+        // A runner that predates Cursor CLI, a platform its pinned build doesn't run on, or a build other
+        // than the pinned one: the row's whole story, which nothing signed in changes (web parity).
+        if health.engine == CursorRuntime.engine, let runner, let label = CursorRuntime.state(of: runner).blocksLabel {
+            return Status(text: label, tone: .warn)
+        }
         if health.engine == "antigravity", let runner, health.installed != false, health.auth != "yes" {
             switch runner.antigravity?.googleLogin {
             case .unsupportedPlatform: return Status(text: "Not supported yet", tone: .muted)
@@ -300,16 +323,24 @@ public enum RunnerPageFormat {
         }
     }
 
-    /// Why the engine page cannot sign `engine` in on this runner, where a sentence says it: only
-    /// Antigravity, whose Google sign-in an older runner or a macOS one doesn't offer.
+    /// Why the engine page cannot sign `engine` in on this runner, where a sentence says it: Antigravity,
+    /// whose Google sign-in an older runner or a macOS one doesn't offer — and Cursor CLI on a runner that
+    /// can't run it at all, which says what fixes that (`CursorRuntime.stateHint`).
     public static func signInHint(_ runner: Runner, engine: String) -> String? {
-        engine == "antigravity" ? EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) : nil
+        if engine == CursorRuntime.engine {
+            let state = CursorRuntime.state(of: runner)
+            guard state.blocks else { return nil }
+            return CursorRuntime.stateHint(state, installationError: CursorRuntime.health(runner.engines)?.installationError)
+        }
+        return engine == "antigravity" ? EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) : nil
     }
 
     /// Whether the engine page signs an account of `engine` in on this runner: every engine Orbit
-    /// signs in, and Antigravity's Google sign-in only where the runner offers it.
+    /// signs in, Antigravity's Google sign-in only where the runner offers it, and Cursor CLI only where
+    /// the runner can run it.
     public static func canSignIn(_ runner: Runner, engine: String) -> Bool {
-        engine != "antigravity" || antigravityCanSignIn(runner)
+        if engine == CursorRuntime.engine { return !CursorRuntime.state(of: runner).blocks }
+        return engine != "antigravity" || antigravityCanSignIn(runner)
     }
 
     /// Whether the engine page offers Add Account: an engine that keeps accounts — for Antigravity, on
@@ -325,16 +356,23 @@ public enum RunnerPageFormat {
                 && runner.capabilities?.contains(CodexAccounts.antigravityAccountLoginCapability) == true
         case "kimi":
             return runner.capabilities?.contains(CodexAccounts.kimiAccountLoginCapability) == true
+        case CursorRuntime.engine:
+            // A runner that keeps Cursor CLI accounts apart (D4 A, Linux today); any other keeps Default
+            // alone (contract §16.2).
+            return runner.capabilities?.contains(CursorRuntime.accountLoginCapability) == true
+                && !CursorRuntime.state(of: runner).blocks
         default:
             return true
         }
     }
 
     /// The engine page's name for its section of logins: Accounts where the engine keeps several on
-    /// this runner, Sign-In where it has the one — as Kimi does on a runner that cannot add a second
-    /// (`canAddAccount`), whose page reads as it always has.
+    /// this runner, Sign-In where it has the one — as Kimi and Cursor CLI do on a runner that cannot add
+    /// a second (`canAddAccount`), whose page reads as it always has.
     public static func accountsTitle(_ runner: Runner, engine: String) -> String {
-        keepsAccounts(engine) && (engine != "kimi" || canAddAccount(runner, engine: engine)) ? "Accounts" : "Sign-In"
+        let addedOnlyByCapability = engine == "kimi" || engine == CursorRuntime.engine
+        return keepsAccounts(engine) && (!addedOnlyByCapability || canAddAccount(runner, engine: engine))
+            ? "Accounts" : "Sign-In"
     }
 
     public static func antigravityCanSignIn(_ runner: Runner) -> Bool {
@@ -461,7 +499,7 @@ public enum RunnerPageFormat {
         /// is on, which is each account's own (`kimi.com · ~/.orbit/kimi-accounts/5c2e91a0`) — and, for
         /// a Default renamed in Orbit, that it is still the machine's own login (web's DEFAULT mark).
         public var subtitle: String? {
-            let line = [site, home, isDefault && name != "Default" ? "Default" : nil]
+            let line = [site, plan.map { "\($0) plan" }, home, isDefault && name != "Default" ? "Default" : nil]
                 .compactMap { $0 }.joined(separator: " · ")
             return line.isEmpty ? nil : line
         }
@@ -474,13 +512,20 @@ public enum RunnerPageFormat {
         /// Kimi only: the site its login is on, `kimi.com` or `kimi.ai` (`KimiSite`) — the account's own,
         /// Default's being the engine's.
         public var site: String? = nil
+        /// Cursor CLI only: the plan the account is on, as Cursor names it (`Free`, `Pro`), said before its
+        /// directory (board iOS 2 ③, web's `Free plan · ~/.orbit/cursor/default`).
+        public var plan: String? = nil
     }
 
     /// Every account an engine is signed into on that runner, Default first. One line for the
     /// runner's own login when it keeps no others — whose answer is the engine's, unless that is a
-    /// Gemini key's rather than Default's Google sign-in (`runsOnEnvKey`).
-    public static func accountLines(_ health: RunnerEngineHealth) -> [AccountLine] {
+    /// Gemini key's rather than Default's Google sign-in (`runsOnEnvKey`). `usage` is the engine's
+    /// snapshot (`CodexAccounts.usage`), where a Cursor CLI account's plan is read.
+    public static func accountLines(_ health: RunnerEngineHealth, usage: PlanUsageSnapshot? = nil) -> [AccountLine] {
         let accounts = health.accounts ?? []
+        let plan = { (account: String) -> String? in
+            health.engine == CursorRuntime.engine ? CodexAccounts.reportedSnapshot(usage, account: account)?.planName : nil
+        }
         guard accounts.count >= 2 else {
             let own = accounts.first
             let envKey = runsOnEnvKey(health, account: CodexAccounts.defaultID, auth: own?.auth)
@@ -489,7 +534,8 @@ public enum RunnerPageFormat {
                                 home: (own?.home ?? own?.codexHome).map(tildePath),
                                 auth: envKey ? nil : health.auth, envKey: envKey,
                                 signInAccount: nil, pausedUntil: own?.pausedUntil,
-                                loginExpiresAt: own?.loginExpiresAt, site: engineSite(health))]
+                                loginExpiresAt: own?.loginExpiresAt, site: engineSite(health),
+                                plan: plan(CodexAccounts.defaultID))]
         }
         return accounts.map { account in
             let envKey = runsOnEnvKey(health, account: account.id, auth: account.auth)
@@ -497,8 +543,18 @@ public enum RunnerPageFormat {
                                home: (account.home ?? account.codexHome).map(tildePath),
                                auth: envKey ? nil : account.auth, envKey: envKey,
                                signInAccount: account.id, pausedUntil: account.pausedUntil,
-                               loginExpiresAt: account.loginExpiresAt, site: KimiSite.site(of: account)?.domain)
+                               loginExpiresAt: account.loginExpiresAt, site: KimiSite.site(of: account)?.domain,
+                               plan: plan(account.id))
         }
+    }
+
+    /// A Cursor CLI account that met Cursor's usage limit this period (`CursorRuntime.usageLimit`): spent
+    /// until its included usage resets. Nil for one that can run, and on every other engine.
+    public static func accountUsageLimit(_ runner: Runner, engine: String, account: String,
+                                         now: Date = Date()) -> CursorRuntime.UsageLimit? {
+        guard engine == CursorRuntime.engine else { return nil }
+        let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
+        return CursorRuntime.usageLimit(CodexAccounts.reportedSnapshot(usage, account: account), now: now)
     }
 
     /// How far ahead of a login lapsing its line warns: Claude Code's own lead ("Your login expires in

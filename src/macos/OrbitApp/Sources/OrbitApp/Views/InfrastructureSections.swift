@@ -381,6 +381,9 @@ struct InfrastructureKeysSection: View {
     let keys: [ConfiguredProvider]
     /// Each DeepSeek key's balance by provider id, as last read.
     var balances: [String: ProviderBalanceReading] = [:]
+    /// The model a Cursor key's session starts on: Cursor CLI's Auto, by its catalogue's name
+    /// (`Infrastructure.cursorModel`) — a Cursor key has no model list of its own.
+    var cursorModel = "Auto"
     var open: ((NavNode) -> Void)? = nil
 
     var body: some View {
@@ -389,7 +392,7 @@ struct InfrastructureKeysSection: View {
                 Text(ProvidersOverview.noKeys).foregroundStyle(.secondary)
             }
             ForEach(ProvidersOverview.byVendor(keys)) { key in
-                if let id = DeepSeekBalance.key(for: key, mine: keys)?.providerID {
+                if let id = Self.pageID(key, mine: keys) {
                     if let open {
                         Button { open(.providerDetail(providerID: id)) } label: {
                             HStack(spacing: 8) {
@@ -414,8 +417,15 @@ struct InfrastructureKeysSection: View {
         }
     }
 
+    /// The keys with a page of their own: a DeepSeek key (its account's balance) and a Cursor key (its
+    /// last check, board iOS 4 ①).
+    private static func pageID(_ key: ConfiguredProvider, mine: [ConfiguredProvider]) -> String? {
+        DeepSeekBalance.key(for: key, mine: mine)?.providerID ?? (CursorRuntime.isKey(key) ? key.providerID : nil)
+    }
+
     /// A key's name over its model and the engines it runs on, and at its end Disabled — or, for a
-    /// DeepSeek key that is on, its account's balance once one is read, in the tone of what it comes to.
+    /// DeepSeek key that is on, its account's balance once one is read, in the tone of what it comes to;
+    /// for a Cursor key Cursor refused, Rejected (board iOS 4 ②).
     /// The value keeps the row's end (board iOS 1 ③): the engines line wraps beside it rather than
     /// pushing it under the row, as a `LabeledContent` does once its label runs wide.
     private func row(_ key: ConfiguredProvider, balance: ProviderBalanceReading?) -> some View {
@@ -424,7 +434,7 @@ struct InfrastructureKeysSection: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
                     .lineLimit(1)
-                if let model = Infrastructure.defaultModel(key) {
+                if let model = CursorRuntime.isKey(key) ? cursorModel : Infrastructure.defaultModel(key) {
                     Text(model)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(.secondary)
@@ -439,6 +449,9 @@ struct InfrastructureKeysSection: View {
             if key.enabled == false {
                 Text(Infrastructure.disabled)
                     .foregroundStyle(.secondary)
+            } else if CursorRuntime.keyCheck(key) == .rejected {
+                Text(CursorRuntime.keyRejectedTag)
+                    .foregroundStyle(Color.orange)
             } else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {
                 Text(value.label)
                     .foregroundStyle(PoolTone.color(value.tone))

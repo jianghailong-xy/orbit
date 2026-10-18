@@ -291,7 +291,16 @@ struct ComposerView: View {
     private var placeholder: String {
         // An offered suggestion takes the placeholder's line (`PromptSuggestionLine`).
         if offeredSuggestion != nil { return "" }
+        // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (contract §3.2).
+        if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"
+    }
+
+    /// A turn of a Cursor CLI session is running now, read off the authoritative record the Stop morph
+    /// reads, or the stream before that record catches up.
+    private var cursorTurnRunning: Bool {
+        guard console.engine == CursorRuntime.engine, !console.isDraft else { return false }
+        return (app.session(id: console.sessionID)?.isGenerating ?? false) || console.sessionStatus == .running
     }
 
     private var showsCompletedResumeNotice: Bool {
@@ -610,7 +619,9 @@ struct ComposerView: View {
                                        reportedWindow: console.state.contextWindow,
                                        model: console.modelID, provider: console.provider,
                                        modelCatalog: console.modelCatalog,
-                                       configured: console.configuredProviders)
+                                       configured: console.configuredProviders,
+                                       unavailable: console.engine == CursorRuntime.engine
+                                           ? CursorRuntime.contextUnavailable : nil)
             }
             sendControls
         }
@@ -741,9 +752,13 @@ struct ComposerView: View {
                     console.permissionModeWasEdited = true
                     Task { await console.applyConfig(permissionMode: mode.rawValue) }
                 } label: {
-                    menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
-                                      : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
-                                  selected: mode == console.permissionMode)
+                    if console.engine == CursorRuntime.engine {
+                        cursorModeLabel(mode)
+                    } else {
+                        menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
+                                          : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
+                                      selected: mode == console.permissionMode)
+                    }
                 }
                 .disabled(!modeRunnable(mode))
             }
@@ -752,6 +767,26 @@ struct ComposerView: View {
         }
         .footerMenuChrome()
         .layoutPriority(2)
+    }
+
+    /// A mode on Cursor CLI, with what it does there under its name (board iOS 6 ②): the shared short
+    /// note the web's mode picker writes after the mode's name (`CursorRuntime.modeNote`) — Default's,
+    /// greyed, says why it can't run.
+    @ViewBuilder
+    private func cursorModeLabel(_ mode: PermissionMode) -> some View {
+        let note = CursorRuntime.modeNote(mode)
+        #if os(iOS)
+        accountRowLabel(AgentDefaults.label(mode), detail: note, selected: mode == console.permissionMode)
+        #else
+        menuItemLabel(note.map { "\(AgentDefaults.label(mode)) — \($0)" } ?? AgentDefaults.label(mode),
+                      selected: mode == console.permissionMode)
+        #endif
+    }
+
+    /// Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto: it
+    /// takes no parameters (contract §10), so the menu has no Effort to offer and the chip none to name.
+    private var cursorAuto: Bool {
+        console.engine == CursorRuntime.engine && CursorRuntime.isAuto(console.modelID)
     }
 
     /// The model menu's title: the engine this session runs on — its own, recorded when it started and
@@ -843,6 +878,18 @@ struct ComposerView: View {
                             Text(note)
                         }
                     }
+                    // A Cursor CLI session that has talked: why its other accounts and keys are listed
+                    // but greyed (board iOS 6 ⑤, D5).
+                    if console.cursorMoveBlocked {
+                        Section {
+                            #if os(macOS)
+                            ForEach(Array(ComposerLogic.menuLines(CursorRuntime.moveBlockedNote).enumerated()),
+                                    id: \.offset) { _, line in Text(line) }
+                            #else
+                            ForEach(ComposerLogic.sentences(CursorRuntime.moveBlockedNote), id: \.self) { Text($0) }
+                            #endif
+                        }
+                    }
                 } label: {
                     menuSubmenuLabel("Provider", value: providerValue)
                 }
@@ -877,20 +924,34 @@ struct ComposerView: View {
                 .disabled(!console.providerCapabilitiesResolved)
             }
             Divider()
-            Menu {
-                ForEach(effortMenuItems) { e in
-                    Button {
-                        console.selectEffort(e)
-                        Task { await console.applyConfig(effort: e.rawValue) }
-                        // Remember this as the account default so the next new session (here or
-                        // on web) starts at it — the cross-device port of web's localStorage write.
-                        app.rememberDefaultEffort(e.rawValue)
-                    } label: {
-                        menuItemLabel(e.label, selected: e == console.effort)
+            // Cursor CLI's Auto takes no parameters: a line on what it does instead of an Effort row.
+            if cursorAuto {
+                Section {
+                    #if os(macOS)
+                    ForEach(Array(ComposerLogic.menuLines(CursorRuntime.autoNote).enumerated()), id: \.offset) { _, line in
+                        Text(line)
                     }
+                    #else
+                    // An iOS menu item ends at its third line: the note's two sentences are two items.
+                    ForEach(ComposerLogic.sentences(CursorRuntime.autoNote), id: \.self) { Text($0) }
+                    #endif
                 }
-            } label: {
-                menuSubmenuLabel("Effort", value: console.effort.label)
+            } else {
+                Menu {
+                    ForEach(effortMenuItems) { e in
+                        Button {
+                            console.selectEffort(e)
+                            Task { await console.applyConfig(effort: e.rawValue) }
+                            // Remember this as the account default so the next new session (here or
+                            // on web) starts at it — the cross-device port of web's localStorage write.
+                            app.rememberDefaultEffort(e.rawValue)
+                        } label: {
+                            menuItemLabel(e.label, selected: e == console.effort)
+                        }
+                    }
+                } label: {
+                    menuSubmenuLabel("Effort", value: console.effort.label)
+                }
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
             // tier both exist on some models and not others, so a row drawn regardless would be a
@@ -937,7 +998,7 @@ struct ComposerView: View {
 
     /// What the chip is called aloud — web parity, the chip's `aria-label`.
     private var chipAccessibilityLabel: String {
-        let base = "Model \(modelDisplayName), effort \(console.effort.label)"
+        let base = cursorAuto ? "Model \(modelDisplayName)" : "Model \(modelDisplayName), effort \(console.effort.label)"
         return smartRoute == nil ? base : base + TaskDetailCopy.chipPickedBySmartSelection
     }
 
@@ -981,10 +1042,12 @@ struct ComposerView: View {
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text(chipEffortLabel)
-                .foregroundStyle(Color.secondary)
-                .lineLimit(1)
-                .fixedSize()
+            if !chipEffortLabel.isEmpty {
+                Text(chipEffortLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .padding(.horizontal, smart ? 7 : 0)
         .padding(.vertical, smart ? 2 : 0)
@@ -993,7 +1056,7 @@ struct ComposerView: View {
         #else
         (Text(smart ? "✦ " : "").foregroundStyle(Color.accentColor)
             + Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
-            + Text(" ")
+            + Text(chipEffortLabel.isEmpty ? "" : " ")
             + Text(chipEffortLabel).foregroundStyle(Color.secondary))
             .lineLimit(1)
         #endif
@@ -1003,7 +1066,9 @@ struct ComposerView: View {
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
     /// given a pill of its own, so the chip keeps saying one thing about the model.
     private var chipEffortLabel: String {
-        fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
+        // Auto on Cursor CLI has no effort to name.
+        if cursorAuto { return "" }
+        return fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
     }
 
     /// Whether this session has a fast lane to offer at all — Claude Code's `/fast` on the models
@@ -1144,7 +1209,7 @@ struct ComposerView: View {
             } label: {
                 providerRowLabel(choice, blocked: blocked, fixable: fixable)
             }
-            .disabled(blocked && !fixable)
+            .disabled((blocked && !fixable) || (console.cursorMoveBlocked && choice.slug != console.provider))
         }
     }
 
@@ -1217,6 +1282,7 @@ struct ComposerView: View {
                 menuItemLabel("Automatic · Switches to soonest reset", selected: console.sessionAutomatic)
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
         ForEach(console.accountChoices) { account in
             Button {
@@ -1237,6 +1303,7 @@ struct ComposerView: View {
                     selected: !console.sessionAutomatic && account.id == console.account(for: engine))
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
     }
 
@@ -1257,6 +1324,7 @@ struct ComposerView: View {
                 menuItemLabel("Automatic · Switches to soonest reset", selected: false)
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
         ForEach(rows) { account in
             Button {
@@ -1277,6 +1345,7 @@ struct ComposerView: View {
                     selected: false)
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
     }
 
@@ -1932,6 +2001,9 @@ private struct ContextWindowIndicator: View {
     let modelCatalog: RunnerModelCatalog?
     /// Configured providers' model rows carry their own context windows (from the control plane).
     let configured: [ConfiguredProvider]
+    /// Why there will never be a reading: an engine that does not report context use (Cursor CLI over
+    /// ACP, contract §4.1), in a sentence. Never a 0% or a token count then — a dashed empty ring.
+    var unavailable: String? = nil
     @State private var showDetail = false
 
     private var window: Int? {
@@ -1953,8 +2025,8 @@ private struct ContextWindowIndicator: View {
     var body: some View {
         Button { showDetail.toggle() } label: {
             HStack(spacing: 5) {
-                UsageRing(percent: pct).frame(width: gaugeShowsNumber ? 14 : 16,
-                                              height: gaugeShowsNumber ? 14 : 16)
+                UsageRing(percent: pct, unavailable: unavailable != nil)
+                    .frame(width: gaugeShowsNumber ? 14 : 16, height: gaugeShowsNumber ? 14 : 16)
                 if gaugeShowsNumber {
                     // See PlanUsageIndicator: pin the pill to its ideal width so a tight toolbar
                     // never wraps the "%" onto a second line.
@@ -1965,10 +2037,12 @@ private struct ContextWindowIndicator: View {
         .buttonStyle(.plain)
         .help(helpText)
         .accessibilityLabel(helpText)
-        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct, known: known))
+        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct,
+                                                  known: known, unavailable: unavailable))
     }
 
     private var helpText: String {
+        if unavailable != nil { return "Context window unavailable" }
         guard known else {
             guard let window, window > 0 else { return "Context window not reported yet" }
             return "Context window not reported yet · \(fmtTokens(window)) window"
@@ -2010,6 +2084,8 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     let window: Int?
     let pct: Int
     let known: Bool
+    /// An engine that never reports a reading, and why (`ContextWindowIndicator.unavailable`).
+    var unavailable: String? = nil
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -2021,14 +2097,16 @@ private struct ContextWindowDetailPresentation: ViewModifier {
             HStack {
                 Text("Context window").foregroundStyle(.secondary)
                 Spacer()
-                Text(!known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens)).monospacedDigit()
+                Text(unavailable != nil ? "Unavailable" : !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens))
+                    .monospacedDigit()
             }
-            if sized { UsageBar(percent: pct).frame(height: 4) }
+            if sized && unavailable == nil { UsageBar(percent: pct).frame(height: 4) }
             Text(detailCaption).font(.caption).foregroundStyle(.secondary)
         }
     }
 
     private var detailCaption: String {
+        if let unavailable { return unavailable }
         guard known else {
             guard let window, window > 0 else { return "Not reported yet" }
             return "Not reported yet · \(fmtTokens(window)) window"
@@ -2260,6 +2338,9 @@ private struct UsageBar: View {
 /// window fills. Mirrors the web `.context-ring`.
 private struct UsageRing: View {
     let percent: Int
+    /// No reading will ever come (an engine that reports none): a dashed empty ring, apart from the
+    /// solid empty ring of a reading still to come.
+    var unavailable = false
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
     private var tint: Color {
         if percent >= 90 { return .red }
@@ -2269,11 +2350,15 @@ private struct UsageRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(.quaternary, lineWidth: 2.5)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            if unavailable {
+                Circle().stroke(Color.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [2.2, 2.2]))
+            } else {
+                Circle().stroke(.quaternary, lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: fraction)
+                    .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
         }
         .padding(1.25)
     }

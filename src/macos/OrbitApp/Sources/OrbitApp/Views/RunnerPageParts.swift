@@ -339,11 +339,18 @@ struct RunnerEngineRow: View {
                 }
             }
             Spacer(minLength: 0)
-            if health.installed == true {
+            if Self.opensPage(health, runner: runner) {
                 RunnerChevron()
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// Whether the row opens the engine's page: an engine the machine has — and Cursor CLI where the fix
+    /// is on its page, its Install (board iOS 2, the four states).
+    static func opensPage(_ health: RunnerEngineHealth, runner: Runner) -> Bool {
+        health.installed == true
+            || (health.engine == CursorRuntime.engine && CursorRuntime.state(of: runner) == .notInstalled)
     }
 
     /// `2.1.284 · Signed in`, the state in its colour — and Kimi's site after its version,

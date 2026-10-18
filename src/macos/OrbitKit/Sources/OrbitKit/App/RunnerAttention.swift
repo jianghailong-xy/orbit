@@ -208,6 +208,8 @@ public enum RunnerAttention {
         ("opencode", "OpenCode"),
         ("antigravity", "Antigravity CLI"),
         ("dsh", "DeepSeek Harness"),
+        // Only ever reported by a runner that knows it, which is when the web draws it too.
+        (CursorRuntime.engine, CursorRuntime.name),
     ]
 
     /// The login a built-in engine runs on, as a sign-in or a quota sentence names it.
@@ -217,6 +219,7 @@ public enum RunnerAttention {
         case .codex: return RunnerPageCopy.RUNNER_LOGIN_CODEX
         case .kimi: return RunnerPageCopy.RUNNER_LOGIN_KIMI
         case .antigravity: return "Antigravity"
+        case .cursor: return CursorRuntime.name
         }
     }
 
@@ -351,7 +354,11 @@ public enum RunnerAttention {
 
     /// What an engine row says about being kept current. `warn` means this machine has actually
     /// drifted and only a person can say why; everything routine stays `quiet`.
-    public static func updateNoteOf(_ update: RunnerEngineUpdate?, nowMs: Int64) -> RunnerEngineUpdateNote? {
+    /// `pinned` is an engine Orbit keeps on one build rather than the newest (Cursor CLI, whose version a
+    /// runner release moves): its routine note says so, since "checked" alone would read as "and it is
+    /// the latest" (web `updateNoteOf`).
+    public static func updateNoteOf(_ update: RunnerEngineUpdate?, nowMs: Int64,
+                                    pinned: Bool = false) -> RunnerEngineUpdateNote? {
         guard let update else { return nil }
         if update.status == "skipped" {
             return RunnerEngineUpdateNote(tone: .quiet, text: "not auto-updated")
@@ -382,7 +389,8 @@ public enum RunnerAttention {
                                               text: "last update failed · retrying every 30 min")
             }
             let verb = update.status == "checked" ? "checked" : "updated"
-            return RunnerEngineUpdateNote(tone: .quiet, text: "\(verb) \(ago(update.at ?? "", nowMs: nowMs))")
+            return RunnerEngineUpdateNote(tone: .quiet,
+                                          text: "\(pinned ? "pinned · " : "")\(verb) \(ago(update.at ?? "", nowMs: nowMs))")
         }
         // Nothing has landed in a week and no drift is being measured.
         guard let lastOk else { return RunnerEngineUpdateNote(tone: .warn, text: "never updated") }

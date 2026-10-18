@@ -581,13 +581,15 @@ public enum ComposerSlash {
     /// since its own command handler ends a stream-json session), so they keep only Orbit's local
     /// commands; local commands are available on every engine. Asked of the session's engine, never of
     /// its provider: a key on Codex's protocol runs on Codex, and a DeepSeek key on Claude Code has
-    /// Claude Code's commands (web `slashAssetMatchesEngine`).
+    /// Claude Code's commands (web `slashAssetMatchesEngine`). Kimi Code and Cursor CLI list their own,
+    /// which the runner reports as the CLI announces them over ACP (Cursor's `available_commands_update`),
+    /// tagged with the engine: a session on either sees only its own engine's.
     public static func forEngine(items: [SlashCommandInfo], engine: String?) -> [SlashCommandInfo] {
         items.filter { item in
             if item.type == "local" { return true }
             switch engine {
             case "codex", "opencode", "antigravity", "dsh": return false
-            case "kimi":  return item.provider == "kimi"
+            case "kimi", CursorRuntime.engine: return item.provider == engine
             default:      return item.provider == nil || item.provider == "claude"
             }
         }

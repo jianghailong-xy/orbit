@@ -1458,7 +1458,13 @@ struct NewSessionView: View {
             }
         }
         #endif
-        .task { await draft.prepareDraft() }
+        .task {
+            // A draft the usage-limit card asked for starts on the account it named (board iOS 5 ⑧).
+            if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
+                draft.pickDraftAccount(pick.engine, pick.account)
+            }
+            await draft.prepareDraft()
+        }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
         // custom provider adopts its real default even if the draft's own request failed.

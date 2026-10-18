@@ -170,6 +170,25 @@ final class AgentsModel {
         }
     }
 
+    // MARK: a Cursor key's last check (P2 follow-up)
+
+    /// Check Again on one of the account's own Cursor keys: one of its runners asks Cursor with the key,
+    /// and the answer is kept on it when it can be — then the keys are read again, so the row and the page
+    /// say it. The server's own sentence when this check came to nothing kept (no runner could ask), nil
+    /// otherwise.
+    func recheckCursorKey(_ id: String) async -> String? {
+        do {
+            let answer = try await api.recheckCursorKey(id)
+            if let mine = try? await api.personalProviders() {
+                personalProviders = mine
+                ownKeys = mine
+            }
+            return answer.recorded ? nil : answer.message
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
 
     /// The pools read again: an account went in or out, or a pool went.

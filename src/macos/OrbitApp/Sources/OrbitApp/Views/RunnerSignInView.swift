@@ -51,6 +51,8 @@ struct RunnerSignInView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
     @State private var model: RunnerSignInModel?
+    /// The Cursor CLI sign-in link last copied from this card, so its button says it was.
+    @State private var copiedLink: URL?
 
     var body: some View {
         Group {
@@ -94,7 +96,11 @@ struct RunnerSignInView: View {
                 waiting(model, "Starting sign-in on the runner…",
                         hint: "The runner picks it up on its next check-in, so the link can take up to a minute to show here.")
             case .awaitingApproval:
-                deviceFlow(model)
+                if engine == .cursor, model.url != nil {
+                    cursorLink(model)
+                } else {
+                    deviceFlow(model)
+                }
             case .awaitingCode:
                 if model.verifying {
                     waiting(model, "Signing in with your code…",
@@ -196,6 +202,59 @@ struct RunnerSignInView: View {
         }
     }
 
+    /// Cursor CLI's `agent login` prints one link and waits on it (docs/cursor-runtime-contract.md §9):
+    /// nothing comes back through here — the runner sees the sign-in finish — so the card offers the link,
+    /// in this device's browser or another's, says how long it lasts, and waits (board iOS 3 ②③).
+    @ViewBuilder
+    private func cursorLink(_ model: RunnerSignInModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(cursorLinkPrompt(model))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            if let url = model.url {
+                HStack(spacing: 8) {
+                    Button { openURL(url) } label: { Text("Open cursor.com") }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                    Button {
+                        PlatformPasteboard.copyString(url.absoluteString)
+                        PlatformHaptics.success()
+                        copiedLink = url
+                    } label: {
+                        Text(copiedLink == url ? "Sign-In Link Copied" : "Copy Sign-In Link")
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                }
+                .controlSize(.small)
+            }
+            // The link lasts about 23 minutes: count down to it a minute at a time.
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for you to sign in…" + cursorExpiry(model.expiresAt, now: context.date))
+                        .font(.orbitLabel)
+                }
+            }
+            cancelButton(model)
+        }
+    }
+
+    /// Whose account the link signs in: the one being added, this one again, or the runner's own.
+    private func cursorLinkPrompt(_ model: RunnerSignInModel) -> AttributedString {
+        var site = AttributedString("cursor.com")
+        site.inlinePresentationIntent = .stronglyEmphasized
+        let tail = model.adding ? " with the account you are adding:"
+            : account != nil ? " with this account again:" : " with the account this runner should use:"
+        return AttributedString("Sign in on ") + site + AttributedString(tail)
+    }
+
+    /// ` · link expires in 26 min`, or that it has run out; nothing where the runner named no time.
+    private func cursorExpiry(_ expiresAt: Date?, now: Date) -> String {
+        guard let expiresAt else { return "" }
+        let left = Int((expiresAt.timeIntervalSince(now) / 60).rounded(.up))
+        return left > 0 ? " · link expires in \(left) min" : " · the link has expired"
+    }
+
     /// Idle, or a failed attempt to try again. Signing in fixes this one machine with the account
     /// the user already pays for; there is no second route out on these clients (an API key is
     /// configured from the web's Infrastructure page), so this is the whole choice.
@@ -263,7 +322,8 @@ struct RunnerSignInView: View {
                 Text(model.busy
                      ? "Starting…"
                      : model.status == .failed
-                       ? "Try signing in to \(engine.displayName) again"
+                       // Cursor's link is what ran out or failed: a new run of `agent login` hands a new one.
+                       ? (engine == .cursor ? "Get a New Link" : "Try signing in to \(engine.displayName) again")
                        : engine == .antigravity ? "Sign in with Google" : "Sign in to \(engine.displayName)")
             }
             .buttonStyle(.borderedProminent)

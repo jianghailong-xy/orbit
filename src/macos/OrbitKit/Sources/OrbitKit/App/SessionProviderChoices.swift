@@ -162,12 +162,19 @@ public struct ChoiceSources: Sendable {
     /// Whether the runner can start DeepSeek Harness; nil before any runner snapshot is read, which
     /// claims nothing (`DshRuntime.state`).
     public var dshState: DshRuntime.RunnerState?
+    /// Whether the runner can start Cursor CLI; nil before any runner snapshot is read, which claims
+    /// nothing (`CursorRuntime.state`).
+    public var cursorState: CursorRuntime.RunnerState?
+    /// Whether these apps draw Cursor CLI at all: a runner of the account knows it
+    /// (`ProviderEngines.appleShowsEngine`, web `fleet`).
+    public var showsCursor: Bool
 
     public init(configured: [ConfiguredProvider], catalog: RunnerModelCatalog? = nil,
                 runtimeDefaults: [String: String]? = nil, engines: [RunnerEngineHealth]? = nil,
                 pools: [ProviderPool] = [], planUsage: PlanUsage? = nil, now: Date = Date(),
                 antigravity: RunnerAntigravityState? = nil, antigravityKeyAvailable: Bool? = nil,
-                dshState: DshRuntime.RunnerState? = nil) {
+                dshState: DshRuntime.RunnerState? = nil, cursorState: CursorRuntime.RunnerState? = nil,
+                showsCursor: Bool = false) {
         self.configured = configured
         self.catalog = catalog
         self.runtimeDefaults = runtimeDefaults
@@ -178,6 +185,8 @@ public struct ChoiceSources: Sendable {
         self.antigravity = antigravity
         self.antigravityKeyAvailable = antigravityKeyAvailable
         self.dshState = dshState
+        self.cursorState = cursorState
+        self.showsCursor = showsCursor
     }
 }
 
@@ -196,7 +205,8 @@ public enum SessionProviderChoices {
     /// The runner's accounts of an engine (`health`) as picker rows, each with its own quota — nil
     /// unless it has signed in more than one (web `accountChoices`). `usage` is the engine's snapshot
     /// (`CodexAccounts.usage`).
-    public static func accountChoices(_ health: RunnerEngineHealth?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
+    public static func accountChoices(_ health: RunnerEngineHealth?, usage: PlanUsageSnapshot?,
+                                      now: Date = Date()) -> [AccountChoice]? {
         guard let health, let accounts = health.accounts, accounts.count >= 2 else { return nil }
         return accounts.map { account in
             // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its
@@ -204,6 +214,12 @@ public enum SessionProviderChoices {
             if RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth) {
                 return AccountChoice(id: account.id, label: CodexAccounts.label(account.id, accounts: accounts),
                                      quota: "env key")
+            }
+            // A Cursor CLI account is spent once a turn on it met Cursor's limit, which no reading says.
+            if health.engine == CursorRuntime.engine, account.auth == "yes",
+               CursorRuntime.usageLimit(CodexAccounts.reportedSnapshot(usage, account: account.id), now: now) != nil {
+                return AccountChoice(id: account.id, label: CodexAccounts.label(account.id, accounts: accounts),
+                                     quota: "Spent", nearLimit: true)
             }
             let own = account.auth == "yes" ? CodexAccounts.snapshot(usage, account: account.id) : nil
             let rows = own?.rows ?? []
@@ -260,6 +276,8 @@ public enum SessionProviderChoices {
     public static let enginePreset: [String: String] = [
         "claude": "anthropic", "codex": "openai", "kimi": "moonshot", "antigravity": "antigravity",
         "dsh": "deepseek",
+        // Cursor CLI wears the mark of a Cursor key, Cursor's cube (the owner's choice D3).
+        CursorRuntime.engine: CursorRuntime.keyPreset,
     ]
 
     /// Missing outranks signed out. Only the CLI's own "no" counts for auth: `unknown` is an engine
@@ -282,6 +300,15 @@ public enum SessionProviderChoices {
             return engineBlocker(health)
         }
         return byokBlocker(health)
+    }
+
+    /// Cursor CLI admission, read the way the server reads it (`CursorRuntime.state`): the runner has to
+    /// run the pinned build before any credential can — a key as much as its own sign-in — and its own
+    /// sign-in has to be signed in on top. Not signed in is the CLI's own "no", as for every engine.
+    static func cursorBlocker(_ state: CursorRuntime.RunnerState?, health: RunnerEngineHealth? = nil,
+                              login: Bool = false) -> String? {
+        if let state, state != .ready { return state.label }
+        return login && health?.auth == "no" ? "Not signed in" : nil
     }
 
     /// Read only the server's key-availability result for the machine this session will run on.
@@ -314,8 +341,11 @@ public enum SessionProviderChoices {
     /// provider to use, so the relay's DTO can't express it (`EngineAuth.Remedy.runCommand`). Naming a
     /// sign-in on those points at a button that isn't there, and the row already lands on the one that
     /// is.
-    public static func fixSuffix(_ fixEngine: String?) -> String {
-        ["antigravity", "dsh", DshRuntime.connectFix, "opencode"].contains(fixEngine ?? "")
+    /// Cursor CLI's says it only for the one reason a sign-in fixes, `Not signed in`; its others —
+    /// an install, a runner update, a build put back — take the bare arrow (board iOS 1 ④).
+    public static func fixSuffix(_ fixEngine: String?, unavailable: String? = nil) -> String {
+        if fixEngine == CursorRuntime.engine { return unavailable == "Not signed in" ? ", sign in →" : " →" }
+        return ["antigravity", "dsh", DshRuntime.connectFix, "opencode"].contains(fixEngine ?? "")
             ? " →" : ", sign in →"
     }
 
@@ -360,6 +390,7 @@ public enum SessionProviderChoices {
         // Harness and agy what the server admits them on.
         let carried: String? = engine == "dsh" ? sources.dshState?.label
             : engine == "antigravity" ? antigravityBlocker(antigravity, health: health)
+            : engine == CursorRuntime.engine ? cursorBlocker(sources.cursorState, health: health)
             : engine == "opencode" ? (openCodeMissing(sources.engines) ? "Not installed" : nil)
             : byokBlocker(health)
 
@@ -370,6 +401,7 @@ public enum SessionProviderChoices {
                 && !(keyAvailable && antigravity?.envKeyAvailable == false)
             let blocker = engine == "antigravity"
                 ? antigravityBlocker(antigravity, health: health, login: !keyAvailable || googleAccount)
+                : engine == CursorRuntime.engine ? cursorBlocker(sources.cursorState, health: health, login: true)
                 : engineBlocker(health)
             own.append(ProviderChoice(
                 slug: engine,
@@ -381,7 +413,7 @@ public enum SessionProviderChoices {
                 fixEngine: blocker == nil ? nil : engine,
                 accounts: blocker == nil
                     ? accountChoices(health, usage: CodexAccounts.usage(engine, planUsage: sources.planUsage,
-                                                                         engines: sources.engines))
+                                                                         engines: sources.engines), now: sources.now)
                     : nil,
                 labelDetail: engine == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil))
         }
@@ -453,6 +485,7 @@ public enum SessionProviderChoices {
         case "codex": return "OpenAI-compatible"
         case "kimi": return "Moonshot API"
         case "antigravity": return "Gemini API"
+        case CursorRuntime.engine: return "Cursor API"
         default: return "Anthropic-compatible"
         }
     }
@@ -461,8 +494,8 @@ public enum SessionProviderChoices {
     /// so it is never named after one.
     private static let keyVendors: [String: String] = [
         "anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Google Gemini", "deepseek": "DeepSeek",
-        DshRuntime.presetSlug: "DeepSeek", "moonshot": "Moonshot", "glm": "Z.AI", "minimax": "MiniMax",
-        "qwen": "Qwen",
+        DshRuntime.presetSlug: "DeepSeek", "moonshot": "Moonshot", CursorRuntime.keyPreset: "Cursor", "glm": "Z.AI",
+        "minimax": "MiniMax", "qwen": "Qwen",
     ]
 
     /// A key as a sentence names it, lowercase for the middle of one: `the DeepSeek key “DeepSeek 2”` —
@@ -509,7 +542,8 @@ public enum SessionProviderChoices {
         if ProviderEngines.isLoginProvider(provider) {
             let antigravity = sources.antigravity
             let blocker = provider == "antigravity"
-                ? antigravityBlocker(antigravity, login: antigravity?.envKeyAvailable != true) : nil
+                ? antigravityBlocker(antigravity, login: antigravity?.envKeyAvailable != true)
+                : provider == CursorRuntime.engine ? cursorBlocker(sources.cursorState) : nil
             return ProviderChoice(
                 slug: provider, label: "Default", kind: .login, brandKey: enginePreset[provider],
                 modelLabel: label, unavailable: blocker, fixEngine: blocker == nil ? nil : provider,
@@ -552,14 +586,15 @@ public enum SessionProviderChoices {
     }
 
     /// The new-session hero's engines, in `ProviderEngines.all`'s order (Claude Code, Codex, Kimi Code,
-    /// Antigravity CLI, OpenCode, DeepSeek Harness), each with its credentials and the one a pick of it
-    /// lands on. An engine with nothing to run on here is left out — except DeepSeek Harness on a runner
-    /// that could run it: with no DeepSeek key yet it offers the connection instead (a turned-off key
-    /// does not count, since GET /providers lists none), so "where is DeepSeek Harness?" has an answer
-    /// in the picker itself. One these apps don't draw yet (`ProviderEngines.appleShowsEngine`) is
-    /// never listed. Mirrors web's `engineChoices`.
+    /// Antigravity CLI, OpenCode, DeepSeek Harness, Cursor CLI), each with its credentials and the one a
+    /// pick of it lands on. An engine with nothing to run on here is left out — except DeepSeek Harness on
+    /// a runner that could run it: with no DeepSeek key yet it offers the connection instead (a turned-off
+    /// key does not count, since GET /providers lists none), so "where is DeepSeek Harness?" has an answer
+    /// in the picker itself. Cursor CLI always has its own sign-in to list, so a runner that can't run it
+    /// lists it greyed with why; and it is listed at all only once a runner of the account knows it
+    /// (`ChoiceSources.showsCursor`). Mirrors web's `engineChoices`.
     public static func engines(sources: ChoiceSources, preferred: [EnginePick] = []) -> [EngineChoice] {
-        ProviderEngines.all.filter(ProviderEngines.appleShowsEngine).compactMap { engine -> EngineChoice? in
+        ProviderEngines.all.filter { $0 != CursorRuntime.engine || sources.showsCursor }.compactMap { engine -> EngineChoice? in
             let providers = providers(for: engine, sources: sources)
             if !providers.isEmpty {
                 return landing(engine, providers: providers,
