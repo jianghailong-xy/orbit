@@ -55,14 +55,21 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         if (follow) followed?.let { kind -> resultNotice(kind, next)?.let { followed = null; say(it) } }
     }
 
-    /** Keep the bar current while the session is on screen (web's refetch policy). */
+    /**
+     * Keep the bar current while the session is on screen (web's refetch policy), and while a repair session works on its merge
+     * recovery: until the repair stops and then until the server's check of it is over — a few reads past the stop, since the
+     * server queues that check just after it.
+     */
     suspend fun poll(live: () -> Boolean) {
         loadDetail()
+        var afterRepair = 0
         while (currentCoroutineContext().isActive) {
             val d = mutable.value.detail
             val pending = d?.string("mergeStatus") == "pending" || d?.string("commitStatus") == "pending"
-            val repairing = (d?.get("mergeRepairSession") as? JsonObject)?.let { it.string("runState") ?: it.string("runStatus") } in setOf("QUEUED", "RUNNING")
-            if (!pending && !live() && !repairing) { delay(3_000); continue }
+            val repairing = d?.let { MergeRecovery.repair(it) }?.running == true
+            val checking = d?.let { MergeRecovery.checking(it) } == true
+            afterRepair = if (repairing) 3 else if (checking) 0 else maxOf(0, afterRepair - 1)
+            if (!pending && !live() && !repairing && !checking && afterRepair == 0) { delay(3_000); continue }
             delay(if (pending) 3_000 else 5_000)
             loadDetail()
         }
