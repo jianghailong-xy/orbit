@@ -202,6 +202,9 @@ private val keyNames = mutableStateMapOf<String, String>()
 
 internal fun providerKeyTitle(id: String): String? = keyNames[ObjectId.canonical(id) ?: id]
 
+/** A key page's title once it has read the key: a DeepSeek key's, and a Cursor key's (CursorKeyPage). */
+internal fun rememberProviderKeyTitle(id: String, label: String) { keyNames[ObjectId.canonical(id) ?: id] = label }
+
 /** A DeepSeek key's page, read-only: the whole DeepSeek account's balance first, then where the key runs. Changing the key happens on
  * the web. */
 @Composable
@@ -218,7 +221,7 @@ internal fun DeepSeekKeyPage(api: ManagementApi, revision: Long, providerId: Str
         try {
             val found = providerObjects(api.get("providers/mine")).firstOrNull { ObjectId.same(it.text("id"), providerId) && DeepSeekBalance.applies(it) }
             key = found; gone = found == null; failure = null
-            found?.let { keyNames[ObjectId.canonical(providerId) ?: providerId] = it.str("label") ?: it.text("slug") }
+            found?.let { rememberProviderKeyTitle(providerId, it.str("label") ?: it.text("slug")) }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { failure = personalFailure(e); return@LaunchedEffect }
         if (key != null) reading = readDeepSeekBalance(api, providerId, refresh = false)
     }

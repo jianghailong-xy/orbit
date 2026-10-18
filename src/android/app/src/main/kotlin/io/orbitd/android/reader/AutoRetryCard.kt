@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -9,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -16,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.tasks.TaskRunConflictCard
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.delay
@@ -34,6 +37,9 @@ internal fun AutoRetryCard(notice: AutoRetryNotice, console: SessionConsole) {
     // The armed retry is a fact about the session, not the transcript: asked for once as the card appears — and, when this window
     // holds no message of the reader's to re-send, what the server would re-send, or that it has nothing to.
     LaunchedEffect(notice.stale) { if (!notice.stale) { console.reloadRetryState(); console.loadRetryText() } }
+    // A Cursor CLI card names the account and its plan, read off the runner (iOS 5 ⑧) — once the session says it is Cursor CLI's.
+    val onCursor = console.engine == CursorRuntime.ENGINE
+    LaunchedEffect(notice.stale, onCursor) { if (!notice.stale && onCursor) console.reload() }
     val retryAt = console.retryAtMs
     // A second hand only where one moves: a settled card, and a live one with nothing armed, are static text.
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -43,9 +49,10 @@ internal fun AutoRetryCard(notice: AutoRetryNotice, console: SessionConsole) {
     }
     val composer by console.composer.state.collectAsState()
     val retryText = console.retryText
+    val cursor = if (notice.quota) console.cursorQuota else null
     val s = AutoRetryLogic.state(notice, live = !notice.stale, retryAtMs = retryAt, attempts = console.retryAttempts,
         provider = console.provider, runnerName = console.runnerName, hasRetryText = retryText.isNotEmpty(),
-        nothingToResend = console.retryContinues, nowMs = now, takenOver = console.takenOver)
+        nothingToResend = console.retryContinues, nowMs = now, takenOver = console.takenOver, cursor = cursor)
     val tint = if (s.needsYou) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().background(tint.copy(alpha = .08f), RoundedCornerShape(10.dp)).padding(10.dp).testTag("auto-retry-card"),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -54,6 +61,18 @@ internal fun AutoRetryCard(notice: AutoRetryNotice, console: SessionConsole) {
             Text(s.title, color = tint, fontWeight = FontWeight.SemiBold)
         }
         Text(s.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Cursor's own words, whose plan ran out and until when — and, since the conversation can't move yet (D5), where a new session
+        // could go instead.
+        if (cursor != null && !notice.stale) Column(Modifier.testTag("auto-retry-cursor"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(AutoRetryLogic.cursorLine(cursor, notice.message), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            cursor.elsewhere?.let { (id, label) ->
+                val (lead, press) = AutoRetryLogic.cursorElsewhere(label)
+                Text(lead, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$press.", Modifier.clickable(role = Role.Button) { console.startCursorSession(id) }.testTag("auto-retry-cursor-elsewhere"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
         if (s.showsMessage) SelectionContainer {
             Text(notice.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

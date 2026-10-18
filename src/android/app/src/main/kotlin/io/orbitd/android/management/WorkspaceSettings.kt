@@ -27,8 +27,9 @@ internal object WorkspaceEffort {
         "kimi" -> listOf("", "low", "high", "max")
         "opencode" -> listOf("", "minimal", "low", "medium", "high", "xhigh", "max")
         "antigravity" -> listOf("", "low", "medium", "high")
-        // DeepSeek Harness's levels are its ACP catalogue's alone: a model the runner hasn't reported offers Default only.
-        "dsh" -> listOf("")
+        // DeepSeek Harness's and Cursor CLI's levels are their ACP catalogue's alone: a model the runner hasn't reported — Cursor's Auto
+        // among them, which takes none — offers Default only.
+        "dsh", ProviderEngines.CURSOR -> listOf("")
         else -> listOf("", "low", "medium", "high", "xhigh", "max", "ultra")
     }
     private val antigravityAliases = mapOf("none" to "low", "minimal" to "low", "xhigh" to "high", "max" to "high", "ultra" to "high")
@@ -37,7 +38,7 @@ internal object WorkspaceEffort {
 
     /** The engine's runner-reported levels for its default model; the static list when the catalog has no row. */
     fun options(engine: String, runner: JsonObject?): List<String> {
-        if (engine !in setOf("codex", "opencode", "kimi", "antigravity", "dsh")) return static(engine)
+        if (engine !in setOf("codex", "opencode", "kimi", "antigravity", "dsh", ProviderEngines.CURSOR)) return static(engine)
         val model = runner?.obj("runtimeDefaultModels")?.str(engine)
         val row = runner?.obj("modelCatalog")?.list(engine)?.firstOrNull { it.str("value") == model } ?: return static(engine)
         return listOf("") + (row["reasoningLevels"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }

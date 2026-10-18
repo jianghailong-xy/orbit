@@ -71,6 +71,8 @@ object ManagementFixture {
     /** The runner's engines as GET /runners reports them, and more of its members (`,"capabilities":[…],"antigravity":{…}`). */
     @Volatile var runnerEngines = "[]"
     @Volatile var runnerExtra = ""
+    /** More of the second runner's members, as [runnerExtra] is the first's: its engines and capabilities among them. */
+    @Volatile var runnerTwoExtra = ""
     /** The sign-in relay as GET runners/:id/login reads it. POST login answers [loginStarted] and POST login/code [codeSent],
      * each of which it then reads; DELETE cancels it. The bodies sent are kept, in order. */
     @Volatile var loginRelay = """{"status":null}"""
@@ -82,6 +84,10 @@ object ManagementFixture {
     val pauseBodies = CopyOnWriteArrayList<String>()
     /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
     val installBodies = CopyOnWriteArrayList<JsonObject>()
+    /** A Cursor key's Check Again (POST providers/mine/:id/key-check): what it answers, and what it does to GET providers/mine first —
+     * as a runner's answer kept on the key would. */
+    @Volatile var keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
+    @Volatile var onKeyCheck: () -> Unit = {}
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -91,11 +97,13 @@ object ManagementFixture {
         wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
-        runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
+        runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"
+        keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
+        onKeyCheck = {}
     }
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
@@ -126,7 +134,7 @@ object ManagementFixture {
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
         "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
-        "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
+        "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"$runnerTwoExtra}"""
     private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":$runnerOnline,
         "status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerOnline) now else now.minusSeconds(86_400)}","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
         "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":$runnerEngines$runnerExtra,"enrolledAt":"2026-09-01T00:00:00Z"}"""
@@ -215,6 +223,7 @@ object ManagementFixture {
                         "revokedAt" to JsonPrimitive(now.toString()), "revokedReason" to JsonPrimitive("USER"))) else it }
                     ok("""{"id":"$id","revokedAt":"$now","revokedReason":"USER"}""")
                 }
+                path.startsWith("providers/mine/") && path.endsWith("/key-check") && api.method == HttpMethod.POST -> { onKeyCheck(); ok(keyCheckAnswer) }
                 path.startsWith("providers/mine/") && path.endsWith("/balance") -> {
                     val id = path.removePrefix("providers/mine/").removeSuffix("/balance")
                     balanceGates[id]?.await()
