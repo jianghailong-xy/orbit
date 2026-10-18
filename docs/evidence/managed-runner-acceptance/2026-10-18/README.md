@@ -217,8 +217,20 @@ These are **blockers**, not passes:
 
 ## Checks on the final tip
 
-To be completed with the landing checks: the project's merge check, the managed-runner Python tests, the managed-runner
-pg specs and `tenant-isolation-runner`.
+The branch ends in a `--no-ff` merge of origin/main (`1c1c78d72`, the promotion of the project line, whose tree is the
+project tip's) onto this task's work; the project line (`da89a8185`) is already in it. On the first such merge,
+`c8eaef57d`, whose code tree is the final tip's (this commit adds only this section and `checks/`), each check ran outside
+the runner's cgroup (one unit, `MemoryMax` 9G, `TZ=UTC`), one after another, with the VM off
+(`checks/landing-checks-merge-1.txt`, full logs beside it):
+
+| Check | Result |
+| --- | --- |
+| The project's merge check: compose topology, `prisma:generate`, `build`, the shared, apiserver and web suites | exit 0: topology 14/14, shared 491 (32 files), apiserver 5,340, web 5,374 (414 files), none failed or skipped |
+| The managed-runner Python tests (`unittest discover -s scripts/managed-runner -p '*test*.py'`) | 154 passed |
+| Every managed-runner pg spec and `tenant-isolation-runner` (`scripts/run-pg-spec.sh`) | 14 spec files against PostgreSQL 16.15, no skips: the 13 managed-runner specs (136 tests) and tenant-isolation-runner (725), all passed |
+
+Neither main nor the project line moved while they ran. The final tip, the same merge made again over this commit, ran
+them again; that run is cited in the task's evidence.
 
 ## Reproduce
 
@@ -247,7 +259,8 @@ in the guest's containerd, and a host with about 6 GiB available.
   `secret-scan` no longer takes "task-…" for an `sk-` key. The run's phases did not change.
 - `logs/`: the driver's output (`run.txt`), the recorder's timeline, the apiserver's and the replica's logs, fake-model.py's
   request log, the gate's connection log, the self-managed runner's log.
-- `checks/`: the default entry points' review, the lab's status before the VM stopped, and its stop.
+- `checks/`: the default entry points' review, the lab's status before the VM stopped and its stop, and the landing
+  checks on the first merge (`*-merge-1.*`).
 - `first-run/`: the stopped first run's steps.
 - `kit/`: `collect.sh` (this directory from a run), `entry-review.sh`. The driver itself is
   `scripts/managed-runner/lab/acceptance-lab.py`.
