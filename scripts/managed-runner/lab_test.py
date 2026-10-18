@@ -136,6 +136,21 @@ class SingleWriterLabTest(unittest.TestCase):
         self.assertNotIn('Path("/var/lib/orbit/storage-verification")', source)
 
 
+class SwitchLabTest(unittest.TestCase):
+    """lab/switch-lab.py (T08b), offline: the claim the runbook restores into carries the marks of the manager's own."""
+
+    def test_the_restored_claim_is_the_repository_template_under_the_runner_s_name(self):
+        spec = importlib.util.spec_from_file_location("lab_switch", LAB / "switch-lab.py")
+        switch_lab = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(switch_lab)
+        runner, owner = "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b", "0199a1b2-0000-7000-8000-000000000001"
+        values = {"storage.pvcName": f"mr-data-{runner}", "kubernetes.namespace": "orbit-mr-test", "storage.ownerID": owner,
+                  "storage.runnerID": runner, "storage.className": "runner-data", "storage.capacity": "2Gi"}
+        template = (REPO / "deploy/managed-runner/storage/pvc.template.json").read_text()
+        rendered = json.loads(re.sub(r"\$\{([^}]+)\}", lambda match: values[match.group(1)], template))
+        self.assertEqual(switch_lab.restore_claim_manifest("orbit-mr-test", f"mr-data-{runner}", owner, runner, "runner-data", "2Gi"), rendered)
+
+
 class ApiGateTest(unittest.TestCase):
     """lab/api-gate.py (T04) on loopback sockets: a stand-in upstream answers every chunk it receives."""
 
