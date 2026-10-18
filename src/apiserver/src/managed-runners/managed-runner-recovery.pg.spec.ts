@@ -43,7 +43,12 @@
  *       kubelet's report until the manager has recorded it, however late the manager looks and
  *       whichever replica it is, and the runner is started again by itself on the same volume; a Pod
  *       gone with no report (its finalizer stripped) still fences, and so does one deleted on a node
- *       that cannot report, once the control plane marks it, until an operator's receipt.
+ *       that cannot report, once the control plane marks it, until an operator's receipt;
+ *  (10) Kubernetes only, since the quota is the namespace's: a create a ResourceQuota refuses (403,
+ *       "exceeded quota") waits for room as (7) does at Docker's cap — KUBERNETES_QUOTA_EXCEEDED, not
+ *       KUBERNETES_FORBIDDEN, nothing made or spent, no startup deadline running, said once — and goes
+ *       on by itself: a new account's Pod once another runner sleeps, a new account's claim once an
+ *       operator raises a quota on claims.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -114,6 +119,10 @@ interface Rig {
   raceHolder?(): void;
   /** Docker: the channel's cap on containers (`limits.maxContainers`), set after the pool was measured. */
   capContainers?(max: number): void;
+  /** Kubernetes: a ResourceQuota on the namespace's object counts, below the pool's budget; null removes it. */
+  quota?(hard: Partial<Record<'pods' | 'persistentvolumeclaims', number>> | null): void;
+  /** Kubernetes: the claims in the namespace. */
+  claims?(): number;
   /**
    * The backend fails the first call of each of the next `passes` passes: `unanswered`, a 5xx or a
    * timeout from a backend that was reached; `unreachable`, no connection to it at all. `first` is
@@ -188,6 +197,8 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
         });
       },
       release: (mapping) => void w.cluster.volumeAttachments.delete(foreign.get(mapping.id)!),
+      quota: (hard) => void (w.cluster.resourceQuota = hard ? { name: 'recovery-quota', hard } : undefined),
+      claims: () => w.cluster.all<PersistentVolumeClaim>('persistentvolumeclaims').length,
       loseVolume: (mapping) => {
         const claim = claimOf(mapping);
         w.cluster.remove('persistentvolumeclaims', mapping.pvcName);
@@ -909,5 +920,91 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     } finally {
       w.cluster.kubeletReportsDeletions = true;
     }
+  });
+
+  const quotaed = kubernetes();
+  await t.test(`(10) a create the namespace's ResourceQuota refuses waits for room, not as a permission problem, and goes on by itself once there is room [${quotaed.backend}]`, async () => {
+    const r = quotaed;
+    const sentence = "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.";
+    const newAccount = async (label: string) => {
+      const ownerId = (await db.user.create({ data: { email: `${label}-${randomUUID()}@example.invalid`, name: label } })).id;
+      await r.service.ensure(ownerId, `ensure-${label}`);
+      return ownerId;
+    };
+    const a = await r.readyRunner('quota-a');
+    // An operator's quota below the pool's budget (it holds a thousand runners): one Pod, which a's holds.
+    r.quota!({ pods: 1 });
+
+    // b, a new account: its claim and credential are made, and the quota refuses its Pod. As T06 saw it on k3s.
+    const b = await newAccount('quota-b');
+    assert.equal(await r.manager.reconcile((await r.mappingOf(b)).id), 'WAITING');
+    const waiting = await r.mappingOf(b);
+    assert.deepEqual(
+      {
+        state: waiting.managementState, code: codeOf(waiting), detail: (waiting.lastError as { detail?: string }).detail,
+        attempt: waiting.attempt, podUid: waiting.podUid, operation: waiting.resourceOperationState, deadline: waiting.startupDeadlineAt,
+      },
+      {
+        state: 'STARTING', code: 'KUBERNETES_QUOTA_EXCEEDED', detail: 'exceeded quota: recovery-quota, requested: pods=1, used: pods=1, limited: pods=1',
+        attempt: 0, podUid: null, operation: 'COMPLETED', deadline: null,
+      },
+    );
+    assert.equal(waiting.nextAttemptAt?.getTime(), r.now().getTime() + r.lifecycle.capacityRetrySeconds * 1000, 'asked again after capacityRetrySeconds');
+    assert.ok(waiting.pvcUid, 'its claim was made before the Pod');
+    assert.equal(r.instance(waiting.runnerId), null, 'nothing made');
+    const status = await r.service.status(b);
+    assert.deepEqual(status.reason, { code: 'KUBERNETES_QUOTA_EXCEEDED', message: sentence, retryable: false }, 'no Retry: it starts by itself');
+    const display = managedRunnerDisplay(status)!;
+    assert.deepEqual([display.kind, display.retry, display.acceptsWork, display.detail], ['preparing', false, true, sentence]);
+
+    // Asked again and again, past the attempt budget and the startup deadline: still waiting, nothing spent, said once.
+    for (let i = 0; i < r.lifecycle.maxAttempts * 3; i += 1) {
+      r.skipTo((await r.mappingOf(b)).nextAttemptAt!);
+      assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+    }
+    r.advance((r.lifecycle.startupDeadlineSeconds + 60) * 1000);
+    assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+    const still = await r.mappingOf(b);
+    assert.deepEqual([still.managementState, codeOf(still), still.attempt, still.podUid], ['STARTING', 'KUBERNETES_QUOTA_EXCEEDED', 0, null]);
+    const said = r.logs.filter((line) => line.includes('KUBERNETES_QUOTA_EXCEEDED'));
+    assert.equal(said.length, 1, 'said once');
+    assert.match(said[0], /: KUBERNETES_QUOTA_EXCEEDED: exceeded quota: recovery-quota, requested: pods=1, used: pods=1, limited: pods=1; it is started once there is room$/);
+    assert.ok(!r.logs.some((line) => line.includes('KUBERNETES_FORBIDDEN')), 'never read as the cluster refusing the manager');
+
+    // a goes to sleep and its Pod is removed: there is room, and b starts by itself, its startup deadline from then.
+    await r.putToSleep(a.ownerId);
+    const room = r.now();
+    const awake = await drive(r, b, ['READY'], async (m) => {
+      assert.ok(r.onVolume(m) <= 1);
+      if (m.managementState === 'STARTING' && m.podUid) {
+        assert.ok(m.startupDeadlineAt && m.startupDeadlineAt.getTime() >= room.getTime() + r.lifecycle.startupDeadlineSeconds * 1000);
+      }
+    });
+    assert.equal(awake.at(-1), 'READY', awake.join(' → '));
+    const ready = await r.mappingOf(b);
+    assert.deepEqual([ready.attempt, ready.lastError, ready.nextAttemptAt, ready.pvcUid], [0, null, null, waiting.pvcUid]);
+
+    // A quota on claims refuses a new account's volume the same way: PROVISIONING waits with nothing made, and an operator
+    // raising the quota lets it on, with its startup deadline from then.
+    r.quota!({ persistentvolumeclaims: r.claims!() });
+    const c = await newAccount('quota-c');
+    assert.equal(await r.manager.reconcile((await r.mappingOf(c)).id), 'WAITING');
+    const claimWait = await r.mappingOf(c);
+    assert.deepEqual(
+      [claimWait.managementState, codeOf(claimWait), claimWait.pvcUid, claimWait.attempt, claimWait.startupDeadlineAt, claimWait.resourceOperationState],
+      ['PROVISIONING', 'KUBERNETES_QUOTA_EXCEEDED', null, 0, null, 'COMPLETED'],
+    );
+    assert.match((claimWait.lastError as { detail: string }).detail, /^exceeded quota: recovery-quota, requested: persistentvolumeclaims=1, /);
+    r.advance((r.lifecycle.startupDeadlineSeconds + 60) * 1000);
+    r.quota!({ persistentvolumeclaims: r.claims!() + 1 });
+    const raised = r.now();
+    const provisioned = await drive(r, c, ['READY'], async (m) => {
+      if (m.pvcUid && m.managementState !== 'READY') {
+        assert.ok(m.startupDeadlineAt && m.startupDeadlineAt.getTime() >= raised.getTime() + r.lifecycle.startupDeadlineSeconds * 1000);
+      }
+    });
+    assert.equal(provisioned.at(-1), 'READY', provisioned.join(' → '));
+    assert.deepEqual([(await r.mappingOf(c)).attempt, (await r.mappingOf(c)).lastError], [0, null]);
+    r.quota!(null);
   });
 });

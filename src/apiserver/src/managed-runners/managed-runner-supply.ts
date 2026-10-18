@@ -80,17 +80,37 @@ export async function managedKeySupply(
   ownerId: string,
   runner: ManagedSupplyRunner,
 ): Promise<string | null> {
+  for (const key of await ownerManagedKeys(prisma, ownerId)) {
+    if (managedRuntimeReady(runner, key.engine, { bringsOwnCredentials: true })) return key.slug;
+  }
+  return null;
+}
+
+/**
+ * The key a first session in a managed default workspace starts on while its runner has not been
+ * found ready (no `initialProvider` yet), or null: the first of the owner's own keys that
+ * `managedKeySupply` would consider, before the runner has said which engines it has. It is the key READY
+ * records when the runner has that key's engine and no runtime of its own signed in, as a brand-new
+ * runner has none. A session on it is queued and waits for the runner (`assertManagedFirstSessionRuntime`).
+ */
+export async function managedFirstSessionKey(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<string | null> {
+  return (await ownerManagedKeys(prisma, ownerId))[0]?.slug ?? null;
+}
+
+/** The owner's own enabled keys, in the owner's order, that run on a runtime counted as supply, with that runtime. */
+async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<Array<{ slug: string; engine: LoginEngine }>> {
   const keys = await prisma.modelProvider.findMany({
     where: { ownerId, enabled: true },
     orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
     select: { slug: true, runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
   });
+  const usable: Array<{ slug: string; engine: LoginEngine }> = [];
   for (const key of keys) {
     if (isBuiltinProvider(key.slug)) continue;
     const engine = defaultEngineOf(keyCredential(key));
-    if (engine && managedRuntimeReady(runner, engine, { bringsOwnCredentials: true })) return key.slug;
+    if (engine && (MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(engine)) usable.push({ slug: key.slug, engine: engine as LoginEngine });
   }
-  return null;
+  return usable;
 }
 
 /**
@@ -98,7 +118,10 @@ export async function managedKeySupply(
  * or is refused with MODEL_UNAVAILABLE before anything is created — never started on an engine it
  * does not have, which is what the provider floor (Claude) or a client echoing it would otherwise
  * pick. The default it should start on is the mapping's `initialProvider`, which
- * `lastProviderByWorkspace` already answers for a workspace with no history.
+ * `lastProviderByWorkspace` already answers for a workspace with no history — and before the runner
+ * was ever ready, the owner's own key (`managedFirstSessionKey`), which is queued for the runner
+ * rather than refused while it has reported nothing (docs/managed-runner-design.md, "Implementation
+ * record: capacity, wake and sleep").
  *
  * "First" is the workspace provider seed's own measure: no session a person started there yet (task
  * runs and spawned children do not count). Once there is one, the workspace's history decides, as
@@ -121,6 +144,12 @@ export async function assertManagedFirstSessionRuntime(
     || ((MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(args.runtime)
       && bringsOwnEnvCredential(args.runtime as LoginEngine, args.workspaceEnv));
   if (managedRuntimeReady(args.runner, args.runtime, { bringsOwnCredentials: ownCredentials })) return;
+  // A runner that has never reported its engines — waiting for capacity, being provisioned, or started
+  // and not yet heard from; the heartbeat stores a report, an empty one included, as sent — has not said
+  // what it lacks. A session that brings its own credential, such as one of the owner's model keys,
+  // needs only its engine there: it is queued, and the runner runs it once it is READY. One that needs a
+  // runtime's own sign-in has none to wait for on a runner nobody could sign in to yet.
+  if (ownCredentials && args.runner.engines == null && (MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(args.runtime)) return;
   const ran = await prisma.session.findFirst({
     where: { workspaceId: args.workspaceId, taskId: null, parentSessionId: null },
     select: { id: true },
