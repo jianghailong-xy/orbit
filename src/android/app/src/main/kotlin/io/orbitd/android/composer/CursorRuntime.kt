@@ -214,8 +214,9 @@ internal object CursorRuntime {
     /** Under the Provider menu of a Cursor CLI session that has talked, on a runner that can't carry its conversation: why its other
      * accounts and keys are listed but can't be picked (D5). The server's refusal of the same request says the same in its own words. */
     val MOVE_BLOCKED_NOTE get() = "$CLI can’t carry a conversation to another account or key yet. Start a new session to use one of these."
-    /** In the model menu under Auto, which has no parameters to set (contract §10). */
-    const val AUTO_NOTE = "Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort to set."
+    /** In the model menu under Auto, which has no parameters to set (contract §10): the board's words (iOS 5 ①), context among them now
+     * that the menu has its row — the web, with none, leaves context out. */
+    const val AUTO_NOTE = "Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set."
     /** Under the tray of messages waiting for a running Cursor CLI turn (contract §3.2: a prompt sent mid-turn cancels the turn, so
      * Orbit queues it). */
     val QUEUE_NOTE get() = "$CLI can’t take a message mid-turn — sending one would stop the turn. These go in order once it ends."

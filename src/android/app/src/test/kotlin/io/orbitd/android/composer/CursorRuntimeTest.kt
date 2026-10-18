@@ -89,7 +89,8 @@ class CursorRuntimeTest {
         assertTrue(CursorRuntime.onAuto("cursor", "default"))
         assertFalse(CursorRuntime.onAuto("cursor", "claude-opus-5-5"))
         assertFalse(CursorRuntime.onAuto("claude", ""))
-        assertEquals("Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort to set.", CursorRuntime.AUTO_NOTE)
+        assertEquals("Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set.",
+            CursorRuntime.AUTO_NOTE)
     }
 
     /** Default is refused and Don't Ask is enforced only in part: the shared permissionSemantics' shortNotes, as the board's subtitles

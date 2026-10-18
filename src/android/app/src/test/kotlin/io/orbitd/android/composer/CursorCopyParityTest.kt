@@ -26,10 +26,13 @@ class CursorCopyParityTest {
     }
 
     @Test fun theComposerAndTheMachinesSayWhatTheWebSays() {
-        val words = listOf(CursorRuntime.MOVE_BLOCKED_NOTE, CursorRuntime.AUTO_NOTE, CursorRuntime.QUEUE_NOTE, CursorRuntime.RUNNING_PLACEHOLDER,
+        val words = listOf(CursorRuntime.MOVE_BLOCKED_NOTE, CursorRuntime.QUEUE_NOTE, CursorRuntime.RUNNING_PLACEHOLDER,
             CursorRuntime.CONTEXT_UNAVAILABLE) + RunnerState.entries.mapNotNull { it.label } +
             listOf(RunnerState.UPDATE_RUNNER, RunnerState.UNSUPPORTED_VERSION, RunnerState.UNSUPPORTED_PLATFORM).map { CursorRuntime.hint(it, null)!! }
         words.forEach { assertTrue("the web says \"$it\"", web.contains(it)) }
+        // Auto's note, but for context, which the web — with no Context row in its menu yet — leaves out.
+        val auto = CursorRuntime.AUTO_NOTE
+        assertTrue("the web says \"$auto\"", web.contains(auto) || web.contains(auto.replace(" or context", "")))
     }
 
     @Test fun theSignInLinkAndTheUsageSayWhatTheWebSays() {
