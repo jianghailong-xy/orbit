@@ -33,7 +33,11 @@ To take them again:
 1. `unshare -n capture/run-ns.sh scenes.mjs [scene ...]`
 2. `python3 -I capture/compare.py docs/mocks/cursor-engine/shots <shots> <out>`
 
-The scripts name their own directory (`/mnt/data/tmp/p7a-shots`) and this worktree's path outright.
+The scripts name their own directory (`/mnt/data/tmp/p7a-shots`) and the worktree they read (`/root/.orbit/worktrees/50304226-…`, the task's first run) outright.
+
+**Taken again from the final tree.** The task's first run stopped when its runner went offline. On 2026-10-18 the second run re-ran this kit from 64d68ad86 (tree b28a05ea7), with those two paths pointed at its own worktree and directory.
+- 67 of the 72 frames came out byte-identical to the captures these copies were made from.
+- The other 5 (`w3-add-pending` ×2, `w3-resign-link-dark`, `w5-running-pane` ×2) differ only inside one spinner, caught at another angle.
 
 ## Board by board
 
@@ -84,7 +88,7 @@ Same as the board:
 - a refused key's row says "Rejected by Cursor · … · Paste a new key".
 
 Different:
-- **"Who gets this key", first bullet.** This follows P0c's finding, as the coordinator ruled on 2026-10-17. The page says "Sessions on Cursor CLI hand it to the CLI on the runner, and commands the agent runs there can't read it." The board says commands can read the key. The finding was measured on Linux; macOS waits on P0b.
+- **"Who gets this key", first bullet.** This follows P0c's finding, as the coordinator ruled on 2026-10-17. The page says "Sessions on Cursor CLI hand it to the CLI on the runner, and commands the agent runs there can't read it." The board says commands can read the key. The finding was measured on Linux. P0b couldn't check it on macOS without a key; its follow-up (34hO5vUuVSUNrTdtUxF6b) will.
 - **The keys table's Models column** shows "—" where the board's fixture shows "7". A Cursor key has no model list of its own: the shared preset `cursor-api` has `models: []` and `modelsFromRuntime: true`. Its models are Cursor CLI's, on each machine.
 
 ### Web 5 · Session (`compare-web-5-session-*`)
@@ -137,7 +141,7 @@ The gate deliberately also accepts a runner that only reports the engine. A runn
   - The runner already installs Cursor CLI. The fix is outside this task's paths, so it is raised with the coordinator.
 - **No real Cursor account, key or prompt was used.** Every Cursor answer here is a fixture in the shape the runner and server give (contract §8–13).
 - **Signing in on another device is not measured yet** (contract §17.1 item 6). Web 3 assumes it works, as the board does.
-- **"Who gets this key" rests on P0c's Linux finding.** macOS waits on P0b.
+- **"Who gets this key" rests on P0c's Linux finding.** macOS waits on P0b's follow-up (34hO5vUuVSUNrTdtUxF6b).
 - **No frame shows a refused move.** A session that has talked can't be moved to another account or key; the page refuses before sending, as P6b's server does. If such a request does reach the server, the 409's sentence appears in the page's usual "Couldn't switch the provider / account" toast.
 
 ## Checks
