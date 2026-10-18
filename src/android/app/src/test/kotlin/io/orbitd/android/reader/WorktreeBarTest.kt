@@ -232,6 +232,14 @@ class WorktreeBarTest {
         compose.waitUntil(5_000) { sent("sessions", id, "merge-repair").isNotEmpty() }
         assertEquals(false, body(sent("sessions", id, "merge-repair").single())["preparePR"]?.jsonPrimitive?.booleanOrNull)
 
+        // The repair failed and its turn queued a check: the row says it failed, and the page waits for the check.
+        settle(loop("mergeRepairSession" to JsonObject(repair("FAILED") + ("error" to JsonPrimitive("The model provider rejected the request"))),
+            "mergeStatus" to JsonPrimitive("pending")))
+        compose.onNodeWithText("Repair session failed").assertIsDisplayed()
+        compose.onNodeWithText("Checking the repair…").assertIsDisplayed()
+        compose.onNode(hasText("Checking…") and hasClickAction()).assertIsNotEnabled()
+        compose.onNodeWithText("Resolve in repair session").assertDoesNotExist()
+
         // Already on origin (the review is still open): no repair row, and Done asks the server to record it merged.
         settle(loop("mergeRepairSession" to repair("AWAITING_INPUT"), "mergeRecovery" to Wire.json.parseToJsonElement("""{"code":"ALREADY_LANDED",
             "targetBranch":"main","previewId":"1c0ffee","sourceSha":"${"a".repeat(40)}","landedCommits":[{"sha":"${"b".repeat(40)}",
