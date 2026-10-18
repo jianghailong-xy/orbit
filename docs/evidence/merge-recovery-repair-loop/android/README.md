@@ -4,7 +4,7 @@ Task 34hJZMKsulMrCDCAtPOIU, project 34hIv3wbdtsxpc5RzDlOk. Board: docs/mocks/mer
 (frames ①–⑥, and the repair row's six states).
 
 Drawn by `src/android/app/src/test/kotlin/io/orbitd/android/reader/MergeRecoveryShotsTest.kt` (Robolectric, native graphics,
-w393dp-h852dp-xxhdpi) over the production `MergeRecoveryReview` at 5687903a4, light then dark (`OrbitTheme(darkTheme = …)`).
+w393dp-h852dp-xxhdpi) over the production `MergeRecoveryReview` at cdd6e783a, light then dark (`OrbitTheme(darkTheme = …)`).
 
 | File | Board | State | Primary step |
 |---|---|---|---|
