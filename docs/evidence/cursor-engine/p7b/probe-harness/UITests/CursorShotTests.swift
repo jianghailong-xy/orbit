@@ -46,7 +46,7 @@ final class CursorShotTests: ProbeCase {
 
     /// Settings, then its Infrastructure row, as a user opens the page.
     private func infrastructure(dark: Bool, reset: Bool = true, _ name: String) -> XCUIApplication {
-        let app = launch("settings", dark: dark, reset: reset, until: "Infrastructure", name)
+        let app = launch("settings", dark: dark, reset: reset, until: "Infrastructure", orPress: "Settings", name)
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Infrastructure'")).firstMatch
         note("\(name): Settings row \(describe(row))")
         row.tap()
@@ -471,8 +471,10 @@ final class CursorShotTests: ProbeCase {
             expectText(running, ["Run the full test suite", "Queued for next turn",
                                  "Cursor CLI can’t take a message mid-turn"], "running-\(s)")
             // The input's placeholder is its placeholderValue, not a label.
-            let input = running.textViews.allElementsBoundByIndex.last ?? running.textFields.firstMatch
-            note("running-\(s): input placeholder \(input.placeholderValue ?? "(none)") \(describe(input))")
+            for input in running.textViews.allElementsBoundByIndex + running.textFields.allElementsBoundByIndex
+            where !(input.placeholderValue ?? "").isEmpty {
+                note("running-\(s): input placeholder \(input.placeholderValue ?? "") \(describe(input))")
+            }
             shot("ios5-c-turn-running-queued-\(s)")
             tree(running, "running-\(s)")
             running.terminate()
@@ -515,9 +517,9 @@ final class CursorShotTests: ProbeCase {
                 if containing(modes, "Bypass").waitForExistence(timeout: 4) { note("modes-\(s): open after \(attempt)"); break }
             }
             settle(1.5)
-            expectText(modes, ["Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass",
-                               "Unsupported on Cursor CLI; session configuration is rejected",
-                               "Partly enforced, edits inside the workspace still run"], "modes-\(s)")
+            // A menu row's subtitle is drawn but not in the accessibility tree (its label is the title
+            // alone): Default's and Don't Ask's notes are read off the picture.
+            expectText(modes, ["Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass"], "modes-\(s)")
             let defaultRow = modes.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Default'")).firstMatch
             note("modes-\(s): Default \(describe(defaultRow)) enabled=\(defaultRow.exists && defaultRow.isEnabled)")
             if defaultRow.exists && defaultRow.isEnabled { XCTFail("modes-\(s): Default can be picked on Cursor CLI") }
@@ -536,12 +538,24 @@ final class CursorShotTests: ProbeCase {
             }
             shot("ios6-b-provider-blocked-\(s)")
             tree(talked, "blocked-\(s)")
+            // The note's second sentence is below the menu's fold: a swipe on a row that can't be picked
+            // scrolls the menu.
+            let lastKey = talked.buttons.matching(NSPredicate(format: "label == 'Cursor 2'")).firstMatch
+            if lastKey.exists {
+                lastKey.swipeUp(velocity: .slow)
+                settle(1.5)
+                expectText(talked, ["Start a new session to use one of these."], "blocked-note-\(s)")
+                shot("ios6-b2-provider-blocked-note-\(s)")
+            } else {
+                note("blocked-\(s): no Cursor 2 row to scroll the menu by")
+            }
             talked.terminate()
 
             let draft = compose(dark: dark, "draft-\(s)")
             pickCursor(draft, "draft-pick-\(s)")
             openProviderMenu(draft, inside: "Signed in on hpc", "draft-\(s)")
-            expectText(draft, ["Signed in on hpc", "Automatic", "Default", "Team", "Monthly 34%", "API keys"], "draft-\(s)")
+            // Team's "Monthly 34%" is its row's subtitle, read off the picture.
+            expectText(draft, ["Signed in on hpc", "Automatic", "Default", "Team", "API keys"], "draft-\(s)")
             expectAbsent(draft, ["can’t carry a conversation"], "draft-\(s)")
             shot("ios6-c-provider-draft-\(s)")
             tree(draft, "draft-\(s)")

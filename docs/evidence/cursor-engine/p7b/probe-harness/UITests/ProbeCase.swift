@@ -26,7 +26,7 @@ class ProbeCase: XCTestCase {
     /// back first; a chain step leaves it where the last press put it.
     func launch(_ surface: String, agent: String = "a1", session: String = "S1", dark: Bool = false,
                 reset: Bool = true, fresh: Bool? = nil, extra: [String] = [], until label: String,
-                _ name: String) -> XCUIApplication {
+                orPress fallback: String? = nil, _ name: String) -> XCUIApplication {
         if reset { resetStub() }
         let app = XCUIApplication()
         app.launchArguments = ["-orbit.instance", "http://127.0.0.1:8765", "-probe.surface", surface,
@@ -35,7 +35,13 @@ class ProbeCase: XCTestCase {
             + ((fresh ?? reset) ? ["-probe.fresh"] : []) + extra
         app.launch()
         dismissSystemPrompts()
-        if !appears(app, label, timeout: 45) {
+        // Not up yet: press what a person would to get there (the drawer's Settings), then wait again.
+        if let fallback, !appears(app, label, timeout: 20) {
+            let press = app.buttons.matching(NSPredicate(format: "label == %@", fallback)).firstMatch
+            note("\(name): \(label) not up after 20 s; pressing \(fallback) \(describe(press))")
+            if press.exists { press.tap() }
+        }
+        if !appears(app, label, timeout: fallback == nil ? 45 : 25) {
             note("\(name): \(label) never showed")
             write(app.debugDescription, "missing-\(name).txt")
             // A state the stub never drove is not evidence of anything: fail, keep the picture.

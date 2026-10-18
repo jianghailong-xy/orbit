@@ -35,6 +35,9 @@ enum ProbeArgs {
         case "console":
             model.route(to: .session(value("-probe.session") ?? "C1"))
         default:
+            // The window has to be up before a sheet goes over it: presented in a launch's first moments,
+            // the sheet was dropped while the flag stayed set (the first CI run, 39166881682).
+            try? await Task.sleep(for: .seconds(1.5))
             model.settingsPresented = true
             guard let machine = value("-probe.machine") else { return }
             try? await Task.sleep(for: .seconds(0.8))
