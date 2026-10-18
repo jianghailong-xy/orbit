@@ -81,7 +81,8 @@ class MergeRecoveryTest {
         assertEquals(MergeRecovery.RepairRow(RepairState.CONFLICTS, "Repair session finished", "Checked just now — 1 conflict left"), row(r, repair("AWAITING_INPUT")))
         assertEquals("Checked just now — 2 conflicts left", row(recovery("conflicts" to JsonArray(listOf(JsonPrimitive("a.swift"), JsonPrimitive("b.swift")))),
             repair("SUCCEEDED")).line)
-        assertEquals("Checked 4m ago — 1 conflict left", row(recovery("checkedAt" to JsonPrimitive("2026-10-11T11:26:00Z")), repair("AWAITING_INPUT")).line)
+        assertEquals("Checked 4m ago — 1 conflict left", row(recovery("checkedAt" to JsonPrimitive("2026-10-11T11:26:00Z")),
+            repair("AWAITING_INPUT", "lastTurnAt" to JsonPrimitive("2026-10-11T11:25:30.120Z"))).line)
         assertEquals(MergeRecovery.Buttons(Button("Continue repair", "repair", preparePR = false), listOf(Button("Prepare PR candidate", "repair", preparePR = true)),
             Button("Check again", "preview")), r.buttons(supported = true, repair = RepairState.CONFLICTS))
         assertEquals("Conflicts", r.conflictsHeading)
@@ -95,10 +96,10 @@ class MergeRecoveryTest {
             row(r, repair("AWAITING_INPUT", "lastAssistantText" to JsonPrimitive("Keep the target's version?"))))
         assertEquals("a long reply reads as one line", "“Both sides changed the closure. Keep the target's version?” · 2m ago",
             row(r, repair("INTERRUPTED", "lastAssistantText" to JsonPrimitive("Both sides changed the closure.\n\n  Keep the target's version?"))).line)
-        assertEquals("2m ago", row(r, repair("AWAITING_INPUT")).line)
+        assertNull("nothing it said, no line", row(r, repair("AWAITING_INPUT")).line)
         assertEquals(MergeRecovery.Buttons(Button("Reply in repair session", "repair", preparePR = false), emptyList(), Button("Check again", "preview")),
             r.buttons(supported = true, repair = RepairState.NEEDS_REPLY))
-        assertEquals("The repair isn't finished", r.title)
+        assertEquals("The repair isn’t finished", r.title)
         assertEquals("Some files in the repair worktree are still unresolved.", r.lede())
         assertEquals("Still unresolved", r.conflictsHeading)
     }
@@ -128,6 +129,18 @@ class MergeRecoveryTest {
         assertEquals(Button("Check again", "preview"), primary(r, RepairState.FINISHED))
     }
 
+    /** A check from before the repair stopped is not the repair's result: no verdict — the server's check of it is still to come. */
+    @Test fun aCheckOlderThanTheRepairsStopIsNotItsVerdict() {
+        val earlier = recovery("checkedAt" to JsonPrimitive("2026-10-11T11:14:00Z"))
+        for (state in listOf("AWAITING_INPUT", "SUCCEEDED"))
+            assertEquals(MergeRecovery.RepairRow(RepairState.FINISHED, "Repair session finished", null), row(earlier, repair(state)))
+        assertEquals(RepairState.FINISHED, row(recovery(*unfinished, "checkedAt" to JsonPrimitive("2026-10-11T11:14:00Z")),
+            repair("AWAITING_INPUT", "lastAssistantText" to JsonPrimitive("Keep the target's version?"))).state)
+        assertEquals("no stop to compare with", MergeRecovery.RepairRow(RepairState.FINISHED, "Repair session finished", null),
+            row(recovery(), repair("AWAITING_INPUT", "lastTurnAt" to JsonNull)))
+        assertEquals("the steps still follow the check", Button("Continue repair", "repair", preparePR = false), primary(earlier, RepairState.FINISHED))
+    }
+
     // ── Board ⑥: already on origin ──
 
     private val landedOnOrigin = arrayOf("code" to JsonPrimitive("ALREADY_LANDED"), "previewId" to JsonPrimitive("1c0ffee"),
@@ -138,15 +151,18 @@ class MergeRecoveryTest {
         "landedCommits" to json("""{"l":[{"sha":"bba5d7b3${"0".repeat(32)}","subject":"Explicit self in the session-list currency closure","author":"coordinator","date":"2026-10-11T18:34:12+08:00","sourceSha":"0032a5e1${"0".repeat(32)}"},
             {"sha":"99cd5459${"0".repeat(32)}","subject":"Update AgentsModel.swift, SessionListSwitchWiringTests.swift","author":"coordinator","date":"2026-10-11T17:36:20+08:00","sourceSha":"e4b9d0e1${"0".repeat(32)}"}]}""")["l"]!!)
 
+    private fun r0() = (landedOnOrigin.first { it.first == "landedCommits" }.second as JsonArray)[0]
+
     @Test fun aSessionAlreadyOnOriginSaysWhereAndEndsWithDone() {
         val r = recovery(*landedOnOrigin)
         assertTrue(r.confirmable)
         assertEquals("Already on origin/main", r.title)
-        assertEquals("This session's changes reached origin/main on Oct 11. Nothing is left to merge.", r.lede(ZoneOffset.UTC, Locale.US))
+        assertEquals("This session’s changes reached origin/main on Oct 11. Nothing is left to merge.", r.lede(ZoneOffset.UTC, Locale.US, now))
         assertEquals(listOf("bba5d7b3" to "0032a5e1", "99cd5459" to "e4b9d0e1"), r.landedCommits!!.map { it.sha.take(8) to it.sourceSha!!.take(8) })
-        assertEquals("Oct 11", MergeRecovery.day(r.landedCommits!!.last().date, ZoneOffset.UTC, Locale.US))
+        assertEquals("Oct 11", MergeRecovery.day(r.landedCommits!!.last().date, ZoneOffset.UTC, Locale.US, now))
+        assertEquals("another year's landing names its year", "Oct 11, 2025", MergeRecovery.day("2025-10-11T09:36:20Z", ZoneOffset.UTC, Locale.US, now))
         assertEquals("Matched by content — this branch was rewritten after these merged.", r.landedNote)
-        assertEquals("Local main's own 2 commits aren't part of this session.", r.localNote)
+        assertEquals("Local main’s own 2 commits aren’t part of this session.", r.localNote)
         assertEquals("Local main: 2 ahead, 1 behind origin/main", r.targetRelation)
         // Done is the one step — whatever the repair session did, and with no Check again beside it.
         for (state in listOf(null, RepairState.FINISHED, RepairState.NEEDS_REPLY, RepairState.RUNNING))
@@ -162,10 +178,12 @@ class MergeRecoveryTest {
         val own = recovery(*landedOnOrigin, "landedCommits" to json("""{"l":[{"sha":"${sha('a')}","subject":"s","author":"a","date":"2026-10-11T09:36:00Z","sourceSha":"${sha('a')}"}]}""")["l"]!!,
             "localCommits" to JsonNull)
         assertNull("the very commits, not copies: nothing was matched by content", own.landedNote)
+        assertEquals("Matched by content — this branch was rewritten after it merged.", recovery(*landedOnOrigin,
+            "landedCommits" to JsonArray(listOf(r0()))).landedNote)
         assertNull(own.localNote)
-        assertEquals("Local main's own 1 commit isn't part of this session.", recovery(*landedOnOrigin,
+        assertEquals("Local main’s own 1 commit isn’t part of this session.", recovery(*landedOnOrigin,
             "localCommits" to JsonArray(listOf(json("""{"sha":"${sha('b')}","subject":"s","author":"a","date":"2026-10-11T09:36:00Z"}""")))).localNote)
-        assertEquals("This session's changes reached origin/main. Nothing is left to merge.", recovery(*landedOnOrigin, "landedCommits" to JsonNull).lede())
+        assertEquals("Nothing is left to merge.", recovery(*landedOnOrigin, "landedCommits" to JsonNull).lede())
     }
 
     // ── Board ④'s footnote: the project's rule ──
@@ -177,6 +195,7 @@ class MergeRecoveryTest {
         assertNull("carried + SOURCE_REPLAY: nothing moved", recovery(*carried, "phase" to JsonPrimitive("SOURCE_REPLAY")).movedAfterRepairNote)
         assertNull("a fresh branch, named for this check", recovery("phase" to JsonPrimitive("TARGET_SYNC")).movedAfterRepairNote)
         assertNull(recovery(*carried, *unfinished, "phase" to JsonPrimitive("TARGET_SYNC")).movedAfterRepairNote)
+        assertNull("no repair branch, nothing carried", recovery(*carried, "phase" to JsonPrimitive("TARGET_SYNC"), "repairBranch" to JsonNull).movedAfterRepairNote)
         assertEquals("origin/main moved after the repair. The repair was kept; only these files conflict with the new commits.",
             recovery(*carried, "phase" to JsonPrimitive("TARGET_SYNC"), "conflicts" to JsonArray(listOf(JsonPrimitive("a"), JsonPrimitive("b")))).movedAfterRepairNote)
     }
@@ -199,7 +218,7 @@ class MergeRecoveryTest {
         assertTrue(MergeRecovery.followsRepairs(JsonObject(old + ("mergeRepairTurnEndedAt" to JsonNull))))
         val repair = MergeRecovery.repair(old)!!
         assertEquals(MergeRecovery.Repair("r", "Resolve merge recovery for main", "AWAITING_INPUT", null, null, null), repair)
-        assertEquals(MergeRecovery.RepairRow(RepairState.FINISHED, "Repair session completed", "Ready to check again"),
+        assertEquals(MergeRecovery.RepairRow(RepairState.COMPLETED, "Repair session completed", "Ready to check again"),
             recovery().repairRow(repair, loop = false, checking = false, now = now))
         assertEquals(MergeRecovery.RepairRow(RepairState.FAILED, "Repair session failed", null), recovery().repairRow(
             MergeRecovery.repair(json("""{"mergeRepairSession":{"runStatus":"FAILED","error":"boom"}}"""))!!, loop = false, checking = true, now = now))
