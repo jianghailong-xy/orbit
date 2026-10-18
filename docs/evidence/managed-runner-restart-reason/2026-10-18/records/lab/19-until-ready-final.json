@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-18T09:22:53.213+00:00",
+  "changes": [
+    [
+      "2026-10-18T09:22:53.213+00:00",
+      {
+        "attempt": 1,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 9,
+        "management_state": "READY",
+        "pod": "8b95df69",
+        "reason": null,
+        "revision": 130
+      }
+    ]
+  ],
+  "owner": "amy",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

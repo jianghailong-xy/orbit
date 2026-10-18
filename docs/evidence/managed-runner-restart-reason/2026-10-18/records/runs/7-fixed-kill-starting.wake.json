@@ -1,0 +1,37 @@
+{
+  "action": "wake",
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": true
+    },
+    "agentId": "34hyEq3tK1wFxVfejUq8R",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "firstSessionProvider": "deepseek",
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek",
+    "lastHeartbeatAt": "2026-10-18T09:21:57.576Z",
+    "managementState": "SLEEPING",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 105,
+    "runnerId": "34hyEq3hAjsYrwl7iWGU9",
+    "runnerPublicId": "34hyEq3hAjsYrwl7iWGU9",
+    "usable": false,
+    "workspaceId": "34hyEq3tK1wFxVfejUq8R",
+    "workspacePublicId": "34hyEq3tK1wFxVfejUq8R"
+  },
+  "at": "2026-10-18T09:22:10.178+00:00",
+  "before": {
+    "desiredState": "SLEEPING",
+    "managementState": "SLEEPING",
+    "revision": 105
+  },
+  "owner": "amy",
+  "status": 202
+}

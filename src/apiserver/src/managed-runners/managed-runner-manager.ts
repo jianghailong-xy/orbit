@@ -114,6 +114,10 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  *     volume and runner, through the same gate, within `maxAttempts` and the backoff (`terminated`).
  *     A crash loop still ends FAILED. Every such stop is logged; running out of memory has reasons
  *     of its own for the owner.
+ *   - The owner is told it is restarting (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY) until it is
+ *     READY. A wait on the way — its predecessor's volume detaching, a volume held, the environment's
+ *     cap, a transient error — is said while it lasts and carries that reason, which comes back once
+ *     the wait is over (`waitReason`).
  *   - No instance is created on a volume something else holds, a backup's helper container say: it
  *     waits until the volume is free (VOLUME_IN_USE), as for a predecessor's volume still detaching.
  *     A host at its cap on instances makes it wait for room the same way (CONTAINER_LIMIT).
@@ -262,6 +266,12 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
 
 /** The waits for room (`waitForRoom`): a create the environment's cap refused, made again once there is room. */
 const ROOM_WAITS: ReadonlySet<string> = new Set(['CONTAINER_LIMIT', 'KUBERNETES_QUOTA_EXCEEDED']);
+
+/** A reason an automatic restart stands under (`terminated`). */
+function restartingReason(reason: unknown): boolean {
+  const code = (reason as { code?: unknown } | null | undefined)?.code;
+  return code === 'POD_RESTARTING' || code === 'POD_RESTARTING_OUT_OF_MEMORY';
+}
 
 export function managedRunnerReason(code: string): ManagedRunnerReason {
   const known = REASONS[code];
@@ -683,9 +693,9 @@ export class ManagedRunnerManager {
       const holders = await this.backend.volumeHolders(storage);
       if (holders.length > 0) return this.volumeInUse(mapping, holders.join(', '));
       if ((mapping.lastError as { code?: unknown } | null)?.code === 'VOLUME_IN_USE') {
-        // Free again: the startup deadline runs from now.
+        // Free again: the startup deadline runs from now, and a restart's own reason is back.
         mapping = await this.commit(mapping, {
-          lastError: Prisma.DbNull,
+          lastError: this.restartReason(mapping),
           startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
         });
       }
@@ -1146,10 +1156,32 @@ export class ManagedRunnerManager {
       && this.now().getTime() - mapping.stateEnteredAt.getTime() >= 2 * this.profile.lifecycle.backoffMaxSeconds * 1000;
   }
 
-  /** The reason an automatic restart stands under until the runner is READY, unless a later wait says more. */
+  /**
+   * The reason an automatic restart stands under until the runner is READY: the stored reason itself,
+   * or the one a wait on the restart's way carries (`waitReason`), so that the restart's reason comes
+   * back when the wait ends. A start nobody restarted — a wake, an owner's retry — has none.
+   */
   private restartReason(mapping: ManagedRunner): Prisma.InputJsonValue | typeof Prisma.DbNull {
-    const code = (mapping.lastError as { code?: unknown } | null)?.code;
-    return code === 'POD_RESTARTING' || code === 'POD_RESTARTING_OUT_OF_MEMORY' ? (mapping.lastError as Prisma.InputJsonValue) : Prisma.DbNull;
+    const stored = mapping.lastError as { restart?: unknown } | null;
+    if (restartingReason(stored)) return stored as Prisma.InputJsonValue;
+    return restartingReason(stored?.restart) ? (stored!.restart as Prisma.InputJsonValue) : Prisma.DbNull;
+  }
+
+  /**
+   * The reason for a wait that ends by itself while the runner is being started: its volume still
+   * detaching or held by something else, the environment's cap on what it holds, a transient error.
+   * The owner reads it while it lasts. On an automatic restart's way it also carries the restart's own
+   * reason (`restart`, which no client is shown), and `restartReason` gives that back once the wait is
+   * over. Kept in the reason itself, it goes wherever the reason goes: READY, a failure, a fence or a
+   * sleep replaces it, restart and all.
+   */
+  private waitReason(mapping: ManagedRunner, code: string, detail?: string): Prisma.InputJsonValue {
+    const restart = this.restartReason(mapping);
+    return {
+      ...managedRunnerReason(code),
+      ...(detail === undefined ? {} : { detail }),
+      ...(restart === Prisma.DbNull ? {} : { restart: restart as Prisma.InputJsonValue }),
+    };
   }
 
   /**
@@ -1194,7 +1226,7 @@ export class ManagedRunnerManager {
     const holders = await this.backend.volumeHolders(storage);
     if (holders.length > 0) {
       if ((mapping.lastError as { code?: unknown } | null)?.code !== 'VOLUME_STILL_ATTACHED') {
-        await this.commit(mapping, { lastError: { ...managedRunnerReason('VOLUME_STILL_ATTACHED'), detail: holders.join(', ') } });
+        await this.commit(mapping, { lastError: this.waitReason(mapping, 'VOLUME_STILL_ATTACHED', holders.join(', ')) });
       }
       return { done: mapping.managementState === 'FENCING' ? 'FENCING' : 'WAITING' };
     }
@@ -1530,7 +1562,7 @@ export class ManagedRunnerManager {
       this.log.warn(`managed runner ${mapping.id}: VOLUME_IN_USE: ${this.backend.terms.volume} ${mapping.pvcName} is held by ${holders}; nothing is started on it until it is free`);
     }
     if (!waiting || Object.keys(also).length > 0) {
-      await this.commit(mapping, { ...also, lastError: { ...managedRunnerReason('VOLUME_IN_USE'), detail: holders }, startupDeadlineAt: null });
+      await this.commit(mapping, { ...also, lastError: this.waitReason(mapping, 'VOLUME_IN_USE', holders), startupDeadlineAt: null });
     }
     return { done: 'WAITING' };
   }
@@ -1551,19 +1583,22 @@ export class ManagedRunnerManager {
     }
     await this.commit(mapping, {
       resourceOperationState: 'COMPLETED',
-      lastError: { ...managedRunnerReason(code), detail },
+      lastError: this.waitReason(mapping, code, detail),
       startupDeadlineAt: null,
       nextAttemptAt: new Date(this.now().getTime() + this.profile.lifecycle.capacityRetrySeconds * 1000),
     });
     return { done: 'WAITING' };
   }
 
-  /** A create a wait for room held back has gone through: the wait's reason goes and the startup deadline runs from now. */
+  /**
+   * A create a wait for room held back has gone through: the wait's reason goes, an automatic
+   * restart's own coming back (`restartReason`), and the startup deadline runs from now.
+   */
   private roomMade(mapping: ManagedRunner): Prisma.ManagedRunnerUpdateManyMutationInput {
     const code = (mapping.lastError as { code?: unknown } | null)?.code;
     if (typeof code !== 'string' || !ROOM_WAITS.has(code)) return {};
     return {
-      lastError: Prisma.DbNull,
+      lastError: this.restartReason(mapping),
       nextAttemptAt: null,
       startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
     };
@@ -1658,7 +1693,7 @@ export class ManagedRunnerManager {
     );
     await this.commit(mapping, {
       nextAttemptAt: new Date(this.now().getTime() + delayMs),
-      lastError: { ...managedRunnerReason('TRANSIENT') },
+      lastError: this.waitReason(mapping, 'TRANSIENT'),
     });
     return { done: 'BACKOFF' };
   }
@@ -1680,7 +1715,7 @@ export class ManagedRunnerManager {
     await this.commit(mapping, {
       attempt,
       nextAttemptAt: new Date(this.now().getTime() + this.backoffDelay(attempt)),
-      lastError: { ...managedRunnerReason('TRANSIENT') },
+      lastError: this.waitReason(mapping, 'TRANSIENT'),
     });
     return { done: 'BACKOFF' };
   }

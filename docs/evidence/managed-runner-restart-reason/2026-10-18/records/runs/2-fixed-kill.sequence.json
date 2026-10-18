@@ -1,0 +1,90 @@
+[
+  {
+    "file": "/mnt/data/tmp/34hxIkHX/lab/records/2-fixed-kill.jsonl",
+    "from": "2026-10-18T09:08:09.495+00:00",
+    "runs": [
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:08:09.495+00:00",
+        "generations": [
+          2
+        ],
+        "reason": null,
+        "samples": 14,
+        "seconds": 6.5,
+        "state": "READY",
+        "until": "2026-10-18T09:08:15.996+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:08:16.496+00:00",
+        "generations": [
+          2
+        ],
+        "reason": "POD_RESTARTING",
+        "samples": 11,
+        "seconds": 5.0,
+        "state": "REQUESTED",
+        "until": "2026-10-18T09:08:21.497+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:08:21.997+00:00",
+        "generations": [
+          3
+        ],
+        "reason": "POD_RESTARTING",
+        "samples": 30,
+        "seconds": 14.5,
+        "state": "STARTING",
+        "until": "2026-10-18T09:08:36.501+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:08:37.001+00:00",
+        "generations": [
+          3
+        ],
+        "reason": null,
+        "samples": 1,
+        "seconds": 0.0,
+        "state": "READY",
+        "until": "2026-10-18T09:08:37.001+00:00"
+      }
+    ],
+    "samples": 56,
+    "until": "2026-10-18T09:08:37.001+00:00"
+  }
+]

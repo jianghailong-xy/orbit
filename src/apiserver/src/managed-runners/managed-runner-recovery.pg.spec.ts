@@ -48,7 +48,22 @@
  *       "exceeded quota") waits for room as (7) does at Docker's cap — KUBERNETES_QUOTA_EXCEEDED, not
  *       KUBERNETES_FORBIDDEN, nothing made or spent, no startup deadline running, said once — and goes
  *       on by itself: a new account's Pod once another runner sleeps, a new account's claim once an
- *       operator raises a quota on claims.
+ *       operator raises a quota on claims;
+ *  (11) Kubernetes only, since the wait is for the stopped Pod's own attachment: a restart, after a
+ *       stop or after running out of memory, whose stopped Pod's volume is still attached to its node
+ *       when the gate looks says so (VOLUME_STILL_ATTACHED) while it waits — nothing spent, no next
+ *       generation, no startup deadline running — and once the volume detaches it is said to be
+ *       restarting again (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY) through admission,
+ *       provisioning and the start, until READY clears it; an owner's retry through the same wait
+ *       says nothing of a restart;
+ *  (12)–(15) every other wait on a restart's way is said while it lasts, and the restart again once
+ *       it ends, until READY: (12) a transient error when it is due (answered, which spends an
+ *       attempt as before; not reached, which spends none); (13) on Docker, where nothing detaches,
+ *       a container outside the instance (a backup's helper) holding the volume when the gate looks,
+ *       which is (11)'s wait; (14) the environment's cap on instances, Docker's on containers or a
+ *       Kubernetes quota on Pods; (15) something else holding the volume when the next instance is to
+ *       be made. The waits of (13)–(15) spend no attempt and run no startup deadline, and a wake
+ *       through (15)'s wait says nothing of a restart.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -123,6 +138,11 @@ interface Rig {
   quota?(hard: Partial<Record<'pods' | 'persistentvolumeclaims', number>> | null): void;
   /** Kubernetes: the claims in the namespace. */
   claims?(): number;
+  /**
+   * Kubernetes: a deleted Pod's volume stays attached to its node, as when the attach/detach controller
+   * lags behind the kubelet, until the function detaches it.
+   */
+  linger?(mapping: ManagedRunner): () => void;
   /**
    * The backend fails the first call of each of the next `passes` passes: `unanswered`, a 5xx or a
    * timeout from a backend that was reached; `unreachable`, no connection to it at all. `first` is
@@ -199,6 +219,13 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
       release: (mapping) => void w.cluster.volumeAttachments.delete(foreign.get(mapping.id)!),
       quota: (hard) => void (w.cluster.resourceQuota = hard ? { name: 'recovery-quota', hard } : undefined),
       claims: () => w.cluster.all<PersistentVolumeClaim>('persistentvolumeclaims').length,
+      linger: (mapping) => {
+        w.cluster.autoDetach = false;
+        return () => {
+          w.cluster.detach(claimOf(mapping).spec.volumeName!);
+          w.cluster.autoDetach = true;
+        };
+      },
       loseVolume: (mapping) => {
         const claim = claimOf(mapping);
         w.cluster.remove('persistentvolumeclaims', mapping.pvcName);
@@ -1006,5 +1033,218 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     assert.equal(provisioned.at(-1), 'READY', provisioned.join(' → '));
     assert.deepEqual([(await r.mappingOf(c)).attempt, (await r.mappingOf(c)).lastError], [0, null]);
     r.quota!(null);
+  });
+
+  // (11): the stopped Pod's own attachment outlives it, as when the attach/detach controller lags behind the kubelet.
+  for (const { kind, exitCode, outOfMemory, code, sentence } of [
+    { kind: 'a stop', exitCode: 1, outOfMemory: false, code: 'POD_RESTARTING', sentence: 'The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.' },
+    { kind: 'running out of memory', exitCode: 137, outOfMemory: true, code: 'POD_RESTARTING_OUT_OF_MEMORY', sentence: 'The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.' },
+  ]) {
+    const r = kubernetes();
+    await t.test(`(11) a restart after ${kind} waiting for its stopped Pod's volume to detach says so, and is said to be restarting again once it has detached, until READY [${r.backend}]`, async () => {
+      const detaching = 'The previous instance has stopped and its data volume is still detaching. The next instance starts once it is detached.';
+      const { ownerId, mapping } = await r.readyRunner(`detach-${exitCode}`);
+      const detach = r.linger!(mapping);
+      r.stop(mapping.runnerId, exitCode, outOfMemory);
+      assert.equal(await r.manager.reconcile(mapping.id), 'BACKOFF');
+      const restarted = await r.mappingOf(ownerId);
+      assert.deepEqual([restarted.managementState, codeOf(restarted), restarted.attempt], ['REQUESTED', code, 1]);
+
+      // After the backoff the gate removes the stopped Pod by UID. Its volume is still attached to the node, so it waits, and says so.
+      const outcomes = await drive(r, ownerId, ['WAITING']);
+      assert.equal(outcomes.at(-1), 'WAITING', outcomes.join(' → '));
+      const waiting = await r.mappingOf(ownerId);
+      assert.deepEqual(
+        { state: waiting.managementState, code: codeOf(waiting), attempt: waiting.attempt, generation: waiting.generation, deadline: waiting.startupDeadlineAt },
+        { state: 'REQUESTED', code: 'VOLUME_STILL_ATTACHED', attempt: 1, generation: 1, deadline: null },
+        'nothing spent, no next generation and no startup deadline while the volume is attached',
+      );
+      assert.deepEqual([r.instance(mapping.runnerId), r.onVolume(waiting), r.instancesRemoved()], [null, 0, 1], 'the stopped Pod removed, nothing new on the volume');
+      const status = await r.service.status(ownerId);
+      assert.deepEqual(status.reason, { code: 'VOLUME_STILL_ATTACHED', message: detaching, retryable: false }, 'the wait is what the owner reads while it lasts');
+      assert.deepEqual([managedRunnerDisplay(status)?.kind, managedRunnerDisplay(status)?.detail], ['waking', detaching]);
+      for (let i = 0; i < 3; i += 1) assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+      assert.equal((await r.mappingOf(ownerId)).revision, waiting.revision, 'nothing written while it stays attached');
+
+      // Detached: the next generation, and the restart's own reason again — through admission, provisioning and the start — until READY.
+      detach();
+      const detached = r.now();
+      const seen: string[] = [];
+      const back = await drive(r, ownerId, ['READY'], async (m) => {
+        seen.push(`${m.managementState}:${codeOf(m)}`);
+        assert.ok(r.onVolume(m) <= 1, `${m.managementState}: ${r.onVolume(m)} Pods on the volume`);
+        if (m.managementState === 'READY') return;
+        const shown = await r.service.status(ownerId);
+        assert.deepEqual([codeOf(m), shown.reason?.code, managedRunnerDisplay(shown)?.detail], [code, code, sentence], seen.join(' → '));
+        assert.equal(m.attempt, 1, 'the restart counted once, the wait not at all');
+        if (m.startupDeadlineAt) assert.equal(m.startupDeadlineAt.getTime(), detached.getTime() + r.lifecycle.startupDeadlineSeconds * 1000, 'the startup deadline runs from its admission, after the wait');
+      });
+      assert.equal(back.at(-1), 'READY', back.join(' → '));
+      assert.ok(seen.some((s) => s.startsWith('STARTING:')), `a pass ended while it started: ${seen.join(' → ')}`);
+      const ready = await r.mappingOf(ownerId);
+      assert.deepEqual(
+        { generation: ready.generation, attempt: ready.attempt, lastError: ready.lastError, pvcUid: ready.pvcUid, runnerId: ready.runnerId },
+        { generation: 2, attempt: 1, lastError: null, pvcUid: mapping.pvcUid, runnerId: mapping.runnerId },
+        'READY says nothing more, on the same volume and runner',
+      );
+      assert.notEqual(ready.podUid, mapping.podUid);
+      assert.equal(managedRunnerDisplay(await r.service.status(ownerId))?.kind, 'available');
+    });
+  }
+
+  const retried = kubernetes({ maxAttempts: 1 });
+  await t.test(`(11) an owner's retry through the same wait says the wait, and then nothing of a restart [${retried.backend}]`, async () => {
+    const r = retried;
+    const { ownerId, mapping } = await r.readyRunner('detach-retry');
+    r.stop(mapping.runnerId, 1);
+    assert.equal(await r.manager.reconcile(mapping.id), 'FAILED');
+    const failed = await r.mappingOf(ownerId);
+    assert.equal(codeOf(failed), 'POD_TERMINATED');
+    const detach = r.linger!(failed);
+    await r.service.retry(ownerId, 'retry-detach', failed.revision);
+    const held = await drive(r, ownerId, ['WAITING']);
+    assert.equal(held.at(-1), 'WAITING', held.join(' → '));
+    const waiting = await r.mappingOf(ownerId);
+    assert.deepEqual([waiting.managementState, codeOf(waiting), waiting.generation], ['REQUESTED', 'VOLUME_STILL_ATTACHED', 1]);
+    detach();
+    const outcomes = await drive(r, ownerId, ['READY'], async (m) => assert.equal(codeOf(m), null, `${m.managementState}: a retry is no automatic restart`));
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+  });
+
+  /** The environment's cap on instances at none, or lifted: Docker's on containers, a Kubernetes quota on Pods. */
+  const capInstances = (r: Rig, on: boolean) => (r.capContainers ? r.capContainers(on ? 0 : 100) : r.quota!(on ? { pods: 0 } : null));
+
+  /**
+   * For (12)–(15): a READY runner, and what its owner reads on a restart's way. `crash` is its host's report of a stop: a
+   * restart, its attempt spent, and the clock past its backoff. `resumes` is the pass after a wait ends: the next
+   * generation's instance made and recorded, its startup deadline from then and the restart said again; then READY,
+   * which says nothing.
+   */
+  async function restarting(r: Rig, label: string) {
+    const { ownerId, mapping } = await r.readyRunner(label);
+    const sentence = 'The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.';
+    const row = () => r.mappingOf(ownerId);
+    const pass = () => r.manager.reconcile(mapping.id);
+    const reasonOf = async () => (await r.service.status(ownerId)).reason?.code ?? null;
+    const crash = async (): Promise<ManagedRunner> => {
+      const up = await row();
+      r.stop(up.runnerId, 1);
+      assert.equal(await pass(), 'BACKOFF');
+      const down = await row();
+      assert.deepEqual([down.managementState, codeOf(down), down.attempt], ['REQUESTED', 'POD_RESTARTING', up.attempt + 1]);
+      r.skipTo(down.nextAttemptAt!);
+      return down;
+    };
+    const resumes = async (what: string, attempt: number, generation: number) => {
+      const at = r.now();
+      assert.equal(await pass(), 'WAITING', what);
+      const started = await row();
+      assert.deepEqual(
+        {
+          state: started.managementState, code: codeOf(started), attempt: started.attempt, generation: started.generation,
+          made: !!started.podUid && r.instance(started.runnerId)?.uid === started.podUid, deadline: started.startupDeadlineAt?.getTime(),
+        },
+        { state: 'STARTING', code: 'POD_RESTARTING', attempt, generation, made: true, deadline: at.getTime() + r.lifecycle.startupDeadlineSeconds * 1000 },
+        `${what}: the wait over, it is restarting again`,
+      );
+      const status = await r.service.status(ownerId);
+      assert.deepEqual([status.reason?.code, managedRunnerDisplay(status)?.detail], ['POD_RESTARTING', sentence], what);
+      const outcomes = await drive(r, ownerId, ['READY'], async (m) => assert.ok(r.onVolume(m) <= 1, `${what}, ${m.managementState}: ${r.onVolume(m)} instances on the volume`));
+      assert.equal(outcomes.at(-1), 'READY', `${what}: ${outcomes.join(' → ')}`);
+      assert.deepEqual([(await row()).lastError, await reasonOf()], [null, null], `${what}: READY says nothing more`);
+    };
+    return { ownerId, row, pass, reasonOf, crash, resumes };
+  }
+
+  await both('(12) a transient error when a restart is due is said while it lasts, and the restart again once it is over, until READY', async (r) => {
+    const { row, pass, reasonOf, crash, resumes } = await restarting(r, 'transient');
+    const down = await crash();
+    // Answered with a failure: an attempt spent, as before.
+    r.outage('unanswered', 1, 'instance');
+    assert.equal(await pass(), 'BACKOFF');
+    let m = await row();
+    assert.deepEqual([m.managementState, codeOf(m), m.attempt, await reasonOf()], ['REQUESTED', 'TRANSIENT', down.attempt + 1, 'TRANSIENT']);
+    r.skipTo(m.nextAttemptAt!);
+    // Not reached at all: nothing spent.
+    r.outage('unreachable', 1, 'instance');
+    assert.equal(await pass(), 'BACKOFF');
+    m = await row();
+    assert.deepEqual([m.managementState, codeOf(m), m.attempt, await reasonOf()], ['REQUESTED', 'TRANSIENT', down.attempt + 1, 'TRANSIENT']);
+    r.skipTo(m.nextAttemptAt!);
+    await resumes('answered again', down.attempt + 1, down.generation + 1);
+  });
+
+  const helper = docker();
+  await t.test(`(13) a backup's helper container holding the volume when a restart's gate looks is (11)'s wait, said while it lasts, and the restart again once it lets go, until READY [${helper.backend}]`, async () => {
+    const r = helper;
+    const { row, pass, reasonOf, crash, resumes } = await restarting(r, 'gate-held');
+    const down = await crash();
+    r.hold(down);
+    assert.equal(await pass(), 'WAITING');
+    const held = await row();
+    assert.deepEqual(
+      { state: held.managementState, code: codeOf(held), attempt: held.attempt, generation: held.generation, deadline: held.startupDeadlineAt, onVolume: r.onVolume(held), reason: await reasonOf() },
+      { state: 'REQUESTED', code: 'VOLUME_STILL_ATTACHED', attempt: down.attempt, generation: down.generation, deadline: null, onVolume: 0, reason: 'VOLUME_STILL_ATTACHED' },
+      'it waits as for its predecessor\'s volume: nothing spent, no next generation',
+    );
+    assert.equal(await pass(), 'WAITING');
+    assert.equal((await row()).revision, held.revision, 'nothing written while it is held');
+    r.release(down);
+    await resumes('let go', down.attempt, down.generation + 1);
+  });
+
+  await both('(14) the environment\'s cap refusing a restart\'s next instance is said while it lasts, and the restart again once there is room, until READY', async (r) => {
+    const { row, pass, reasonOf, crash, resumes } = await restarting(r, 'room');
+    const room = r.capContainers ? 'CONTAINER_LIMIT' : 'KUBERNETES_QUOTA_EXCEEDED';
+    const down = await crash();
+    capInstances(r, true);
+    assert.equal(await pass(), 'WAITING');
+    const waiting = await row();
+    assert.deepEqual(
+      { state: waiting.managementState, code: codeOf(waiting), attempt: waiting.attempt, generation: waiting.generation, podUid: waiting.podUid, deadline: waiting.startupDeadlineAt, reason: await reasonOf() },
+      { state: 'STARTING', code: room, attempt: down.attempt, generation: down.generation + 1, podUid: null, deadline: null, reason: room },
+      'it waits for room: nothing spent, no startup deadline running',
+    );
+    capInstances(r, false);
+    r.skipTo(waiting.nextAttemptAt!);
+    await resumes('room again', down.attempt, down.generation + 1);
+  });
+
+  await both('(15) something else holding the volume when a restart\'s next instance is to be made is said while it lasts, and the restart again once it lets go, until READY; a wake through the same wait says nothing of a restart', async (r) => {
+    const { ownerId, row, pass, reasonOf, crash, resumes } = await restarting(r, 'create-held');
+    const down = await crash();
+    // The cap holds the next generation's instance back before its create, while something comes to hold the volume.
+    capInstances(r, true);
+    assert.equal(await pass(), 'WAITING');
+    r.hold(down);
+    capInstances(r, false);
+    r.skipTo((await row()).nextAttemptAt!);
+    assert.equal(await pass(), 'WAITING');
+    const held = await row();
+    assert.deepEqual(
+      { state: held.managementState, code: codeOf(held), attempt: held.attempt, podUid: held.podUid, deadline: held.startupDeadlineAt, onVolume: r.onVolume(held), reason: await reasonOf() },
+      { state: 'STARTING', code: 'VOLUME_IN_USE', attempt: down.attempt, podUid: null, deadline: null, onVolume: 0, reason: 'VOLUME_IN_USE' },
+      'it waits for the volume: nothing spent, no startup deadline running',
+    );
+    r.release(down);
+    await resumes('let go', down.attempt, down.generation + 1);
+
+    // A wake is no restart: through the same wait it says the wait, and then nothing. (A second on, the slept
+    // instance's last heartbeat is not a report from the woken one.)
+    const asleep = await r.putToSleep(ownerId);
+    r.hold(asleep);
+    r.advance(1_000);
+    assert.ok(await recordManagedDemand(prisma, asleep.runnerId, r.now()), 'a message wakes it');
+    const woken = await drive(r, ownerId, ['WAITING']);
+    assert.equal(woken.at(-1), 'WAITING', woken.join(' → '));
+    assert.deepEqual([codeOf(await row()), await reasonOf()], ['VOLUME_IN_USE', 'VOLUME_IN_USE']);
+    r.release(asleep);
+    assert.equal(await pass(), 'WAITING');
+    const started = await row();
+    assert.deepEqual(
+      [started.managementState, codeOf(started), !!started.podUid, await reasonOf(), managedRunnerDisplay(await r.service.status(ownerId))?.kind],
+      ['STARTING', null, true, null, 'waking'],
+    );
+    assert.equal((await drive(r, ownerId)).at(-1), 'READY');
   });
 });

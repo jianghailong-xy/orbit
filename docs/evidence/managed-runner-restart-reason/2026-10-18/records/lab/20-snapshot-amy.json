@@ -1,0 +1,189 @@
+{
+  "at": "2026-10-18T09:22:53.502+00:00",
+  "attachments": [
+    {
+      "attached": true,
+      "deleting": false,
+      "name": "csi-a2f5d12f5e74b9ea0f272b4214dffc55a5ebc9b3281fa1c4cc415e269b5066ad"
+    }
+  ],
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "enable_worktree": true,
+    "id": "01a14e3f-b2c5-77fe-84c0-9ba68954157b",
+    "name": "Default",
+    "runner_id": "01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "target_runner_id": "01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "mapping": {
+    "attempt": 1,
+    "demand_revision": 1,
+    "desired_state": "RUNNING",
+    "generation": 9,
+    "id": "01a14e3f-b2c7-77dd-852a-f72946f06e86",
+    "initial_provider": "deepseek",
+    "last_demand_at": "2026-10-18T09:22:10.154+00:00",
+    "last_error": null,
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab",
+    "pod_name": "mr-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "pod_uid": "8b95df69-fab3-4502-8f60-5fd0e77f04d2",
+    "pv_uid": "2e93daf0-1f90-42b6-8674-a062f4eefa22",
+    "pvc_name": "mr-data-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "pvc_uid": "3d7239dd-281f-4a10-8720-e270c96cf7ec",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 8,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-18T09:22:10.191Z"
+      },
+      "pool": "0d70efcc-6bda-4c76-9db3-e44d279936bd",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-18T09:02:39.836Z"
+      },
+      "version": 1
+    },
+    "revision": 130,
+    "state_entered_at": "2026-10-18T09:22:41.015+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-10e58522-f866-4ee5-a23a-fb91c4a33e07"
+  },
+  "owner": "amy",
+  "pod": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://250ceeeffe075707a143cabec58161f8449ab44c8df14bdcbb35d9fbdc4d961d",
+            "exitCode": 0,
+            "finishedAt": "2026-10-18T09:22:38Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-18T09:22:38Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-18T09:22:39Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": null,
+    "generation": "9",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+    ],
+    "name": "mr-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "8b95df69-fab3-4502-8f60-5fd0e77f04d2"
+  },
+  "podsUsingTheClaim": [
+    "mr-01a14e3f-b2c3-755a-ae7b-0a99e998e42d"
+  ],
+  "pv": {
+    "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-10e58522-f866-4ee5-a23a-fb91c4a33e07",
+    "image": "csi-vol-10e58522-f866-4ee5-a23a-fb91c4a33e07",
+    "reclaim": "Retain",
+    "uid": "2e93daf0-1f90-42b6-8674-a062f4eefa22"
+  },
+  "pvc": {
+    "createdAt": "2026-10-18T09:02:39Z",
+    "phase": "Bound",
+    "uid": "3d7239dd-281f-4a10-8720-e270c96cf7ec",
+    "volumeName": "pvc-3d7239dd-281f-4a10-8720-e270c96cf7ec"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-maintenance-run/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-18T09:02:39.811",
+    "id": "01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "last_heartbeat_at": "2026-10-18T09:22:39.804",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "token_hash_prefix": "baa5f0f489da"
+  },
+  "sessions": [],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": true,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "ONLINE",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 130,
+    "usable": true
+  }
+}
