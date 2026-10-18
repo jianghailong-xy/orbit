@@ -1,0 +1,39 @@
+{
+  "answer": {
+    "assignedRunnerId": "34hkeTv4p8HKXHXD9c4PY",
+    "code": null,
+    "engine": "claude",
+    "id": "34hkfehcoyDRpkrrgX5sO",
+    "message": null,
+    "model": null,
+    "provider": "deepseek",
+    "status": "PENDING",
+    "workspaceId": "34hkeTvGvyjmdu9qfXsBO"
+  },
+  "at": "2026-10-17T23:49:48.846+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "managed": {
+    "initialProvider": "deepseek",
+    "managementState": "READY",
+    "runnerId": "34hkeTv4p8HKXHXD9c4PY",
+    "usable": true,
+    "workspaceId": "34hkeTvGvyjmdu9qfXsBO"
+  },
+  "owner": "first",
+  "request": {
+    "prompt": "T05-FIRST-USER first session of a new deployment",
+    "title": "t05 first user first session",
+    "workspaceId": "34hkeTvGvyjmdu9qfXsBO"
+  },
+  "status": 201
+}

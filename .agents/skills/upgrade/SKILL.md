@@ -45,6 +45,17 @@ Without `--pull-base`, the helper:
 
 Postgres is omitted from the recreate set. With `--pull-base`, the helper pulls `postgres` and `gateway`, then runs a full `up -d --wait` so changed base images take effect.
 
+The helper never writes `.env`, so managed runners stay as the deployment's `.env` has them: off unless it switches them on, which only a fresh install (`scripts/install-server.sh`) or an administrator does (docs/self-hosting.md, "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile, Compose does not list `docker-channel`, and the helper builds, recreates and writes exactly what it did before managed runners existed: nothing under `data/`, no managed runner image.
+
+Where `.env` turns that profile on, the helper also keeps managed runners current (the section marked in the script, the same in both copies of /upgrade's script):
+
+1. It finds the managed runners' directory where Compose binds it into `docker-channel`, and stops before building anything if its `channel.json` and `profile.json` are not there.
+2. It builds `docker-channel` with the other images, then the managed runner image from `deploy/managed-runner/image` as `orbit-managed-runner:local` (local, never pushed; `--no-cache` applies to it too).
+3. After the migrations, when the image ID is new, it writes that ID into both files, each replaced whole by a rename.
+4. It recreates the other services as above, then the apiserver again if that did not recreate it (it reads the profile only as it starts), then `docker-channel`, last. The apiserver goes first: until the channel serves the image its profile names, it makes no container and only waits, while a channel already on the new image would refuse the old apiserver's creates.
+
+A managed runner's container keeps the image it was made from and is never stopped by the upgrade: each runner moves to the new image with its next container, when it wakes after it next sleeps. Nothing deletes the previous image while a container uses it: in Docker's containerd image store it loses its name when the new image takes the tag, and its storage goes with the last container made from it; in the classic store `--prune` removes it once no container, running or stopped, was made from it. `data/managed-runners/.image-switch` marks a switch written and not yet started on, so a run that failed between the two is finished by the next one.
+
 Concurrent upgrades are serialized with `/tmp/orbit-upgrade.lock`; a second invocation exits instead of starting another deployment.
 
 ## Requirements

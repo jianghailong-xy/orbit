@@ -1,0 +1,37 @@
+{
+  "answer": {
+    "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+    "message": "A FENCING managed runner is not retried."
+  },
+  "at": "2026-10-17T20:18:52.058+00:00",
+  "before": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hfIsD8KI6ITwx2rb3qZ",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T20:12:45.377Z",
+    "managementState": "FENCING",
+    "reason": {
+      "code": "PREDECESSOR_STOP_UNPROVEN",
+      "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+      "retryable": false
+    },
+    "retryAfter": null,
+    "revision": 13,
+    "runnerId": "34hfIsD2FWelHSkXqxwgI",
+    "runnerPublicId": "34hfIsD2FWelHSkXqxwgI",
+    "usable": false,
+    "workspaceId": "34hfIsD8KI6ITwx2rb3qZ",
+    "workspacePublicId": "34hfIsD8KI6ITwx2rb3qZ"
+  },
+  "status": 409
+}

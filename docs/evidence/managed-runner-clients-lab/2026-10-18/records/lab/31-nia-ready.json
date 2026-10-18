@@ -1,0 +1,94 @@
+{
+  "at": "2026-10-18T06:12:22.745+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:11:05.209+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "WAITING_CAPACITY",
+        "pod": null,
+        "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+        "revision": 4
+      }
+    ],
+    [
+      "2026-10-18T06:11:11.701+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "WAITING_CAPACITY",
+        "pod": null,
+        "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+        "revision": 5
+      }
+    ],
+    [
+      "2026-10-18T06:11:42.111+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "WAITING_CAPACITY",
+        "pod": null,
+        "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+        "revision": 6
+      }
+    ],
+    [
+      "2026-10-18T06:12:02.174+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "PROVISIONING",
+        "pod": null,
+        "reason": null,
+        "revision": 9
+      }
+    ],
+    [
+      "2026-10-18T06:12:07.603+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "STARTING",
+        "pod": "55115ad6",
+        "reason": null,
+        "revision": 16
+      }
+    ],
+    [
+      "2026-10-18T06:12:22.745+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "READY",
+        "pod": "55115ad6",
+        "reason": null,
+        "revision": 17
+      }
+    ]
+  ],
+  "owner": "nia",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

@@ -192,6 +192,16 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// on the runner beside the engine, so it has no turn to be sent into (`PendingTray`'s Steer).
     /// False on every echo — the runner runs one as a Bash card, never as a user turn.
     public var shell: Bool
+    /// All there is of this message is the server's durable receipt: written into a running turn, it
+    /// was refused or stranded before any runner echoed it, so GET …/turns?view=active lists how it
+    /// came out (`delivery`) and nothing in the transcript carries it. The queued tail draws it with
+    /// why it did not land, and putting its words back discards the receipt
+    /// (`ConsoleModel.putBack`). False on every other message.
+    public var receipt: Bool
+    /// The receipt's own code and reason, said in the sender's words by
+    /// `SteerDelivery.failureExplanation`.
+    public var deliveryCode: String?
+    public var deliveryReason: String?
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -204,7 +214,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil,
-                shell: Bool = false) {
+                shell: Bool = false, receipt: Bool = false,
+                deliveryCode: String? = nil, deliveryReason: String? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -228,6 +239,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
         self.shell = shell
+        self.receipt = receipt
+        self.deliveryCode = deliveryCode
+        self.deliveryReason = deliveryReason
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
@@ -236,6 +250,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, ownerAnswer, taskStart, startedCard, sessionMessage, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
+        case receipt, deliveryCode, deliveryReason
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -270,6 +285,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
         reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
         reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
         shell = (try? c.decodeIfPresent(Bool.self, forKey: .shell)) ?? false
+        // A snapshot from before receipts were drawn held none.
+        receipt = (try? c.decodeIfPresent(Bool.self, forKey: .receipt)) ?? false
+        deliveryCode = try? c.decodeIfPresent(String.self, forKey: .deliveryCode)
+        deliveryReason = try? c.decodeIfPresent(String.self, forKey: .deliveryReason)
     }
 }
 

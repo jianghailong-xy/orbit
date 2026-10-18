@@ -1,0 +1,55 @@
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetCompose]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetCompose]' passed (78.399 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetSession]' passed (28.346 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseCompose]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseCompose]' passed (28.772 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseSession]' passed (21.773 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingCompose]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingCompose]' passed (19.818 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingSession]' passed (14.525 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test04WenFirstSessionOffered]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test04WenFirstSessionOffered]' passed (49.507 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test05WenPreparingAnswered]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test05WenPreparingAnswered]' passed (121.459 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test06WenSleepWake]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test06WenSleepWake]' passed (104.555 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test07WenRestartsFailedRetried]' started.
+    t =   160.12s Added attachment named '07b-failed-stopped-too-often'
+    t =   261.63s Added attachment named 'verdict-07-wen-restarts-failed-retried.json'
+Test Case '-[T07ProbeUITests.ReplayTests test07WenRestartsFailedRetried]' passed (263.277 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test08NiaFirstSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test08NiaFirstSession]' passed (187.628 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test09NiaSleepWake]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test09NiaSleepWake]' passed (130.020 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' started.
+    t =   169.31s Added attachment named '10b-failed-kept-running-out-of-memory'
+Test Case '-[T07ProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' passed (194.387 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test11NiaQuotaWait]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test11NiaQuotaWait]' passed (111.926 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test12NiaVolumeInUse]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test12NiaVolumeInUse]' passed (93.809 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test13NiaVolumeDeleted]' started.
+    t =    44.87s Added attachment named '13b-failed-volume-gone-no-retry'
+Test Case '-[T07ProbeUITests.ReplayTests test13NiaVolumeDeleted]' passed (48.730 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test14WenEnvironmentUnavailable]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test14WenEnvironmentUnavailable]' passed (14.185 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test15RootOnOwnWorkspace]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test15RootOnOwnWorkspace]' passed (25.743 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test16RootOnSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test16RootOnSession]' passed (19.897 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test17DockerFirstSessionThenAtTheCap]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test17DockerFirstSessionThenAtTheCap]' passed (173.336 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test18DockerWakeAtTheCap]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test18DockerWakeAtTheCap]' passed (97.945 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (119.004 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+    t =    42.95s Added attachment named '20b-failed-volume-gone-no-retry'
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' passed (91.622 seconds).
+	 Executed 23 tests, with 0 failures (0 unexpected) in 2038.665 (2038.702) seconds
+	 Executed 23 tests, with 0 failures (0 unexpected) in 2038.665 (2038.703) seconds
+	 Executed 23 tests, with 0 failures (0 unexpected) in 2038.665 (2038.705) seconds
+** TEST SUCCEEDED **

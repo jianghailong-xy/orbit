@@ -1,0 +1,43 @@
+== 2026-10-17T18:02:04Z channel.py at b8186215ec0ef2323285f58516fc5d2d9f230211 (sha256 e3e63c40b4f74347…), image sha256:26eefb8145b8dba29cc04ce78c65a87b2cdd16ef04e3d238ac8ac6d412e1ae32
+-- /v1/info: limits and the disk (this channel runs in the test host's own namespace: it sees Docker's data root)
+{"limits": {"maxConcurrent": 1, "maxContainers": 1, "maxCpuMillis": 1000, "maxMemoryBytes": 1073741824, "maxPids": 512, "maxTmpBytes": 268435456, "maxVolumeBytes": 1073741824}, "allowVolumeRemoval": false, "disk": {"freeBytes": 15276600164352, "path": "/var/lib/docker", "totalBytes": 15873633447936}}
+-- container 1 (runner 9ee5551f-734c-4bfc-b8dc-a649cc5624b5)
+201   running
+-- container 2 (runner 41002e66-c0c9-48f3-afff-f549a99cfb68)
+429 CONTAINER_LIMIT containers of this instance: 1, at its limit (limits.maxContainers 1); another is made only once one of them is removed 
+-- the first container's /tmp, as its user
+tmpfs /tmp tmpfs rw,nosuid,nodev,relatime,size=65536k,inode64 0 0
+a program run from /tmp: exit=0
+TmpfsOptions: {"SizeBytes":67108864,"Mode":1023,"Options":[["exec"]]}
+-- removal is off
+{"body": {"code": "REMOVAL_REFUSED", "message": "volume removal is off on this channel: an operator turns it on with allowVolumeRemoval in its configuration (docs/managed-runner-docker-operations.md)"}, "request": "DELETE /v1/volumes/mr-data-41002e66-c0c9-48f3-afff-f549a99cfb68?uid=a901ea80-7015-4d25-b73b-5d91517a5218", "status": 403}
+-- every container on the test host now: mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5:running 
+-- cleaning up by UID: the container stopped and removed through the channel, then the volumes and network directly
+POST /v1/containers/mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5/stop?uid=e53093a0-ec01-4366-895e-054d0099fb60 202
+DELETE /v1/containers/mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5?uid=e53093a0-ec01-4366-895e-054d0099fb60 204
+volumes removed (an operator's docker volume rm, with the channel stopped)
+network removed
+-- the channel's own log
+   2026-10-17T18:02:04Z orbit-docker-channel: containers of this instance: at most 1
+   2026-10-17T18:02:04Z orbit-docker-channel: instance d8-standalone serving on /work/d8-standalone/channel.sock; image sha256:26eefb8145b8dba29cc04ce78c65a87b2cdd16ef04e3d238ac8ac6d412e1ae32, network orbit-mr-d8-standalone
+   2026-10-17T18:02:04Z orbit-docker-channel: GET /v1/info -> 200
+   2026-10-17T18:02:04Z orbit-docker-channel: volume mr-data-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 created
+   2026-10-17T18:02:04Z orbit-docker-channel: PUT /v1/volumes/mr-data-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 -> 200
+   2026-10-17T18:02:04Z orbit-docker-channel: credential of runner 9ee5551f-734c-4bfc-b8dc-a649cc5624b5 stored
+   2026-10-17T18:02:04Z orbit-docker-channel: PUT /v1/credentials/9ee5551f-734c-4bfc-b8dc-a649cc5624b5 -> 200
+   2026-10-17T18:02:05Z orbit-docker-channel: container mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 created and started
+   2026-10-17T18:02:05Z orbit-docker-channel: POST /v1/containers -> 201
+   2026-10-17T18:02:05Z orbit-docker-channel: volume mr-data-41002e66-c0c9-48f3-afff-f549a99cfb68 created
+   2026-10-17T18:02:05Z orbit-docker-channel: PUT /v1/volumes/mr-data-41002e66-c0c9-48f3-afff-f549a99cfb68 -> 200
+   2026-10-17T18:02:05Z orbit-docker-channel: credential of runner 41002e66-c0c9-48f3-afff-f549a99cfb68 stored
+   2026-10-17T18:02:05Z orbit-docker-channel: PUT /v1/credentials/41002e66-c0c9-48f3-afff-f549a99cfb68 -> 200
+   2026-10-17T18:02:05Z orbit-docker-channel: POST /v1/containers -> 429 CONTAINER_LIMIT
+   2026-10-17T18:02:05Z orbit-docker-channel: DELETE /v1/volumes/mr-data-41002e66-c0c9-48f3-afff-f549a99cfb68 -> 403 REMOVAL_REFUSED
+   2026-10-17T18:02:05Z orbit-docker-channel: GET /v1/containers/mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 -> 200
+   2026-10-17T18:02:05Z orbit-docker-channel: container mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5: stop asked (grace 10 s)
+   2026-10-17T18:02:05Z orbit-docker-channel: POST /v1/containers/mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5/stop -> 202
+   2026-10-17T18:02:05Z orbit-docker-channel: container mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 stopped
+   2026-10-17T18:02:06Z orbit-docker-channel: container mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 removed
+   2026-10-17T18:02:06Z orbit-docker-channel: DELETE /v1/containers/mr-9ee5551f-734c-4bfc-b8dc-a649cc5624b5 -> 204
+   2026-10-17T18:02:06Z orbit-docker-channel: signal 15: shutting down
+-- left on the test host: containers [0], volumes [0], networks: bridge host none 

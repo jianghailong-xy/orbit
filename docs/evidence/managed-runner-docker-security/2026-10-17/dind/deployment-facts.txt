@@ -1,0 +1,114 @@
+== deployment facts at 2026-10-17T13:10:10Z, checkout c16d115b38900ba4c20237d060ecb0c004ac7051
+-- .env (mode 600): the managed runner lines
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+COMPOSE_PROFILES=managed-runners-docker
+-- data/managed-runners: owner, mode, size
+drwx------ root:root 4096 data/managed-runners
+-rw------- root:root 655 data/managed-runners/channel.json
+srw------- root:root 0 data/managed-runners/channel.sock
+-rw------- root:root 1019 data/managed-runners/profile.json
+drwx------ root:root 4096 data/managed-runners/state
+-rw------- root:root 65 data/managed-runners/token
+drwx------ root:root 4096 data/managed-runners/state
+drwx------ root:root 4096 data/managed-runners/state/credentials
+drwx------ root:root 4096 data/managed-runners/state/evictions
+drwx------ root:root 4096 data/managed-runners/state/fencing
+-- data/managed-runners/channel.json
+{
+  "schemaVersion": 1,
+  "instanceId": "orbit-e08a3eef",
+  "listen": { "unixSocket": "/var/lib/orbit-managed-runners/channel.sock" },
+  "tokenFile": "/var/lib/orbit-managed-runners/token",
+  "dockerSocket": "/var/run/docker.sock",
+  "stateDir": "/var/lib/orbit-managed-runners/state",
+  "image": "sha256:e70dc4770beb31947330a29364cf3f722da2243cb71fd7c91b0cfb2c7336e906",
+  "network": "orbit-managed-runners",
+  "limits": {
+    "maxCpuMillis": 4000,
+    "maxMemoryBytes": 8589934592,
+    "maxPids": 4096,
+    "maxTmpBytes": 2147483648,
+    "maxVolumeBytes": 107374182400,
+    "maxConcurrent": 8
+  },
+  "stopGraceSeconds": 240,
+  "diskCheckSeconds": 120
+}
+-- data/managed-runners/profile.json
+{
+  "schemaVersion": 1,
+  "valueKind": "actual",
+  "backend": "docker",
+  "environmentId": "orbit-e08a3eef",
+  "clusterKey": "orbit-e08a3eef",
+  "resourceProfileId": "docker-default",
+  "docker": {
+    "instanceId": "orbit-e08a3eef",
+    "channel": { "socketPath": "/var/lib/orbit-managed-runners/channel.sock" },
+    "tokenFile": "/var/lib/orbit-managed-runners/token"
+  },
+  "storage": { "capacity": "20Gi" },
+  "runner": {
+    "image": "sha256:e70dc4770beb31947330a29364cf3f722da2243cb71fd7c91b0cfb2c7336e906",
+    "serverUrl": "http://172.19.0.1:2086",
+    "maxConcurrent": 2,
+    "tmpSizeLimit": "1Gi",
+    "resources": { "cpu": "2", "memory": "4Gi", "pids": 4096 }
+  },
+  "lifecycle": {
+    "maxAttempts": 5,
+    "backoffBaseSeconds": 10,
+    "backoffMaxSeconds": 300,
+    "startupDeadlineSeconds": 1800,
+    "requestTimeoutSeconds": 60,
+    "leaseSeconds": 60,
+    "pollIntervalSeconds": 5,
+    "heartbeatFreshSeconds": 120,
+    "idleSeconds": 3600,
+    "capacityRetrySeconds": 60,
+    "drainSeconds": 600
+  }
+}
+-- the managed runners' network
+name=orbit-managed-runners driver=bridge internal=false enable_icc=false subnet=172.19.0.0/16 gateway=172.19.0.1 
+runner.serverUrl=http://172.19.0.1:2086; the network's IPv4 gateway=172.19.0.1; serverUrl names that gateway: yes
+-- who publishes what on this host
+orbit-apiserver	3000/tcp
+orbit-docker-channel	
+orbit-gateway	0.0.0.0:2086->80/tcp, [::]:2086->80/tcp
+orbit-pgbackup	5432/tcp
+orbit-postgres	5432/tcp
+orbit-web	80/tcp
+orbit-wiki-worker	3000/tcp
+-- which containers are given a Docker socket (any mount whose source ends in docker.sock)
+/orbit-apiserver 
+/orbit-docker-channel DOCKER-SOCKET:/var/run/docker.sock->/var/run/docker.sock 
+/orbit-gateway 
+/orbit-pgbackup 
+/orbit-postgres 
+/orbit-web 
+/orbit-wiki-worker 
+-- docker-channel: how it runs
+network=none user="" privileged=false capAdd=[] readonlyRootfs=false ports={} exposed=null restart=unless-stopped
+bind /work/orbit/data/managed-runners -> /var/lib/orbit-managed-runners rw=true
+bind /var/run/docker.sock -> /var/run/docker.sock rw=true
+
+-- docker-channel: its network namespace (interfaces, listening TCP/UDP sockets, listening unix sockets)
+lo
+tcp listeners:
+udp sockets:
+listening unix sockets:
+/var/lib/orbit-managed-runners/channel.sock
+-- docker-channel: processes
+PID   USER     COMMAND
+    1 root     python3 -I /opt/orbit-docker-channel/channel.py serve --config /var/lib/orbit-managed-runners/channel.json
+  224 root     ps -o pid,user,args
+-- apiserver: how it reaches the channel
+user="" networks=orbit_default 
+bind /work/orbit/data/managed-runners -> /var/lib/orbit-managed-runners rw=false
+
+ORBIT_MANAGED_RUNNERS_PROFILE=/var/lib/orbit-managed-runners/profile.json
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+-- this test host's own dockerd (an artifact of the Docker-in-Docker host, not of the deployment)
+docker-init -- dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2376 --tlsverify --tlscacert /certs/server/ca.pem --tlscert /certs/server/cert.pem --tlskey <path> 

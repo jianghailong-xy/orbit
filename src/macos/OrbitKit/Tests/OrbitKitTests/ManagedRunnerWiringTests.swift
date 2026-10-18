@@ -69,6 +69,24 @@ final class ManagedRunnerWiringTests: XCTestCase {
         XCTAssertTrue(adopt.contains("ManagedRunnerLogic.refreshInterval(display)"))
     }
 
+    func testAMovedFirstSessionProviderReadsTheWorkspaceListAgain() throws {
+        // The draft of the managed default workspace starts on the workspace's `lastProvider`, which
+        // the server derives: when the status's first-session provider moves (a key added, READY's
+        // record), the list is read again — never on the first answer, and a failed read forgets nothing.
+        let model = code(try source("ManagedRunnerModel.swift"))
+        let adopt = flat(try slice(model, from: "private func adopt(", to: "\n    }"))
+        XCTAssertTrue(adopt.contains("let startsOn = ManagedRunnerLogic.firstSessionProvider(answer)"))
+        XCTAssertTrue(adopt.contains("if let seen = seenFirstSessionProvider, seen != startsOn { onFirstSessionProviderChanged() }"))
+        XCTAssertTrue(adopt.contains("seenFirstSessionProvider = .some(startsOn)"))
+        let answered = try XCTUnwrap(adopt.range(of: "if let answer {"))
+        XCTAssertLessThan(answered.lowerBound, try XCTUnwrap(adopt.range(of: "onFirstSessionProviderChanged()")).lowerBound)
+        let reset = try slice(model, from: "func reset() {", to: "\n    }")
+        XCTAssertTrue(reset.contains("seenFirstSessionProvider = nil"))
+        let app = code(try source("AppModel.swift"))
+        let configure = try slice(app, from: "sharedPools = SharedPoolsModel(", to: "runnerControl = RunnerControl(")
+        XCTAssertTrue(configure.contains("managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }"))
+    }
+
     func testTheAppBuildsItPollsItAndForgetsItOnSignOut() throws {
         let app = code(try source("AppModel.swift"))
         let configure = try slice(app, from: "sharedPools = SharedPoolsModel(", to: "runnerControl = RunnerControl(")
@@ -110,7 +128,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
     func testWorkSentToAManagedRunnerThatIsNotUpReadsItsStateAtOnce() throws {
         let console = code(try source("ConsoleModel.swift"))
         let wake = try slice(console, from: "private func managedWorkSent() {", to: "\n    }")
-        XCTAssertTrue(wake.contains("guard managed != nil, runnerOnline != true, let managedRunner else { return }"))
+        // Not up by the managed status: a runner that has just slept still reads online for a while.
+        XCTAssertTrue(wake.contains("guard let managed, managed.display.kind != .available, let managedRunner else { return }"))
+        XCTAssertFalse(wake.contains("runnerOnline"), "a just-slept runner's row still reads online")
         XCTAssertTrue(wake.contains("await managedRunner.load()"))
         XCTAssertEqual(console.components(separatedBy: "managedWorkSent()").count - 1, 3,
                        "declared once, called after an accepted turn and after a created session")

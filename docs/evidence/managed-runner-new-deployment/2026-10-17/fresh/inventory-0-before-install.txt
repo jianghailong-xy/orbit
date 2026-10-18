@@ -1,0 +1,11 @@
+== before install 2026-10-17T10:50:09Z
+-- containers
+-- volumes
+-- networks
+bridge	bridge
+host	host
+none	null
+-- images
+orbit-managed-runner:t03-d856cde9b	7d6bd8f205e9
+nginx:alpine	892bb2152464
+postgres:16-alpine	721873c34ceb

@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/scripts/managed-runner/lab/manager-lab.py", line 720, in <module>
+    main()
+    ~~~~^^
+  File "/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/scripts/managed-runner/lab/manager-lab.py", line 713, in main
+    {'prepare': cmd_prepare, 'gate': cmd_gate, 'replica': cmd_replica, 'owner': cmd_owner, 'signin': cmd_signin, 'ensure': cmd_ensure,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     'action': cmd_action, 'status': cmd_status, 'view': cmd_view, 'consistency': cmd_view, 'watch': cmd_watch,
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     'stand-in-login': cmd_stand_in_login, 'kill-runner': cmd_kill_runner, 'delete': cmd_delete, 'evict': cmd_evict,
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     'api-outage': cmd_api_outage, 'cross-user': cmd_cross_user, 'foreign': cmd_foreign, 'switch-check': cmd_switch_check}[args.command](args)
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/scripts/managed-runner/lab/manager-lab.py", line 261, in cmd_ensure
+    token = owner_state(args.name)['accessToken']
+            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'accessToken'

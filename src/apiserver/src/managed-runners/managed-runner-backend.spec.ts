@@ -10,26 +10,27 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { FakeKubeCluster, tripwireKubeClientFactory } from '../test-support/fake-kube-client';
 import { MemoryRunBackend } from '../test-support/memory-run-backend';
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
-import { KubeAmbiguousError, KubeApiError, type PersistentVolumeClaim, type Pod } from './kube-client';
+import { KubeAmbiguousError, KubeApiError, KubeUnreachableError, type PersistentVolumeClaim, type Pod } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
 import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
 import { MANAGED_RUNNER_BACKENDS, ManagedRunnerConflict } from './managed-runner-backend';
 import { capacityBudget, computeShare, storageShare } from './managed-runner-capacity';
 import { ManagedRunnerManager } from './managed-runner-manager';
 import { parseManagedRunnerProfile, type ManagedRunnerProfile } from './managed-runner-profile';
-import { managedAdmissionProbeName, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
+import { MANAGED_STOP_REPORT_FINALIZER, managedAdmissionProbeName, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
 import { createManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerService } from './managed-runner.service';
 
-// The run backend boundary (managed-runner-backend.ts): which backend a profile chooses, Docker
-// refused by name with nothing built for Kubernetes in its place, KubernetesBackend making exactly
-// the Kubernetes calls the manager made itself, and the manager making none of its own. The manager
-// driving a mapping on a backend with no Kubernetes in it is managed-runner-backend.pg.spec.ts.
+// The run backend boundary (managed-runner-backend.ts): which backend a profile chooses, a Docker
+// profile never read as a Kubernetes one nor building anything for Kubernetes, KubernetesBackend
+// making exactly the Kubernetes calls the manager made itself, and the manager making none of its
+// own. The manager driving a mapping on a backend with no Kubernetes in it is
+// managed-runner-backend.pg.spec.ts; the Docker backend itself is docker-backend.spec.ts.
 
 const quiet = { warn: () => undefined, error: () => undefined, log: () => undefined };
 const RUNNER = '0195c0de-0000-7000-8000-0000000000a1';
 const OWNER = '0195c0de-0000-7000-8000-0000000000b1';
-const DOCKER_REFUSED = /^backend is "docker", which this server does not implement yet; it does not run managed runners on Kubernetes instead$/;
+const KUBERNETES_SECTION = /^kubernetes belongs to the kubernetes backend; a docker profile does not name it$/;
 
 function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
   return {
@@ -44,7 +45,7 @@ function profileFile(profile: unknown): string {
   return file;
 }
 
-test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "docker" is refused by name, anything else is refused', () => {
+test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "docker" is read as Docker alone, anything else is refused', () => {
   assert.deepEqual(MANAGED_RUNNER_BACKENDS, ['kubernetes', 'docker']);
   const absent = parseManagedRunnerProfile(structuredClone(testManagedRunnerProfile()));
   assert.ok(absent.ok);
@@ -54,13 +55,15 @@ test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "dock
   assert.ok(stated.ok);
   assert.equal(stated.profile.backend, 'kubernetes');
 
-  // Docker is refused with that one reason — whatever else the file says, and with no Kubernetes
-  // section asked of it — so nothing reads it as a Kubernetes profile.
-  for (const docker of [{ ...testManagedRunnerProfile(), backend: 'docker' }, { backend: 'docker' }, { schemaVersion: 2, backend: 'docker' }]) {
+  // A Kubernetes profile relabelled docker is read as a Docker one, which it is not: refused, its
+  // Kubernetes section named — so nothing reads it as a Kubernetes profile either.
+  const relabelled = parseManagedRunnerProfile({ ...testManagedRunnerProfile(), backend: 'docker' });
+  assert.equal(relabelled.ok, false);
+  assert.ok(!relabelled.ok && relabelled.problems.some((p) => KUBERNETES_SECTION.test(p)), JSON.stringify(!relabelled.ok && relabelled.problems));
+  for (const docker of [{ backend: 'docker' }, { schemaVersion: 2, backend: 'docker' }]) {
     const refused = parseManagedRunnerProfile(docker);
     assert.equal(refused.ok, false);
-    assert.equal(!refused.ok && refused.problems.length, 1, JSON.stringify(!refused.ok && refused.problems));
-    assert.match(!refused.ok ? refused.problems[0] : '', DOCKER_REFUSED);
+    assert.ok(!refused.ok && refused.problems.some((p) => /^docker\.channel must name exactly one/.test(p)), JSON.stringify(!refused.ok && refused.problems));
   }
   for (const other of ['Kubernetes', 'podman', '', 1, null]) {
     const refused = parseManagedRunnerProfile({ ...testManagedRunnerProfile(), backend: other });
@@ -68,20 +71,20 @@ test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "dock
   }
 });
 
-test('a docker profile leaves the enabled feature unavailable, and nothing is built for Kubernetes instead', async () => {
+test('an invalid docker profile leaves the enabled feature unavailable, and nothing is built for Kubernetes instead', async () => {
   const constructed: string[] = [];
   const logged: string[] = [];
   const runtime = createManagedRunnerRuntime({
     profilePath: profileFile({ ...testManagedRunnerProfile(), backend: 'docker' }),
     prisma: {} as PrismaService,
     kubeClient: tripwireKubeClientFactory(constructed),
+    dockerChannel: () => assert.fail('no channel client for a profile that is refused'),
     log: { error: (line: string) => void logged.push(line), log: (line: string) => void logged.push(line) },
   });
   assert.equal(runtime.available, false);
-  assert.match(!runtime.available ? runtime.problems.join('\n') : '', DOCKER_REFUSED);
+  assert.match(!runtime.available ? runtime.problems.join('\n') : '', /kubernetes belongs to the kubernetes backend/);
   assert.deepEqual(constructed, [], 'no Kubernetes client was constructed');
-  assert.equal(logged.length, 1);
-  assert.match(logged[0], /^managed runners are enabled but unavailable: backend is "docker"/);
+  assert.ok(logged.length > 0 && logged.every((line) => line.startsWith('managed runners are enabled but unavailable: ')));
 
   // What an owner is told: unavailable, never a Kubernetes runner instead.
   const reads = { managedRunner: { findUnique: async () => null }, user: { findUnique: async () => ({ disabledAt: null }) } };
@@ -204,9 +207,17 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
   const verified = { volume, backing };
   assert.deepEqual(await backend.volumeHolders(verified), [`csi-${volume.boundTo}-node-a`], 'attached while the Pod is there');
 
+  assert.equal(instance.exit, null, 'running: it has not ended');
   cluster.stopPod(managedPodName(RUNNER));
   const stopped = (await backend.readInstance(running))!;
   assert.deepEqual([stopped.terminated, stopped.stopConfirmed, stopped.phase], [true, true, 'Succeeded']);
+  assert.deepEqual(stopped.exit, { code: 0, outOfMemory: false }, 'the runner container\'s exit');
+  // The runtime's OOMKilled on a runner that ended killed (137) is out of memory; on another exit it is not.
+  cluster.stopPod(managedPodName(RUNNER), 137, 'OOMKilled');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: true });
+  cluster.stopPod(managedPodName(RUNNER), 255, 'OOMKilled');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 255, outOfMemory: false });
+  cluster.stopPod(managedPodName(RUNNER));
   const predecessor = { runnerId: RUNNER, generation: 1, podName: instance.name, podUid: instance.uid, nodeName: 'node-a', pvcUid: volume.uid, volumeHandle: backing.handle };
   const proof = backend.observedStop(predecessor, stopped, new Date('2026-10-17T00:00:00.000Z'));
   assert.equal(proof.kind, 'OBSERVED_STOP');
@@ -215,7 +226,11 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
 
   cluster.calls.length = 0;
   await backend.removeInstance(running);
-  assert.deepEqual(cluster.calls, [{ op: 'delete', kind: 'pods', name: managedPodName(RUNNER) }]);
+  assert.deepEqual(cluster.calls, [
+    { op: 'delete', kind: 'pods', name: managedPodName(RUNNER) },
+    { op: 'get', kind: 'pods', name: managedPodName(RUNNER) },
+    { op: 'patch', kind: 'pods', name: managedPodName(RUNNER) },
+  ], 'deleted by UID, then its stop-report finalizer taken off');
   assert.equal(await backend.readInstance(running), null);
   assert.deepEqual(await backend.volumeHolders(verified), [], 'released once no Pod uses it');
 
@@ -225,6 +240,52 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
   const declared = (await backend.readInstance(mapping({ ...recorded, podUid: again.uid })))!;
   assert.deepEqual([declared.terminated, declared.stopConfirmed], [true, false]);
   assert.equal(await backend.readFencingReceipt(recorded, predecessor, backing, new Date()), null, 'no receipt left');
+});
+
+test('a Pod deleted by anyone stays, ended, with its kubelet\'s report, until the manager takes its finalizer off', async () => {
+  const profile = testManagedRunnerProfile();
+  const cluster = new FakeKubeCluster(profile.kubernetes.namespace);
+  const backend = new KubernetesBackend(cluster.client(), profile);
+  const recorded = mapping({ pvcUid: '0195c0de-0000-7000-8000-0000000000c1' });
+  const name = managedPodName(RUNNER);
+
+  const instance = await backend.createInstance(recorded);
+  assert.deepEqual(cluster.object<Pod>('pods', name)!.metadata.finalizers, [MANAGED_STOP_REPORT_FINALIZER]);
+  const running = mapping({ ...recorded, podUid: instance.uid, podName: instance.name, nodeName: instance.node });
+
+  // An operator's `kubectl delete` (an eviction, a drain): the kubelet stops the runner and reports it, and the object stays.
+  await cluster.deletePod(name);
+  const deleted = (await backend.readInstance(running))!;
+  assert.deepEqual(
+    { uid: deleted.uid, terminated: deleted.terminated, stopConfirmed: deleted.stopConfirmed, removing: deleted.removing, exit: deleted.exit },
+    { uid: instance.uid, terminated: true, stopConfirmed: true, removing: false, exit: { code: 0, outOfMemory: false } },
+    'ended by its kubelet\'s report, and waiting for the manager: not going by itself',
+  );
+  assert.ok(cluster.object<Pod>('pods', name)!.metadata.deletionTimestamp);
+
+  // Once the manager has recorded that stop: deleted by UID (it already is), the finalizer off, and gone.
+  await backend.removeInstance(running);
+  assert.equal(await backend.readInstance(running), null, 'the stop recorded and the finalizer off: gone');
+
+  // Deleted while its node cannot answer: no report, so it is being removed, and stays.
+  const again = await backend.createInstance(recorded);
+  cluster.kubeletReportsDeletions = false;
+  await cluster.deletePod(name);
+  const unreported = (await backend.readInstance(mapping({ ...recorded, podUid: again.uid })))!;
+  assert.deepEqual([unreported.terminated, unreported.stopConfirmed, unreported.removing], [false, false, true]);
+  // Made terminal by the control plane (PodGC): ended, not confirmed, and still held for the manager.
+  cluster.markFailedByControlPlane(name);
+  const declared = (await backend.readInstance(mapping({ ...recorded, podUid: again.uid })))!;
+  assert.deepEqual([declared.terminated, declared.stopConfirmed, declared.removing], [true, false, false]);
+  assert.ok(cluster.object<Pod>('pods', name), 'the object stays until its finalizer comes off');
+
+  // By UID only: with another Pod under the name, nothing of it is deleted, and its finalizer stays.
+  cluster.remove('pods', name);
+  const successor = await backend.createInstance(recorded);
+  await assert.rejects(backend.removeInstance(mapping({ ...recorded, podUid: again.uid })), (e: unknown) => e instanceof KubeApiError && e.status === 409);
+  assert.equal(cluster.object<Pod>('pods', name)?.metadata.uid, successor.uid, 'the successor is untouched');
+  assert.deepEqual(cluster.object<Pod>('pods', name)!.metadata.finalizers, [MANAGED_STOP_REPORT_FINALIZER]);
+  assert.equal(cluster.count('patch'), 1, 'only the recorded Pod was ever patched');
 });
 
 test('KubernetesBackend proves the admission guard before a Pod, and words failures as the manager did', async () => {
@@ -247,12 +308,24 @@ test('KubernetesBackend proves the admission guard before a Pod, and words failu
   assert.equal(cluster.count('create'), 0, 'a probe is only ever a dry run');
 
   assert.deepEqual(backend.failure(new KubeAmbiguousError('timed out')), { retryable: true });
+  assert.deepEqual(backend.failure(new KubeUnreachableError('connect ECONNREFUSED 127.0.0.1:16443')), { retryable: true, unreachable: true }, 'no request reached the API server');
   assert.deepEqual(backend.failure(new KubeApiError(429, 'TooManyRequests', 'slow down')), { retryable: true });
   assert.deepEqual(backend.failure(new KubeApiError(503, 'ServiceUnavailable', 'later')), { retryable: true });
   assert.deepEqual(backend.failure(new KubeApiError(403, 'Forbidden', 'pods is forbidden')), {
     retryable: false, code: 'KUBERNETES_FORBIDDEN', detail: 'HTTP 403 Forbidden', log: 'Kubernetes answered 403 Forbidden: pods is forbidden',
   });
   assert.equal((backend.failure(new KubeApiError(401, '', 'who are you')) as { code: string }).code, 'KUBERNETES_FORBIDDEN');
+  // A ResourceQuota's refusal (T06 saw this one on k3s) is a wait for room, not a permission problem.
+  const quota = 'POST pods mr-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585: pods "mr-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585" is forbidden: '
+    + 'exceeded quota: t06-no-pods, requested: pods=1, used: pods=1, limited: pods=0';
+  assert.deepEqual(backend.failure(new KubeApiError(403, 'Forbidden', quota)), {
+    retryable: false,
+    waitForRoom: true,
+    code: 'KUBERNETES_QUOTA_EXCEEDED',
+    detail: 'exceeded quota: t06-no-pods, requested: pods=1, used: pods=1, limited: pods=0',
+    log: `Kubernetes answered 403 Forbidden: ${quota}`,
+  });
+  assert.equal((backend.failure(new KubeApiError(422, 'Invalid', quota)) as { code: string }).code, 'KUBERNETES_REJECTED', 'only a 403 is the quota\'s');
   assert.deepEqual(backend.failure(new KubeApiError(422, '', 'invalid')), {
     retryable: false, code: 'KUBERNETES_REJECTED', detail: 'HTTP 422', log: 'Kubernetes answered 422 : invalid',
   });

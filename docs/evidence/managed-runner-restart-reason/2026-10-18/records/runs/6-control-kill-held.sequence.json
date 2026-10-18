@@ -1,0 +1,111 @@
+[
+  {
+    "file": "/mnt/data/tmp/34hxIkHX/lab/records/6-control-kill-held.jsonl",
+    "from": "2026-10-18T09:18:46.583+00:00",
+    "runs": [
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:18:46.583+00:00",
+        "generations": [
+          6
+        ],
+        "reason": null,
+        "samples": 20,
+        "seconds": 9.5,
+        "state": "READY",
+        "until": "2026-10-18T09:18:56.085+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:18:56.586+00:00",
+        "generations": [
+          6
+        ],
+        "reason": "POD_RESTARTING",
+        "samples": 10,
+        "seconds": 4.5,
+        "state": "REQUESTED",
+        "until": "2026-10-18T09:19:01.087+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The previous instance has stopped and its data volume is still detaching. The next instance starts once it is detached.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:19:01.587+00:00",
+        "generations": [
+          6,
+          7
+        ],
+        "reason": "VOLUME_STILL_ATTACHED",
+        "samples": 31,
+        "seconds": 15.0,
+        "state": "REQUESTED",
+        "until": "2026-10-18T09:19:16.590+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "It is starting again. Messages sent meanwhile wait for it and run once it is up.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:19:17.090+00:00",
+        "generations": [
+          7
+        ],
+        "reason": null,
+        "samples": 41,
+        "seconds": 20.0,
+        "state": "STARTING",
+        "until": "2026-10-18T09:19:37.094+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:19:37.595+00:00",
+        "generations": [
+          7
+        ],
+        "reason": null,
+        "samples": 1,
+        "seconds": 0.0,
+        "state": "READY",
+        "until": "2026-10-18T09:19:37.595+00:00"
+      }
+    ],
+    "samples": 103,
+    "until": "2026-10-18T09:19:37.595+00:00"
+  }
+]

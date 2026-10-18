@@ -172,7 +172,7 @@ func TestSelfUpdateStatusWaitingForIdle(t *testing.T) {
 	registerWith(t, cp.srv.URL)
 	p := newSessionPool(2)
 	s := registerPoolSession(t, p, "a", true)
-	check := updateWhenNoTurnInFlight(availableSelfUpdate, p, time.Minute)
+	check := updateWhenNoTurnInFlight(availableSelfUpdate, p, noOperations, time.Minute)
 
 	if remote, ok := check(context.Background(), cp.srv.URL); ok || remote != "" {
 		t.Fatalf("check with a turn in flight = %q, %v; want it deferred", remote, ok)
@@ -397,7 +397,7 @@ func TestWaitForRunLoopStopChecksWhenAsked(t *testing.T) {
 		gated := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 			noteSelfUpdate(selfUpdateStateEnabled, "", "/home/u/.orbit/bin")
 			return rolloutTestLatest, true
-		}, p, time.Hour)
+		}, p, noOperations, time.Hour)
 		check := func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
 			checked <- struct{}{}

@@ -9,6 +9,7 @@ import {
   HttpCode,
   Inject,
   Injectable,
+  NotFoundException,
   Post,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -31,13 +32,25 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import { managedRunnerUnavailableReason } from './managed-runner-status';
 
+/** A server running managed runners on Docker has no Kubernetes admission webhook to answer. */
+export const MANAGED_RUNNER_ADMISSION_NOT_APPLICABLE = 'MANAGED_RUNNER_ADMISSION_NOT_APPLICABLE';
+
+function admissionNotApplicable(): NotFoundException {
+  return new NotFoundException({
+    code: MANAGED_RUNNER_ADMISSION_NOT_APPLICABLE,
+    message: 'This server runs managed runners on Docker, not Kubernetes: it answers no Pod admission review.',
+  });
+}
+
 /**
  * Who may call the admission webhook: the Kubernetes API server of the managed environment, with the
  * bearer token the profile holds the hash of (`admission.webhookTokenSha256`; the API server sends
  * it through its AdmissionConfiguration kubeconfig). Off, the route answers as a server without the
- * feature, 404; enabled without a valid profile, 503. The webhook is installed with
- * `failurePolicy: Fail`, so every one of these answers — like a timeout, a database error or Orbit
- * being down — refuses the Pod.
+ * feature, 404; enabled without a valid profile, 503; enabled on Docker, 404
+ * MANAGED_RUNNER_ADMISSION_NOT_APPLICABLE, before any token is looked at — there is no Kubernetes
+ * profile, and no Pod of this server's to admit. The webhook is installed with `failurePolicy: Fail`,
+ * so every one of these answers — like a timeout, a database error or Orbit being down — refuses
+ * the Pod.
  */
 @Injectable()
 export class ManagedRunnerAdmissionGuard implements CanActivate {
@@ -49,6 +62,7 @@ export class ManagedRunnerAdmissionGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     if (!this.gate.enabled) throw managedRunnerDisabledError();
     if (!this.runtime?.available) throw new ServiceUnavailableException(managedRunnerUnavailableReason());
+    if (this.runtime.profile.backend === 'docker') throw admissionNotApplicable();
     const header: string | undefined = context.switchToHttp().getRequest().headers?.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
     const presented = Buffer.from(token ? sha256(token) : '', 'utf8');
@@ -139,6 +153,7 @@ export class ManagedRunnerAdmissionController {
     const request = admissionRequest(body);
     const runtime = this.runtime;
     if (!runtime?.available) throw new ServiceUnavailableException(managedRunnerUnavailableReason());
+    if (runtime.profile.backend === 'docker') throw admissionNotApplicable();
     return admissionReviewResponse(request.uid, await reviewPodAdmission(this.prisma, runtime.profile, request));
   }
 }

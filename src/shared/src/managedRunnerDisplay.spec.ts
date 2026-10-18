@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 // Through the package's own entry: what the clients import is the thing under test.
 import {
   MANAGED_RUNNER_COPY,
+  firstSessionProvider,
   managedRunnerDisplay,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
@@ -70,10 +71,10 @@ describe('managed-runner-states.fixture.json', () => {
     expect(managedRunnersOffered(undefined)).toBe(false);
   });
 
-  it('accepts work exactly where the server queues it, and a first session only once a runtime is known', () => {
+  it('accepts work exactly where the server queues it, and a first session only where the server names what it starts on', () => {
     for (const { name, status, display } of fixture.states) {
       if (!display) continue;
-      expect(display.startsNewSession, name).toBe(display.acceptsWork && !!status.initialProvider);
+      expect(display.startsNewSession, name).toBe(display.acceptsWork && !!status.firstSessionProvider);
       if (['FAILED', 'FENCING', 'DELETING', 'DELETED', 'NOT_PROVISIONED'].includes(status.managementState)) {
         expect(display.acceptsWork, name).toBe(false);
       }
@@ -81,6 +82,19 @@ describe('managed-runner-states.fixture.json', () => {
       if (['SLEEPING', 'DRAINING'].includes(status.managementState) && !status.actions.canWake) {
         expect(display.acceptsWork, name).toBe(false);
       }
+    }
+  });
+
+  it('offers a first session before READY when the server names the owner\'s key, and reads an older server by initialProvider', () => {
+    const waiting = fixture.states.filter(({ status }) => !status.initialProvider && status.firstSessionProvider);
+    expect(waiting.map(({ status }) => status.managementState).sort()).toEqual(['STARTING', 'STARTING', 'WAITING_CAPACITY']);
+    for (const { name, display } of waiting) expect(display?.startsNewSession, name).toBe(true);
+    // A server from before `firstSessionProvider` sends no such field: the first session waits for READY, as it did.
+    for (const { name, status, display } of fixture.states) {
+      if (!display) continue;
+      const { firstSessionProvider: _named, ...older } = status;
+      expect(managedRunnerDisplay(older as ManagedRunnerStatus)?.startsNewSession, name).toBe(display.acceptsWork && !!status.initialProvider);
+      expect(firstSessionProvider(older as ManagedRunnerStatus), name).toBe(status.initialProvider);
     }
   });
 
