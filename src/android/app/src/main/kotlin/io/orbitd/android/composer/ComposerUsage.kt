@@ -53,7 +53,12 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                 Text(CursorRuntime.CONTEXT_UNAVAILABLE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else Text("Context: $contextLabel")
             if (window != null && !noContext) LinearProgressIndicator(progress = { (tokens.toFloat() / window).coerceIn(0f, 1f) })
-            Text("${detail.text("provider").orEmpty()} · ${detail.text("model").orEmpty()}")
+            // Cursor CLI's model by the chip's words (iOS 5 ④), never its value with the parameters in brackets.
+            if (noContext) Row(Modifier.fillMaxWidth()) {
+                Text("Model", Modifier.weight(1f))
+                Text(CursorRuntime.modelName(state.catalog, detail.text("provider") ?: CursorRuntime.ENGINE, detail.text("model").orEmpty(),
+                    detail.text("effort")), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Text("${detail.text("provider").orEmpty()} · ${detail.text("model").orEmpty()}")
             // Whose quota this is, where the pool holds more than one account to tell apart (iOS a0a76a760).
             account?.takeIf { it.accounts > 1 }?.let {
                 Row(Modifier.fillMaxWidth()) { Text("Account", Modifier.weight(1f)); Text(it.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }

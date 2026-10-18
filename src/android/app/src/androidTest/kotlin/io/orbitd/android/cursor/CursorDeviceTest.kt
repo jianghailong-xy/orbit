@@ -50,11 +50,15 @@ class CursorDeviceTest {
     private val session = "01a0cca7-8609-70ed-a0e2-d4b55b832c05"
     private val keyValid = "01a0cca7-8609-70ed-a0e2-d4b55b832c06"
     private val keyRejected = "01a0cca7-8609-70ed-a0e2-d4b55b832c07"
+    /** A session of its own for the usage limit, so its transcript is that turn alone, as the board draws it. */
+    private val quotaSession = "01a0cca7-8609-70ed-a0e2-d4b55b832c0a"
 
     @Volatile private var theme = "light"
     /** Cursor CLI on hpc, as its runner reports it: ready, not installed, signed out, a runner too old for it, a build it won't run. */
     @Volatile private var cursorState = "ready"
-    /** The Cursor CLI session: talked or not, running with a message queued, or met Cursor's usage limit. */
+    /** The account's Cursor keys: none, for the board's runner that is signed out and has no key either. */
+    @Volatile private var cursorKeys = true
+    /** The Cursor CLI session: talked or not, or running with a message queued; [quota]: Default met Cursor's usage limit. */
     @Volatile private var talked = true
     @Volatile private var running = false
     @Volatile private var quota = false
@@ -108,13 +112,13 @@ class CursorDeviceTest {
         compose.waitUntil(15_000) { compose.onAllNodes(hasContentDescription("Model Auto, effort Default")).fetchSemanticsNodes().isNotEmpty() }
         capture("ios1-new-session-$pass")
         for (state in listOf("not-installed", "signed-out", "update-runner", "wrong-version")) {
-            cursorState = state
+            cursorState = state; cursorKeys = state != "signed-out"
             engines()
             compose.onNodeWithTag("engine:cursor").performScrollTo()
             capture("ios1-row-$state-$pass")
             click(hasText("Done") and hasAnyAncestor(isDialog()), scroll = false)
         }
-        cursorState = "ready"
+        cursorState = "ready"; cursorKeys = true
         back()
     }
 
@@ -133,7 +137,7 @@ class CursorDeviceTest {
         modelMenu()
         await("Auto picks a model for each request.")
         capture("ios5-model-auto-$pass")
-        compose.onNodeWithTag("composer-mode:default").performScrollTo()
+        compose.onNodeWithTag("composer-mode:bypassPermissions").performScrollTo()
         capture("ios6-modes-$pass")
         compose.onNodeWithTag("composer-provider-move-blocked").performScrollTo()
         capture("ios6-switch-blocked-$pass")
@@ -144,13 +148,16 @@ class CursorDeviceTest {
         reopen()
         modelMenu()
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("composer-cursor-speed:true").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("composer-cursor-context:1m").performScrollTo()
+        compose.onNodeWithTag("composer-cursor-speed:true").performScrollTo()
         capture("ios5-model-variant-$pass")
         closeDialog()
-        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Claude Opus 5.5 · 1M · Fast")).fetchSemanticsNodes().isNotEmpty() }
+        val named = "Claude Opus 5.5 High · 1M · Fast"
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText(named)).fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-chip-$pass")
         click(hasText("Context: Unavailable", substring = true) and hasClickAction())
         await("Context window")
+        // The sheet reads the catalogue afresh: its model is named once that is in.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText(named) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-context-$pass")
         closeDialog()
         model = "default"; effort = ""; running = true
@@ -158,7 +165,8 @@ class CursorDeviceTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("pending-tray-note").fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-running-$pass")
         running = false; quota = true
-        reopen()
+        back()
+        open("orbit-session:$quotaSession")
         await("Cursor answered “Upgrade your plan to continue”")
         compose.onNodeWithTag("auto-retry-card").performScrollTo()
         capture("ios5-quota-$pass")
@@ -352,7 +360,7 @@ class CursorDeviceTest {
             """{"engine":"dsh","installed":true,"version":"0.2.0","auth":"unknown","dsh":{"versionCompatible":true}}""",
             cursor).joinToString(",")
         return """{"id":"$hpc","name":"hpc","displayName":"hpc","hostname":"hpc","version":"0.1.262","online":true,"status":"ONLINE",
-            "lastHeartbeatAt":"$now","maxConcurrent":4,"activeSessions":1,"runsAsRoot":true,"capabilities":[$capabilities],"engines":[$engines],
+            "lastHeartbeatAt":"$now","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"capabilities":[$capabilities],"engines":[$engines],
             "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}],"codex":[{"value":"gpt-5.6-sol","label":"gpt-5.6-sol"}],
               "kimi":[{"value":"kimi-for-coding","label":"Kimi for Coding"}],"dsh":[{"value":"deepseek-v4","label":"DeepSeek V4 Pro"}],"cursor":$cursorCatalog},
             "planUsage":${cursorUsage()},"accountRemove":$accountRemove,"enrolledAt":"2026-09-01T00:00:00Z"}"""
@@ -368,16 +376,19 @@ class CursorDeviceTest {
         "preferences":{"theme":"$theme","defaultPermissionMode":"default"}}"""
     private fun workspaceJson() = """{"id":"$workspace","name":"orbit","runnerId":"$hpc","enabled":true,"workDir":"/root/orbit","provider":"claude",
         "model":"claude-opus-5-5","lastProvider":"claude","lastEngine":"claude","env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
-    private fun sessionJson(): String {
+    private fun sessionJson(id: String = session): String {
+        val quota = id == quotaSession
+        val running = running && !quota
         val status = if (running) "RUNNING" else "AWAITING_INPUT"
-        return """{"id":"$session","title":"Fix the flaky export test","status":"$status","runState":"$status","runStatus":"$status","lifecycleState":"OPEN",
+        return """{"id":"$id","title":"Fix the flaky export test","status":"$status","runState":"$status","runStatus":"$status","lifecycleState":"OPEN",
             "engine":"cursor","provider":"cursor","model":"$model","effort":"$effort","permissionMode":"$mode","numTurns":${if (talked) 1 else 0},
             ${if (talked) "\"runtimeSessionId\":\"0b4c11e2-3f1a-4c55-9d2e-6a1f0c7b9e21\"," else ""}
             "assignedRunnerId":"$hpc","assignedRunner":{"id":"$hpc","name":"hpc"},"agentId":"$workspace","agent":{"id":"$workspace","name":"orbit"},
             "workspace":{"id":"$workspace","name":"orbit"},"retryAttempts":${if (quota) 1 else 0},"createdAt":"${at(-60)}","lastTurnAt":"${at(-5)}",
             "capabilities":{"canSend":true,"canResume":false,"canComplete":true},"tags":[],"pendingApprovals":0}"""
     }
-    private fun events(): String {
+    private fun events(id: String): String {
+        val quota = id == quotaSession
         fun event(seq: Int, type: String, text: String) = buildJsonObject {
             put("type", type); put("seq", seq); put("ts", at(-30L + seq)); putJsonObject("payload") { put("text", text) } }.toString()
         val list = if (quota) listOf(event(1, "user", "Add a regression test for the midnight case too."),
@@ -391,24 +402,32 @@ class CursorDeviceTest {
     /** Cursor CLI's sign-in link as the runner relays it, with when it stops working. */
     private fun link(account: String?) = """{"status":"awaiting_approval","engine":"cursor","account":${account?.let { "\"$it\"" } ?: "null"},
         "url":"https://cursor.com/loginDeepControl?challenge=Q2hhbGxlbmdlRm9yT3JiaXRQN2M&uuid=7d2e4f61&mode=login&redirectTarget=cli","expiresAt":"${at(26)}"}"""
-    private fun keys() = """[{"id":"$keyValid","slug":"cursor-api","label":"Cursor","runtime":"cursor","presetSlug":"cursor-api","baseUrl":"https://api2.cursor.sh",
-          "hasApiKey":true,"enabled":true,"models":[],"defaultModel":"","engines":["cursor"],"keyCheckState":"VALID","keyCheckedAt":"${at(-4)}"},
-        {"id":"$keyRejected","slug":"cursor-api-2","label":"Cursor 2","runtime":"cursor","presetSlug":"cursor-api","baseUrl":"https://api2.cursor.sh",
-          "hasApiKey":true,"enabled":true,"models":[],"defaultModel":"","engines":["cursor"],"keyCheckState":"INVALID","keyCheckedAt":"${at(-4)}"},
-        {"id":"01a0cca7-8609-70ed-a0e2-d4b55b832c08","slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek",
+    /** The account's own keys (GET providers/mine), and the keys a session can pick (GET providers): two Cursor keys, one of them
+     * refused by Cursor, while [cursorKeys], and a DeepSeek key. */
+    private fun keys() = (if (!cursorKeys) emptyList() else listOf(
+        """{"id":"$keyValid","slug":"cursor-api","label":"Cursor","runtime":"cursor","presetSlug":"cursor-api","baseUrl":"https://api2.cursor.sh",
+          "hasApiKey":true,"enabled":true,"models":[],"defaultModel":"","engines":["cursor"],"keyCheckState":"VALID","keyCheckedAt":"${at(-4)}"}""",
+        """{"id":"$keyRejected","slug":"cursor-api-2","label":"Cursor 2","runtime":"cursor","presetSlug":"cursor-api","baseUrl":"https://api2.cursor.sh",
+          "hasApiKey":true,"enabled":true,"models":[],"defaultModel":"","engines":["cursor"],"keyCheckState":"INVALID","keyCheckedAt":"${at(-4)}"}""")) +
+        """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832c08","slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek",
           "baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"enabled":true,"defaultModel":"deepseek-v4-pro","models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}],
-          "engines":["claude","opencode","dsh"]}]"""
+          "engines":["claude","opencode","dsh"]}"""
+    private fun providers() = (if (!cursorKeys) emptyList() else listOf(
+        """{"slug":"cursor-api","label":"Cursor","runtime":"cursor","presetSlug":"cursor-api","engines":["cursor"],"modelsFromRuntime":true,"models":[]}""",
+        """{"slug":"cursor-api-2","label":"Cursor 2","runtime":"cursor","presetSlug":"cursor-api","engines":["cursor"],"modelsFromRuntime":true,"models":[]}""")) +
+        """{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","defaultModel":"deepseek-v4-pro","engines":["claude","opencode","dsh"],
+          "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}]}"""
 
     private fun dispatcher() = object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse {
             // Each id as these fixtures spell it, whichever form the app sent it in.
-            val ids = listOf(workspace, hpc, mac, build, session, keyValid, keyRejected)
+            val ids = listOf(workspace, hpc, mac, build, session, quotaSession, keyValid, keyRejected)
             val path = request.requestUrl!!.encodedPath.split('/').joinToString("/") { part -> ids.firstOrNull { ObjectId.same(it, part) } ?: part }
             calls += "${request.method} $path"
             if (path == "/dl/version.json") return json("""{"version":"0.1.262"}""")
             if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
             fun bodyOf() = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
-            if (path == "/api/events" || path == "/api/sessions/$session/events" && request.requestUrl!!.queryParameter("sinceSeq") != null)
+            if (path == "/api/events" || path.startsWith("/api/sessions/") && path.endsWith("/events") && request.requestUrl!!.queryParameter("sinceSeq") != null)
                 return MockResponse().setHeader("Content-Type", "text/event-stream").setChunkedBody(": connected\n\n".repeat(120), 13)
                     .throttleBody(13, 1, TimeUnit.SECONDS)
             val body = when (path) {
@@ -436,6 +455,9 @@ class CursorDeviceTest {
                 "/api/sessions" -> if (request.requestUrl!!.queryParameter("view") == "open") "[${sessionJson()}]" else "[]"
                 "/api/sessions/counts" -> """[{"workspaceId":"$workspace","active":1,"running":${if (running) 1 else 0},"jobs":0,"needsYou":0}]"""
                 "/api/sessions/$session" -> sessionJson()
+                "/api/sessions/$quotaSession" -> sessionJson(quotaSession)
+                "/api/sessions/$quotaSession/events/page" -> events(quotaSession)
+                "/api/sessions/$quotaSession/retry-message" -> """{"text":"Add a regression test for the midnight case too."}"""
                 "/api/sessions/$session/config" -> {
                     val patch = bodyOf()
                     patch["model"]?.let { model = it.jsonPrimitive.content }
@@ -443,15 +465,11 @@ class CursorDeviceTest {
                     patch["permissionMode"]?.let { mode = it.jsonPrimitive.content }
                     sessionJson()
                 }
-                "/api/sessions/$session/events/page" -> events()
+                "/api/sessions/$session/events/page" -> events(session)
                 "/api/sessions/$session/turns" -> if (running) """[{"turnId":"01a0cca7-8609-70ed-a0e2-d4b55b832c09","kind":"message","placement":"queued",
                     "content":"Also add a line about the fix to CHANGELOG.md","attachments":[],"createdAt":"${at(-1)}"}]""" else "[]"
-                "/api/sessions/$session/retry-message" -> """{"text":"Add a regression test for the midnight case too."}"""
-                "/api/providers" -> """[{"slug":"cursor-api","label":"Cursor","runtime":"cursor","presetSlug":"cursor-api","engines":["cursor"],"modelsFromRuntime":true,"models":[]},
-                    {"slug":"cursor-api-2","label":"Cursor 2","runtime":"cursor","presetSlug":"cursor-api","engines":["cursor"],"modelsFromRuntime":true,"models":[]},
-                    {"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","defaultModel":"deepseek-v4-pro","engines":["claude","opencode","dsh"],
-                      "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}]}]"""
-                "/api/providers/mine" -> keys()
+                "/api/providers" -> providers().joinToString(",", "[", "]")
+                "/api/providers/mine" -> keys().joinToString(",", "[", "]")
                 "/api/providers/pools", "/api/providers/shared-pools" -> "[]"
                 else -> when {
                     path.startsWith("/api/providers/mine/") && path.endsWith("/balance") ->

@@ -97,8 +97,8 @@ class CursorSessionShellTest : ComposerShellTest() {
         press("composer-cursor-context:1m")
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config") != null }
         assertEquals(buildJsonObject { put("model", "claude-opus-5-5[context=1m,fast=true]") }, ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
-        // The chip names the model and what the session set (the board's "Opus 5.5 High · 1M · Fast"): here, Fast.
-        await { has(hasTestTag("composer-model") and hasText("Claude Opus 5.5 · Fast")) }
+        // The chip names the model, its effort and what the session set (the board's "Opus 5.5 High · 1M · Fast"): here, Fast.
+        await { has(hasTestTag("composer-model") and hasText("Claude Opus 5.5 High · Fast")) }
     }
 
     /** iOS 6 ④⑤ (D5, P6b): a session that has talked, on a runner that can't carry its conversation, lists its other accounts and
@@ -140,6 +140,9 @@ class CursorSessionShellTest : ComposerShellTest() {
         await { has(hasTestTag("composer-context-unavailable")) }
         assertTrue(has(inDialog("Cursor CLI doesn’t report how much of the window a session has used, so there is no reading to show.")))
         assertFalse(has(inDialog("tokens")))
+        // The model by the chip's words, never its raw value (iOS 5 ④: Model, Auto).
+        assertTrue(has(hasText("Auto") and hasAnyAncestor(isDialog())))
+        assertFalse(has(inDialog("cursor · ")))
     }
 
     /** iOS 5 ⑤⑥: while a turn runs, a message waits for the next one, and the tray and the box say why. */

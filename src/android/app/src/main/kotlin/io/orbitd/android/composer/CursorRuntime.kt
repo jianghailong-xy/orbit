@@ -200,6 +200,15 @@ internal object CursorRuntime {
         )
     }
 
+    /** A session's Cursor model as the chip and the context sheet name it (the board's iOS 5 ①②④): Auto, or the catalogue's name for
+     * the model with the effort set on it, then [chipParameters] — "Claude Opus 5.5 High · 1M · Fast". Never the bracketed value. */
+    fun modelName(catalog: ComposerCatalog?, provider: String, model: String, effort: String?): String {
+        if (onAuto(ENGINE, model)) return AUTO
+        val row = catalog?.modelRow(ENGINE, provider, model)
+        val name = row?.string("label") ?: modelBase(model)
+        return (listOf(if (effort.isNullOrEmpty()) name else "$name ${effortLabel(effort)}") + chipParameters(model, row)).joinToString(" · ")
+    }
+
     // Words, the web's (lib/cursorRuntime.ts)
 
     /** Under the Provider menu of a Cursor CLI session that has talked, on a runner that can't carry its conversation: why its other

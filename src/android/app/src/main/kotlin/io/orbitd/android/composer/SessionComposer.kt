@@ -265,14 +265,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                // Cursor CLI's model by its catalogue's name, Auto for its catalogue's `default` or for none named (iOS 5 ①④).
-                // Its context and speed follow the name where the session set them (the board's "Opus 5.5 High · 1M · Fast").
-                val cursorModel = if (shownEngine == CursorRuntime.ENGINE) effective.text("model").orEmpty().let { model ->
-                    val provider = effective.text("provider") ?: shownEngine
-                    val name = state.catalog?.modelLabel(shownEngine, provider, model)
-                        ?: if (CursorRuntime.onAuto(shownEngine, model)) CursorRuntime.AUTO else CursorRuntime.modelBase(model)
-                    (listOf(name) + CursorRuntime.chipParameters(model, state.catalog?.modelRow(shownEngine, provider, model))).joinToString(" · ")
-                } else null
+                // Cursor CLI's model by its catalogue's name, its effort and what the session set (iOS 5 ①②).
+                val cursorModel = if (shownEngine == CursorRuntime.ENGINE) CursorRuntime.modelName(state.catalog,
+                    effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
                 ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
                     effortLabel(effective.text("effort")), smart != null,
                     enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f)) {

@@ -107,6 +107,12 @@ class CursorComposerTest {
         // The chip's words after the name: a context set away from its default, and Fast while the lane is on.
         assertEquals(listOf("1M", "Fast"), CursorRuntime.chipParameters("claude-opus-5-5[context=1m,fast=true]", row))
         assertEquals(emptyList<String>(), CursorRuntime.chipParameters("claude-opus-5-5", row))
+        // The name the chip and the context sheet give it: the catalogue's, the effort set on it, then those words — never the brackets.
+        val catalog = ComposerCatalog(runner(), emptyList())
+        assertEquals("Claude Opus 5.5 High · 1M · Fast", CursorRuntime.modelName(catalog, "cursor", "claude-opus-5-5[context=1m,fast=true]", "high"))
+        assertEquals("Claude Opus 5.5", CursorRuntime.modelName(catalog, "cursor", "claude-opus-5-5", ""))
+        assertEquals("Auto", CursorRuntime.modelName(catalog, "cursor", "default", ""))
+        assertEquals("claude-opus-5-5", CursorRuntime.modelName(null, "cursor", "claude-opus-5-5[context=1m]", null))
         assertEquals(listOf("300K", "1M"), CursorRuntime.values(CursorRuntime.parameter(row, "context")!!).map { CursorRuntime.valueLabel(CursorRuntime.parameter(row, "context")!!, it) })
         assertEquals(listOf("Standard", "Fast"), CursorRuntime.values(CursorRuntime.parameter(row, "fast")!!).map { CursorRuntime.speedLabel(CursorRuntime.parameter(row, "fast")!!, it) })
         assertTrue(CursorRuntime.onAuto("cursor", "default"))
