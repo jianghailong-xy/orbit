@@ -2339,7 +2339,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
       // function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
-      '0431_session_merge_repair_turn_ended_at'],
+      '0431_session_merge_repair_turn_ended_at',
+      // The owner's Done on a recovery whose check found the session already on origin (0432, S3 of the
+      // merge-recovery repair loop): `session_merge_receipt_result_check` dropped and re-added with one more
+      // value, `MATCHED_BY_CONTENT`, which every stored receipt (one of 0128's four) satisfies — inside a DO
+      // block that replaces it only while it does not read that value yet. Only `session_merge_receipt` is
+      // named: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions, and no function, trigger, type or index is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0432_session_merge_receipt_matched_by_content'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
