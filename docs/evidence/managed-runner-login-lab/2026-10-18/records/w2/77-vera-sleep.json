@@ -1,0 +1,36 @@
+{
+  "action": "sleep",
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hkQIyNjyAjsIXngyDiP",
+    "contractVersion": 1,
+    "desiredState": "SLEEPING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek-6",
+    "lastHeartbeatAt": "2026-10-17T23:44:02.553Z",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 16,
+    "runnerId": "34hkQIyHd7Hzt3eHh6cRM",
+    "runnerPublicId": "34hkQIyHd7Hzt3eHh6cRM",
+    "usable": true,
+    "workspaceId": "34hkQIyNjyAjsIXngyDiP",
+    "workspacePublicId": "34hkQIyNjyAjsIXngyDiP"
+  },
+  "at": "2026-10-17T23:44:26.304+00:00",
+  "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 15
+  },
+  "owner": "vera",
+  "status": 202
+}

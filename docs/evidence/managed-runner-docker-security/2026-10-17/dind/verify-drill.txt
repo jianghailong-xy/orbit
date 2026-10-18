@@ -1,0 +1,38 @@
+a: READY generation 8 container mr-01a14a02-f8f0-752a-9c45-2e748a13c38f
+b: READY generation 10 container mr-01a14a02-f987-712b-8893-d9440d0d9c09
+a's container: mr-01a14a02-f8f0-752a-9c45-2e748a13c38f Up About a minute
+$ scripts/managed-runner/volume-backup.sh verify mr-data-01a14a02-f8f0-752a-9c45-2e748a13c38f
+volume-backup.sh: a running container uses mr-data-01a14a02-f8f0-752a-9c45-2e748a13c38f: verify it while its runner is down
+exit=1
+$ scripts/managed-runner/volume-backup.sh check mr-data-01a14a02-f987-712b-8893-d9440d0d9c09 /work/backups/20261017T141802Z
+checksums: all 158 files match the backup
+volume root: owner 10001:10001, mode 700
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/goals_1.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/logs_2.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/memories_1.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/queue_1.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/state_5.sqlite: ok
+sqlite ./home/d5-drill/drill.sqlite: ok
+git ./home/.codex/.tmp/plugins-clone-ysRHE6: ok
+git ./home/d5-drill/repo: ok
+inspect: 6 SQLite files and 2 repositories ok
+exit=0
+b: SLEEPING generation 11 container None
+containers referring to b's volume: []
+$ scripts/managed-runner/volume-backup.sh verify mr-data-01a14a02-f987-712b-8893-d9440d0d9c09
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/goals_1.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/logs_2.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/memories_1.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/queue_1.sqlite: ok
+sqlite ./home/.orbit/codex-state/efbba389c4f39b5878bb4935/state_5.sqlite: ok
+sqlite ./home/d5-drill/drill.sqlite: ok
+git ./home/.codex/.tmp/plugins-clone-ysRHE6: ok
+git ./home/d5-drill/repo: ok
+inspect: 6 SQLite files and 2 repositories ok
+exit=0
+$ scripts/managed-runner/volume-backup.sh verify mr-data-00000000-0000-4000-8000-0000000000d5
+sqlite ./home/broken.sqlite: Error: in prepare, file is not a database (26)
+inspect: something is not ok
+exit=5
+scratch volume mr-data-00000000-0000-4000-8000-0000000000d5 removed
+b: READY generation 11 container mr-01a14a02-f987-712b-8893-d9440d0d9c09

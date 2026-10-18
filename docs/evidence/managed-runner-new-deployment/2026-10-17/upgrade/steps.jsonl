@@ -1,0 +1,24 @@
+{"at": "2026-10-17T11:20:07Z", "body": {"needsSetup": true}, "status": 200, "step": "setup-status"}
+{"at": "2026-10-17T11:20:07Z", "status": 201, "step": "bootstrap (first account, a sign-in)"}
+{"at": "2026-10-17T11:20:07Z", "managedRunners": {"contractVersion": 1, "enabled": false}, "status": 200, "step": "capabilities (authenticated) on the previous version"}
+{"at": "2026-10-17T11:20:07Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "admin's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T11:20:07Z", "status": 201, "step": "admin creates account second"}
+{"account": "second", "at": "2026-10-17T11:20:07Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T11:20:07Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "second's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T11:20:07Z", "rows": [], "step": "managed_runner rows on the previous version"}
+{"account": "admin", "at": "2026-10-17T11:24:31Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T11:24:31Z", "managedRunners": {"contractVersion": 1, "enabled": false}, "status": 200, "step": "capabilities (authenticated) after the upgrade"}
+{"at": "2026-10-17T11:24:31Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "admin's status after a sign-in", "usable": false, "workspaceId": null}
+{"account": "second", "at": "2026-10-17T11:24:31Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T11:24:31Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "second's status after a sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T11:24:31Z", "status": 201, "step": "admin creates account third"}
+{"account": "third", "at": "2026-10-17T11:24:31Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T11:24:31Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "third's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T11:24:31Z", "reason": {"code": "MANAGED_RUNNER_DISABLED", "message": "Managed runners are not enabled on this Orbit server (ORBIT_MANAGED_RUNNERS_ENABLED), so nothing was written.", "retryable": false}, "status": 404, "step": "third asks for one (ensure)"}
+{"at": "2026-10-17T11:25:16Z", "rows": [], "step": "managed_runner rows after the upgrade and three sign-ins"}
+{"account": "admin", "at": "2026-10-17T11:26:37Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T11:27:10Z", "codexLoginStatus": "Logged in using an API key - sk-orbit***a-key", "container": "mr-01a1499d-23ca-72c9-8028-810a912fa012", "exit": 0, "step": "operator signs Codex in for admin with a placeholder key"}
+{"at": "2026-10-17T11:32:11Z", "desiredState": "RUNNING", "enabled": true, "heartbeatStatus": "ONLINE", "initialProvider": "codex", "managementState": "READY", "reason": null, "runnerId": "34hSQrWbxPqVusjXL2gXC", "step": "admin's managed runner", "usable": true, "workspaceId": "34hSQrWo8bfdbjQPFzEoJ"}
+{"account": "admin", "at": "2026-10-17T11:32:11Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T11:32:11Z", "managedRunners": {"contractVersion": 1, "enabled": true}, "status": 200, "step": "capabilities (authenticated) after the explicit enable"}
+{"at": "2026-10-17T11:32:12Z", "rows": ["admin@d3-upgrade.test\t01a1499d-23ca-72c9-8028-810a912fa012\tdocker\tREADY\tRUNNING\t1\tmr-data-01a1499d-23ca-72c9-8028-810a912fa012\tmr-01a1499d-23ca-72c9-8028-810a912fa012"], "step": "managed_runner rows after the explicit enable and the admin's sign-in"}

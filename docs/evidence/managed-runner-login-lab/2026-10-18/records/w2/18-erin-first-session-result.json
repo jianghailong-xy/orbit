@@ -1,0 +1,77 @@
+{
+  "answers": [
+    "FAKE MODEL reply #1: this conversation has 2 message(s); secrets seen: none."
+  ],
+  "at": "2026-10-17T23:37:43.908+00:00",
+  "events": 8,
+  "fakeModelRequests": [
+    {
+      "at": "2026-10-17T23:37:42Z",
+      "lastUser": "T05-ERIN-FIRST hello from the first session",
+      "messages": 2,
+      "model": "deepseek-v4-pro",
+      "n": 1,
+      "path": "/anthropic/v1/messages?beta=true",
+      "secrets": [],
+      "slow": 0,
+      "stream": true
+    }
+  ],
+  "owner": "erin",
+  "row": [
+    {
+      "assigned_runner_id": "01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+      "created_at": "2026-10-17T23:37:41.4",
+      "engine": "claude",
+      "id": "01a14c3a-7318-7589-9e93-cda0dea34ef6",
+      "model": "deepseek-v4-pro",
+      "provider": "deepseek-2",
+      "provider_builtin": false,
+      "runtime_session_id": "91b3824a-e448-4c1a-9ae6-2c7cf014aba0",
+      "status": "AWAITING_INPUT"
+    }
+  ],
+  "session": "34hkNCwwRzhI4xZhtQ6QI",
+  "timedOut": false,
+  "timeline": [
+    [
+      "2026-10-17T23:37:41.808+00:00",
+      {
+        "assignedRunnerId": "34hkLQCdaTRbQff2QouEQ",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": null,
+        "provider": "deepseek-2",
+        "runState": "RUNNING",
+        "runStatus": "RUNNING",
+        "runtimeSessionId": "91b3824a-e448-4c1a-9ae6-2c7cf014aba0",
+        "sessionState": "RUNNING",
+        "status": "RUNNING"
+      }
+    ],
+    [
+      "2026-10-17T23:37:43.832+00:00",
+      {
+        "assignedRunnerId": "34hkLQCdaTRbQff2QouEQ",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek-2",
+        "runState": "AWAITING_INPUT",
+        "runStatus": "AWAITING_INPUT",
+        "runtimeSessionId": "91b3824a-e448-4c1a-9ae6-2c7cf014aba0",
+        "sessionState": "AWAITING_INPUT",
+        "status": "AWAITING_INPUT"
+      }
+    ]
+  ],
+  "types": {
+    "assistant": 1,
+    "system": 3,
+    "turn_end": 1,
+    "user": 1,
+    "user_delivery": 2
+  }
+}

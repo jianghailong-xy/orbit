@@ -1,0 +1,1 @@
+src/test-support/memory-run-backend.ts(254,7): error TS2353: Object literal may only specify known properties, and 'exit' does not exist in type 'ManagedInstance'.

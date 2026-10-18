@@ -1,0 +1,279 @@
+{
+  "at": "2026-10-17T20:04:59.518+00:00",
+  "kept": [
+    {
+      "generation": 1,
+      "podUid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9",
+      "tokenSha256Prefix": "511c51785bc1"
+    },
+    {
+      "generation": 2,
+      "podUid": "c99d2b99-30b5-4b90-af52-00d2bd3a23fa",
+      "tokenSha256Prefix": "2da369b475f6"
+    },
+    {
+      "generation": 3,
+      "podUid": "e8bc0c13-e7ae-4064-8ecc-105e45b48d6e",
+      "tokenSha256Prefix": "0a347cd5b160"
+    }
+  ],
+  "mapping": {
+    "generation": 3,
+    "podUid": "e8bc0c13-e7ae-4064-8ecc-105e45b48d6e",
+    "state": "STARTING"
+  },
+  "results": [
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the current generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the current generation and Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": "invalid runner token",
+      "offer": "the current generation and Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 2",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 2",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 2",
+      "message": "invalid runner token",
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 2",
+      "message": "invalid runner token",
+      "offer": "the current generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 2",
+      "message": "invalid runner token",
+      "offer": "the current generation and Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 2",
+      "message": "invalid runner token",
+      "offer": "the current generation and Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 401
+    },
+    {
+      "code": null,
+      "credential": "generation 3",
+      "message": null,
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "status": 200
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_REQUIRED",
+      "credential": "generation 3",
+      "message": "This credential belongs to a managed runner. A request with it must declare managed-runner-instance-v1 and name its generation and Pod UID; a runner that cannot is refused.",
+      "offer": "no instance declaration",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_REQUIRED",
+      "credential": "generation 3",
+      "message": "This credential belongs to a managed runner. A request with it must declare managed-runner-instance-v1 and name its generation and Pod UID; a runner that cannot is refused.",
+      "offer": "no instance declaration",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_REQUIRED",
+      "credential": "generation 3",
+      "message": "This credential belongs to a managed runner. A request with it must declare managed-runner-instance-v1 and name its generation and Pod UID; a runner that cannot is refused.",
+      "offer": "no instance declaration",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 3",
+      "message": "Pod acecaf5f-fa32-42ea-b073-a5e7bba93db2 is not the instance authorized for generation 3.",
+      "offer": "the current generation, another Pod UID",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 3",
+      "message": "Pod acecaf5f-fa32-42ea-b073-a5e7bba93db2 is not the instance authorized for generation 3.",
+      "offer": "the current generation, another Pod UID",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 3",
+      "message": "Pod acecaf5f-fa32-42ea-b073-a5e7bba93db2 is not the instance authorized for generation 3.",
+      "offer": "the current generation, another Pod UID",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 3",
+      "message": "Generation 4 of this managed runner was never authorized.",
+      "offer": "the next generation",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 3",
+      "message": "Generation 4 of this managed runner was never authorized.",
+      "offer": "the next generation",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 3",
+      "message": "Generation 4 of this managed runner was never authorized.",
+      "offer": "the next generation",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_SUPERSEDED",
+      "credential": "generation 3",
+      "message": "Generation 1 of this managed runner has been replaced by generation 3. This instance must stop; it is not authorized again.",
+      "offer": "generation 1 and its Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_SUPERSEDED",
+      "credential": "generation 3",
+      "message": "Generation 1 of this managed runner has been replaced by generation 3. This instance must stop; it is not authorized again.",
+      "offer": "generation 1 and its Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_SUPERSEDED",
+      "credential": "generation 3",
+      "message": "Generation 1 of this managed runner has been replaced by generation 3. This instance must stop; it is not authorized again.",
+      "offer": "generation 1 and its Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_SUPERSEDED",
+      "credential": "generation 3",
+      "message": "Generation 2 of this managed runner has been replaced by generation 3. This instance must stop; it is not authorized again.",
+      "offer": "generation 2 and its Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_SUPERSEDED",
+      "credential": "generation 3",
+      "message": "Generation 2 of this managed runner has been replaced by generation 3. This instance must stop; it is not authorized again.",
+      "offer": "generation 2 and its Pod",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_SUPERSEDED",
+      "credential": "generation 3",
+      "message": "Generation 2 of this managed runner has been replaced by generation 3. This instance must stop; it is not authorized again.",
+      "offer": "generation 2 and its Pod",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    }
+  ]
+}

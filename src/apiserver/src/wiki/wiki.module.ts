@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PushModule } from '../push/push.module';
+import { AdminRoleGuard } from '../users/admin-role.guard';
 import { WikiController } from './wiki.controller';
+import { AdminWikiController } from './wiki-admin.controller';
 import { WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { WikiDocs } from './wiki-docs';
@@ -40,7 +42,9 @@ import { WikiSystemModelController } from './wiki-system-model.controller';
   // The articles' reads (contract `articles`), one run's read (contract `reviewModes.run`) and a
   // space's health (contract `maintenance.health`) and the plan (contract `plan`) are controllers of their
   // own, so WikiController's hand-built specs construct it as before — and so are the documents (contract `docs`).
-  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController, WikiJobsController],
+  // The administrators' wiki routes (contract `plan.jobs.rebuild.support`) are a controller of their own, behind the
+  // admin area's guard rather than the wiki's flag, which reads the caller's account.
+  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController, WikiJobsController, AdminWikiController],
   // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to
   // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
   // do: through Prisma, with no service of theirs. WikiArticles serves the articles to both doors the
@@ -59,7 +63,9 @@ import { WikiSystemModelController } from './wiki-system-model.controller';
   // WikiExecutorSweep cancels at apiserver start whatever the server still had in flight for an account the
   // executor switch no longer serves (contract `jobs.executor.rollback`, design §10), and announces the
   // spaces it touched the same way a run's own end does.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs, WikiSystemModelReads, WikiJobReads, WikiExecutorSweep],
+  // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export
+  // it), as ProvidersModule does for its admin controller.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs, WikiSystemModelReads, WikiJobReads, WikiExecutorSweep, AdminRoleGuard],
   exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
 })
 export class WikiModule {}

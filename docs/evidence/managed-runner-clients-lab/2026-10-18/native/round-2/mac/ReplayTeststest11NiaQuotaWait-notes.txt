@@ -1,0 +1,19 @@
+scene 11-nia-quota-wait: 118 s, actions (
+        {
+        body =         {
+            content = "T07-NIA-Q1 wake while the cluster quota has no room for the Pod";
+            kind = message;
+        };
+        m = POST;
+        path = "/api/sessions/34hu0yWhtIlaZz1eVBWTZ/turns";
+        t = "23.887";
+    }
+)
+11-nia-quota-wait: no window after launch; File > New Window
+11-nia-quota-wait-00: "Managed runner asleep" shows
+11-nia-quota-wait-01: typed into 49 label="" value="T07-NIA-Q1 wake while the cluster quota has no room for the Pod" frame=(652.0, 584.0, 317.0, 36.0) hittable=true
+11-nia-quota-wait-01: send 9 label="Arrow Up Circle" value="" frame=(944.0, 633.0, 32.0, 32.0) hittable=true
+11-nia-quota-wait-02: "resource quota for managed runners has no room" shows
+11-nia-quota-wait-03: "Answering: T07-NIA-Q1" shows
+11-nia-quota-wait: 108 requests, 0 violations, actions left [], notes (
+)

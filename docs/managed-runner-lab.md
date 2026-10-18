@@ -169,6 +169,17 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
 | `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
 | `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
+| `test-server.sh start [--managed\|--managed-false\|--managed-false-no-profile]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`, `--managed-false-no-profile` sets `false` and names no profile (no Kubernetes or Ceph configuration at all); `secrets` only makes the secrets and the lab CA. |
+| `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
+| `manager-lab.py` | The manager against real k3s ([below](#manager-reconciliation-t04)): the T04 server directory, a second apiserver replica, owners and their concurrent sign-ins and ensures, the database against k3s (`consistency`), a recorder of every change, a stand-in Claude login on a runner's volume, a killed runner process, an operator's delete or eviction, an API outage, a controller crash timed on a create, the switch checks and one owner against another. |
+| `login-lab.py` | Sign-in provisioning on real k3s ([below](#sign-in-provisioning-t05)), through manager-lab.py's gate, replica and views: accounts and timed (concurrent) sign-ins, an account with its own runner and arranged workspaces, its landing by the web's own rule and its deep links, the switch-off check for new and existing accounts, a model key on fake-model.py's endpoint or the owner's key file, sessions in the managed default workspace, a provisioning timeline, the manager's requests by size, and a database trigger that refuses the sign-in's intent. |
+| `api-gate.py` | A pass-through in front of the k3s API forward that only the test manager's kubeconfig names: it logs each connection's TLS record sizes, never decrypting them, and can lose one create's answer after k3s applied it (and the read-back's), or hold it while the controller is killed. |
+| `qmp.py SOCKET hostfwd-remove\|hostfwd-add` | Takes the 127.0.0.1 forward of the k3s API (or SSH) away and puts it back: an outage of the API server for everything on the host. |
+| `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
+| `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
+| `wake-lab.py` | Wake, sleep and capacity on real k3s ([below](#wake-sleep-and-capacity-t06)), through manager-lab.py's gate, replica, views and `kill-runner`: a profile with a budget of one runner and a 60 s idle interval, accounts with a fake-model key, a self-managed runner and its dispatch, every kind of demand (a turn, a session, a task's Run Now or run time, all at once), waits on a mapping or on an answer quoting a marker, data on the runner's volume, the administrator's disable, a ResourceQuota of zero Pods, the switch-off check for demand, and a recorder with its timeline. |
+| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
+| `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
 
 A test window:
 
@@ -207,6 +218,359 @@ Reports are in `/mnt/data/managed-runner-lab/state/smoke-RUN_ID.json` (the first
 as retained test data: `mr-data-640deaf2-…` (RWO, with the probe data) and `mr-data-13282595-…`
 (RWOP). Deleting a claim leaves a released PV and its RBD image (`Retain`).
 
+## Runner image (T03)
+
+Recorded 2026-10-17 by task T03. The optional runner image ([deploy/managed-runner](../deploy/managed-runner/README.md))
+was built on the host and run in the lab through its **standalone enrollment path**: one owner
+enrollment on the first start, then the identity retained on the volume on every rebuild. The
+test server ran with `ORBIT_MANAGED_RUNNERS_ENABLED` unset, so the manager's own Pod, the
+admission guard and generation-bound credentials are not part of this record (T02a, T04).
+
+```sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+sudo scripts/managed-runner/lab/start.sh && sudo scripts/managed-runner/lab/test-server.sh start
+docker buildx build --file deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" \
+  --output type=docker,dest=/mnt/data/image.tar,name=orbit-managed-runner:TAG .   # clean checkout; nothing is pushed
+R=scripts/managed-runner/lab/runner-image.py
+python3 $R import /mnt/data/image.tar          # into the guest's k3s containerd; the Pod uses imagePullPolicy Never
+python3 $R owner && python3 $R enroll t03 && python3 $R start t03 --image docker.io/library/orbit-managed-runner:TAG
+python3 $R workspace t03 && python3 $R provider t03 --fake    # or --key-file for a real key
+python3 $R session t03 --provider SLUG --model deepseek-v4-flash --attach FILE --prompt TEXT
+python3 $R snapshot t03 && python3 $R stop t03 && python3 $R start t03 --image ... && python3 $R snapshot t03
+```
+
+The Pod follows [runner-pod.yaml.example](../deploy/managed-runner/runner-pod.yaml.example) for the
+standalone path: init container `init-volume` (root, `CHOWN FOWNER DAC_OVERRIDE` only), runner UID
+10001 with a read-only root, no capabilities, `RuntimeDefault` seccomp, no service account token,
+`restartPolicy: Never`, 240 s grace, an RBD claim `t03-data` (`runner-data`, RWO, 5 GiB) at
+`/var/lib/orbit` and an `emptyDir` `/tmp`. It reaches the test server at `https://10.0.2.2:13711`; the
+lab CA comes from a ConfigMap through `SSL_CERT_DIR`, which Go reads besides the image's public roots.
+
+| Check | Result |
+| --- | --- |
+| Build | The image had never been built. The first build failed at `apt-get update` (the slim Node base has no OpenSSL CA file until the `openssl` package arrives), and the second produced `/usr/local/share/orbit` with mode 0644 (`COPY --chmod`), unreadable for UID 10001. Both are fixed. Builds took 101–170 s in a 5 GiB-capped buildx builder; the archive is 500 MB. Final image `r4-6bfe0a871`: manifest `sha256:7e20b93f…6d1ba`, config `sha256:feda0de7…b76`. Its `tool-versions.json`: Go 1.27.1, Node v26.10.0, Codex 0.158.0, Claude Code 2.1.300, git 2.47.3, Python 3.13.5, ripgrep 14.1.1, SQLite 3.46.1, tini 0.19.0. |
+| Engine | The image had only Codex, and an Anthropic-dialect key (DeepSeek's) runs on `claude`, `opencode` or `dsh`: such a session failed as soon as it was claimed. Claude Code 2.1.300 is now in the image (native binary, `DISABLE_AUTOUPDATER=1`). |
+| Git identity | A fresh volume had no git identity, so the runner's commits failed (`unable to auto-detect email address`), the `autoInitGit` baseline of a managed default workspace among them. The image now sets `Orbit Runner <runner@orbit.invalid>` in `/etc/gitconfig`: the runner's real `autoInitGit` baseline in a new workspace was authored with it, with no `GIT_*` variable set; a repository identity overrides it (build check and `image-smoke.py --fixture-git-identity`). |
+| Import | `k3s ctr images import` of the archive: 37–39 s. The VM's unit grew to 3.6–3.9 GiB of host RAM (page cache), back to under 2 GiB a minute after `provision.sh trim`. |
+| First start | 16.6 s from Pod creation to `Running` (init included); `orbit register` ran once, its doctor output took 8 s, then `orbit run`; the first real heartbeat came 30 s later (registration also stamps `lastHeartbeatAt`, so it alone proves nothing). `/var/lib/orbit` is ext4 on `/dev/rbd*`; home 0700, `config.json` 0600. |
+| Recreation | Six recreations on the same claim and RBD image, two of them onto a newer image (r2 → r3 → r4): the same runner (public id and UUID), the same `enrolledAt`, `config.json` byte-identical (no token rotation), one runner of that name throughout. Pod `Running` in 6–17 s, first heartbeat 36–50 s after creation. Worktrees (with an uncommitted file), the workspace repository, `runs/*/meta.json`, Claude transcripts and the uploads of open sessions were byte-identical after each. |
+| Wrong expected ID | Passing the owner API's public id as `ORBIT_RUNNER_EXPECTED_ID` made the entrypoint refuse to start (exit 1, no registration, no state change); it takes the UUID that `orbit-container check` prints, which the message now says. |
+| Uploads | An attachment of a message turn lands in `uploads/<session>/` with its SHA-256; a shell turn downloads none. At the next start the runner removes the uploads of sessions that are no longer open (FAILED, ended): `gc: removed orphan uploads dir`. |
+| Continuation | A session reclaimed after recreation (and after both image upgrades) resumed with `--resume`: its next request carried the whole earlier conversation, read from the transcript on the volume (checked with `fake-model.py`, which is not a model). |
+| Drain, idle | SIGTERM to exit: 1.5–2.3 s; the idle sessions detach as resumable. |
+| Drain, turn in flight | A turn held open for 60 s when SIGTERM came: the runner waited, the answer and `turn_end` reached the server, the session detached, exit 0 after 49.8 s. |
+| Drain, turn too long | A turn held for 150 s: at the runner's 100 s deadline it was torn down (`interrupt`, reason `runner_restart`), exit 0 after 101.5 s; the session stayed `RUNNING`, and the next Pod re-delivered the turn, which completed. |
+| Drain, landing in flight | A `LAND_TASK` integration job's merge check (330 s) was running when SIGTERM came. The runner stopped heartbeating at once (its last beat preceded the signal), detached its sessions, then waited for the job with no time limit: the kubelet killed it at the end of the 240 s grace (exit 137, Pod gone after 241.3 s). The server kept the job `RUNNING` until its heartbeat was 10 minutes old; the next Pod took it over 10 min 26 s after that heartbeat, ran it again from the start and landed it at 08:05:12, about 10.5 minutes later than it would have. The killed attempt's scratch worktree `_integrate-<job>` stayed on the volume until the rerun removed it. |
+| Least privilege | In the runner: UID/GID 10001, every capability set empty, `NoNewPrivs`, seccomp filter, read-only root; no service account token, Docker socket, kubeconfig or credential variable; tini is PID 1 and `orbit run` gets only the fixed paths and update switches. |
+| Real engine session | Pending: the owner's DeepSeek key file does not exist yet. |
+
+## Single-writer protection (T02a)
+
+Recorded 2026-10-17 by task T02a: the same-node part of criterion 2 with the manager's own Pods,
+C2b's admission guard and generation-bound credentials, and D7's recovery rule. The records are in
+[the evidence](evidence/managed-runner-single-writer-lab/2026-10-17/README.md). No model was used:
+the runners stayed STARTING with `MODEL_UNAVAILABLE`, which the gate and the guard do not depend on.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02a   # T03's database untouched
+W=scripts/managed-runner/lab/single-writer.py
+sudo scripts/managed-runner/lab/test-server.sh secrets                     # the lab CA the image trusts
+docker buildx build ... --output type=oci,dest=product.oci.tar ...          # deploy/managed-runner/image, as for T03
+docker buildx build --build-context base=oci-layout://DIR@sha256:... \
+  --file scripts/managed-runner/lab/lab-ca-image.Dockerfile ...             # one layer: the lab CA
+python3 $W import lab.tar && python3 $W identity && python3 $W profile --image REF
+sudo scripts/managed-runner/lab/test-server.sh start --managed
+python3 $W owner                              # sign-in provisions; without the guard: ADMISSION_GUARD_MISSING
+python3 $W admission install && python3 $W retry
+python3 $W contenders                         # ... payload, credential, signal, force-delete, receipt
+python3 $W admission remove                   # before the test server stops
+```
+
+| Part | As set up |
+| --- | --- |
+| Manager | The test server's own manager, `ORBIT_MANAGED_RUNNERS_ENABLED=true` and a profile naming a separate JSON kubeconfig: ServiceAccount `orbit-mr-manager` in `orbit-mr-test` with `get`/`create`/`delete` on Pods and Secrets, `get`/`create` on PVCs, `get` on ConfigMaps, `get` on PVs and `list` on VolumeAttachments, nothing else (`auth can-i` checks in the record). Its username is the profile's `admission.managerUsername`. |
+| Admission | k3s's API server runs with `--admission-control-config-file`, from a drop-in in `/etc/rancher/k3s/config.yaml.d` (`config.yaml`, which `provision.sh` rewrites, is untouched): its WebhookAdmissionConfiguration names a kubeconfig whose user `10.0.2.2:13711` holds the webhook's bearer token (0600 in the guest, only its hash in the profile). The ValidatingWebhookConfiguration is the repository template with the namespace, `https://10.0.2.2:13711/api/managed-runner/admission` and the lab CA; the API server reaches the test server's TLS front through the QEMU user network. |
+| Image | The product image from deploy/managed-runner/image at the project tip, plus one layer adding the lab CA to the system trust store: the manager's Pod mounts only its claim, emptyDirs and its bootstrap Secret, and the guard refuses anything else, so the CA cannot come as a ConfigMap. `ctr images import --digests --base-name` names a digest reference, which the profile pins and the kubelet finds locally (no pull policy is set, so a digest reference is `IfNotPresent`); that digest is the archive's index, which holds the one built manifest. |
+
+| Check | Result |
+| --- | --- |
+| Without the guard | The sign-in provisioned the PVC, its PV and generation 1's Secret, then the manager's dry-run probe was admitted and it stopped: `FAILED ADMISSION_GUARD_MISSING`, retryable, no Pod. After `admission install` the owner's retry started generation 1's Pod; the probe was refused by the guard. |
+| Second Pod, same node, same claim | Refused, while the authorized Pod kept running (same UID, its writer committing rows, one VolumeAttachment, one RBD mount): an unlabelled Pod by the cluster admin (`NOT_THE_MANAGER`), the same by the manager's identity and a full copy of the authorized Pod under another name (`NOT_THE_FIXED_NAME`), the fixed name again (`NOT_RESERVED`), the fixed name for the next generation (`NOT_THE_RESERVED_GENERATION`), a Job's Pod (`FailedCreate`, `NOT_THE_MANAGER`), an ephemeral container mounting the volume (`EPHEMERAL_CONTAINER`). With the TLS front down every Pod create in the namespace was refused (`failed calling webhook`); with only PostgreSQL down, a Pod on the claim was refused and one with no claim admitted (its decision reads no row). |
+| Generations | A SIGTERM to the runner (what the kubelet sends) ended the Pod `Succeeded`; the manager recorded the kubelet's report, deleted the Pod by UID, waited for the detach and started generation 2 on the same PVC in 11 s. After the VM restart the kubelet reported generation 2's runner stopped (exit 0) and generation 3 followed. Each older generation's credential was then refused 401 at heartbeat, claim and `GET /runner/me`; the current credential naming an older instance 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. |
+| No stop proof | An operator's graceful `kubectl delete pod` and a force delete each left the mapping `FENCING` (`PREDECESSOR_STOP_UNPROVEN`) with its generation, recorded Pod, Secret, PVC and compute reservation kept and no new Pod, for 14 and 6 minutes until the end of the window; the credential was replaced (401), the owner's retry refused (409), an incomplete fencing receipt rejected field by field (`FENCING_RECEIPT_INVALID`), and the manager identity's fixed-name Pods refused (`NOT_RESERVED`). The graceful delete fenced because the kubelet's terminal report was in the API for about a second and the manager polls every 5 s. |
+| Data | Ordinary file, Git commit (fsck clean), a 32 MiB random file and SQLite rows in WAL mode (`synchronous=FULL`) written inside the runner container: the same after the Pod's recreation as generation 2, and after the VM restart (written until the shutdown) every acknowledged row present, `integrity_check` `ok`, the earlier rows hashing as before. |
+
+## Manager reconciliation (T04)
+
+Recorded 2026-10-17 by task T04: the manager driving several owners' runners against the real k3s API server, with the
+switch off and on, two replicas, lost answers, crashes, outages and a VM restart. The records are in
+[the evidence](evidence/managed-runner-manager-lab/2026-10-17/README.md). No model was used: READY came from a stand-in
+Claude login on the runner's volume (no access token, so no request leaves the runner), which is no engine acceptance.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t04
+M=scripts/managed-runner/lab/manager-lab.py
+python3 $M prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token; identity; profile -> the gate
+python3 $M gate start && sudo scripts/managed-runner/lab/test-server.sh start --managed && python3 $M replica start
+python3 scripts/managed-runner/lab/single-writer.py admission install
+python3 $M owner alice --no-signin && python3 $M signin alice --parallel 8 && python3 $M ensure alice --parallel 8 --replica
+python3 $M consistency && python3 $M stand-in-login alice      # READY within the runner's 5-minute engine probe
+python3 $M api-outage 150                                      # also: kill-runner, delete [--force], evict, cross-user A B
+python3 $M gate arm --min-bytes 4000 --skip 1 --then 1         # the next Pod create's answer lost, and its read-back's
+python3 scripts/managed-runner/lab/single-writer.py admission remove   # before the test server stops
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset and `false` | On a fresh database and with live managed objects: the server answers, sign-in provisions nothing, every managed write is 404 `MANAGED_RUNNER_DISABLED`, not one connection reaches the gate in 60–90 s, and no object in the namespace changes. On again, the managers resume from the stored identities. |
+| Concurrent provisioning | 16 sign-ins and 16 ensures of two accounts across two replicas: one mapping, runner, workspace, PVC, Secret and Pod each; the gate saw one create of each, no duplicate even sent. |
+| Lost answers, a crash | A PVC create and a Pod create whose answers were lost after k3s applied them were found by name and recorded on the next pass; a Secret create whose answer was held while both apiservers were SIGKILLed was adopted, same UID, by the restarted ones after the dead lease expired. |
+| Outages | 150 s with no API forward: READY runners wrote and spent nothing; a STARTING runner spent no attempt (before this change it would have been FAILED in about 75 s). |
+| Stops | A killed runner process, a VM restart (the kubelet reported both Pods stopped after the boot, exit 255), `kubectl delete`, an eviction and a force delete: each started the next generation by itself on the same volume, the old attachment gone first. A Pod gone with its finalizer stripped fenced. |
+| Owners | Another owner's token and runner credential could not read, change or act as one owner's runner, workspace or instance; the guard refused Pods mixing their identities and volumes. |
+
+The manager's Pods now carry the finalizer `orbit.dev/managed-runner-stop-report`. A managed Pod deleted while no manager
+runs (the switch off, the test server stopped) stays Terminating until a manager records its stop, or until an operator
+removes the finalizer by hand.
+
+## Sign-in provisioning (T05)
+
+Recorded 2026-10-17 by task T05: new accounts signing in on real k3s, through provisioning, a heartbeat and the default workspace,
+to a first session. Also concurrent and repeated sign-ins, an existing account's landing and deep links, two provisioning failures
+and their retries, and the switch unset and `false`. The records are in
+[the evidence](evidence/managed-runner-login-lab/2026-10-18/README.md). The owner's DeepSeek key file did not exist, so every
+session ran on a DeepSeek-preset model key whose endpoint is fake-model.py. That is the real key's code path, but not a model.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t05
+L=scripts/managed-runner/lab/login-lab.py
+python3 $L prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token, T04's identity
+python3 $L gate start && sudo scripts/managed-runner/lab/test-server.sh start      # switch unset; --managed-false; --managed
+python3 $L off-check admin --label unset          # the first user, then new and existing accounts: nothing managed
+python3 $L account vera && python3 $L veteran vera && python3 $L landing vera --save
+python3 scripts/managed-runner/lab/single-writer.py admission install            # with --managed, and replica start
+python3 $L account erin && python3 $L until erin STARTING --reason MODEL_UNAVAILABLE
+python3 $L key erin --fake && python3 $L until erin READY       # or --key-file the owner's DeepSeek key
+python3 $L session erin --prompt TEXT && python3 $L wait-session erin SESSION   # nothing named, as a client sends it
+python3 $L signin hank --parallel 16 --replica && python3 $L gate-summary --since TS
+python3 $L intent-fault on|off                    # a sign-in whose intent cannot be written
+python3 scripts/managed-runner/lab/single-writer.py admission remove             # before the test server stops
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset and `false` | The deployment's first user, new accounts and an existing one (with its own runner, workspaces and a session) sign in as before. No mapping, runner, workspace or namespace object is written or changed, and every managed write is 404 `MANAGED_RUNNER_DISABLED`. The gate's first connection came only once the switch was on. The same with six mappings present, on the fixed build. |
+| Model supply | A key-only account never became READY: Claude Code and Codex installed but signed out kept it `MODEL_UNAVAILABLE`, and the shared display offered no first session. Since `baea95083` the owner's own enabled model key counts, on both backends, and READY records its slug as `initialProvider` ([design record](managed-runner-design.md#implementation-record-sign-in-provisioning)). |
+| A new account | Sign-in 201 in 47 ms. PVC, Secret and Pod within 5.4 s, the first heartbeat 47 s after the sign-in, READY 10 s after its key was added. The first session, with nothing named, started on the key, was claimed by the managed runner and answered. The workspace is on `/dev/rbd*` ext4 with its `autoInitGit` baseline. A fresh deployment's first user (the bootstrap) went the same way. |
+| Concurrent and repeated | 16 concurrent first sign-ins over two replicas: one mapping, runner and workspace, and one PVC, Secret, admission probe and Pod create sent. Five later sign-ins left the mapping's revision as it was. |
+| An existing account | Its workspaces, their order, the web landing and every deep link were unchanged through sign-in, a capacity wait, start, READY and the switch `false`. The managed default was added last, matched by nothing. |
+| Failures | An intent the database refused, and a cluster without the admission guard (`FAILED`, `ADMISSION_GUARD_MISSING`): each sign-in still answered 201 with a working token. The next sign-in, or the owner's retry once the guard was back, made it READY, on the same PVC. A sign-in does not retry a FAILED mapping. |
+
+## Wake, sleep and capacity (T06)
+
+Recorded 2026-10-18 by task T06: a managed runner woken by messages, tasks and scheduled work, put to sleep when idle and only then,
+on a budget of one runner, through failed starts, disabled accounts and the switch unset and `false`. The records are in
+[the evidence](evidence/managed-runner-wake-lab/2026-10-18/README.md). The owner's DeepSeek key file did not exist, so every session ran on
+a DeepSeek-preset key whose endpoint is fake-model.py (T05's way), which is not a model.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t06
+W=scripts/managed-runner/lab/wake-lab.py
+python3 $W prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token, T04's identity; budget: one runner
+python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start    # unset: the bootstrap, then accounts without sign-in
+python3 $W account root && python3 $W account amy --no-signin && python3 $W selfhost root && python3 $W selfhost-dispatch root --label unset0
+sudo scripts/managed-runner/lab/test-server.sh start --managed                    # after stopping the apiserver unit
+python3 scripts/managed-runner/lab/single-writer.py admission install && python3 $W replica start && python3 $W record start
+python3 $W account amy && python3 $W key amy && python3 $W until amy READY
+python3 $W session amy --prompt "T06-AMY-S1 ..." && python3 $W answered amy T06-AMY-S1 && python3 $W probe amy write p1
+python3 $W until amy SLEEPING && python3 $W message amy SESSION --prompt "T06-AMY-M1 ..." && python3 $W answered amy T06-AMY-M1
+python3 $W task amy --prompt "T06-..." --run-now          # or --run-at-seconds S; a session with "FAKE-WAKEUP 240 WORD" for a wakeup
+python3 $W burst amy --prompt T06-AMY-BURST --messages S1,S2 --sessions 2 --tasks 2
+python3 $W quota on|off && python3 $W action amy retry && python3 $W disable ben on|off
+python3 $W off-check --label unset --seconds 330 --message ben:SESSION --task ben    # with the switch unset, then false
+python3 scripts/managed-runner/lab/single-writer.py admission remove                  # before the test server stops
+```
+
+| Check | Result |
+| --- | --- |
+| Scale to zero | 22 sleeps: the drain 60 s after the last work by the runner's own count, the runner's acceptance at its next heartbeat, its exit 0, the kubelet's report as the stop proof, the Pod removed, the volume detached; 35–41 s from the drain request to SLEEPING. The next start always on the same PVC, PV, RBD image, runner row and workspace (generations 1 → 17). |
+| Three kinds of wake | A message (answered 3.9 s after it was sent), a task's Run Now (17 s), a held wakeup (13 s after due), a task's run time (29 s after it). READY follows ~30 s after the Pod runs, at the woken instance's first heartbeat; the instance claims before that. |
+| No sleep while busy | Through a 150 s turn and a 180 s runner-hosted background job, the runner stayed READY and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; the job ran out (`completed`, exit 0) and only then did the runner sleep. |
+| Demand | Eight demands at once: one start, one Pod create. A message as the drain began called it off (`DEMAND`). |
+| Failed starts | A runner killed while starting was restarted by itself (D7: attempt 1 of 5, the next generation on the same volume). A ResourceQuota of zero Pods failed the start `KUBERNETES_FORBIDDEN`; with the quota gone the owner's retry ran the waiting message. |
+| Capacity | A new account and a wake each waited (`MANAGED_RUNNER_CAPACITY_UNAVAILABLE`, "Waiting for capacity") with nothing created, and started within seconds of the other runner's release. Never more than one managed Pod. |
+| Background work | A retry due while asleep woke the runner and was re-armed with no attempt spent until READY; one armed retry waited 15.7 minutes through the switch-off phases on the offline path, then ran. |
+| The finding | A woken runner's first run was finalized `runner offline` by the reaper, whose heartbeat was from before the sleep. Since this task the reaper counts the run's claim as presence (`reaper.service.ts`). |
+| Disabled accounts | A waiting mapping went to sleep with nothing made; a running one drained and slept 37–39 s after the disable, its PVC kept; demand while disabled was recorded and woke nothing; enabled again, the waiting work woke it on the same PVC and runner row. |
+| Switch unset and `false` | Messages, Run Now, held wakeups, run times and an armed retry: no mapping, pool or namespace change and no connection to the gate for 330 s each; owner writes `404 MANAGED_RUNNER_DISABLED`; a running instance kept serving as any runner and was never drained; a self-managed runner's dispatch worked. On again, the waiting work woke the runner. |
+
+## Wake and capacity follow-ups (T06b)
+
+Recorded 2026-10-18 by task T06b: three of T06's findings, fixed and checked on the lab's real k3s with a budget of one
+runner. The records are in [the evidence](evidence/managed-runner-wake-followups/2026-10-18/README.md). The owner's
+DeepSeek key file still did not exist, so the sessions ran on fake-model.py as a DeepSeek-preset key, which is not a model.
+The runner image was rebuilt from the task's commit (deploy/managed-runner/image unchanged, plus the lab CA layer) and
+imported into the guest; nothing was pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t06b   # T06's database untouched
+W=scripts/managed-runner/lab/wake-lab.py; K=docs/evidence/managed-runner-wake-followups/2026-10-18/kit
+python3 scripts/managed-runner/lab/single-writer.py import lab.oci.tar && python3 $W prepare --image REF
+python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start && python3 $W account root
+sudo scripts/managed-runner/lab/test-server.sh start --managed                   # after stopping the apiserver unit
+python3 scripts/managed-runner/lab/single-writer.py admission install && python3 $W record start
+sudo systemd-run --unit=orbit-mr-lab-t06b-beats $K/beats.sh                     # heartbeat, claim and state stamps
+python3 $W account amy && python3 $W key amy && python3 $W session amy --prompt "T06-B-..."   # wakes: session, message, task
+python3 $W account ben && python3 $W key ben && python3 $K/t06b.py first-session ben --prompt "T06-B-BEN-S1 ..."
+python3 $W quota on && python3 $W message amy SESSION --prompt "T06-B-AMY-Q1 ..." && python3 $W quota off
+python3 $K/timings.py beats.jsonl timeline.jsonl                                # per generation: beat, claim, READY
+```
+
+| Check | Result |
+| --- | --- |
+| Heartbeat before the first claim | Five wakes of amy (a new session, a message, a task's Run Now behind a capacity wait, a message behind a quota wait, a message) and ben's first start: the instance's first heartbeat came 0.03–0.21 s before its first claim every time, and READY 1.1–5.0 s after that claim, the manager's 5 s poll. T06 had READY about 30 s after the first claim. The first beat now waits for the engine probe: it came about 8 s after `orbit run` started. A woken instance's first claim waits for that beat, so it now comes later than T06's 0.2–5 s after the Pod ran. |
+| A self-managed runner | The same build of the runner, run on the host as a self-managed runner of the test server: it claimed its queued session 0.09 s after it started, before any heartbeat of its own, and its first tick came 30.0 s after the start. The one beat between them (4.5 s after the start) was an existing trigger: the engine re-probe after that session failed on a missing Claude Code. |
+| A namespace quota | A ResourceQuota of zero Pods, then a message to amy asleep. Her Pod create was refused 403 `exceeded quota`, and she waited in STARTING with `KUBERNETES_QUOTA_EXCEEDED` and the quota's sentence (no Retry offered) for 2 minutes. She was asked again every 30 s with no attempt spent and never failed, and it was logged once. Before this change it went FAILED `KUBERNETES_FORBIDDEN`. With the quota removed, the next retry made the Pod about 4 s later, with no retry from the owner, and the message was answered. |
+| A new account's first session | ben signed in while amy held the one slot: WAITING_CAPACITY, his runner never having reported its engines, his default workspace already on his key (`deepseek-2`). His first session with nothing named, and one naming the key, were queued (201 PENDING, on the key). Before this change both answered 409 `MODEL_UNAVAILABLE`. One on Claude Code's own sign-in was still refused 409. When amy slept, ben was admitted. He was READY on the key 15.6 s after STARTING, and both sessions were answered 1.4–1.5 s after READY. |
+
+## The three clients (T07)
+
+Recorded 2026-10-18 by task T07: the web, iPhone and Mac apps against the lab's test server. The run covered:
+
+- the switch unset, `false`, missing and on;
+- new accounts' first sessions, sleep and wake;
+- a crash loop and an out-of-memory loop, each with its Retry;
+- a namespace quota, a held volume and a deleted volume;
+- an environment the server cannot use;
+- the Docker-only states, on the host's real Docker.
+
+The records are in [the evidence](evidence/managed-runner-clients-lab/2026-10-18/README.md). The owner's DeepSeek key file still did not
+exist, so every session ran on fake-model.py as a DeepSeek-preset key (T05's way), which is not a model. The runner image
+was T06b's, already in the guest. Nothing was built or pushed.
+
+- **Web, live.** This checkout's web build was served same-origin on 127.0.0.1 (`kit/serve-web.mjs`), passing `/api`
+  through to the test server; a second instance answers the capability route 404, as a server from before it would.
+  It ran in headless Chromium on the host (`kit/t07web.mjs`), one browser per account, each signed in through the login
+  page. The observer takes a picture and writes a line each time the managed notice, the composer or the answers
+  change, and it sends the presses (send, Retry) from command files.
+- **iPhone and Mac, replayed.** No Mac can reach the host, and the coordinator chose replay over a tunnel. A recorder
+  (`kit/t07rec.py`) asked the test server, as each account, every request the two apps make on these screens, on the
+  apps' cadences or faster. It also sent the apps' own writes (a first session from the draft, a message, Retry) in
+  their request shapes. Scenes are windows of those recordings. The probe on GitHub's macos-26 replays each to the real
+  apps (`kit/replay.py`), failing on any request it does not hold and on any write whose key fields differ.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t07     # T03–T06b's databases untouched
+W=scripts/managed-runner/lab/wake-lab.py; K=docs/evidence/managed-runner-clients-lab/2026-10-18/kit
+python3 $W prepare --image REF && python3 $K/t07lab.py profile                # one runner, 60 s idle, runner memory 1Gi
+python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start   # then --managed-false, --managed
+node $K/serve-web.mjs src/web/dist 5873 13710 &                               # T07_NO_CAPABILITIES=1: a server before it
+node $K/t07web.mjs run --account wen --out DIR --base http://127.0.0.1:5873   # node $K/t07web.mjs act --out DIR send TEXT
+python3 $K/t07rec.py run --account nia --out DIR --client ios                 # python3 $K/t07rec.py act --out DIR retry
+python3 $K/t07lab.py loop wen kill --times 5; python3 $K/t07lab.py loop nia oom --times 5
+python3 $K/t07lab.py va nia on|off; python3 $K/t07lab.py pvc-delete nia; python3 $W quota on|off
+python3 $K/t07docker.py up && bash $K/step-dock-limit.sh && bash $K/step-dock-cap.sh && bash $K/step-dock-volume.sh
+python3 $K/scenes.py pack RUN_DIR SCENES_DIR && bash $K/push-probe.sh PROBE_DIR   # the probe on macos-26
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset, `false`, capability missing | Root, an account with its own runner, saw its own workspace's draft on Claude Code, its session by deep link and Infrastructure as before. There was no managed notice and no registration prompt, on the web and in the replayed apps. |
+| A new account's first session | wen signed in while hana held the one slot, and nia while wen held it: "Waiting for capacity", with no draft. Once their key was added, the draft was offered on it (the web 3.4 s later). The first session sent from it with nothing named was queued, shown waiting and then preparing, and answered on the key once the runner was READY. eve did the same on Docker. |
+| Sleep and wake | Going to sleep, asleep, then a message: waking, then answered (k3s and Docker). The web says "Waking" 0.7 s after the send since this task's fix; before it, "asleep" stayed until the next 30 s read. |
+| Restarts and Retry | Five kills of wen's runner (the profile's five attempts): `POD_RESTARTING`, then failed with "stopped too often" and Retry, which the web pressed: waking, then READY. Five out-of-memory kills of nia's: `POD_RESTARTING_OUT_OF_MEMORY`, then `POD_OUT_OF_MEMORY` with Retry, pressed by the recorder as the iPhone presses it. |
+| Quota, held and deleted volume | A quota of zero Pods: waking with the quota's sentence, until it was lifted. A VolumeAttachment left behind: waking with `VOLUME_IN_USE`, until it was removed. The claim deleted while asleep: failed `PVC_MISSING`, with no Retry. |
+| Environment unusable | The switch on with a profile whose backend is neither Kubernetes nor Docker: "…not configured correctly", the composer closed. |
+| Docker only | The channel's cap held by a container nobody records: `CONTAINER_LIMIT` while preparing and while waking. A stopped container holding the volume: `VOLUME_IN_USE`. The volume removed, then restored by the runbook (`volume-backup.sh`): `PVC_MISSING`, then `PVC_RESTORED` with Retry, and answered. |
+| iPhone and Mac | Replayed on macos-26. Each of the 25 scenes passed on both apps: the switch off, the first session on the key, sleep and wake, both loops and their Retry, the quota, both volumes, the unusable environment, root's own workspace and deep link, the Docker states, and where each app lands by itself. No app made a request outside the recording, and every write matched the recording's key fields. The evidence explains round 1's replay artifact and round 2's one Mac exit, which did not recur. |
+
+One finding is reported, not fixed here: on k3s the restart reason is lost after the detach wait. The evidence also
+notes two behaviours from before this task: a Retry pressed on another client shows at the next 30 s read, and the
+web composer under a failed notice reads "Reply…" while the runner row is still online.
+
+## The restart reason through the detach wait (T07b)
+
+Recorded 2026-10-18 by task T07b, which fixed T07's finding above. It records what a runner's owner is told while a
+READY runner restarts by itself, before and after the fix. The records are in
+[the evidence](evidence/managed-runner-restart-reason/2026-10-18/README.md).
+
+- **Setup.** One account (`amy`), T06b's image (already in the guest) and T07's profile: one runner, its memory limit
+  1Gi. The idle interval was raised to an hour, so that sleep stayed out of the way.
+- **Model.** fake-model.py stood in as the owner's DeepSeek-preset key. No session ran, and nothing was built into an
+  image or pushed.
+- **What was read.** The status, as the owner reads it, every 0.5 s (`kit/t07b.py watch`).
+- **Control.** For one run, the test server ran a build of the previous manager.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t07b    # earlier tasks' databases untouched
+W=scripts/managed-runner/lab/wake-lab.py; K=docs/evidence/managed-runner-restart-reason/2026-10-18/kit
+python3 $W prepare --image REF && python3 $K/t07b.py profile                 # then idleSeconds 3600 in the profile
+python3 $W gate start && sudo -E scripts/managed-runner/lab/test-server.sh start && python3 $W account root
+sudo -E scripts/managed-runner/lab/test-server.sh start --managed           # after stopping the apiserver unit
+python3 scripts/managed-runner/lab/single-writer.py admission install && python3 $W record start
+python3 $W account amy && python3 $W key amy && python3 $W until amy READY
+$K/run.sh OUT LABEL kill|oom natural|held      # READY for 125 s first; the status every 0.5 s until READY again
+$K/run-starting.sh OUT LABEL                   # sleep, wake, and a kill while the woken runner is still starting
+```
+
+| Check | Result |
+| --- | --- |
+| The detach wait, with the fix | The stopped Pod's own VolumeAttachment was kept by a finalizer of the kit's (`detach-hold`) after the cluster had detached the volume, as a slow detach keeps it. After a SIGKILL of `orbit run`: REQUESTED `POD_RESTARTING` (4.5 s), REQUESTED `VOLUME_STILL_ATTACHED` (15 s, the restart carried), STARTING `POD_RESTARTING` on the next generation, READY with no reason. After the container ran out of memory: the same, with `POD_RESTARTING_OUT_OF_MEMORY`, and the clients' out-of-memory sentence before and after the wait. |
+| The same, before the fix | REQUESTED `POD_RESTARTING`, REQUESTED `VOLUME_STILL_ATTACHED`, then STARTING with no reason for 20 s: "It is starting again", T07's finding. |
+| Without the hold | Two kills and an out-of-memory kill while READY, and a kill while a woken runner started. Each time the volume was detached 3.3–6.1 s after the Pod failed, before the gate looked (one poll and a 3.75 s backoff after the stop), so there was no wait. The restart's reason stood until READY. T07 saw the natural wait in a crash loop of a runner still starting. |
+| Attempts and identity | Each run began with the runner READY for 125 s, and each restart counted attempt 1; no wait spent one. Generations 1 to 9 ran on the same PVC and PV, one Pod at a time. |
+
+Left in the lab: `amy` SLEEPING, its PVC kept; the webhook removed; the test server and the gate stopped; the VM off.
+
+## End-to-end acceptance (T08)
+
+Recorded 2026-10-18 by task T08: two accounts (`ann`, `bob`) and a third (`cy`) through the whole flow on the lab's real
+k3s, in one run of `acceptance-lab.py` on the project line (`eb16b3b5e`: 48 steps, 261 checks, all passed, 36.4 minutes),
+with the switch unset, `false` and on. The records are in [the evidence](evidence/managed-runner-acceptance/2026-10-18/README.md),
+and the runbook written from it is [Managed runners on Kubernetes](managed-runner-kubernetes-operations.md). The owner's
+DeepSeek key file did not exist, so every session ran on fake-model.py as a DeepSeek-preset key (T05's way), which is not a
+model. The runner image was T06b's (`…@sha256:cdb09014…`; nothing under `src/runner-go` or `deploy/managed-runner/image`
+changed since its source); nothing was built into an image or pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08     # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08-run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t08-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/acceptance-lab.py run --out $OUT --quiet-seconds 90
+python3 scripts/managed-runner/lab/acceptance-lab.py report $OUT        # each step's time and checks, the intervals
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset, then `false`, no profile | No Kubernetes or Ceph setting in the apiserver's environment. Sign-ins; `GET /api/managed-runner` `enabled: false` and no display; every managed write `404 MANAGED_RUNNER_DISABLED`; this checkout's runner as a real self-managed runner (Claude Code 2.1.302 on the host) answered a session, a task run now and a task's run time. No managed row, no namespace object changed and no connection to the gate in 90 s each. |
+| Provisioning | 16 concurrent sign-ins of ann and bob over two replicas, the admission guard absent: one mapping, claim and Secret each, `FAILED ADMISSION_GUARD_MISSING` 5.7 s later, no Pod. Guard installed, the owners' retries: the Pod 6.3 s after, the first heartbeat 31 s after the Pod, `MODEL_UNAVAILABLE`, then READY 1.1 s after each key. The gate saw two claim creates, two Secret creates, two probes, then two Pod creates. |
+| Capacity | A budget of two runners: cy waited `WAITING_CAPACITY` with nothing created, and got its claim the moment the first runner slept. |
+| Sessions | An attachment, and a file written and committed in the session's worktree by Claude Code's own Bash tool (`FAKE-WRITE`), answered 2.3–2.4 s after each first session was made. |
+| Busy, then idle | A 240 s turn (ann) and a 240 s background job (bob): READY past the 90 s idle interval, the owner's sleep `409 MANAGED_RUNNER_BUSY` at 110 s; 96 s after the work ended the drain began, 40 s later both were SLEEPING, Pod gone, volume detached, no RBD watcher, compute released. |
+| Between the accounts | The other owner's token and runner credential refused (403/404) on the runner, workspace, instance, session, events, turn, attachment and a session in the other's workspace; the other's mapping unchanged. The guard refused Pods mixing the owners and volumes, an unlabelled Pod on a runner's claim and a copy of a runner's Pod under another name. In each runner: one RBD filesystem at `/var/lib/orbit`, no service account token, no credential variable, no RBD device node, UID 10001 with no capabilities, `401` from the Kubernetes API. |
+| Wakes | A message to sleeping ann: answered 10.4 s later on a new Pod. A task due at a time for sleeping bob: answered 5.1 s after it was due. |
+| Rebuilds | An operator's `kubectl delete pod` of ann's runner (held by the stop-report finalizer, then the next generation by itself): READY again 14.7 s after the delete. A SIGKILL of bob's `orbit run`: READY again 25.0 s after its Pod failed. Each on a new Pod of the next generation, the same claim. |
+| Controller restart | Both apiservers SIGKILLed 0.4 s into bob's wake, his Pod just created (STARTING); down for 5 s, then started again (6.9 s). The restarted manager adopted that Pod (no second Pod create), bob was READY 12.5 s after the kill, and ann's 200 s turn, running through it, was answered on the same Pod. |
+| Image rollback | The previous lab image (T02a's build) pinned and the apiservers restarted: the running Pod kept its image, the next generation ran the previous one; forward again the same way. |
+| Data through it all | The probe's random bytes, SQLite rows (WAL, `synchronous=FULL`) and Git commit, the uploads, the worktree and its commit, and the engine's transcript: the same after every sleep, wake, rebuild, restart and image change, `integrity_check` `ok`; each resumed session's next request carried the earlier conversation. One runner, claim, PV, handle and RBD image per account throughout (ann generations 1–7), never two Pods on a volume in any of the 207 timeline samples. |
+| Independent backup | ann disabled (asleep 33.8 s later), her 2 GiB image exported out of the VM to the host (7.8 s, 27.0 MB gzip, 0.3 s copy), checked there with no cluster (`debugfs`; 4.3 s), written into a new claim's image that read back byte for byte as the backup, and checked in a Pod (25.8 s). The original untouched; ann woke on it. |
+| Off again, every runner asleep | Unset, then `false`: a message, a task run now and a task's run time per account made no managed write, changed nothing in the namespace and reached nothing for 90 s each; every claim kept; the self-managed runner kept working. Switched on, all six waiting pieces of work were answered, ann's last, once a runner had slept and freed a slot. |
+
+Findings: Ceph-CSI v3.18.0 with `attachRequired: true` refuses to publish a static PV whose handle is a plain image
+name, and its unpublish then panics, which holds the VolumeAttachment and the PV on the attacher's finalizer: the runbook
+restores into a claim the driver provisions instead. A sleep already advances a mapping's generation, so a wake's new Pod
+keeps the generation the sleeping row names. Two volumes writing on this VM's one HDD fsync three times as slowly as one.
+
+Left in the lab: `test-server-t08` with ann, bob and cy SLEEPING, their claims kept; the restored claim
+`t08-restore-20261018t125553z` and its PV and image, as retained test data; the backup archive and its manifest in
+`/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z` (0700); the webhook removed; the test server, gate, replica,
+recorder and self-managed runner stopped; the VM off.
+
 ## Known limits
 
 - **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2
@@ -214,8 +578,10 @@ as retained test data: `mr-data-640deaf2-…` (RWO, with the probe data) and `mr
   stops or is fenced) and criterion 8's cross-node migration cannot be verified here; they wait for
   a multi-machine cluster or another decision by the owner. Single-machine evidence must not be
   presented as covering them. Criteria 3–7 and the single-node parts of 2 and 8 can be tested here.
-- No admission guard, fencing procedure, Rook or CSI snapshots are installed; T02 and C2b's
-  admission work brings the guard. `ceph-rbd-verify.py`'s live phases need two nodes.
+- The admission guard is installed only for a test window (`single-writer.py admission install`)
+  and removed after it (`admission remove`): with no test server answering, `failurePolicy: Fail`
+  refuses every Pod create in `orbit-mr-test`. No fencing procedure, Rook or CSI snapshots are
+  installed. `ceph-rbd-verify.py`'s live phases need two nodes.
 - The three replicas share one VM and one HDD: no durability against hardware failure, and I/O is
   bound by that disk.
 - Kernel RBD and OSDs share one kernel. Shutdown ordering is handled; severe memory pressure inside
@@ -223,6 +589,7 @@ as retained test data: `mr-data-640deaf2-…` (RWO, with the probe data) and `mr
 - The host can swap guest memory when the host itself runs short (it did during the first
   provisioning); the VM then slows down. `OOMScoreAdjust=1000` makes the VM, not the runner, the
   host OOM killer's first choice.
-- The kubeconfig is k3s's cluster-admin. Later tasks create least-privilege identities (the manager
-  ServiceAccount, the admission webhook's caller) themselves.
+- The kubeconfig is k3s's cluster-admin. The manager's own identity is the ServiceAccount
+  `orbit-mr-manager` (`single-writer.py identity`), with only the verbs the Kubernetes backend calls;
+  the webhook's caller is k3s's API server, which presents a bearer token from its AdmissionConfiguration.
 - Recreating the lab gives a new FSID and new keys; read `state/facts.json` after `create.sh`.

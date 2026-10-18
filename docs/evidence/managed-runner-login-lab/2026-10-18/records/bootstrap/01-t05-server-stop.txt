@@ -1,0 +1,2 @@
+23:47:09Z stopped; data kept in /mnt/data/managed-runner-lab/test-server-t05
+exit=0

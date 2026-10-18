@@ -1,0 +1,11 @@
+==== session-request.pg.spec.ts tests=40 pass=40 fail=0 skipped=0 
+==== session-delete-integration-job.pg.spec.ts tests=4 pass=4 fail=0 skipped=0 
+==== watch-core-qa-followups.pg.spec.ts tests=6 pass=6 fail=0 skipped=0 
+==== watch-expiry-delivery.pg.spec.ts tests=12 pass=12 fail=0 skipped=0 
+==== watch-core-qa-defects.pg.spec.ts tests=4 pass=4 fail=0 skipped=0 
+==== watch-delivery.pg.spec.ts tests=18 pass=18 fail=0 skipped=0 
+==== project-exception-todos.pg.spec.ts tests=43 pass=43 fail=0 skipped=0 
+==== managed-runner-wake.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==== managed-runner-sleep.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==== managed-runner-recovery.pg.spec.ts tests=17 pass=17 fail=0 skipped=0 
+==> OK: 10 spec(s) witnessed against PostgreSQL 16.15, no skips

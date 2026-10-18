@@ -1,0 +1,15 @@
+{
+  "everyTokenWorks": true,
+  "owner": "jack",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:42:40.178+00:00",
+      "ms": 41.7,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 41.7
+}

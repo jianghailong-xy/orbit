@@ -1102,7 +1102,7 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 			_, _ = w.Write([]byte(`{}`))
 		}))
 		defer srv.Close()
-		runIntegrationJobAndReport(context.Background(), NewTransport(srv.URL, "tok"), job)
+		runIntegrationJobAndReport(context.Background(), context.Background(), NewTransport(srv.URL, "tok"), job)
 		if result == nil {
 			t.Fatal("no result was reported")
 		}

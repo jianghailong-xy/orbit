@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-18T06:25:20.949+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:25:20.949+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 4,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 10,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 145
+      }
+    ]
+  ],
+  "owner": "nia",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

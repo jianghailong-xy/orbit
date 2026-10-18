@@ -1,0 +1,1064 @@
+{
+ "checks": [
+  {
+   "check": "ann: the operator's delete leaves the Pod held by the stop-report finalizer",
+   "ok": true,
+   "value": [
+    "orbit.dev/managed-runner-stop-report"
+   ]
+  },
+  {
+   "check": "bob: the killed runner's Pod failed",
+   "ok": true,
+   "value": "Failed"
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the rebuild",
+   "ok": true,
+   "value": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834"
+  },
+  {
+   "check": "ann: a new Pod of the next generation",
+   "ok": true,
+   "value": [
+    2,
+    3
+   ]
+  },
+  {
+   "check": "ann: the engine resumed the session after the rebuild: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 17,
+    "secrets": [
+     "annfirst"
+    ]
+   }
+  },
+  {
+   "check": "ann: the probe data unchanged after the rebuild, integrity_check ok",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "ann: uploads, worktrees, the engine's transcripts and the runner ID as before after the rebuild",
+   "ok": true,
+   "value": {
+    "transcripts": 1,
+    "uploads": 1,
+    "worktrees": 1
+   }
+  },
+  {
+   "check": "ann: every SQLite database on the volume passes integrity_check after the rebuild",
+   "ok": true,
+   "value": [
+    "t08-probe/p1/rows.sqlite"
+   ]
+  },
+  {
+   "check": "ann: the session's worktree is there after the rebuild",
+   "ok": true,
+   "value": [
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+   ]
+  },
+  {
+   "check": "bob: the same runner, PVC, PV, volume handle, RBD image and workspace after the rebuild",
+   "ok": true,
+   "value": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+  },
+  {
+   "check": "bob: a new Pod of the next generation",
+   "ok": true,
+   "value": [
+    2,
+    3
+   ]
+  },
+  {
+   "check": "bob: the engine resumed the session after the rebuild: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 23,
+    "secrets": [
+     "bobfirst"
+    ]
+   }
+  },
+  {
+   "check": "bob: the probe data unchanged after the rebuild, integrity_check ok",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "bob: uploads, worktrees, the engine's transcripts and the runner ID as before after the rebuild",
+   "ok": true,
+   "value": {
+    "transcripts": 2,
+    "uploads": 1,
+    "worktrees": 2
+   }
+  },
+  {
+   "check": "bob: every SQLite database on the volume passes integrity_check after the rebuild",
+   "ok": true,
+   "value": [
+    "t08-probe/p1/rows.sqlite"
+   ]
+  },
+  {
+   "check": "bob: the session's worktree is there after the rebuild",
+   "ok": true,
+   "value": [
+    "01a14f04-a753-774e-ae62-e1572e6de075",
+    "94834aeb-0a4b-511c-837e-227821526188"
+   ]
+  },
+  {
+   "check": "the gate saw exactly two Pod creates (one next generation each)",
+   "ok": true,
+   "value": {
+    "Pod create": 2,
+    "Secret create": 2,
+    "admission probe": 2,
+    "other (reads, patches, deletes)": 110
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T12:46:37.056+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "rebuild",
+ "result": {
+  "ann": {
+   "answered": {
+    "event": {
+     "created_at": "2026-10-18T12:46:33.756",
+     "ingested_at": "2026-10-18T12:46:33.873216+00:00",
+     "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "seq": 47,
+     "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "type": "assistant"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-18T12:46:33Z",
+      "kind": "text",
+      "messages": 17,
+      "n": 20,
+      "secrets": [
+       "annfirst"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "created_at": "2026-10-18T12:37:47.476",
+     "engine": "claude",
+     "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "provider": "deepseek-2",
+     "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "status": "AWAITING_INPUT",
+     "task_id": null
+    }
+   },
+   "identityAfter": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 3,
+    "podUid": "1ed0fa7a-d1fe-4d24-90a4-3e8f8fb38f0f",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+    "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+    "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+    "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+    "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+   },
+   "identityBefore": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 2,
+    "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+    "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+    "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+    "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+    "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+   },
+   "probe": {
+    "action": "check",
+    "allSame": true,
+    "at": "2026-10-18T12:46:34.729+00:00",
+    "data": {
+     "gitFsckExit": 0,
+     "gitHead": "d7b23ac4189d90a2d300b38e3e74e33cec739388",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd1",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "40f97e5031520870b3132fc336fdc75ff265ac04ed495b52802dabe17d7c9e22",
+     "rows": 150,
+     "rowsSha256": "3ffa04699efae14a0d4ac7131e48e965464a41406769b3f56c0157d29c7b5654"
+    },
+    "generation": 3,
+    "owner": "ann",
+    "pod": "1ed0fa7a-d1fe-4d24-90a4-3e8f8fb38f0f",
+    "run": "p1",
+    "same": {
+     "gitHead": true,
+     "randomSha256": true,
+     "rows": true,
+     "rowsSha256": true
+    },
+    "sameRunnerId": true,
+    "volume": {
+     "managedInstance": {
+      "generation": 3,
+      "podUid": "1ed0fa7a-d1fe-4d24-90a4-3e8f8fb38f0f",
+      "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+     },
+     "repos": [
+      "default"
+     ],
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "worktrees": [
+      "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+     ]
+    },
+    "writtenAt": "2026-10-18T12:38:30.542+00:00",
+    "writtenByGeneration": 1,
+    "writtenByPod": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2"
+   },
+   "snapshotAfter": {
+    "managedInstance": {
+     "generation": 3,
+     "podUid": "1ed0fa7a-d1fe-4d24-90a4-3e8f8fb38f0f",
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+     }
+    ],
+    "podUid": "1ed0fa7a-d1fe-4d24-90a4-3e8f8fb38f0f",
+    "prefix": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": "bb9ffb51d9cd8b43895e63bfb7b29337e1cfde7a8786a97d283102ca18ca5618"
+    },
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "runs": {
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+      "provider": "claude",
+      "runtimeSessionId": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+      "sessionUuid": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d"
+     }
+    },
+    "sqlite": {
+     "t08-probe/p1/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-18T12:46:34.903+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": {
+      "lines": 54,
+      "sha256": "5aa9b4bb1b0d098788088a48c9ec6c96f4558f3604ad2b8c72f2072307d6b3c7"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d/t08-ann-note.txt": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d",
+      "HEAD b3da4b68be18c1bb2ad735b863515e5d53c86717",
+      "branch refs/heads/orbit/t08-ann-first-session-a0df10"
+     ]
+    },
+    "worktrees": {
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+      "branch": "orbit/t08-ann-first-session-a0df10",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+      },
+      "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+      "status": []
+     }
+    }
+   },
+   "snapshotBefore": {
+    "managedInstance": {
+     "generation": 2,
+     "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+     }
+    ],
+    "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+    "prefix": {},
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "runs": {
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+      "provider": "claude",
+      "runtimeSessionId": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+      "sessionUuid": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d"
+     }
+    },
+    "sqlite": {
+     "t08-probe/p1/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-18T12:46:05.109+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": {
+      "lines": 48,
+      "sha256": "bb9ffb51d9cd8b43895e63bfb7b29337e1cfde7a8786a97d283102ca18ca5618"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d/t08-ann-note.txt": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d",
+      "HEAD b3da4b68be18c1bb2ad735b863515e5d53c86717",
+      "branch refs/heads/orbit/t08-ann-first-session-a0df10"
+     ]
+    },
+    "worktrees": {
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+      "branch": "orbit/t08-ann-first-session-a0df10",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+      },
+      "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+      "status": []
+     }
+    }
+   },
+   "times": {
+    "generation": 3,
+    "initialProvider": "deepseek-2",
+    "mappingCreatedAt": "2026-10-18T12:36:59.609+00:00",
+    "node": "orbit-mr-lab",
+    "podCreatedAt": "2026-10-18T12:46:11Z",
+    "pvcCreatedAt": "2026-10-18T12:36:59Z",
+    "readyAt": "2026-10-18T12:46:22.29+00:00",
+    "runner": {
+     "capabilities_reported_at": "2026-10-18T12:46:20.337+00:00",
+     "enrolled_at": "2026-10-18T12:36:59.565",
+     "last_heartbeat_at": "2026-10-18T12:46:20.336",
+     "status": "ONLINE",
+     "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+    },
+    "runnerContainerStartedAt": "2026-10-18T12:46:19Z",
+    "secretCreatedAt": "2026-10-18T12:46:11Z"
+   },
+   "turn": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 5,
+     "status": null
+    },
+    "at": "2026-10-18T12:46:33.236+00:00",
+    "kind": "turn",
+    "session": "34i3WAGGhr09tgpAvF8px",
+    "status": 201
+   }
+  },
+  "bob": {
+   "answered": {
+    "event": {
+     "created_at": "2026-10-18T12:46:35.786",
+     "ingested_at": "2026-10-18T12:46:35.87351+00:00",
+     "ingested_by_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+     "seq": 66,
+     "session_id": "01a14f04-a753-774e-ae62-e1572e6de075",
+     "type": "assistant"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-18T12:46:35Z",
+      "kind": "text",
+      "messages": 23,
+      "n": 21,
+      "secrets": [
+       "bobfirst"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+     "created_at": "2026-10-18T12:37:47.475",
+     "engine": "claude",
+     "id": "01a14f04-a753-774e-ae62-e1572e6de075",
+     "provider": "deepseek-3",
+     "runtime_session_id": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+     "status": "AWAITING_INPUT",
+     "task_id": null
+    }
+   },
+   "identityAfter": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 3,
+    "podUid": "8276be76-13e5-4ac9-927e-d4c77e77596d",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+    "pvUid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+    "pvcName": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "pvcUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+    "rbdImage": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+    "workspaceId": "01a14f03-ec5d-74fe-ab6f-e1dcb89d3341"
+   },
+   "identityBefore": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 2,
+    "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+    "pvUid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+    "pvcName": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "pvcUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+    "rbdImage": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+    "workspaceId": "01a14f03-ec5d-74fe-ab6f-e1dcb89d3341"
+   },
+   "probe": {
+    "action": "check",
+    "allSame": true,
+    "at": "2026-10-18T12:46:36.695+00:00",
+    "data": {
+     "gitFsckExit": 0,
+     "gitHead": "4a360b598010aecf3623dcfa9a2b2312f7af0730",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd2",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "b356e3f5736553695d257fd9dd6b362c3f53f881c79d4a700bd46e8270111e42",
+     "rows": 150,
+     "rowsSha256": "9d524463da72e3d8d70cff13f279bbe32a26382d08b0e90c3940f12d86b4b195"
+    },
+    "generation": 3,
+    "owner": "bob",
+    "pod": "8276be76-13e5-4ac9-927e-d4c77e77596d",
+    "run": "p1",
+    "same": {
+     "gitHead": true,
+     "randomSha256": true,
+     "rows": true,
+     "rowsSha256": true
+    },
+    "sameRunnerId": true,
+    "volume": {
+     "managedInstance": {
+      "generation": 3,
+      "podUid": "8276be76-13e5-4ac9-927e-d4c77e77596d",
+      "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+     },
+     "repos": [
+      "default"
+     ],
+     "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+     "worktrees": [
+      "01a14f04-a753-774e-ae62-e1572e6de075",
+      "94834aeb-0a4b-511c-837e-227821526188"
+     ]
+    },
+    "writtenAt": "2026-10-18T12:39:13.076+00:00",
+    "writtenByGeneration": 1,
+    "writtenByPod": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620"
+   },
+   "snapshotAfter": {
+    "managedInstance": {
+     "generation": 3,
+     "podUid": "8276be76-13e5-4ac9-927e-d4c77e77596d",
+     "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd2"
+     }
+    ],
+    "podUid": "8276be76-13e5-4ac9-927e-d4c77e77596d",
+    "prefix": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a753-774e-ae62-e1572e6de075/c8974823-c3e4-4082-a8d3-c855eaef7411.jsonl": "b458bc0fe325993979df8240b4a02431bbba3abd63cf70badff462fbe0af0a0c",
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-94834aeb-0a4b-511c-837e-227821526188/da926734-a553-4baa-876a-7a045dd1b5cd.jsonl": "d95928d71f61353421fefa52a092f087854ca45af376de747d0e0f50742fdd08"
+    },
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "runs": {
+     "01a14f04-a753-774e-ae62-e1572e6de075": {
+      "provider": "claude",
+      "runtimeSessionId": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+      "sessionUuid": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075"
+     },
+     "94834aeb-0a4b-511c-837e-227821526188": {
+      "provider": "claude",
+      "runtimeSessionId": "da926734-a553-4baa-876a-7a045dd1b5cd",
+      "sessionUuid": "da926734-a553-4baa-876a-7a045dd1b5cd",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/94834aeb-0a4b-511c-837e-227821526188"
+     }
+    },
+    "sqlite": {
+     "t08-probe/p1/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-18T12:46:36.865+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a753-774e-ae62-e1572e6de075/c8974823-c3e4-4082-a8d3-c855eaef7411.jsonl": {
+      "lines": 65,
+      "sha256": "ccad553a48132cc31de503b8992d017648fef00a627912c54cc6e52380184e72"
+     },
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-94834aeb-0a4b-511c-837e-227821526188/da926734-a553-4baa-876a-7a045dd1b5cd.jsonl": {
+      "lines": 21,
+      "sha256": "d95928d71f61353421fefa52a092f087854ca45af376de747d0e0f50742fdd08"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a14f04-a753-774e-ae62-e1572e6de075/t08-bob-note.txt": "a4d8206da6b9d5bfd2f59d07f1b3ebc632cf7d5becbde43db75b54b84f735216"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075",
+      "HEAD 32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+      "branch refs/heads/orbit/t08-bob-first-session-d2213c",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/94834aeb-0a4b-511c-837e-227821526188",
+      "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "branch refs/heads/orbit/task-t08-bob-scheduled-task-840053"
+     ]
+    },
+    "worktrees": {
+     "01a14f04-a753-774e-ae62-e1572e6de075": {
+      "branch": "orbit/t08-bob-first-session-d2213c",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-bob1.txt": "60477fcb9906a12d70ea8b641cb966255bc822703a5308963a1e2e3060742019"
+      },
+      "head": "32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+      "status": []
+     },
+     "94834aeb-0a4b-511c-837e-227821526188": {
+      "branch": "orbit/task-t08-bob-scheduled-task-840053",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "status": []
+     }
+    }
+   },
+   "snapshotBefore": {
+    "managedInstance": {
+     "generation": 2,
+     "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+     "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd2"
+     }
+    ],
+    "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+    "prefix": {},
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "runs": {
+     "01a14f04-a753-774e-ae62-e1572e6de075": {
+      "provider": "claude",
+      "runtimeSessionId": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+      "sessionUuid": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075"
+     },
+     "94834aeb-0a4b-511c-837e-227821526188": {
+      "provider": "claude",
+      "runtimeSessionId": "da926734-a553-4baa-876a-7a045dd1b5cd",
+      "sessionUuid": "da926734-a553-4baa-876a-7a045dd1b5cd",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/94834aeb-0a4b-511c-837e-227821526188"
+     }
+    },
+    "sqlite": {
+     "t08-probe/p1/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-18T12:46:05.282+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a753-774e-ae62-e1572e6de075/c8974823-c3e4-4082-a8d3-c855eaef7411.jsonl": {
+      "lines": 59,
+      "sha256": "b458bc0fe325993979df8240b4a02431bbba3abd63cf70badff462fbe0af0a0c"
+     },
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-94834aeb-0a4b-511c-837e-227821526188/da926734-a553-4baa-876a-7a045dd1b5cd.jsonl": {
+      "lines": 21,
+      "sha256": "d95928d71f61353421fefa52a092f087854ca45af376de747d0e0f50742fdd08"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a14f04-a753-774e-ae62-e1572e6de075/t08-bob-note.txt": "a4d8206da6b9d5bfd2f59d07f1b3ebc632cf7d5becbde43db75b54b84f735216"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075",
+      "HEAD 32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+      "branch refs/heads/orbit/t08-bob-first-session-d2213c",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/94834aeb-0a4b-511c-837e-227821526188",
+      "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "branch refs/heads/orbit/task-t08-bob-scheduled-task-840053"
+     ]
+    },
+    "worktrees": {
+     "01a14f04-a753-774e-ae62-e1572e6de075": {
+      "branch": "orbit/t08-bob-first-session-d2213c",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-bob1.txt": "60477fcb9906a12d70ea8b641cb966255bc822703a5308963a1e2e3060742019"
+      },
+      "head": "32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+      "status": []
+     },
+     "94834aeb-0a4b-511c-837e-227821526188": {
+      "branch": "orbit/task-t08-bob-scheduled-task-840053",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+      "status": []
+     }
+    }
+   },
+   "times": {
+    "generation": 3,
+    "initialProvider": "deepseek-3",
+    "mappingCreatedAt": "2026-10-18T12:36:59.615+00:00",
+    "node": "orbit-mr-lab",
+    "podCreatedAt": "2026-10-18T12:46:22Z",
+    "pvcCreatedAt": "2026-10-18T12:36:59Z",
+    "readyAt": "2026-10-18T12:46:32.614+00:00",
+    "runner": {
+     "capabilities_reported_at": "2026-10-18T12:46:30.257+00:00",
+     "enrolled_at": "2026-10-18T12:36:59.61",
+     "last_heartbeat_at": "2026-10-18T12:46:30.257",
+     "status": "ONLINE",
+     "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+    },
+    "runnerContainerStartedAt": "2026-10-18T12:46:29Z",
+    "secretCreatedAt": "2026-10-18T12:46:22Z"
+   },
+   "turn": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 6,
+     "status": null
+    },
+    "at": "2026-10-18T12:46:35.191+00:00",
+    "kind": "turn",
+    "session": "34i3WAGAkWMoXGCZw2Tmn",
+    "status": 201
+   }
+  },
+  "deleted": {
+   "answer": "pod \"mr-01a14f03-ec2d-7673-9917-a5b4bc4bae36\" deleted from orbit-mr-test namespace",
+   "finalizersRightAfter": [
+    "orbit.dev/managed-runner-stop-report"
+   ],
+   "force": false,
+   "generation": 2,
+   "objectRightAfter": {
+    "containers": [
+     {
+      "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+      "name": "private-volume-directories",
+      "restartCount": 0,
+      "state": {
+       "terminated": {
+        "containerID": "containerd://250bc60abe42d7bd5a1d6e36fbd2aac15a379e3a57f80a05eb89a20c4b1ed9ad",
+        "exitCode": 0,
+        "finishedAt": "2026-10-18T12:45:07Z",
+        "reason": "Completed",
+        "startedAt": "2026-10-18T12:45:07Z"
+       }
+      }
+     },
+     {
+      "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+      "name": "runner",
+      "restartCount": 0,
+      "state": {
+       "running": {
+        "startedAt": "2026-10-18T12:45:08Z"
+       }
+      }
+     }
+    ],
+    "deletionTimestamp": "2026-10-18T12:50:05Z",
+    "generation": "2",
+    "images": [
+     "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+    ],
+    "name": "mr-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "d4f20ebf-b522-402a-8e11-6310288dd1a0"
+   },
+   "owner": "ann",
+   "pod": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+   "requestedAt": "2026-10-18T12:46:05.355+00:00"
+  },
+  "ensureReady": {
+   "ann": {
+    "answeredAt": "2026-10-18T12:46:03.805118+00:00",
+    "turn": {
+     "answer": {
+      "code": null,
+      "id": null,
+      "message": null,
+      "seq": 4,
+      "status": null
+     },
+     "at": "2026-10-18T12:46:03.552+00:00",
+     "kind": "turn",
+     "session": "34i3WAGGhr09tgpAvF8px",
+     "status": 201
+    }
+   },
+   "bob": {
+    "answeredAt": "2026-10-18T12:46:03.771453+00:00",
+    "turn": {
+     "answer": {
+      "code": null,
+      "id": null,
+      "message": null,
+      "seq": 5,
+      "status": null
+     },
+     "at": "2026-10-18T12:46:03.552+00:00",
+     "kind": "turn",
+     "session": "34i3WAGAkWMoXGCZw2Tmn",
+     "status": 201
+    }
+   }
+  },
+  "gate": {
+   "at": "2026-10-18T12:46:37.056+00:00",
+   "byKind": {
+    "Pod create": 2,
+    "Secret create": 2,
+    "admission probe": 2,
+    "other (reads, patches, deletes)": 110
+   },
+   "connections": 116,
+   "largestRecordSizes": {
+    "1111": 6,
+    "1136": 30,
+    "1147": 28,
+    "1155": 10,
+    "1170": 30,
+    "1287": 2,
+    "1295": 2,
+    "1457": 2,
+    "1669": 2,
+    "4084": 2,
+    "4111": 2
+   },
+   "since": "2026-10-18T12:46:05.282+00:00",
+   "until": null
+  },
+  "killed": {
+   "ended": {
+    "containers": [
+     {
+      "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+      "name": "private-volume-directories",
+      "restartCount": 0,
+      "state": {
+       "terminated": {
+        "containerID": "containerd://adfa1983e8ae3cd033682050ac707e812a5e4ea18e8a40925c19c94787c6b888",
+        "exitCode": 0,
+        "finishedAt": "2026-10-18T12:45:58Z",
+        "reason": "Completed",
+        "startedAt": "2026-10-18T12:45:58Z"
+       }
+      }
+     },
+     {
+      "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+      "name": "runner",
+      "restartCount": 0,
+      "state": {
+       "terminated": {
+        "containerID": "containerd://f7f953006026dcc2fa46b7b154c4249cc12c5886af2168b4b296936ab1cfda75",
+        "exitCode": 137,
+        "finishedAt": "2026-10-18T12:46:05Z",
+        "reason": "Error",
+        "startedAt": "2026-10-18T12:45:59Z"
+       }
+      }
+     }
+    ],
+    "deletionTimestamp": null,
+    "generation": "2",
+    "images": [
+     "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+    ],
+    "name": "mr-01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "node": "orbit-mr-lab",
+    "phase": "Failed",
+    "uid": "5950726c-5e88-4d89-ab77-867cff86f0f3"
+   },
+   "generation": 2,
+   "pod": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+   "sentAt": "2026-10-18T12:46:05.435+00:00",
+   "signal": "KILL",
+   "timeline": [
+    {
+     "at": "2026-10-18T12:46:05.515+00:00",
+     "containers": [
+      {
+       "private-volume-directories": [
+        "terminated"
+       ]
+      },
+      {
+       "runner": [
+        "running"
+       ]
+      }
+     ],
+     "deleting": false,
+     "phase": "Running",
+     "present": true
+    },
+    {
+     "at": "2026-10-18T12:46:07.105+00:00",
+     "containers": [
+      {
+       "private-volume-directories": [
+        "terminated"
+       ]
+      },
+      {
+       "runner": [
+        "terminated"
+       ]
+      }
+     ],
+     "deleting": false,
+     "phase": "Running",
+     "present": true
+    },
+    {
+     "at": "2026-10-18T12:46:08.162+00:00",
+     "containers": [
+      {
+       "private-volume-directories": [
+        "terminated"
+       ]
+      },
+      {
+       "runner": [
+        "terminated"
+       ]
+      }
+     ],
+     "deleting": false,
+     "phase": "Failed",
+     "present": true
+    }
+   ]
+  },
+  "ready": {
+   "ann": {
+    "at": "2026-10-18T12:46:22.816+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:46:08.197+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 2,
+       "management_state": "REQUESTED",
+       "pod": "d4f20ebf",
+       "reason": "POD_RESTARTING",
+       "revision": 34
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:11.989+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 3,
+       "management_state": "STARTING",
+       "pod": null,
+       "reason": "POD_RESTARTING",
+       "revision": 43
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:12.529+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 3,
+       "management_state": "STARTING",
+       "pod": "1ed0fa7a",
+       "reason": "POD_RESTARTING",
+       "revision": 46
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:22.816+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 3,
+       "management_state": "READY",
+       "pod": "1ed0fa7a",
+       "reason": null,
+       "revision": 47
+      }
+     }
+    ],
+    "reached": "READY",
+    "seconds": 14.7
+   },
+   "bob": {
+    "at": "2026-10-18T12:46:33.137+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:46:08.202+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 2,
+       "management_state": "READY",
+       "pod": "5950726c",
+       "reason": null,
+       "revision": 33
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:12.530+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 2,
+       "management_state": "REQUESTED",
+       "pod": "5950726c",
+       "reason": "POD_RESTARTING",
+       "revision": 34
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:17.411+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 2,
+       "management_state": "REQUESTED",
+       "pod": "5950726c",
+       "reason": "VOLUME_STILL_ATTACHED",
+       "revision": 37
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:22.816+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 3,
+       "management_state": "STARTING",
+       "pod": "8276be76",
+       "reason": "POD_RESTARTING",
+       "revision": 47
+      }
+     },
+     {
+      "at": "2026-10-18T12:46:33.137+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 3,
+       "management_state": "READY",
+       "pod": "8276be76",
+       "reason": null,
+       "revision": 48
+      }
+     }
+    ],
+    "reached": "READY",
+    "seconds": 25.0
+   }
+  }
+ },
+ "seconds": 33.5,
+ "startedAt": "2026-10-18T12:46:03.552+00:00",
+ "step": "pods"
+}

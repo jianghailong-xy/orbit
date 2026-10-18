@@ -5,8 +5,11 @@ import { isAbsolute } from 'node:path';
 import {
   KubeAmbiguousError,
   KubeApiError,
+  KubeUnreachableError,
   type ConfigMap,
+  type JsonPatchOperation,
   type KubeObject,
+  type KubePods,
   type KubeResource,
   type KubeWatch,
   type KubeWatchEvent,
@@ -30,11 +33,13 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  *
  * Every request goes through a `KubeTransport`, so the unit tests stub the HTTP layer and no test
  * ever reaches a cluster. A timeout or a broken connection is a `KubeAmbiguousError`: a write that
- * ends that way may have been applied, and the manager reads it back before it tries again.
+ * ends that way may have been applied, and the manager reads it back before it tries again. One that
+ * ends before the TLS session with the API server was up is a `KubeUnreachableError`: no request
+ * reached it.
  */
 
 export interface KubeTransportRequest {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'DELETE' | 'PATCH';
   url: URL;
   headers: Record<string, string>;
   body?: string;
@@ -107,7 +112,7 @@ export class KubeHttpClient implements ManagedKubeClient {
   readonly namespace: string;
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
-  readonly pods: KubeResource<Pod>;
+  readonly pods: KubePods;
   readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;
   private readonly server: URL;
   private readonly transport: KubeTransport;
@@ -121,7 +126,7 @@ export class KubeHttpClient implements ManagedKubeClient {
     this.transport = options.transport ?? httpsTransport;
     this.persistentVolumeClaims = this.resource<PersistentVolumeClaim>('persistentvolumeclaims');
     this.secrets = this.resource<Secret>('secrets');
-    this.pods = this.resource<Pod>('pods');
+    this.pods = { ...this.resource<Pod>('pods'), patch: (name, operations) => this.patchPod(name, operations) };
     // Read only: the manager can be shown a fencing receipt, and cannot write one.
     const configMaps = this.resource<ConfigMap>('configmaps');
     this.configMaps = { get: configMaps.get };
@@ -136,6 +141,12 @@ export class KubeHttpClient implements ManagedKubeClient {
   async listVolumeAttachments(): Promise<VolumeAttachment[]> {
     const response = await this.send('GET', '/apis/storage.k8s.io/v1/volumeattachments');
     return this.parse<{ items?: VolumeAttachment[] }>(response, 'LIST volumeattachments').items ?? [];
+  }
+
+  /** A JSON Patch of one Pod of the namespace: all its operations, or none when a `test` fails. */
+  private async patchPod(name: string, operations: JsonPatchOperation[]): Promise<Pod> {
+    const response = await this.send('PATCH', `/api/v1/namespaces/${this.namespace}/pods/${objectName(name)}`, JSON.stringify(operations), 'application/json-patch+json');
+    return this.parse<Pod>(response, `PATCH pods ${name}`);
   }
 
   private resource<T extends KubeObject>(plural: string): KubeResource<T> {
@@ -181,16 +192,22 @@ export class KubeHttpClient implements ManagedKubeClient {
     };
   }
 
-  private request(method: KubeTransportRequest['method'], path: string, body: string | undefined, timeoutMs: number): KubeTransportRequest {
+  private request(
+    method: KubeTransportRequest['method'],
+    path: string,
+    body: string | undefined,
+    timeoutMs: number,
+    contentType = 'application/json',
+  ): KubeTransportRequest {
     const headers: Record<string, string> = { accept: 'application/json' };
-    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (body !== undefined) headers['content-type'] = contentType;
     const token = this.options.token?.();
     if (token) headers.authorization = `Bearer ${token}`;
     return { method, url: new URL(path, this.server), headers, body, timeoutMs, tls: this.options.tls };
   }
 
-  private send(method: KubeTransportRequest['method'], path: string, body?: string): Promise<KubeTransportResponse> {
-    return this.transport.request(this.request(method, path, body, this.options.requestTimeoutMs));
+  private send(method: KubeTransportRequest['method'], path: string, body?: string, contentType?: string): Promise<KubeTransportResponse> {
+    return this.transport.request(this.request(method, path, body, this.options.requestTimeoutMs, contentType));
   }
 
   private parse<T>(response: KubeTransportResponse, what: string): T {
@@ -221,10 +238,16 @@ export class KubeHttpClient implements ManagedKubeClient {
   }
 }
 
-/** node:https, with the deadline as a timer of its own: the socket timeout alone is an idle timeout. */
+/**
+ * node:https, with the deadline as a timer of its own: the socket timeout alone is an idle timeout.
+ * A request goes out only once the TLS session is up, so whatever ends it before then — refused,
+ * reset, timed out, a name that does not resolve — never reached the API server.
+ */
 export const httpsTransport: KubeTransport = {
   request(request) {
     return new Promise((resolve, reject) => {
+      let reached = false;
+      const lost = (what: string) => (reached ? new KubeAmbiguousError(what) : new KubeUnreachableError(what));
       const req = https.request(
         request.url,
         { method: request.method, headers: request.headers, ...request.tls, agent: false },
@@ -238,10 +261,11 @@ export const httpsTransport: KubeTransport = {
           res.on('error', (error) => req.destroy(error));
         },
       );
-      const timer = setTimeout(() => req.destroy(new KubeAmbiguousError(`${request.method} ${request.url.pathname} timed out`)), request.timeoutMs);
+      req.on('socket', (socket) => socket.once('secureConnect', () => (reached = true)));
+      const timer = setTimeout(() => req.destroy(lost(`${request.method} ${request.url.pathname} timed out`)), request.timeoutMs);
       req.on('error', (error) => {
         clearTimeout(timer);
-        reject(error instanceof KubeAmbiguousError ? error : new KubeAmbiguousError(`${request.method} ${request.url.pathname} failed: ${error.message}`));
+        reject(error instanceof KubeAmbiguousError ? error : lost(`${request.method} ${request.url.pathname} failed: ${error.message}`));
       });
       if (request.body !== undefined) req.write(request.body);
       req.end();

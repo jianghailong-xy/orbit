@@ -1,0 +1,89 @@
+{
+  "answer": "{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Success\",\"code\":201}",
+  "conditionsRightAfter": [
+    {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-17T21:51:03Z",
+      "message": "Eviction API: evicting",
+      "reason": "EvictionByEvictionAPI",
+      "status": "True",
+      "type": "DisruptionTarget"
+    },
+    {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-17T21:48:53Z",
+      "observedGeneration": 2,
+      "status": "True",
+      "type": "PodReadyToStartContainers"
+    },
+    {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-17T21:48:54Z",
+      "observedGeneration": 2,
+      "status": "True",
+      "type": "Initialized"
+    },
+    {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-17T21:48:54Z",
+      "observedGeneration": 2,
+      "status": "True",
+      "type": "Ready"
+    },
+    {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-17T21:48:54Z",
+      "observedGeneration": 2,
+      "status": "True",
+      "type": "ContainersReady"
+    },
+    {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-17T21:48:44Z",
+      "observedGeneration": 2,
+      "status": "True",
+      "type": "PodScheduled"
+    }
+  ],
+  "generation": 2,
+  "objectRightAfter": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://e034963d41ab31fb72f8b4cdbb8ad53d09c41abbeaf279501022339726715b48",
+            "exitCode": 0,
+            "finishedAt": "2026-10-17T21:48:53Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-17T21:48:53Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-17T21:48:54Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": "2026-10-17T21:55:03Z",
+    "generation": "2",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+    ],
+    "name": "mr-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "d4fda6f4-da31-409e-8a3f-9486325ce16e"
+  },
+  "owner": "alice",
+  "pod": "d4fda6f4-da31-409e-8a3f-9486325ce16e",
+  "requestedAt": "2026-10-17T21:51:03.772+00:00"
+}

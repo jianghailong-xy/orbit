@@ -1,0 +1,59 @@
+{
+  "apiserverSocketsToTheApi": [],
+  "at": "2026-10-17T22:10:48.224+00:00",
+  "changed": [],
+  "gateConnectionsDuring": 0,
+  "health": 200,
+  "managedLogLines": [
+    "kend did not answer: GET /api/v1/namespaces/orbit-mr-test/pods/mr-01a14bdc-ead8-73ba-9322-286ff7b293dd failed: Client network socket disconnected before secure TLS connection was established; looking again next pass\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mManagedRunnerGateModule dependencies initialized\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mManagedRunnerModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerController {/api/managed-runner}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/ensure, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/retry, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/wake, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/sleep, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/delete, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 700235  - \u001b[39m10/18/2026, 6:10:45 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/admission, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m"
+  ],
+  "managedRowsAfter": "3",
+  "managedRowsBefore": "3",
+  "namespaceObjects": 23,
+  "namespaceUnchanged": true,
+  "runnerRows": "3",
+  "signedIn": "admin",
+  "status": {
+    "display": null,
+    "enabled": false,
+    "http": 200,
+    "managementState": "NOT_PROVISIONED"
+  },
+  "switch": [
+    "(unset)"
+  ],
+  "waitedSeconds": 90,
+  "writes": {
+    "delete": {
+      "code": "MANAGED_RUNNER_DISABLED",
+      "status": 404
+    },
+    "ensure": {
+      "code": "MANAGED_RUNNER_DISABLED",
+      "status": 404
+    },
+    "retry": {
+      "code": "MANAGED_RUNNER_DISABLED",
+      "status": 404
+    },
+    "sleep": {
+      "code": "MANAGED_RUNNER_DISABLED",
+      "status": 404
+    },
+    "wake": {
+      "code": "MANAGED_RUNNER_DISABLED",
+      "status": 404
+    }
+  }
+}
