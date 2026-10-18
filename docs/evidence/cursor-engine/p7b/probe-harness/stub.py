@@ -24,7 +24,8 @@
 # (and keeps handing it to every sign-in after, until a reset); {"login": "expire" | "approve"} ends it
 # either way — approving one that added an account adds "Work". Removing Team is refused as the runner refuses an
 # account in use. POST /__set {"keys": "nocursor"} takes the Cursor keys away (the board's "signed out, no
-# Cursor key"), {"keys": "onecursor"} leaves the one Cursor accepted (the key iOS 6 draws); POST /__reset puts
+# Cursor key"), {"keys": "onecursor"} leaves the one Cursor accepted (the key iOS 6 draws); {"catalog": "short"} has
+# the runners list three Cursor models, so a model menu's last rows fit on a phone; POST /__reset puts
 # everything back (every UI test calls it before launching). Every
 # request is logged; anything not served is a 404. All data is made up.
 import json
@@ -55,7 +56,8 @@ def checked():
 
 
 def fresh_state():
-    return {"keys": "all", "login": None, "outcome": None, "link": False, "added": False, "removeRefused": False}
+    return {"keys": "all", "catalog": "full", "login": None, "outcome": None, "link": False, "added": False,
+            "removeRefused": False, "rechecked": {}}
 
 
 STATE = fresh_state()
@@ -138,6 +140,13 @@ CURSOR_CATALOG = [
     {"value": "grok-4.7", "label": "Grok 4.7", "reasoningLevels": ["low", "high"], "defaultReasoningLevel": "high"},
     {"value": "composer-2.5", "label": "Composer 2.5"},
 ]
+
+
+def cursor_catalog():
+    """The runner's Cursor catalogue: all of it, or Auto, Claude Opus 5.5 and Composer 2.5 alone."""
+    if STATE.get("catalog") == "short":
+        return [row for row in CURSOR_CATALOG if row["value"] in ("default", "claude-opus-5-5", "composer-2.5")]
+    return CURSOR_CATALOG
 CURSOR_CAPS = ["provider:cursor", "cursor-account-login/v1", "cursor-account-remove/v1", "cursor-key-check/v1"]
 
 
@@ -169,7 +178,7 @@ def runners():
                                   "reasoningLevels": ["low", "medium", "high", "xhigh", "max"]},
                                  {"value": "claude-sonnet-5-5", "label": "Sonnet 5.5", "contextWindow": 1000000}],
                       "dsh": [{"value": "deepseek-v4-pro", "label": "DeepSeek V4 Pro"}],
-                      "cursor": CURSOR_CATALOG},
+                      "cursor": cursor_catalog()},
         runtimeDefaultModels={"claude": "claude-opus-5-5", "dsh": "deepseek-v4-pro"})
     if STATE["removeRefused"]:
         hpc["accountRemove"] = {"engine": "cursor", "account": TEAM, "status": "failed",
@@ -194,7 +203,7 @@ def runners():
                  position=4, capabilities=["provider:cursor"],
                  engines=[CLAUDE_ONE, cursor_health(auth="no", accounts=[{"id": "default", "auth": "no",
                                                                           "home": "/root/.orbit/cursor/default"}])],
-                 modelCatalog={"cursor": CURSOR_CATALOG})
+                 modelCatalog={"cursor": cursor_catalog()})
     return [hpc, box, mac, gpu, lab]
 
 
@@ -203,6 +212,12 @@ def key(**over):
            "followsPreset": True, "enabled": True, "hasApiKey": True, "poolRefusal": None, "lastUsedAt": ago(90)}
     row.update(over)
     return row
+
+
+def checked_at(pid):
+    """When the key was last checked: 4 minutes ago, or when Check Again asked."""
+    at = STATE["rechecked"].get(pid)
+    return datetime.fromtimestamp(at, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z") if at else ago(4.2)
 
 
 def own_keys():
@@ -225,11 +240,11 @@ def own_keys():
         # no models of its own, and its last check (P2 follow-up).
         keys.append(key(id="p-cur", slug="cursor-api", label="Cursor", runtime="cursor", engines=["cursor"],
                         baseUrl="https://api2.cursor.sh", presetSlug="cursor-api", modelsFromRuntime=True,
-                        keyCheckState="VALID", keyCheckedAt=ago(4.2), lastUsedAt=ago(35)))
+                        keyCheckState="VALID", keyCheckedAt=checked_at("p-cur"), lastUsedAt=ago(35)))
     if STATE["keys"] == "all":
         keys.append(key(id="p-cur2", slug="cursor-2", label="Cursor 2", runtime="cursor", engines=["cursor"],
                         baseUrl="https://api2.cursor.sh", presetSlug="cursor-api", modelsFromRuntime=True,
-                        keyCheckState="INVALID", keyCheckedAt=ago(4.2), lastUsedAt=None))
+                        keyCheckState="INVALID", keyCheckedAt=checked_at("p-cur2"), lastUsedAt=None))
     return keys
 
 
@@ -457,7 +472,7 @@ class Handler(BaseHTTPRequestHandler):
             STATE.update(fresh_state())
             return self.send(200, {"ok": True})
         if parts == ["__set"]:
-            for name in ("keys", "spent"):
+            for name in ("keys", "spent", "catalog"):
                 if name in body:
                     STATE[name] = body[name]
             if body.get("login") == "link":
@@ -474,6 +489,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(201, login_state())
         if len(parts) == 5 and parts[:2] == ["api", "providers"] and parts[2] == "mine" and parts[4] == "key-check":
             state = "INVALID" if parts[3] == "p-cur2" else "VALID"
+            STATE["rechecked"][parts[3]] = time.time()
             return self.send(200, {"ok": state == "VALID", "keyCheck": state, "recorded": True,
                                    "message": "Cursor accepted this key." if state == "VALID" else
                                    "Cursor rejected this key: “The provided API key is invalid.” Save a new key "

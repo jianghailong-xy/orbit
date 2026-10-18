@@ -185,6 +185,22 @@ final class CursorShotTests: ProbeCase {
         settle(1.5)
     }
 
+    /// Whether `element` is wholly on the screen, not past its foot.
+    private func onScreen(_ app: XCUIApplication, _ element: XCUIElement) -> Bool {
+        let screen = app.windows.firstMatch.frame
+        return element.exists && element.frame.minY >= screen.minY && element.frame.maxY <= screen.maxY - 30
+    }
+
+    /// A menu taller than the room it has scrolls as a finger scrolls it: pressed on a row that can't be picked
+    /// and dragged up, lifting above the menu, so nothing is picked.
+    private func dragMenuUp(_ app: XCUIApplication, from row: XCUIElement, by distance: CGFloat, _ name: String) {
+        guard row.exists else { note("\(name): no row to drag the menu by"); return }
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)),
+                    withVelocity: .slow, thenHoldForDuration: 0.3)
+        settle(1.2)
+    }
+
     // MARK: board iOS 1 — the Engine sheet's seventh row, the hero, the four ways it can't run
 
     func test1NewSession() {
@@ -468,7 +484,40 @@ final class CursorShotTests: ProbeCase {
             expectText(opus, ["Cursor CLI", "Claude Opus 5.5", "Effort", "Context", "Speed"], "opus-menu-\(s)")
             shot("ios5-b-model-menu-opus-\(s)")
             tree(opus, "opus-menu-\(s)")
+            // With the board's seven models the menu runs past the screen's foot: Effort, Context and Speed are a
+            // scroll down.
+            let speed = opus.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Speed'")).firstMatch
+            note("opus-menu-\(s): Speed \(describe(speed))")
+            if !onScreen(opus, speed) {
+                let title = opus.buttons.matching(NSPredicate(format: "label == 'Cursor CLI'")).firstMatch
+                dragMenuUp(opus, from: title, by: 260, "opus-scroll-\(s)")
+                note("opus-scroll-\(s): Speed after the drag \(describe(speed))")
+            }
+            if onScreen(opus, speed) {
+                shot("ios5-b1-model-menu-opus-scrolled-\(s)")
+            } else {
+                note("opus-scroll-\(s): the menu did not scroll")
+            }
             opus.terminate()
+
+            // The runner listing three models: the menu ends on Effort, Context and Speed, on the screen, and
+            // Auto's note is whole.
+            resetStub()
+            setStub(#"{"catalog": "short"}"#)
+            let short = launch("console", session: "C2", dark: dark, reset: false, fresh: true,
+                               until: "Model Claude Opus 5.5", "opus-short-\(s)")
+            openModelMenu(short, inside: "Effort", "opus-short-menu-\(s)")
+            expectText(short, ["Effort, High", "Context, 1M", "Speed, Fast"], "opus-short-menu-\(s)")
+            let shortSpeed = short.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Speed'")).firstMatch
+            if !onScreen(short, shortSpeed) { XCTFail("opus-short-\(s): Speed is not on the screen \(describe(shortSpeed))") }
+            shot("ios5-b2-model-menu-opus-three-models-\(s)")
+            tree(short, "opus-short-menu-\(s)")
+            short.terminate()
+            let autoShort = launch("console", session: "C1", dark: dark, reset: false, fresh: true,
+                                   until: "Model Auto", "auto-short-\(s)")
+            openModelMenu(autoShort, inside: "Provider", "auto-short-menu-\(s)")
+            shot("ios5-a2-model-menu-auto-three-models-\(s)")
+            autoShort.terminate()
 
             let running = launch("console", session: "C3", dark: dark, until: "Also add a line to the changelog.",
                                  "running-\(s)")
@@ -554,6 +603,16 @@ final class CursorShotTests: ProbeCase {
             expectText(talked, ["Start a new session to use one of these."], "blocked-note-\(s)")
             let second = talked.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Start a new session'")).firstMatch
             note("blocked-\(s): the note's second sentence \(describe(second))")
+            if !onScreen(talked, second) {
+                let header = talked.staticTexts.matching(NSPredicate(format: "label == 'Signed in on hpc'")).firstMatch
+                dragMenuUp(talked, from: header, by: 120, "blocked-scroll-\(s)")
+                note("blocked-scroll-\(s): after the drag \(describe(second))")
+                if onScreen(talked, second) {
+                    shot("ios6-b1-provider-blocked-scrolled-\(s)")
+                } else {
+                    note("blocked-scroll-\(s): the menu did not scroll")
+                }
+            }
             talked.terminate()
 
             resetStub()
