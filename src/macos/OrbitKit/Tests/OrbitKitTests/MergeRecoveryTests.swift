@@ -299,12 +299,15 @@ final class MergeRecoveryTests: XCTestCase {
                                             secondary: [], headerCheck: nil))
         XCTAssertEqual(try buttons(repair: repairSession("AWAITING_INPUT")), MergeRecoveryButtons(
             primary: MergeRecoveryButton(title: "Sync develop and merge", action: .apply), secondary: [preparePR], headerCheck: check))
-        XCTAssertEqual(try buttons(["code": "CONFLICT"], repair: repairSession("AWAITING_INPUT")), MergeRecoveryButtons(
-            primary: MergeRecoveryButton(title: "Continue repair", action: .repair(preparePR: false)),
-            secondary: [preparePR], headerCheck: check))
-        XCTAssertEqual(try buttons(["code": "CONFLICT"], repair: repairSession("FAILED")).primary,
-                       MergeRecoveryButton(title: "Resolve in repair session", action: .repair(preparePR: false)),
-                       "a failed repair session is replaced, not continued")
+        for resumable in ["AWAITING_INPUT", "SUCCEEDED", "CANCELLED", "INTERRUPTED"] {
+            XCTAssertEqual(try buttons(["code": "CONFLICT"], repair: repairSession(resumable)), MergeRecoveryButtons(
+                primary: MergeRecoveryButton(title: "Continue repair", action: .repair(preparePR: false)),
+                secondary: [preparePR], headerCheck: check), "\(resumable): the same repair session goes on")
+        }
+        XCTAssertEqual(try buttons(["code": "CONFLICT"], repair: repairSession("FAILED")), MergeRecoveryButtons(
+            primary: MergeRecoveryButton(title: "Resolve in repair session", action: .repair(preparePR: false)),
+            secondary: [preparePR], headerCheck: check),
+                       "a failed repair session is replaced by a new one, never continued (S2)")
         XCTAssertEqual(try buttons(["code": "REPAIR_IN_PROGRESS"], repair: repairSession("AWAITING_INPUT", said: "Keep the target's version?")),
                        MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Reply in repair session", action: .repair(preparePR: false)),
                                             secondary: [], headerCheck: check))
