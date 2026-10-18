@@ -1,6 +1,8 @@
 import {
   AgentProvider,
   autoAvailable,
+  CURSOR_DEFAULT_PERMISSION_MODE,
+  CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
   isEngine,
   isRetiredModel,
@@ -59,6 +61,7 @@ const LOGIN_ENGINES: readonly string[] = [
   AgentProvider.CODEX,
   AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
+  AgentProvider.CURSOR,
 ];
 
 /** Whether `provider` is an engine's own sign-in on the runner (its slug is the engine's name). */
@@ -85,7 +88,9 @@ const nativeEngine = (runtime?: string | null): AgentProvider =>
       ? AgentProvider.KIMI
       : runtime === AgentProvider.ANTIGRAVITY
         ? AgentProvider.ANTIGRAVITY
-        : AgentProvider.CLAUDE;
+        : runtime === AgentProvider.CURSOR
+          ? AgentProvider.CURSOR
+          : AgentProvider.CLAUDE;
 
 /**
  * The engines `provider` runs on, the one a session naming only it gets first (the compatibility
@@ -182,6 +187,16 @@ export const OPENCODE_MODEL_OPTIONS = [{ value: '', label: 'Managed by OpenCode'
 // preset default while preserving the empty dispatch value.
 export const ANTIGRAVITY_MODEL_OPTIONS = [{ value: '', label: 'Gemini 3.8 Flash' }];
 
+// Cursor CLI's models are its ACP catalogue on each runner (`cursor/list_available_models`, read per
+// account or key: docs/cursor-runtime-contract.md §10), whichever of its credentials a session spends.
+// Until a runner reports one, the one choice that is true is naming no model, which a new session runs
+// as Cursor's own default, Auto — only a fallback, as Antigravity's is: once a catalogue is reported,
+// Auto is its own row (`default`).
+export const CURSOR_MODEL_OPTIONS = [{ value: '', label: 'Auto' }];
+
+/** The value of Auto in a Cursor CLI catalogue, with the parameterized model picker (§10). */
+const CURSOR_AUTO_MODEL = 'default';
+
 // Last-resort context windows for the composer's gauge, for a runner too old to report one of its
 // own. Not the source of truth and not maintained as if it were: the window belongs to the engine
 // that runs the model, and a table keyed on a model id cannot express it — Claude Code offers
@@ -255,6 +270,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   antigravity: '',
   // Harness's model values are opaque ACP tokens from the runner's catalogue; none is shipped.
   dsh: '',
+  // Cursor CLI's are its catalogue's too; naming none runs Auto.
+  cursor: '',
 };
 
 /** A key's (or pool's) own model table, the same on every engine that runs it: what the runner's CLI
@@ -285,6 +302,8 @@ export const modelOptionsFor = (
   configured?: ConfiguredProvider[] | null,
 ): ModelOption[] => {
   if (engine === AgentProvider.DSH) return catalogOptions(AgentProvider.DSH, modelCatalog) ?? [];
+  // Cursor CLI's catalogue, on its own sign-in and on a Cursor key alike (§10).
+  if (engine === AgentProvider.CURSOR) return catalogOptions(AgentProvider.CURSOR, modelCatalog) ?? CURSOR_MODEL_OPTIONS;
   const row = configuredRow(provider, configured);
   if (row) return rowModelOptions(row, modelCatalog);
   if (engine === AgentProvider.OPENCODE) {
@@ -336,6 +355,17 @@ export const defaultModelFor = (
   // Harness has no static model space: until a runner reports its catalogue the runtime picks.
   if (engine === AgentProvider.DSH) {
     return runtimeDefaultModels?.[AgentProvider.DSH] || catalogOptions(AgentProvider.DSH, modelCatalog)?.[0]?.value || '';
+  }
+  // Cursor CLI starts a session on Auto (§10, §16.3): its catalogue's Auto row where it has one, else
+  // no model at all, which runs as Auto.
+  if (engine === AgentProvider.CURSOR) {
+    const catalog = catalogOptions(AgentProvider.CURSOR, modelCatalog);
+    return (
+      runtimeDefaultModels?.[AgentProvider.CURSOR] ||
+      catalog?.find((option) => option.value === CURSOR_AUTO_MODEL)?.value ||
+      catalog?.[0]?.value ||
+      ''
+    );
   }
   const row = configuredRow(provider, configured);
   if (row) return rowDefaultModel(row, modelCatalog, runtimeDefaultModels);
@@ -588,9 +618,15 @@ const effortWithinDeclaredLevels = (effort: string, levels: string[]): string =>
 
 /** Harness's thinking levels are its catalogue row's `reasoningLevels` (ACP `reasoning_effort`),
  *  opaque like its model values. A model the runner hasn't reported offers Default only: there is
- *  no static list to fall back on, and a guessed level would be refused at dispatch. */
-const dshEffortOptions = (model?: string | null, modelCatalog?: RunnerModelCatalog | null) => {
-  const row = modelCatalog?.[AgentProvider.DSH]?.find((entry) => entry.value === model);
+ *  no static list to fall back on, and a guessed level would be refused at dispatch. Cursor CLI's
+ *  are read the same way: each model's own effort parameter, by its own values (§10), and Auto has
+ *  none. */
+const dshEffortOptions = (
+  model?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+  engine: AgentProvider.DSH | AgentProvider.CURSOR = AgentProvider.DSH,
+) => {
+  const row = modelCatalog?.[engine]?.find((entry) => entry.value === model);
   const levels = [...new Set((row?.reasoningLevels ?? []).filter(Boolean))];
   return [{ value: '', label: 'Default' }, ...levels.map((level) => ({ value: level, label: effortLabel(level) }))];
 };
@@ -606,7 +642,7 @@ export const effortOptionsFor = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ) => {
-  if (engine === AgentProvider.DSH) return dshEffortOptions(model, modelCatalog);
+  if (engine === AgentProvider.DSH || engine === AgentProvider.CURSOR) return dshEffortOptions(model, modelCatalog, engine);
   const declared = declaredEffortLevels(engine, provider, model, configured);
   if (declared) {
     return CLAUDE_EFFORT_OPTIONS.filter(
@@ -641,8 +677,8 @@ export const normalizeEffortFor = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): string => {
-  if (engine === AgentProvider.DSH) {
-    return dshEffortOptions(model, modelCatalog).some((option) => option.value === effort) ? effort : '';
+  if (engine === AgentProvider.DSH || engine === AgentProvider.CURSOR) {
+    return dshEffortOptions(model, modelCatalog, engine).some((option) => option.value === effort) ? effort : '';
   }
   // A level the declaring model lacks is not dropped but moved, exactly as dispatch moves it, so
   // the pill names the level the session actually runs at.
@@ -721,11 +757,20 @@ export const supportsAuto = (
   modelCatalog?: RunnerModelCatalog | null,
 ): boolean => autoAvailable(engine, model, !!configuredRow(provider, configured), modelCatalog);
 
-/** Whether `engine` accepts this permission mode at all. Only DeepSeek Harness refuses modes
- *  outright (DSH_PERMISSION_MODES, which the server enforces at admission): those are not offered
- *  rather than caveated, since the session would be rejected. */
+/** Whether `engine` accepts this permission mode at all. DeepSeek Harness and Cursor CLI refuse modes
+ *  outright (DSH_PERMISSION_MODES, CURSOR_PERMISSION_MODES — Cursor CLI's Default, which can't ask
+ *  before an edit: the owner's choice D6), which the server enforces at admission: those are not
+ *  offered rather than caveated, since the session would be rejected. */
 export const permissionModeSupported = (mode: string, engine: AgentProvider): boolean =>
-  engine !== AgentProvider.DSH || (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
+  engine === AgentProvider.DSH
+    ? (DSH_PERMISSION_MODES as readonly string[]).includes(mode)
+    : engine !== AgentProvider.CURSOR || (CURSOR_PERMISSION_MODES as readonly string[]).includes(mode);
+
+/** The mode a session falls back to when its own can't run on `engine`: Default, except on Cursor CLI,
+ *  which has none and starts a session in Accept Edits (CURSOR_DEFAULT_PERMISSION_MODE, as the server
+ *  starts one nobody named a mode for). */
+export const fallbackPermissionMode = (engine: AgentProvider): string =>
+  engine === AgentProvider.CURSOR ? CURSOR_DEFAULT_PERMISSION_MODE : 'default';
 
 export const clampPermissionModeForModel = (
   mode: string,
@@ -736,9 +781,9 @@ export const clampPermissionModeForModel = (
   modelCatalog?: RunnerModelCatalog | null,
 ): string =>
   !permissionModeSupported(mode, engine)
-    ? 'default'
+    ? fallbackPermissionMode(engine)
     : mode === 'auto' && !supportsAuto(model, engine, provider, configured, modelCatalog)
-      ? 'default'
+      ? fallbackPermissionMode(engine)
       : mode;
 
 // App defaults used when the user has set no preference of their own.
