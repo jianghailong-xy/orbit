@@ -1,0 +1,96 @@
+{
+ "ios-1-new-session-light": [
+  "ios1-engines ← phone 2",
+  "ios1-new-session ← phone 3",
+  "ios1-row-not-installed ← phone 4",
+  "ios1-row-signed-out ← phone 4",
+  "ios1-row-update-runner ← phone 4",
+  "ios1-row-wrong-version ← phone 4"
+ ],
+ "ios-1-new-session-dark": [
+  "ios1-engines ← phone 2",
+  "ios1-new-session ← phone 3",
+  "ios1-row-not-installed ← phone 4",
+  "ios1-row-signed-out ← phone 4",
+  "ios1-row-update-runner ← phone 4",
+  "ios1-row-wrong-version ← phone 4"
+ ],
+ "ios-2-infrastructure-light": [
+  "ios2-infrastructure ← phone 1",
+  "ios2-machine ← phone 2",
+  "ios2-engine-page ← phone 3",
+  "ios2-state-not-installed ← phone 4",
+  "ios2-state-not-installed-page ← phone 4",
+  "ios2-state-signed-out ← phone 4",
+  "ios2-state-update-runner ← phone 4",
+  "ios2-state-wrong-version ← phone 4",
+  "ios2-state-wrong-version-page ← phone 4"
+ ],
+ "ios-2-infrastructure-dark": [
+  "ios2-infrastructure ← phone 1",
+  "ios2-machine ← phone 2",
+  "ios2-engine-page ← phone 3",
+  "ios2-state-not-installed ← phone 4",
+  "ios2-state-not-installed-page ← phone 4",
+  "ios2-state-signed-out ← phone 4",
+  "ios2-state-update-runner ← phone 4",
+  "ios2-state-wrong-version ← phone 4",
+  "ios2-state-wrong-version-page ← phone 4"
+ ],
+ "ios-3-add-account-light": [
+  "ios3-add-pending ← phone 1",
+  "ios3-add-link ← phone 2",
+  "ios3-add-expired ← phone 3",
+  "ios3-add-done ← phone 4",
+  "ios3-account-menu ← phone 5",
+  "ios3-resign-link ← phone 6",
+  "ios3-remove-confirm ← phone 7",
+  "ios3-remove-refused ← phone 8"
+ ],
+ "ios-3-add-account-dark": [
+  "ios3-add-pending ← phone 1",
+  "ios3-add-link ← phone 2",
+  "ios3-add-expired ← phone 3",
+  "ios3-add-done ← phone 4",
+  "ios3-account-menu ← phone 5",
+  "ios3-resign-link ← phone 6",
+  "ios3-remove-confirm ← phone 7",
+  "ios3-remove-refused ← phone 8"
+ ],
+ "ios-4-api-key-light": [
+  "ios4-keys ← phone 2",
+  "ios4-key-valid ← phone 3",
+  "ios4-key-rejected ← phone 4"
+ ],
+ "ios-4-api-key-dark": [
+  "ios4-keys ← phone 2",
+  "ios4-key-valid ← phone 3",
+  "ios4-key-rejected ← phone 4"
+ ],
+ "ios-5-session-light": [
+  "ios5-model-auto ← phone 1",
+  "ios5-model-variant ← phone 2",
+  "ios5-chip ← phone 2",
+  "ios5-running ← phone 3",
+  "ios5-context ← phone 4",
+  "ios5-quota ← phone 5"
+ ],
+ "ios-5-session-dark": [
+  "ios5-model-auto ← phone 1",
+  "ios5-model-variant ← phone 2",
+  "ios5-chip ← phone 2",
+  "ios5-running ← phone 3",
+  "ios5-context ← phone 4",
+  "ios5-quota ← phone 5"
+ ],
+ "ios-6-modes-and-switch-light": [
+  "ios6-modes ← phone 2",
+  "ios6-switch-blocked ← phone 4",
+  "ios6-switch-open ← phone 5"
+ ],
+ "ios-6-modes-and-switch-dark": [
+  "ios6-modes ← phone 2",
+  "ios6-switch-blocked ← phone 4",
+  "ios6-switch-open ← phone 5"
+ ]
+}
