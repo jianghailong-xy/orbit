@@ -44,10 +44,12 @@ final class CursorShotTests: ProbeCase {
 
     // MARK: Settings → Infrastructure → a machine → Cursor CLI
 
-    /// Settings, then its Infrastructure row, as a user opens the page.
+    /// Settings, then its Infrastructure row, as a user opens the page. The row is below the sheet's fold, and
+    /// a list only has the rows it shows: the sheet is dragged until it is there.
     private func infrastructure(dark: Bool, reset: Bool = true, _ name: String) -> XCUIApplication {
-        let app = launch("settings", dark: dark, reset: reset, until: "Infrastructure", orPress: "Settings", name)
+        let app = launch("settings", dark: dark, reset: reset, until: "Default permission", orPress: "Settings", name)
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Infrastructure'")).firstMatch
+        bring(app, row, between: 150, and: 780, missingIsAbove: false, "\(name)-settings-row")
         note("\(name): Settings row \(describe(row))")
         row.tap()
         must(app, "What your agents can run on", "\(name)-page", timeout: 45)
@@ -527,7 +529,12 @@ final class CursorShotTests: ProbeCase {
             tree(modes, "modes-\(s)")
             modes.terminate()
 
-            let talked = launch("console", session: "C1", dark: dark, until: "Model Auto", "blocked-\(s)")
+            // One Cursor key, as the board draws: with Cursor 2 too, the menu is a row taller than the screen
+            // has room for and the note's second sentence is a scroll away.
+            resetStub()
+            setStub(#"{"keys": "onecursor"}"#)
+            let talked = launch("console", session: "C1", dark: dark, reset: false, fresh: true,
+                                until: "Model Auto", "blocked-\(s)")
             openProviderMenu(talked, inside: "Signed in on hpc", "blocked-\(s)")
             expectText(talked, ["Signed in on hpc", "Automatic", "Default", "Team", "API keys",
                                 "can’t carry a conversation to another account or key yet"], "blocked-\(s)")
@@ -538,20 +545,14 @@ final class CursorShotTests: ProbeCase {
             }
             shot("ios6-b-provider-blocked-\(s)")
             tree(talked, "blocked-\(s)")
-            // The note's second sentence is below the menu's fold: a swipe on a row that can't be picked
-            // scrolls the menu.
-            let lastKey = talked.buttons.matching(NSPredicate(format: "label == 'Cursor 2'")).firstMatch
-            if lastKey.exists {
-                lastKey.swipeUp(velocity: .slow)
-                settle(1.5)
-                expectText(talked, ["Start a new session to use one of these."], "blocked-note-\(s)")
-                shot("ios6-b2-provider-blocked-note-\(s)")
-            } else {
-                note("blocked-\(s): no Cursor 2 row to scroll the menu by")
-            }
+            expectText(talked, ["Start a new session to use one of these."], "blocked-note-\(s)")
+            let second = talked.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Start a new session'")).firstMatch
+            note("blocked-\(s): the note's second sentence \(describe(second))")
             talked.terminate()
 
-            let draft = compose(dark: dark, "draft-\(s)")
+            resetStub()
+            setStub(#"{"keys": "onecursor"}"#)
+            let draft = compose(dark: dark, reset: false, "draft-\(s)")
             pickCursor(draft, "draft-pick-\(s)")
             openProviderMenu(draft, inside: "Signed in on hpc", "draft-\(s)")
             // Team's "Monthly 34%" is its row's subtitle, read off the picture.

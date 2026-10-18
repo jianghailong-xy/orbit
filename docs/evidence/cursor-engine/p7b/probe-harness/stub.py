@@ -23,7 +23,8 @@
 # (and keeps handing it to every sign-in after, until a reset); {"login": "expire" | "approve"} ends it
 # either way — approving one that added an account adds "Work". Removing Team is refused as the runner refuses an
 # account in use. POST /__set {"keys": "nocursor"} takes the Cursor keys away (the board's "signed out, no
-# Cursor key"); POST /__reset puts everything back (every UI test calls it before launching). Every
+# Cursor key"), {"keys": "onecursor"} leaves the one Cursor accepted (the key iOS 6 draws); POST /__reset puts
+# everything back (every UI test calls it before launching). Every
 # request is logged; anything not served is a 404. All data is made up.
 import json
 import sys
@@ -219,14 +220,13 @@ def own_keys():
     if STATE["keys"] != "nocursor":
         # A Cursor User API Key as GET /providers/mine serves it (P2): the cursor-api preset, Cursor CLI alone,
         # no models of its own, and its last check (P2 follow-up).
-        keys += [
-            key(id="p-cur", slug="cursor-api", label="Cursor", runtime="cursor", engines=["cursor"],
-                baseUrl="https://api2.cursor.sh", presetSlug="cursor-api", modelsFromRuntime=True,
-                keyCheckState="VALID", keyCheckedAt=ago(4.2), lastUsedAt=ago(35)),
-            key(id="p-cur2", slug="cursor-2", label="Cursor 2", runtime="cursor", engines=["cursor"],
-                baseUrl="https://api2.cursor.sh", presetSlug="cursor-api", modelsFromRuntime=True,
-                keyCheckState="INVALID", keyCheckedAt=ago(4.2), lastUsedAt=None),
-        ]
+        keys.append(key(id="p-cur", slug="cursor-api", label="Cursor", runtime="cursor", engines=["cursor"],
+                        baseUrl="https://api2.cursor.sh", presetSlug="cursor-api", modelsFromRuntime=True,
+                        keyCheckState="VALID", keyCheckedAt=ago(4.2), lastUsedAt=ago(35)))
+    if STATE["keys"] == "all":
+        keys.append(key(id="p-cur2", slug="cursor-2", label="Cursor 2", runtime="cursor", engines=["cursor"],
+                        baseUrl="https://api2.cursor.sh", presetSlug="cursor-api", modelsFromRuntime=True,
+                        keyCheckState="INVALID", keyCheckedAt=ago(4.2), lastUsedAt=None))
     return keys
 
 
