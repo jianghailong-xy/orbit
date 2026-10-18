@@ -1,0 +1,160 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="web.css">
+<script src="kit.js"></script>
+<script src="web.js"></script>
+<body>
+<h1>⑥ 会话列表、协调会话、任务页和写代码的会话（v4 · 2026-10-18 · 按 main 1c1c78d72 重画）</h1>
+<p class="lede lede4">落地会话<b>不进平铺的会话列表</b>（LS6）：一个项目在列表里仍然只占一行，第二行按现有优先级写落地，读法换成 V6——健康的长检查不再因为 runner 只在步骤边界回报而变灰，超时照 main 写 <i>timed out</i>。其余入口都链到落地会话：协调会话的转录卡在 <i>Open the task ↗</i>、<i>Open the failed session ↗</i> 之后多一个 <b>Open the landing ↗</b>；<b>X-E5</b>（租约过期满 15 分钟）给 owner 开一张待办，照修订 18 的「三端同一张卡」画：第一行是 <code>requiredAction</code>，<code>primaryAction</code>（ABANDON）领头，每扇门下面一行后果；任务页加 Landing 段（iOS、Android 新加，web 加链接）；写代码的会话底部有一个落地标签。合入 main 在协调会话里每个时刻只留一行（修订 10，main 已是如此）。</p>
+<div id="board" class="board4"></div>
+<script>
+const DS = 'DeepSeek Harness 原生接入（核心首版）';
+const navList = () => `<div class="nav"><div class="circ">${ic('ham', 21, '#000', 2.1)}</div><div class="circ">${ic('plus', 21, '#000', 2.2)}</div></div>`;
+const meter = (d, t) => `<span class="pchip"><span class="mini"><i style="width:${d / t * 100}%;background:var(--green)"></i></span>${d}/${t}</span>`;
+const prow = ({ t, tm, d, tt, sub, cls = 'mut' }) => `<div class="prow2"><div class="a"><span class="t">${t}</span><span class="tm">${tm}</span></div><div class="b">${meter(d, tt)}<span class="sub ${cls}">${sub}</span></div></div>`;
+const srow = ({ t, tm, sub }) => `<div class="prow2"><div class="a"><span class="t">${t}</span><span class="tm">${tm}</span></div><div class="b"><span class="sub">${sub}</span></div></div>`;
+const listPage = (rows) => phone(`${statusBar('9:43', 97)}${navList()}<div class="big">orbit-develop</div><div class="wl">${sh('Today')}${rows}
+${srow({ t: '修复 iOS 菜单字幕被截断', tm: '3m ago', sub: 'You: 再看一下 macOS 菜单里的换行' })}
+${srow({ t: 'Antigravity Google 登录', tm: '18m ago', sub: 'Running Bash…' })}
+${sh('Yesterday')}${srow({ t: 'Toast 系统重做', tm: 'yesterday', sub: 'Levels and the iPhone board are in docs/mocks…' })}</div>`);
+
+// a1 · 现在：runner 只在步骤边界回报，检查跑过 10 分钟这一行就写 no report，健康的长检查看起来像卡住了
+const a1 = listPage(mkx(prow({ t: P4, tm: 'just now', d: 44, tt: 46, sub: 'Merge check · no report for 19m · 29m' }), 1, 'l')
+  + prow({ t: DS, tm: '2m', d: 16, tt: 20, sub: 'Landing · checking · 4m · 修复 D3：DeepSeek Harness…', cls: 'ink' })
+  + mkx(prow({ t: '托管 runner：Kubernetes 与 Docker 两种部署', tm: '12m', d: 23, tt: 24, sub: 'Merge to main · no report for 23m · 31m' }), 2, 'l'));
+// a2 · 改后：V6
+const a2 = listPage(mkx(prow({ t: P4, tm: 'just now', d: 44, tt: 46, sub: 'Merge check · checking · 29m', cls: 'ink' }), 1, 'l')
+  + prow({ t: DS, tm: '2m', d: 16, tt: 20, sub: 'Landing · checking · 4m · 修复 D3：DeepSeek Harness…', cls: 'ink' })
+  + mkx(prow({ t: '托管 runner：Kubernetes 与 Docker 两种部署', tm: '12m', d: 23, tt: 24, sub: 'Merge to main · timed out · no report for 23m', cls: 'warnt' }), 2, 'l'));
+
+// b · 协调会话：转录卡（OpenItemDelivery）多一个 Open the landing ↗
+const delivery = `<div class="oic"><div class="oh">${ic('warn', 14, 'var(--amber-ink)', 2.1)}Exception item<span class="kind">Checks failed</span></div>
+<div class="ot">Checks failed on the combined tree: ${TC}</div>
+<div class="ow">Task <a>${TC}</a></div>
+<div class="oy">Check TASK_ACCEPTANCE exited 1 where 0 was declared; the target branch did not move.</div>
+<div class="ow" style="margin-top:6px">◌ No merge receipt for this work — Orbit cannot tell whether it has landed.</div>
+<div class="oc">The coordinator can:<span class="c">Retry the task</span><span class="c">Cancel the task</span></div>
+${mkx(`<div class="ol" style="margin-top:0"><span>Open the task ↗</span><span>Open the failed session ↗</span><span style="background:rgba(62,105,246,.1);border-radius:5px;padding:0 4px">Open the landing ↗</span></div>`, 1, 't l', 'margin-top:8px;border-radius:6px')}
+<div class="om">Item 34c7Hn2kYq0F · a notification, not an interruption · 18m ago</div></div>`;
+const bBody = stamp('11:07') + delivery
+  + abub('P10 的验收没过：任务分支上能过，合到项目分支上就挂了——服务端执行的开关读成了 RUNNER。这是交付本身的问题，不重跑，建一个修复任务；修复会在它自己的落地会话里落地。')
+  + stamp('11:34') + mkx(`<div class="evl">${ic('ring', 14, 'var(--tint)', 2.3)}Re-checking before merging into main…${ic('chevr', 11, 'var(--tint)', 2.8)}</div>`, 2, 't l', 'align-self:center;border-radius:999px;margin:6px 16px')
+  + abub('合入在重查：main 在你确认之后又被推进了 2 个提交。');
+const b = chatPage({ at: '11:38', sub: 'Working · Open · now', body: bBody }).replaceAll(PROJECT, P4).replace('<span class="batt">72</span>', '<span class="batt">97</span>');
+
+// c · 协调会话里的 owner 卡：X-E5（租约过期满 15 分钟），修订 18 的样子
+const xe5 = oc4({ heading: 'Now yours — no report from the runner for 27m',
+  required: 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.',
+  doors: [
+    mkx(door4('Abandon', 'red', 'Ends this attempt. Nothing was pushed, and nothing is queued again.'), 1, 't l'),
+    mkx(door4('Open landing', 'tonal', 'Open the landing: every attempt, step by step.'), 2, 't l'),
+    door4('Chat about this', 'tonal'),
+    door4('Mark as handled', 'plain', 'Only if you dealt with it yourself. Your reason goes on the record.'),
+  ],
+  facts: [['Landing', `Land · ${TA.slice(0, 10)}… · gen 2`], ['Runner', `${RUNNER} · last report 14:35`], ['Step', 'rebasing · claim 1 · round 1 of 3']],
+  owner: 'Owner: you · waiting 2m' });
+const cBody = stamp('15:00') + mkx(xe5.replace('class="oc4"', 'class="oc4" style="margin:0"'), 3, 't in', 'border-radius:18px;margin:6px 12px');
+const c = chatPage({ at: '15:02', sub: 'Watching · Open · 20m', body: cBody }).replaceAll(PROJECT, P4).replace('<span class="batt">72</span>', '<span class="batt">97</span>');
+
+// d · 任务页：Landing 段（iOS 新加），徽标照 LandTaskStatus，带 Open landing ›
+const navTask = `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>Task</b></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+const d = phone(`${statusBar('11:25', 97)}${navTask}<div style="padding:4px 20px 10px"><div style="font-size:21px;font-weight:700;line-height:1.3">${TC}</div>
+<div style="margin-top:9px;display:inline-block">${mkx(`<div style="display:flex;gap:7px;align-items:center;padding:2px"><span class="tbadge green">Done</span><span class="tbadge red">Landing checks failed</span></div>`, 1, 't r')}</div></div>
+<div style="background:#F2F2F7;position:absolute;top:200px;left:0;right:0;bottom:0;padding:12px 16px">
+<div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:17px">Landing</b><span style="font-size:13px;color:var(--l2)">onto ${BR4S}</span></div>
+<div class="gen" style="border-top:none;padding-top:8px"><div class="gh"><span>Task DONE</span><span class="tbadge red">Landing checks failed</span><span>generation 1</span><span>stopped while checking</span></div>
+<div class="gr">Checks failed on the combined tree: Task acceptance exited 1 (expected 0)</div>
+<div class="gf"><span>Target</span><b class="mono" style="font-size:12px">${BR4S}</b><span>Queue wait</span><b>48s</b><span>Queued</span><b>Oct 18, 11:02:12</b><span>Started</span><b>Oct 18, 11:03:00</b><span>Heartbeat</span><b>Oct 18, 11:07:02</b><span>Finished</span><b>Oct 18, 11:07:02</b></div>
+<div style="display:inline-block;margin-top:6px">${mkx(`<span class="go" style="margin:0">Open landing ${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`, 2, 't r')}</div></div></div>
+<div style="background:#fff;border-radius:16px;padding:12px 14px;margin-top:12px"><div style="display:flex"><b style="font-size:17px">Runs</b><span style="margin-left:auto;color:var(--l2)">1</span></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:15px"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">执行任务：${TC}</span><span class="tbadge green">Completed</span>${chev()}</div></div>
+</div>`);
+
+// e · 写代码的会话：派生的落地标签
+const navRun = `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>执行任务：${TA}</b><span>Completed · 4m ago</span></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+const e = phone(`${statusBar('9:09', 97)}${navRun}<div class="tx">${ubub('byJob 计数恒为 0：查一下每日轮数上限在服务端路径上为什么没生效。')}
+${abub('原因是 SQL 三值逻辑：<code>job_id = NULL</code> 永远不成立，byJob 一直数到 0。改成 <code>IS NOT DISTINCT FROM</code>，10-10 的 13 轮在新查询下是 8 轮；补了 NULL 的单测，已提交 <code>b71c0e4</code>，任务标记完成。')}
+${stamp('Completed 9:05 · task marked Done')}
+${mkx(`<div style="display:inline-flex"><span class="chip4 run">${ic('ring', 13, 'var(--tint)', 2.4)}Landing · checking ${ic('chevr', 10, 'var(--tint)', 3)}</span></div>`, 1, 't r', 'align-self:center;margin:18px 0 6px;border-radius:999px')}</div>
+<div class="composer">Message…</div>`);
+
+const cap = (title, items, dd = '') => `<b>${title}</b><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol>${dd ? `<div class="capdd">${dd}</div>` : ''}`;
+
+// ── web ──
+const wTask = `<div class="mhd"><div class="t"><b style="font-size:15px;color:#646a73;font-weight:500">Task</b><span class="more">${ic('dots', 18, '#646a73', 1.6)}</span></div></div>
+<div class="wtask"><div class="tt">${TC}</div>
+<div class="bd"><span class="tdb green">Done</span><span class="tdb red">Landing checks failed</span></div>
+<div class="wsect"><div class="st">Landing</div>
+<div class="lts"><div class="hd"><span class="tk">Task DONE</span><span class="tdb red">Landing checks failed</span><span>generation 1</span><span>stopped while checking</span></div>
+<div class="rs">Checks failed on the combined tree: Task acceptance exited 1 (expected 0)</div>
+<dl><div><dt>Target</dt><dd class="mono" style="font-size:11.5px">${BR4}</dd></div><div><dt>Queue wait</dt><dd>48s</dd></div><div><dt>Queued</dt><dd>Oct 18, 11:02:12</dd></div><div><dt>Started</dt><dd>Oct 18, 11:03:00</dd></div><div><dt>Heartbeat</dt><dd>Oct 18, 11:07:02</dd></div><div><dt>Finished</dt><dd>Oct 18, 11:07:02</dd></div></dl>
+<div style="display:inline-block;margin-top:8px">${mkx('<span class="go" style="margin:0;display:inline-block">Open landing ›</span>', 1, 't r')}</div></div></div>
+<div class="wsect"><div class="st">Details</div><div style="font-size:13px;color:#646a73">Project · ${P4} · Assignee · claude-opus-5-5</div></div>
+<div class="wsect"><div class="st">Runs (1)</div><div style="display:flex;align-items:center;gap:8px;font-size:13.5px"><span>执行任务：${TC}</span><span class="tdb green">Completed</span></div></div></div>`;
+const W_LG6 = wsec5('Landings') + wtr4(wh4({ tone: 'fail', title: `Land · ${TC}`, right: '18m', rcls: 'tm', detail: 'Checks failed · with the coordinator' }))
+  + `<div class="wfold4">${ic('check', 13, '#1a7f37', 2.4)}Earlier · 31 landed · 3 nothing to land<span class="rr">›</span></div>`;
+const wColTask = `${wcolHead4()}<div class="body">${wpc4()}${wsec5('Coordinator')}${W_COORD.replace(' sel', '')}${W_LG6}${wsec5('Today')}${W_ROWS.join('')}</div>`;
+const W1 = webFrame4({ w: 1240, h: 720, col: wColTask, main: wTask });
+
+const wDelivery = `<div class="woic"><div class="h">${ic('warn', 14, '#c2710c', 2.1)}Exception item<span class="kind">Checks failed</span></div>
+<div class="t">Checks failed on the combined tree: ${TC}</div><div class="w">Task <a>${TC}</a></div>
+<div class="y">Check TASK_ACCEPTANCE exited 1 where 0 was declared; the target branch did not move.</div>
+<div class="c">The coordinator can:<span class="ch">Retry the task</span><span class="ch">Cancel the task</span></div>
+<div style="display:inline-block;margin-top:8px">${mkx('<div class="l" style="margin-top:0"><span>Open the task ↗</span><span>Open the failed session ↗</span><span>Open the landing ↗</span></div>', 1, 't r')}</div>
+<div class="mt">Item 34c7Hn2kYq0F · a notification, not an interruption · 18m ago</div></div>`;
+const wDoor = (btn, cons) => `<div style="display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:center;margin-top:8px">${btn}<span style="font-size:12.5px;color:#646a73">${cons}</span></div>`;
+const wXe5 = `<div class="witem owner" style="margin:12px 22px"><div class="ih">Now yours — no report from the runner for 27m<span class="pv" style="border:1px solid var(--warning-border);border-radius:4px;padding:1px 6px;color:#c2710c">FROM ORBIT</span></div>
+<div class="ib"><div style="border:1px solid var(--warning-border);background:var(--warning-bg);border-radius:8px;padding:10px 12px">
+<div style="font-weight:650;color:#1f2329">The runner stopped reporting; abandon this landing, or wait for the runner to come back.</div>
+${mkx(wDoor('<span class="wbtn" style="background:#cf3b35;border-color:#cf3b35;color:#fff;justify-content:center">Abandon</span>', 'Ends this attempt. Nothing was pushed, and nothing is queued again.'), 2, 't l')}
+${mkx(wDoor('<span class="lk" style="text-decoration:underline;color:#646a73">Open landing</span>', 'Open the landing: every attempt, step by step.'), 3, 't l')}
+${wDoor('<span class="lk" style="text-decoration:underline;color:#646a73">Mark as handled</span>', 'Only if you dealt with it yourself. Your reason goes on the record.')}</div>
+<div class="kv" style="margin-top:10px"><span class="k">Landing</span><span class="v">Land · ${TA.slice(0, 24)}… · generation 2</span><span class="k">Runner</span><span class="v">${RUNNER} · last report 14:35 · lease expired 14:45</span><span class="k">Step</span><span class="v">rebasing · claim 1 · round 1 of 3</span></div>
+<div style="margin-top:8px"><span class="wbtn sm">Chat about this</span></div></div>
+<div class="if">Owner: you · waiting 2m</div></div>`;
+const wConv = `${wConvHead(P4, 'Watching · Open · now')}<div class="stamp">11:07</div>${wDelivery}<div class="stamp">15:00</div>${wXe5}`;
+const wColConv = `${wcolHead4()}<div class="body">${wpc4()}${wlc4(wh4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 27m · limit 10m' }) + wWhat(TA) + wRef()
+  + wDet('Runner workstation-gpu took it at 14:33 · stopped at rebasing · nothing was pushed') + wFoot('<span class="wpri">Retry</span><span class="wlk">Open landing ›</span>', '<span class="wlk">All jobs ›</span>'), true)}${wsec5('Coordinator')}${W_COORD}${W_LG6}</div>`;
+const W2 = webFrame4({ w: 1240, h: 900, col: wColConv, main: wConv.replaceAll(PROJECT, P4) });
+
+const tbd6 = `<div class="panel4 tbd" style="width:640px"><h2>待定（请 owner 定）</h2><ol>
+<li><b>X-E5 卡的标题</b>：它的 <code>assignee_reason</code> 是 ESCALATED，main 今天的标题公式取 <code>escalatedAt − waitingSince</code>；X-E5 开出即升级，这个差约为 0，会写成 <i>Now yours — no one acted on this for 1s</i>。本板给它自己的一句：<i>Now yours — no report from the runner for 27m</i>（从上次回报算）。</li>
+<li><b>Abandon 的样子</b>：契约定 ABANDON 是这一格的 <code>primaryAction</code>，领头的门照惯例是实心主色；它是结束一次尝试的门，本板画成实心红色。</li>
+<li><b>会话列表里超时的写法</b>：<i>Merge to main · timed out · no report for 23m</i>（琥珀字，不点橙点；橙点只给等你的，X-E5 的待办开出后由待办决定）。</li>
+</ol></div>`;
+
+document.getElementById('board').innerHTML = `
+${band('iOS', 'a', '会话列表、协调会话、任务页、写代码的会话')}
+<div class="rowv4">
+${fig4('now', 'a1 · 现在 · 会话列表的项目行', a1, cap('现在：runner 十分钟不回报，这一行就写 no report', [
+  `${n(1)}第二行（19555f614 的优先级）读 <code>inFlight</code>：legacy runner 只在步骤开始时回报，检查跑过 10 分钟这一行就写 <i>no report for 19m</i> 并变灰，可检查好好的。`,
+  `${n(2)}真卡住的推送也是这样写，两件事分不出来。这一行不读 <code>inFlightJobs</code>，也就没有 main 卡上的 <i>Timed out</i>。`]))}
+${fig4('a', 'a2 · 改后 · 会话列表的项目行', a2, cap('改后：一个项目仍是一行，读法换成 V6', [
+  `${n(1)}v2 runner 每 30 秒回报：健康的长检查保持蓝色 <i>checking</i>。点按目标不变。`,
+  `${n(2)}服务端判了超时（LEASE_EXPIRED）才写 <i>timed out · no report for 23m</i>，琥珀色字。SILENT（90 秒到 10 分钟）写 <i>no word from runner · 4m</i>。`,
+  '落地会话本身不进平铺列表、搜索与计数（LS6）。']))}
+${fig4('a', 'b · 协调会话 · 转录卡', b, cap('转录卡多一个 Open the landing ↗', [
+  `${n(1)}链接行：<i>Open the task ↗</i>、<b>保留</b> <i>Open the failed session ↗</i>（所有端都画出 OPEN_LANDING 之前不去掉，设计 §0.1 第 9 条），后面加 <b>Open the landing ↗</b>。投递给协调会话的文本一个字节都不改（G6）。`,
+  `${n(2)}合入 main 每个时刻一行（修订 10），用词是合入卡的标题；点开是合入的审阅。`]))}
+${fig4('a', 'c · X-E5：租约过期满 15 分钟', c, cap('给 owner 的待办，照修订 18 的卡', [
+  `${n(1)}<b>Abandon</b> 领头（ABANDON 是这一格的 <code>primaryAction</code>，J-T10 的 owner 门），下面一行后果，推送那一句照 J12。`,
+  `${n(2)}<b>Open landing</b>（OPEN_LANDING）进这个落地会话；Chat about this、Mark as handled 照 main 的位置。`,
+  `${n(3)}第一行是契约给的 <code>requiredAction</code>。它不投递协调会话、不唤醒 agent、不结束作业；runner 回来、被接管、交还或作业结束时自己关掉（JOB_MOVED_ON）。`]))}
+${fig4('a', 'd · 任务页的 Landing 段（iOS 新加）', d, cap('任务页：徽标照 LandTaskStatus', [
+  `${n(1)}状态徽标旁边是落地徽标，词与颜色照 web 的 <code>LANDING_LABELS</code>：<i>Landing checks failed</i>（红）、<i>Waiting to land</i>（琥珀）、<i>Landing</i>（蓝）、<i>Landed</i>（绿）。`,
+  `${n(2)}<b>Open landing ›</b> 进这个任务段的落地会话；同一段的各代共用一个会话，所以只有一个链接。iOS 今天没有这一段（不解码 <code>landTask</code>）。`]))}
+${fig4('a', 'e · 写代码的那个会话', e, cap('从源头也能找到它', [
+  `${n(1)}会话底部、完成那一行下面一个派生标签：<i>Landing · checking ›</i>（蓝）、<i>On ${BR4S} ✓ ›</i>（绿）、<i>Landing · checks failed ›</i>（红），点进这个任务段的落地会话。`,
+  '用词是集成线，不和 session merge 混；这个会话自己的 merge 栏照旧。']))}
+</div>
+${band('web', 'web', '任务页与协调会话')}
+<div class="rowv4">
+<figure style="width:1240px"><span class="tag web">web · 任务页（TaskDetailPanel）</span>${W1}<figcaption><b>web 任务页</b><ol>
+<li>${n(1)}Landing 段（<code>LandTaskStatus</code>）照旧，末尾加 <b>Open landing ›</b>。左边项目会话栏的 Landings 组列着这一段（等决定的）。</li></ol></figcaption></figure>
+<figure style="width:1240px"><span class="tag web">web · 协调会话：转录卡与 X-E5 卡</span>${W2}<figcaption><b>web 协调会话</b><ol>
+<li>${n(1)}转录卡链接行加 <b>Open the landing ↗</b>。${n(2)}X-E5 的卡：头一行是升级的说法，琥珀框里先说要你做什么（<code>requiredAction</code>），Abandon 领头、每扇门右边一句后果（修订 18 的 web 排法）。${n(3)}Open landing 是看的门，不写任何东西。</li>
+<li>左栏的 Landing 卡此刻是琥珀的那一张：同一次超时，卡上是 Retry（J-T9），待办上是 Abandon（J-T10）——两扇门、两个结果。</li></ol></figcaption></figure>
+</div>
+<div class="rowv4">${tbd6}</div>`;
+</script>
+</body></html>

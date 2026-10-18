@@ -1,0 +1,248 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="web.css">
+<script src="kit.js"></script>
+<script src="web.js"></script>
+<body>
+<h1>⑤ 落地会话页（v4 · 2026-10-18 · 按 main 1c1c78d72 重画）</h1>
+<p class="lede lede4">外壳和普通会话相同：标题、时间线、URL、⌘F、Pin；不同的是时间线由 Orbit 写，底部没有输入框，会话不进 Trash。<b>一轮合入 main 一个会话</b>（从上次 MERGED / DECLINED / CANCELLED 之后的第一个候选，到下一次这三者之一，标题 <code>Merge project/&lt;id&gt; → main · #&lt;n&gt;</code>），<b>一个任务的一段落地一个会话</b>（从 DONE 到落上项目分支，标题 <code>Land · &lt;task&gt;</code>）。入口见 ④ 的入口表。判断不在这里做，判断的结果带着署名记在同一个会话里（LS4）。<br>
+v4 改了三处：<b>页头的状态卡穿 main 的头</b>——30pt 圆里的标记、词、右边活的时钟（或 <i>Timed out</i>）、下面一行，和合入检查行、Landing 卡、清单的行是同一个样子，下面再接 V6 的预算、活性与轮次；<b>超时</b>照 main 写 <i>No report for Nm · limit Nm</i>，推送那一句照 J12，按钮是 <b>Retry</b>（LAND_TASK）/ <b>Re-run the check</b>（CHECK_PROMOTION，修订 16）与 <b>Abandon</b>（三种作业）；<b>合入轮</b>里 Automatic 遇到 main 动了就回到检查（d321b88ee），时间线按作业分段。</p>
+<div id="board" class="board4"></div>
+<script>
+const SUB_T = `Run by Orbit · runner ${RUNNER}`;
+const TITLE_M = MR;
+const sct = (t) => `<div class="t13" style="color:var(--l2)">${t}</div>`;
+const term = (lines) => `<div class="term">${lines}</div>`;
+const T_MC = term(`<span class="dim">$ npm run build &amp;&amp; npm test -w @orbit/apiserver</span>
+ <span class="ok">✔</span> wiki/wiki-daily-limit.spec.ts (412ms)
+ <span class="ok">✔</span> wiki/wiki-dossier-pages.spec.ts (288ms)
+ ▶ projects/project-integration-line.spec.ts <span class="cur"></span>`);
+const SC = (cls, inner, n, bcls = 'in') => mkx(sc4(cls, inner), n, bcls, 'border-radius:16px;margin:6px 14px 10px');
+const tlwTop = (top, inner) => `<div class="tlw" style="top:${top}px;bottom:84px;justify-content:flex-start;-webkit-mask-image:none"><div class="tl">${inner}</div></div>`;
+const page5 = ({ at, title, sub, card, tl, top, foot, extra = '', align = 'bottom' }) => phone(`${statusBar(at, 97)}${navL4(title, sub)}${card}${align === 'top' ? tlwTop(top, tl) : tlw(top, tl)}${foot}${extra}`, 'page');
+const FOOT_M = lfoot('Orbit runs this landing — <b>nothing to type here.</b><br>A clean pass merges on its own · <a>Review Card ›</a>');
+const FOOT_MO = lfoot('Orbit runs this landing — <b>nothing to type here.</b><br>Merging is decided on the merge card · <a>Review Card ›</a>');
+const FOOT_T = lfoot('Orbit runs this landing — <b>nothing to type here.</b><br>Decisions: the coordinator · <a>Open coordinator ›</a>');
+const OKG = ic('check', 15, 'var(--green-ink)', 2.6);
+const MERGE_G = ic('merge', 14, 'var(--green-ink)', 2.2);
+const ASK = ic('merge', 14, 'var(--orange)', 2.2);
+
+// a · 一轮合入 · 检查中（从合入检查行进来）
+const pA = page5({ at: '9:17', title: TITLE_M, sub: 'Run by Orbit · 2 tasks → main',
+  card: SC('', head4({ tone: 'run', title: 'Merge check', right: '2m 40s', detail: 'checking · claim 1 · updated just now' })
+    + scl('Merge check <b>2m 40s</b> of 60m<span class="u">usually ~18m</span>') + bud4(4.4, 30) + live4('Output 3s ago · Updated just now')
+    + scl('Merges on its own when it passes.'), 1),
+  top: 318, tl: rnd('Merge check · 1') + ev('9:14', RING, `Merge check started on the combined tree<span class="sub">${BR4S} + main @ 41ac9e0 · claim 1 · ${RUNNER}</span>`)
+    + ev('9:14', RING, toolBlock('Merge check', 'live', '2m 40s', T_MC)),
+  foot: FOOT_M, align: 'top' });
+
+// b · 一轮合入 · main 动了，回到检查（d321b88ee）
+const pB = page5({ at: '9:33', title: TITLE_M, sub: 'Run by Orbit · 2 tasks → main',
+  card: SC('', head4({ tone: 'run', title: 'Merge check', right: '1m 12s', detail: 'checking · after main moved' })
+    + scl('Merge check <b>1m 12s</b> of 60m<span class="u">usually ~18m</span>') + bud4(2, 30) + live4('Output 2s ago · Updated just now')
+    + scl('Merges on its own when it passes.') + sct('Automatic merge 2 of 3 · if main moves a third time, it asks you'), 1),
+  top: 372, tl: rnd('Merge check · 1') + ev('9:14', RING, `Merge check started · claim 1 · ${RUNNER}`) + ev('9:31', OKG, 'Merge check passed · 17m 02s <a>Log ›</a>')
+    + rnd('Merge to main · 1') + ev('9:31', ic('merge', 14, 'var(--tint)', 2.2), 'Merging into main on its own — Automatic is on')
+    + mkx(ev('9:32', UP, 'main moved 3 commits since the check — checking again on the new main<span class="sub">Not pushed. 2 of the 3 came from outside the queue: <code>feat(macos): …</code>, <code>fix(web): …</code> <a>›</a></span>'), 2, 't l')
+    + rnd('Merge check · 2', true) + ev('9:32', RING, toolBlock('Merge check', 'live', '1m 12s', T_MC)),
+  foot: FOOT_M });
+
+// c · 一轮合入 · 已合入（从回执的 Open landing › 进来）
+const pC = page5({ at: '10:03', title: TITLE_M, sub: 'Run by Orbit · settled 9:51',
+  card: SC('ok', head4({ tone: 'ok', mark: MARK.merged(), title: 'Merged into main', right: '9:51', rcls: 'tm', detail: '8ed0ea7 · 2 tasks · automatically' })
+    + `<div class="t13"><b>Now on main · 2 tasks</b></div><ul class="tk"><li>${TA}</li><li>${TB}</li></ul>`
+    + sct('<span style="color:var(--green-ink)">✓ Passed on the combined tree · 17m 41s</span>') + sct('Landed exactly the tested tree <b style="color:var(--label)">5e5bfca</b> · as a merge commit'), 1),
+  top: 386, tl: rnd('Merge check · 1') + ev('9:31', OKG, 'Merge check passed · 17m 02s <a>Log ›</a>')
+    + rnd('Merge to main · 1') + ev('9:32', UP, 'main moved 3 commits — checking again')
+    + rnd('Merge check · 2') + ev('9:50', OKG, 'Merge check passed · 17m 41s <a>Log ›</a>')
+    + rnd('Merge to main · 2') + ev('9:51', ic('up', 15, 'var(--green-ink)', 2), 'Pushed to main · <code style="font-size:11.5px">8ed0ea7</code>')
+    + ev('9:51', OKG, '<b>Merged</b> · receipts for 2 tasks<span class="sub">Landing settled</span>'),
+  foot: lfoot('This landing is complete — <b>nothing to type here.</b><br>The next merge into main opens a new landing (#10).') });
+
+// d · 一轮合入 · ⋯ 菜单（owner 确认后、重查中）
+const menuM = `<div class="dimbg" style="background:rgba(0,0,0,.18);z-index:20"></div><div class="lmenu" style="top:112px;right:14px">
+${mkx(`<div class="mi">Review Card${ic('card', 19, '#000', 1.9)}</div><div class="mi">Open Coordinator${ic('person', 19, '#000', 1.9)}</div>`, 1, 'in', 'border-radius:0;outline-offset:-4px')}
+<div class="gap"></div>
+${mkx(`<div class="mi red"><span>Cancel Merge<span class="sm">Before the push only · stops at the runner’s next report</span></span>${ic('stop', 19, '#E5281D', 2)}</div>`, 2, 'in', 'border-radius:0;outline-offset:-4px')}
+</div>`;
+const pD = page5({ at: '11:38', title: TITLE_M, sub: 'Run by Orbit · 2 tasks → main',
+  card: sc4('', head4({ tone: 'run', title: 'Merge to main', right: '3m 50s', detail: 'checking · claim 1 · updated just now' })
+    + scl('Re-checking before merging into main — main moved 2 commits since you confirmed') + live4('Output 1s ago · Updated just now')),
+  top: 270, tl: rnd('Merge check · 1') + ev('11:02', OKG, 'Merge check passed · 17m 52s <a>Log ›</a>') + ev('11:20', ASK, 'Asked you to merge into main')
+    + ev('11:34', '<span class="av me">W</span>', '<b>You</b> pressed Merge to main', 'who') + rnd('Merge to main · 1', true)
+    + ev('11:34', UP, 'main moved 2 commits since the check — re-checking before merging'),
+  foot: FOOT_MO, extra: menuM, align: 'top' });
+
+// e · 一轮合入 · 检查超时（10-09 那一次，候选 EgpMcrpirt5G2yVGJimfS）
+const pE = page5({ at: '14:52', title: 'Merge project/34bmz…N2yLPrnsCk → main · #7', sub: SUB_T,
+  card: SC('warn', head4({ tone: 'warn', title: 'Merge check', right: 'Timed out', detail: 'No report for 110m · limit 10m' })
+    + `<div class="t13">Runner ${RUNNER} took it at 13:02 · stopped at checking · claim 1</div>`
+    + `<div class="t13"><b>A check pushes nothing</b> — main is as it was.</div>`
+    + `<div class="acts">${mkx(cap4('Re-run the check'), 2, 't l')}${cap4('Abandon', 'red')}</div>`
+    + `<div class="variant">Re-run ends this check and queues the next one on the same candidate. <b>Abandon</b> only ends it; the candidate goes back to you.</div>`, 1),
+  top: 394, tl: rnd('Merge check · 1') + ev('13:02', RING, `Merge check started · claim 1 · ${RUNNER}`) + ev('13:02', ic('term', 14, '#8e8e93', 2), 'Last report · checking<span class="sub">Merge check 0m 40s of 60m</span>')
+    + `<div class="ephem">No report from ${RUNNER} since 13:02</div>`,
+  foot: FOOT_M, align: 'top' });
+
+// f · 一轮合入 · 合入作业超时（Merge to main）
+const pF = page5({ at: '16:05', title: 'Merge project/34bmz…N2yLPrnsCk → main · #10', sub: SUB_T,
+  card: SC('warn', head4({ tone: 'warn', title: 'Merge to main', right: 'Timed out', detail: 'No report for 23m · limit 10m' })
+    + `<div class="t13">Runner ${RUNNER} took it at 15:38 · stopped at pushing · claim 1</div>`
+    + mkx(`<div class="t13"><b>May have been pushed</b> — it reported starting the push at 15:42, then went silent.</div>`, 2, 't l')
+    + `<div class="acts">${cap4('Abandon', 'red')}${cap4('Open Coordinator', 'bord')}</div>`
+    + `<div class="variant">No Retry: a confirmed merge ends by <b>Abandon</b>, or finishes when a new process on the runner takes it over.</div>`, 1),
+  top: 396, tl: rnd('Merge check · 1') + ev('15:02', OKG, 'Merge check passed · 31m 10s <a>Log ›</a>') + ev('15:36', '<span class="av me">W</span>', '<b>You</b> pressed Merge to main', 'who')
+    + rnd('Merge to main · 1', true) + ev('15:38', RING, `Claimed by runner ${RUNNER} · claim 1`) + ev('15:42', UP, 'Reported starting the push to main')
+    + `<div class="ephem">No report from ${RUNNER} since 15:42</div>`,
+  foot: FOOT_MO, align: 'top' });
+
+// g · 任务段 · 检查没过，交给协调会话
+const T_FAIL = term(`<span class="dim">$ cd src/apiserver &amp;&amp; npx vitest run src/wiki/server-execution.spec.ts</span>
+ FAIL  server-execution &gt; runs on the server when the deploy says so
+   expected 'RUNNER' to be 'SERVER'
+ Test Files  1 failed (1)`);
+const pG = page5({ at: '11:25', title: `Land · ${TC}`, sub: SUB_T,
+  card: SC('fail', head4({ tone: 'fail', title: 'Landing', right: 'Not landed', detail: 'checks failed · exit 1 after 3m 52s' })
+    + `<div class="t13">Task acceptance exited 1 (expected 0) on the combined tree · <b>nothing was pushed</b></div>`
+    + mkx(scl(`${ic('person', 13, '#7a5af5', 2)}<b>Coordinator</b>&nbsp;has it · 18m`), 2, 't l')
+    + `<div class="acts">${cap4('Open Coordinator')}${cap4('Open Task', 'grey')}</div>`, 1),
+  top: 330, tl: rnd('Generation 1') + ev('11:02', ic('task', 14, '#8e8e93', 2), `Task marked done · queued to land on ${BR4S}`)
+    + ev('11:03', RING, `Claimed by runner ${RUNNER} · claim 1<span class="sub">fetch, sync main, rebase</span>`)
+    + ev('11:03', X, toolBlock('Task acceptance', 'exit 1', '3m 52s', T_FAIL, 'var(--red-ink)'))
+    + ev('11:07', STOP, '<b>Not landed</b> · CHECK_FAILED<span class="sub">The project branch did not move.</span>')
+    + ev('11:07', ARR, 'Handed to <b>the coordinator</b> — Automatic is on<span class="sub">Item “Checks failed on the combined tree: Task acceptance…” · <a>Open ›</a></span>'),
+  foot: FOOT_T });
+
+// h · 任务段 · ⋯ 菜单（设计 §3）
+const menuT = `<div class="dimbg" style="background:rgba(0,0,0,.18);z-index:20"></div><div class="lmenu" style="top:112px;right:14px">
+${mkx(`<div class="mi">Open Task${ic('task', 19, '#000', 1.9)}</div><div class="mi">Open Source Session${ic('bubble', 19, '#000', 1.9)}</div><div class="mi">Open Coordinator${ic('person', 19, '#000', 1.9)}</div>`, 1, 'in', 'border-radius:0;outline-offset:-4px')}
+<div class="gap"></div>
+${mkx(`<div class="mi red"><span>Stop Landing<span class="sm">Before the push only · nothing pushed yet</span></span>${ic('stop', 19, '#E5281D', 2)}</div>`, 2, 'in', 'border-radius:0;outline-offset:-4px')}
+</div>`;
+const pH = page5({ at: '11:05', title: `Land · ${TC}`, sub: SUB_T,
+  card: sc4('', head4({ tone: 'run', title: 'Landing', right: '1m 40s', detail: 'task acceptance · claim 1' })
+    + scl('Task acceptance <b>1m 40s</b> of 60m') + bud4(2.8) + live4('Output 1s ago · Updated just now')),
+  top: 290, tl: rnd('Generation 1') + ev('11:02', ic('task', 14, '#8e8e93', 2), 'Task marked done · queued to land') + ev('11:03', RING, `Claimed by runner ${RUNNER} · claim 1`)
+    + ev('11:03', RING, 'Task acceptance · live · 1m 40s'),
+  foot: FOOT_T, extra: menuT, align: 'top' });
+
+// i · 任务段 · 超时（LAND_TASK）
+const pI = page5({ at: '14:58', title: `Land · ${TA}`, sub: SUB_T,
+  card: SC('warn', head4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 23m · limit 10m' })
+    + `<div class="t13">Runner ${RUNNER} took it at 14:33 · stopped at rebasing · claim 1 · round 1 of 3</div>`
+    + mkx(`<div class="t13"><b>Nothing was pushed</b> — the runner reports before it pushes, and it never did.</div>`, 2, 't l')
+    + `<div class="acts">${mkx(cap4('Retry'), 3, 't l')}${cap4('Abandon', 'red')}</div>`
+    + `<div class="variant">An older runner (reports only between steps): <b>may have been pushed</b> — Orbit can’t rule it out.</div>`, 1),
+  top: 396, tl: rnd('Generation 1 · not landed · CHECK_FAILED') + rnd('Generation 2', true)
+    + ev('14:20', ic('task', 14, '#8e8e93', 2), 'Task marked done again · queued<span class="sub">The coordinator sent it back at 11:34 (task_reopen)</span>')
+    + ev('14:33', RING, `Claimed by runner ${RUNNER} · claim 1<span class="sub">Reports every 30 s (v2)</span>`)
+    + ev('14:34', OKG, 'Fetched · synced main') + ev('14:35', RING, `Rebasing onto ${BR4S}<span class="sub">Last report</span>`)
+    + `<div class="ephem">No report from ${RUNNER} since 14:35</div>`,
+  foot: FOOT_T });
+
+// j · 任务段 · 接管之后
+const pJ = page5({ at: '17:36', title: `Land · ${TB}`, sub: SUB_T,
+  card: SC('', head4({ tone: 'run', title: 'Landing', right: '4m 50s', detail: 'task acceptance · claim 2' })
+    + scl('Task acceptance <b>4m 50s</b> of 60m') + bud4(8) + live4('Output 1s ago · Updated just now')
+    + sct('<b style="color:var(--label)">Taken over 17:31</b> · first started 17:03 · claim 1’s late reports are refused'), 1),
+  top: 360, tl: rnd('Generation 1') + ev('17:02', ic('task', 14, '#8e8e93', 2), 'Task marked done · queued to land') + ev('17:03', RING, `Claimed by runner ${RUNNER} · claim 1`)
+    + ev('17:21', ic('term', 14, '#8e8e93', 2), 'Last report from claim 1 · checking<span class="sub">The runner restarted to update</span>')
+    + mkx(ev('17:31', ARR, `<b>Taken over</b> by a new process on ${RUNNER} · claim 2<span class="sub">Claim 1’s late reports are refused</span>`), 2, 't l')
+    + ev('17:31', RING, toolBlock('Task acceptance', 'live', '4m 50s', term(`<span class="dim">$ cd src/apiserver &amp;&amp; npx vitest run src/wiki</span>
+ <span class="ok">✔</span> wiki-dossier-pages.spec.ts (1.8s)
+ ▶ wiki-maintain.spec.ts <span class="cur"></span>`))),
+  foot: FOOT_T });
+
+const cap = (title, items, dd = '') => `<b>${title}</b><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol>${dd ? `<div class="capdd">${dd}</div>` : ''}`;
+
+// web：任务段 · 超时，⋯ 菜单打开
+const wSc = `<div class="wsc warn" style="margin:14px 22px 8px">${wh4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 23m · limit 10m' })}
+<div class="m" style="margin-top:8px">Runner ${RUNNER} took it at 14:33 · stopped at rebasing · claim 1 · round 1 of 3</div>
+<div class="m"><b>Nothing was pushed</b> — the runner reports before it pushes, and it never did.</div>
+<div class="acts"><span class="wpri">Retry</span><span class="wsec4 red">Abandon</span></div></div>`;
+const wTl = `<div class="wtl"><div class="wrnd">Generation 2</div>
+<div class="wev"><span class="tm">14:20</span><span class="gl">${ic('task', 13, '#8f959e', 2)}</span><span class="wx">Task marked done again · queued<span class="s">The coordinator sent it back at 11:34 (task_reopen)</span></span></div>
+<div class="wev"><span class="tm">14:33</span><span class="gl">${wGlyph('spin', 13)}</span><span class="wx">Claimed by runner ${RUNNER} · claim 1<span class="s">Reports every 30 s (v2)</span></span></div>
+<div class="wev"><span class="tm">14:34</span><span class="gl">${ic('check', 13, '#1a7f37', 2.4)}</span><span class="wx">Fetched · synced main</span></div>
+<div class="wev"><span class="tm">14:35</span><span class="gl">${wGlyph('spin', 13)}</span><span class="wx">Rebasing onto ${BR4}<span class="s">Last report</span></span></div></div>`;
+const wMenu = `<div class="wmenu" style="top:58px;right:22px">${mkx(`<div class="mi">${ic('task', 15, '#646a73', 1.8)}Open Task</div><div class="mi">${ic('bubble', 15, '#646a73', 1.8)}Open Source Session</div><div class="mi">${ic('person', 15, '#646a73', 1.8)}Open Coordinator</div>`, 1, 'in', 'border-radius:6px')}<div class="sep"></div>
+${mkx(`<div class="mi red">${ic('x', 15, '#cf3b35', 2)}<span>Abandon<span class="sm">Ends this attempt · nothing was pushed</span></span></div>`, 2, 'in', 'border-radius:6px')}</div>`;
+const wMainL = `<div class="mhd"><div class="bc">‹ ${P4}</div><div class="t"><b>Land · ${TA}</b><span class="kchip4">${ic('ring', 10, '#5b4bd6', 2.6)}Landing</span><span class="more">${ic('dots', 18, '#646a73', 1.6)}</span></div><div class="sub">Run by Orbit · runner ${RUNNER}</div></div>
+${wSc}${wTl}${wMenu}<div class="ro">Orbit runs this landing — <b>nothing to type here.</b> Decisions: coordinator (Automatic on) · <a>Open coordinator ›</a></div>`;
+const wColL = `${wcolHead4()}<div class="body">${wpc4()}${wlc4(wh4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 23m · limit 10m' }) + wWhat(TA) + wRef()
+  + wDet('Runner workstation-gpu took it at 14:33 · stopped at rebasing · nothing was pushed') + wFoot('<span class="wpri">Retry</span><span class="wlk">Open landing ›</span>', '<span class="wlk">All jobs ›</span>'), true)}${wsec5('Coordinator')}${W_COORD}${wsec5('Today')}${W_ROWS.join('')}</div>`;
+const wF = webFrame4({ col: wColL, main: wMainL, h: 800 });
+
+// V6 活性
+const legend = `<div class="panel4" style="width:700px"><h2>状态卡上的活性一行（V6，读时推导）</h2>
+<p class="hint">头的右边是当前这一步的时钟；下面一行与其后的一行说服务端的两个事实——<i>Output</i>（输出最后一次动）与 <i>Updated</i>（最后一次回报）。什么都没发生时它们只会变大，所以伪造不了进展。</p>
+<ul style="list-style:none;padding:0">
+<li><span class="live" style="margin-right:6px"></span><b>LIVE</b> · Output 6s ago · Updated just now — 回报 ≤ 90 s，输出 10 分钟内动过。本地时钟走。</li>
+<li><span class="live" style="margin-right:6px;background:#FFCC00;box-shadow:0 0 0 3px rgba(255,204,0,.2)"></span><b>QUIET</b> · No output for 14m · within its 60m budget — 回报新，输出不动。时钟照走。</li>
+<li><span class="live off" style="margin-right:6px"></span><b>SILENT</b> · No word from runner ${RUNNER} for 4m — 回报 90 s 到 10 分钟。时钟冻结，不转。</li>
+<li><span style="display:inline-block;vertical-align:-2px;margin-right:6px">${triFill(12)}</span><b>Timed out</b>（LEASE_EXPIRED，唯一的超时定义）· No report for 23m · limit 10m — v2 领取超过 10 分钟没回报；legacy 领取检查中按「各检查预算之和 + 10 分钟」。推送那一句按 J12。LAND_TASK 有 Retry，CHECK_PROMOTION 有 Re-run the check，三种作业都有 Abandon；满 15 分钟给 owner 开 X-E5 待办（⑥）。</li>
+<li><span class="live off" style="margin-right:6px"></span><b>LEGACY</b> · Reports only between steps · Updated 12m ago — runner 没声明 integration-progress/v2：检查中不推断静默，也不写 nothing was pushed。</li>
+</ul>
+<ul style="margin-top:8px">
+<li><b>Update unavailable</b> 只说这台设备读不到服务端（读失败或超过 90 s），和 runner 无关；这时时钟冻结。</li>
+<li><b>轮次按领取计</b>：<i>claim 2 · round 1 of 3</i>；接管写 <i>Taken over 17:31 · first started 17:03</i>，首次起点不重置。</li>
+<li><b>usually ~18m</b> 只给合入检查（同项目同检查最近几次通过的中位数）；任务验收各不相同，不写。</li>
+</ul></div>`;
+const tbd5 = `<div class="panel4 tbd" style="width:640px"><h2>待定（请 owner 定）</h2><ol>
+<li><b>租约过期时 Stop / Cancel 还留不留在菜单里</b>（v3 第 5 条）：叫停只写 <code>cancel_requested_at</code>，要 runner 回来才生效；本板在 LEASE_EXPIRED 时菜单只给 Abandon。</li>
+<li><b>菜单要不要 Copy Link</b>（v3 第 6 条）：设计 §3 没有，t4web 的任务原文写了 Open Project 与 Copy Link。本板照设计。</li>
+<li><b>检查作业超时的推送句</b>（e）：J12 按领取协议判，legacy 领取一律 <i>may have been pushed</i>；但 CHECK_PROMOTION 从不推送。本板写 <i>A check pushes nothing</i>，要不要在 J12 里给检查作业单列一句。</li>
+<li><b>Automatic 的第几次自动合入</b>（b）：d321b88ee 在 3 次都撞上 main 动了以后才把候选交给 owner；状态卡写 <i>automatic merge 2 of 3</i>，main 今天哪里都不显示这个数。</li>
+</ol></div>`;
+
+document.getElementById('board').innerHTML = `
+${band('合入 main 的一轮', 'a', '一轮一个会话：每次检查、main 动了重查、推送、交回都在这里；从合入检查行、回执的 Open landing ›、Landings 组进来')}
+<div class="rowv4">
+${fig4('a', 'a · 一轮合入 · 检查中（从合入检查行进来）', pA, cap('页头：同一个头，下面接 V6', [
+  `${n(1)}状态卡第一行就是合入检查行的头：30pt 圆、<i>Merge check</i>、右边这一步的时钟、下面一行（状态 · 第几次领取 · 新鲜度）。再往下是预算与通常时长、活性、通过以后怎样（d321b88ee 那一句）。`,
+  '时间线按作业分段（Merge check · 1、Merge to main · 1 …）；正在跑的检查输出就在这里，点开看全文。']))}
+${fig4('a', 'b · main 动了，回到检查（d321b88ee）', pB, cap('Automatic 遇到 main 动了：回 CHECKING 重查', [
+  `${n(1)}头照旧是 <i>Merge check</i>，下面一行说这是 main 动了之后的那一次；末行说这是第几次自动合入。`,
+  `${n(2)}时间线写清楚：没推送，main 动了几个提交，哪几个来自队列外（J-T4 的 <code>upstreamMovedCommits</code>；跨账号只给原因）。`]))}
+${fig4('a', 'c · 已合入（从回执的 Open landing › 进来）', pC, cap('结案的一轮：页头是结局', [
+  `${n(1)}页头穿「Merged into main」那一行的头（绿圆里的合入标记、右边是合入的时刻），下面是现在在 main 上的任务、检查与「落下的就是测过的树」。`,
+  '会话结案为 SUCCEEDED；下一轮合入另开 #10。时间线保留每一段。']))}
+${fig4('a', 'd · ⋯ 菜单（owner 确认后、重查中）', pD, cap('合入轮的菜单（设计 §3）', [
+  `${n(1)}Review Card（合入卡的完整一张）、Open Coordinator。没有 Open Task、Open Source Session：一轮合入不属于某个任务。`,
+  `${n(2)}Cancel Merge 按条件出现：确认之后、推送之前；和合入卡上的 Cancel 是同一扇门（M-F3），按下后卡与页头都变「取消中」。租约过期后这里出现 Abandon。`,
+  '不提供 rename、fork、share、model 与 merge 栏（LS6）。']))}
+${fig4('a', 'e · 检查超时（10-09，项目 34bmz 那一次）', pE, cap('检查作业超时：Re-run the check 与 Abandon', [
+  `${n(1)}页头穿超时的头：三角、<i>Timed out</i>、<i>No report for 110m · limit 10m</i>；下面说谁在何时领的、停在哪一步。`,
+  `${n(2)}<b>Re-run the check</b>：修订 16 的候选重检门（J-T9 对 CHECK_PROMOTION），先结束这一代再排下一代。<b>Abandon</b>：只结束（J-T10）。`,
+  '2026-10-09 的事故就是这一态：候选 EgpMcrpirt5G2yVGJimfS 的检查卡在 RUNNING，页面上没有任何一扇门。']))}
+${fig4('a', 'f · 合入作业超时（Merge to main）', pF, cap('合入作业超时：只有 Abandon', [
+  `${n(1)}J-T9 不适用于 LAND_PROMOTION：这里没有 Retry，只有 Abandon 和 Open Coordinator。`,
+  `${n(2)}停在 pushing：照 J12 写 <i>May have been pushed</i>。Abandon 写 PUSH_OUTCOME_UNKNOWN，候选回 BLOCKED；下一个作业发现 tested_sha 已在 main 上就补写回执。`]))}
+</div>
+${band('一个任务的一段落地', 'a', '从 DONE 到落上项目分支：每一代、每次领取与接管都在同一个会话；从 Landing 卡、清单、任务页、写代码的会话、待办卡进来')}
+<div class="rowv4">
+${fig4('a', 'g · 任务段 · 检查没过', pG, cap('判断不在这里做：交给协调会话', [
+  `${n(1)}页头：红叉、<i>Landing</i>、右边 <i>Not landed</i>，下面一行 <i>checks failed · exit 1 after 3m 52s</i>；再一行说没推送、项目分支没动。`,
+  `${n(2)}谁拿着：<i>Coordinator has it · 18m</i>。修订 13 起协调会话回答过投递就不再按时钟交给 owner，所以不写 <i>goes to you in …</i>。`,
+  '协调会话建修复任务（0379）时，修复落在它自己的任务段；这一段之后以 HANDLED 结案。']))}
+${fig4('a', 'h · 任务段 · ⋯ 菜单', pH, cap('任务段的菜单（设计 §3）', [
+  `${n(1)}Open Task、Open Source Session（写代码的那个会话）、Open Coordinator。`,
+  `${n(2)}Stop Landing 按条件出现：推送之前（J-T8 的 owner 叫停门）。叫停不结案，段显示 <i>Stopped by you · not landed</i>。租约过期后这里换成 Abandon。`]))}
+${fig4('a', 'i · 任务段 · 超时（LAND_TASK）', pI, cap('超时：Retry 与 Abandon', [
+  `${n(1)}三角、<i>Timed out</i>、<i>No report for 23m · limit 10m</i>，照 main 的词；下面说领取、停在哪一步、第几轮。`,
+  `${n(2)}推送那一句照 J12：v2 领取且没记下 PUSH 回报写 <i>Nothing was pushed</i>；legacy 领取一律 <i>may have been pushed</i>（虚线下那一行）。`,
+  `${n(3)}Retry（J-T9）结束这一代、照 J-T1b 排下一代；Abandon（J-T10）只结束。两扇门、两个结果，按钮下面不再解释。`]))}
+${fig4('a', 'j · 任务段 · 接管之后', pJ, cap('接管：claim 2，首次起点不重置', [
+  `${n(1)}runner 换了进程（更新、重启）：头下面一行写 <i>claim 2</i>，末行 <i>Taken over 17:31 · first started 17:03</i>。`,
+  `${n(2)}时间线记接管的那一刻；旧领取迟到的回报被 409 拒绝。runner 停机交还（J-T11，10-17 已上线）也记一行：<i>Handed back · the runner was stopping</i>。`]))}
+</div>
+${band('web 与活性', 'web', 'web 的同一页：项目会话栏 + 主区；⋯ 菜单是下拉')}
+<div class="rowv4">
+<figure style="width:1240px"><span class="tag web">web · 任务段 · 超时（同 i），⋯ 菜单打开</span>${wF}<figcaption style="max-width:1220px"><b>web：同一个落地会话</b><ol>
+<li>${n(1)}菜单与 iOS 同三项（设计 §3）。${n(2)} 租约过期后出现 Abandon，下面一行写结果（J12）；Stop 在租约过期后不在菜单里（见待定 1）。</li>
+<li>左栏的 Landing 卡照 ④ 的方案 A：卡底 Open landing ›，和 Retry、All jobs › 一行。主区页头的状态卡穿 28px 的头（<code>.landing-head</code>）。</li></ol></figcaption></figure>
+${legend}
+${tbd5}
+</div>`;
+</script>
+</body></html>
