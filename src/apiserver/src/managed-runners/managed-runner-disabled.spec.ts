@@ -197,6 +197,15 @@ for (const said of [undefined, 'false', ' FALSE ', 'on']) {
         const malformed = await send(base, 'POST', `/api/managed-runner/${action}`, 'login', {});
         assert.equal(malformed.status, 404, `${action}: the switch is checked before the body is read`);
       }
+      // An administrator's volume switch: closed the same way, before the role is asked or the body read.
+      const volumeSwitch = `/api/admin/managed-runners/${OWNER}/volume-switch`;
+      const switchBody = { idempotencyKey: 'k', revision: 1, volumeUid: OWNER, reason: 'a restore' };
+      assert.equal((await send(base, 'POST', volumeSwitch, undefined, switchBody)).status, 401, 'the volume switch: authentication comes first');
+      for (const body of [switchBody, {}]) {
+        const closed = await send(base, 'POST', volumeSwitch, 'login', body);
+        assert.equal(closed.status, 404, 'the volume switch: refused as a server without the feature');
+        assert.equal(closed.json.code, 'MANAGED_RUNNER_DISABLED');
+      }
       assert.deepEqual(callsSince(), [], 'no managed write — and no read either — before the refusal');
 
       // The single-Pod admission webhook: closed with or without the API server's token, before

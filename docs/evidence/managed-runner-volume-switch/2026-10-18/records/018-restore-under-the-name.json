@@ -1,0 +1,139 @@
+{
+ "checks": [
+  {
+   "check": "a new claim under the runner's name, with a new PV and RBD image",
+   "ok": true,
+   "value": {
+    "claim": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+    "image": "csi-vol-9bce2a80-b965-44b2-9844-2bc0e9e154cf",
+    "pv": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510"
+   }
+  },
+  {
+   "check": "the archive reached the guest intact",
+   "ok": true,
+   "value": [
+    [
+     "3547ead8e102e9f2c0ad2d93f5d163b6817acf63da390a748953a4b17c41758f",
+     "/work/volume.img.gz"
+    ]
+   ]
+  },
+  {
+   "check": "the bytes imported are the exported image (SHA-256)",
+   "ok": true,
+   "value": "37be4e5be7eb6c47"
+  },
+  {
+   "check": "the new image reads back byte for byte as the backup (SHA-256 of all of it)",
+   "ok": true,
+   "value": "37be4e5be7eb6c47"
+  },
+  {
+   "check": "the scratch image is gone",
+   "ok": true
+  },
+  {
+   "check": "the admission guard refuses a check Pod on the restored claim",
+   "ok": true,
+   "value": "rbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume"
+  },
+  {
+   "check": "no such Pod exists",
+   "ok": true
+  },
+  {
+   "check": "the manager adopts nothing: still PVC_MISSING, the lost volume recorded",
+   "ok": true,
+   "value": {
+    "code": "PVC_MISSING",
+    "detail": "a PVC under its name is not the recorded one: PVC_CONFLICT: the PVC under this name has a different UID from the one recorded",
+    "message": "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.",
+    "retryable": false
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T15:25:03.926+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "restore",
+ "result": {
+  "checkPodRefusal": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume",
+  "claim": {
+   "annotations": {
+    "orbit.dev/owner-id": "01a14f99-caba-748b-8c8b-97018f4ec00e",
+    "orbit.dev/runner-id": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "pv.kubernetes.io/bind-completed": "yes",
+    "pv.kubernetes.io/bound-by-controller": "yes",
+    "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+    "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+   },
+   "creationTimestamp": "2026-10-18T15:24:45Z",
+   "name": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+   "uid": "92140165-55f9-4513-a0a7-8a1d2c6ce510"
+  },
+  "image": "csi-vol-9bce2a80-b965-44b2-9844-2bc0e9e154cf",
+  "managerDetail": "a PVC under its name is not the recorded one: PVC_CONFLICT: the PVC under this name has a different UID from the one recorded",
+  "manifest": {
+   "apiVersion": "v1",
+   "kind": "PersistentVolumeClaim",
+   "metadata": {
+    "annotations": {
+     "orbit.dev/owner-id": "01a14f99-caba-748b-8c8b-97018f4ec00e",
+     "orbit.dev/runner-id": "01a14f99-caed-762f-92e2-6291c6d5ab95"
+    },
+    "name": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "namespace": "orbit-mr-test"
+   },
+   "spec": {
+    "accessModes": [
+     "ReadWriteOnce"
+    ],
+    "resources": {
+     "requests": {
+      "storage": "2Gi"
+     }
+    },
+    "storageClassName": "runner-data",
+    "volumeMode": "Filesystem"
+   }
+  },
+  "pv": {
+   "creationTimestamp": "2026-10-18T15:24:45Z",
+   "name": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510",
+   "reclaimPolicy": "Retain",
+   "uid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+  },
+  "rbdInfo": {
+   "access_timestamp": "Sun Oct 18 15:24:45 2026",
+   "block_name_prefix": "rbd_data.31d77b928a46e",
+   "create_timestamp": "Sun Oct 18 15:24:45 2026",
+   "features": [
+    "layering"
+   ],
+   "flags": [],
+   "format": 2,
+   "id": "31d77b928a46e",
+   "modify_timestamp": "Sun Oct 18 15:24:45 2026",
+   "name": "csi-vol-9bce2a80-b965-44b2-9844-2bc0e9e154cf",
+   "object_size": 4194304,
+   "objects": 512,
+   "op_features": [],
+   "order": 22,
+   "size": 2147483648,
+   "snapshot_count": 0
+  },
+  "restoreSeconds": 18.3,
+  "scratchImage": "t08b-restore-scratch-20261018t152419z",
+  "sha256": {
+   "archive": "3547ead8e102e9f2c0ad2d93f5d163b6817acf63da390a748953a4b17c41758f",
+   "imported": "37be4e5be7eb6c4780522edd70057837914ecba5d388ba6e33dfc42c8db19b63",
+   "readBack": "37be4e5be7eb6c4780522edd70057837914ecba5d388ba6e33dfc42c8db19b63"
+  },
+  "writeSeconds": 17.1
+ },
+ "seconds": 18.4,
+ "startedAt": "2026-10-18T15:24:45.568+00:00",
+ "step": "under-the-name"
+}

@@ -1,0 +1,282 @@
+{
+ "checks": [
+  {
+   "check": "a member is refused 403",
+   "ok": true,
+   "value": 403
+  },
+  {
+   "check": "another UID than the one verified is refused, VOLUME_NOT_VERIFIED",
+   "ok": true,
+   "value": {
+    "check": "VOLUME_NOT_VERIFIED",
+    "code": "MANAGED_RUNNER_VOLUME_SWITCH_REFUSED",
+    "detail": "PVC mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95 is 92140165-55f9-4513-a0a7-8a1d2c6ce510, not 4dc58456-72b0-4314-9439-26969f524680",
+    "message": "The volume under this runner's name is not the one the request names, so nothing was switched. Check it again and name it."
+   }
+  },
+  {
+   "check": "a stale revision is refused with the current one",
+   "ok": true,
+   "value": {
+    "code": "MANAGED_RUNNER_REVISION_CONFLICT",
+    "message": "The managed runner changed since it was read; read it again and decide again.",
+    "revision": 22
+   }
+  },
+  {
+   "check": "nothing switched by the refusals",
+   "ok": true
+  },
+  {
+   "check": "no audit row yet",
+   "ok": true
+  },
+  {
+   "check": "the administrator's switch is answered 200",
+   "ok": true,
+   "value": {
+    "answer": {
+     "desiredState": "RUNNING",
+     "from": {
+      "pvUid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+      "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "pvcUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+     },
+     "generation": 2,
+     "managementState": "SLEEPING",
+     "replayed": false,
+     "revision": 23,
+     "runnerId": "34i7W1UbEpZVgF0vx0Jsb",
+     "runnerPublicId": "34i7W1UbEpZVgF0vx0Jsb",
+     "switchedAt": "2026-10-18T15:25:04.219Z",
+     "to": {
+      "pvName": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510",
+      "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+      "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+     }
+    },
+    "status": 200
+   }
+  },
+  {
+   "check": "answered with the new identity, asleep, the waiting demand kept",
+   "ok": true,
+   "value": {
+    "desiredState": "RUNNING",
+    "from": {
+     "pvUid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+     "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+     "pvcUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+    },
+    "generation": 2,
+    "managementState": "SLEEPING",
+    "replayed": false,
+    "revision": 23,
+    "runnerId": "34i7W1UbEpZVgF0vx0Jsb",
+    "runnerPublicId": "34i7W1UbEpZVgF0vx0Jsb",
+    "switchedAt": "2026-10-18T15:25:04.219Z",
+    "to": {
+     "pvName": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510",
+     "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+     "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+     "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+    }
+   }
+  },
+  {
+   "check": "one audit row: the administrator, when, from which volume to which",
+   "ok": true,
+   "value": [
+    {
+     "actor_id": "01a14f99-95d6-7050-83d2-2703dcf6b3fd",
+     "created_at": "2026-10-18T15:25:04.219",
+     "credential_kind": "LOGIN",
+     "payload": {
+      "backend": "kubernetes",
+      "before": {
+       "code": "PVC_MISSING",
+       "desiredState": "RUNNING",
+       "managementState": "FAILED"
+      },
+      "clusterKey": "orbit-mr-lab",
+      "confirmedReplacement": false,
+      "from": {
+       "pvUid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+       "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+       "pvcUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+       "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+      },
+      "generation": 2,
+      "idempotencyKey": "0acffa4a-33f7-4954-a6f0-10b9dd574cbe",
+      "mappingId": "01a14f99-caf2-70da-bf1f-60e056166e66",
+      "namespace": "orbit-mr-test",
+      "ownerId": "01a14f99-caba-748b-8c8b-97018f4ec00e",
+      "reason": "T08b lab: the volume was lost; restored from the independent backup",
+      "retired": null,
+      "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "to": {
+       "pvName": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510",
+       "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+       "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+       "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+       "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+      }
+     },
+     "type": "managed_runner.volume_switched"
+    }
+   ]
+  },
+  {
+   "check": "the same request again is answered as it stands, with no second audit row",
+   "ok": true,
+   "value": [
+    200,
+    {
+     "desiredState": "RUNNING",
+     "from": null,
+     "generation": 2,
+     "managementState": "PROVISIONING",
+     "replayed": true,
+     "revision": 27,
+     "runnerId": "34i7W1UbEpZVgF0vx0Jsb",
+     "runnerPublicId": "34i7W1UbEpZVgF0vx0Jsb",
+     "switchedAt": null,
+     "to": {
+      "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+      "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+     }
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T15:25:04.351+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "switch",
+ "result": {
+  "answer": {
+   "desiredState": "RUNNING",
+   "from": {
+    "pvUid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+    "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "pvcUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+   },
+   "generation": 2,
+   "managementState": "SLEEPING",
+   "replayed": false,
+   "revision": 23,
+   "runnerId": "34i7W1UbEpZVgF0vx0Jsb",
+   "runnerPublicId": "34i7W1UbEpZVgF0vx0Jsb",
+   "switchedAt": "2026-10-18T15:25:04.219Z",
+   "to": {
+    "pvName": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510",
+    "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+    "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+   }
+  },
+  "at": "2026-10-18T15:25:04.079+00:00",
+  "audit": [
+   {
+    "actor_id": "01a14f99-95d6-7050-83d2-2703dcf6b3fd",
+    "created_at": "2026-10-18T15:25:04.219",
+    "credential_kind": "LOGIN",
+    "payload": {
+     "backend": "kubernetes",
+     "before": {
+      "code": "PVC_MISSING",
+      "desiredState": "RUNNING",
+      "managementState": "FAILED"
+     },
+     "clusterKey": "orbit-mr-lab",
+     "confirmedReplacement": false,
+     "from": {
+      "pvUid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+      "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "pvcUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+     },
+     "generation": 2,
+     "idempotencyKey": "0acffa4a-33f7-4954-a6f0-10b9dd574cbe",
+     "mappingId": "01a14f99-caf2-70da-bf1f-60e056166e66",
+     "namespace": "orbit-mr-test",
+     "ownerId": "01a14f99-caba-748b-8c8b-97018f4ec00e",
+     "reason": "T08b lab: the volume was lost; restored from the independent backup",
+     "retired": null,
+     "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+     "to": {
+      "pvName": "pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510",
+      "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+      "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+     }
+    },
+    "type": "managed_runner.volume_switched"
+   }
+  ],
+  "mappingBusyAnswers": [],
+  "refusals": {
+   "anotherUid": {
+    "answer": {
+     "check": "VOLUME_NOT_VERIFIED",
+     "code": "MANAGED_RUNNER_VOLUME_SWITCH_REFUSED",
+     "detail": "PVC mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95 is 92140165-55f9-4513-a0a7-8a1d2c6ce510, not 4dc58456-72b0-4314-9439-26969f524680",
+     "message": "The volume under this runner's name is not the one the request names, so nothing was switched. Check it again and name it."
+    },
+    "status": 409
+   },
+   "member": {
+    "answer": {
+     "error": "Forbidden",
+     "message": "admin only",
+     "statusCode": 403
+    },
+    "status": 403
+   },
+   "staleRevision": {
+    "answer": {
+     "code": "MANAGED_RUNNER_REVISION_CONFLICT",
+     "message": "The managed runner changed since it was read; read it again and decide again.",
+     "revision": 22
+    },
+    "status": 409
+   }
+  },
+  "replay": {
+   "desiredState": "RUNNING",
+   "from": null,
+   "generation": 2,
+   "managementState": "PROVISIONING",
+   "replayed": true,
+   "revision": 27,
+   "runnerId": "34i7W1UbEpZVgF0vx0Jsb",
+   "runnerPublicId": "34i7W1UbEpZVgF0vx0Jsb",
+   "switchedAt": null,
+   "to": {
+    "pvUid": "44cad2a0-0c9b-4e1e-b3cb-0d149d9ccdc8",
+    "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "pvcUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-9bce2a80-b965-44b2-9844-2bc0e9e154cf"
+   }
+  },
+  "request": {
+   "reason": "T08b lab: the volume was lost; restored from the independent backup",
+   "revision": 22,
+   "volumeUid": "92140165-55f9-4513-a0a7-8a1d2c6ce510"
+  }
+ },
+ "seconds": 0.4,
+ "startedAt": "2026-10-18T15:25:03.926+00:00",
+ "step": "switch"
+}

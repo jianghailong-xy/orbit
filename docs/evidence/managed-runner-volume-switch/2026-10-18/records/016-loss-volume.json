@@ -1,0 +1,45 @@
+{
+ "checks": [
+  {
+   "check": "ann is asleep: nothing uses the volume",
+   "ok": true
+  },
+  {
+   "check": "no Pod, attachment or RBD watcher",
+   "ok": true,
+   "value": {
+    "attachments": [],
+    "pods": []
+   }
+  },
+  {
+   "check": "the claim is gone",
+   "ok": true
+  },
+  {
+   "check": "its PV is gone (it was Released, kept by Retain)",
+   "ok": true,
+   "value": "Released"
+  },
+  {
+   "check": "its RBD image is gone",
+   "ok": true,
+   "value": "csi-vol-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+  }
+ ],
+ "endedAt": "2026-10-18T15:24:44.710+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "loss",
+ "result": {
+  "imagesLeftInThePool": 31,
+  "pvBeforeItsDeletion": {
+   "phase": "Released",
+   "reclaimPolicy": "Retain"
+  },
+  "seconds": 3.7
+ },
+ "seconds": 10.2,
+ "startedAt": "2026-10-18T15:24:34.555+00:00",
+ "step": "volume"
+}

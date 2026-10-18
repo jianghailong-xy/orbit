@@ -44,6 +44,17 @@ import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProo
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
 import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
+import {
+  MANAGED_RUNNER_VOLUME_SWITCHED_ACTIVITY,
+  ManagedVolumeSwitchRefused,
+  ManagedVolumeSwitchRevisionMoved,
+  recordedVolume,
+  volumeSwitchStateProblem,
+  type ManagedVolumeSwitchOutcome,
+  type ManagedVolumeSwitchRequest,
+  type SwitchedVolume,
+  type VolumeSwitchCheck,
+} from './managed-runner-volume-switch';
 import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
 
 /**
@@ -127,6 +138,9 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  *     the Docker channel down, restarting or cut off — spends no attempt in any state (`unreachable`),
  *     any more than a held volume does: the budget counts tries that failed, and an outage lasts as
  *     long as it lasts. One that answers with a transient failure still spends one while provisioning.
+ *   - On Kubernetes, where a claim's UID cannot be recreated, an administrator can switch an asleep or
+ *     failed mapping to a volume restored under the runner's name, once the manager has verified it
+ *     and that the recorded one is no longer in use (`switchVolume`): recorded, with an audit row.
  *
  * Left to the work that follows: deletion.
  */
@@ -1356,6 +1370,229 @@ export class ManagedRunnerManager {
     return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
   }
 
+  // ── an administrator's switch to a restored volume ─────────────────────────────────────────
+
+  /**
+   * Switch the mapping's data volume to the restored one an administrator verified (managed-runner-volume-switch.ts;
+   * docs/managed-runner-kubernetes-operations.md, "Put a restored volume back under its runner"). A volume under the
+   * runner's name with another identity is a conflict the manager never resolves by itself; this is an operator's
+   * review of it, made explicit and recorded.
+   *
+   * Under the mapping's lease, with a holder of its own, so that no pass of this replica or another runs beside it.
+   * Each check below refuses the switch (ManagedVolumeSwitchRefused) with nothing written:
+   *
+   *   - the mapping's state (`volumeSwitchStateProblem`) and the revision the administrator read; a stopped instance
+   *     it still records only with the stop proof the gate itself would need (`stopProofFor`);
+   *   - the volume under the runner's name (`readReplacement`): the one the administrator verified and not the
+   *     recorded one, bound, with the marks every pass checks the mapping's volume for, its storage made for it;
+   *   - no other mapping records it, its storage or its handle;
+   *   - nothing holds it, no instance of the runner exists, and nothing holds the recorded volume
+   *     (`recordedVolumeHolders`);
+   *   - the single-instance guard is in force for it: the runner's template on it, under another name, is refused.
+   *
+   * Then one transaction records the new volume, its storage and its handle, and leaves the mapping SLEEPING. A
+   * stopped instance it still recorded is retired on its proof there, as a sleep retires one: the generation
+   * advances, the credential nobody may hold any more is replaced and its compute is given back. One `activity` row
+   * records who switched which mapping, when, from which volume to which. The runner row, workspace, storage share
+   * and desired state stay: the next wake starts the reserved generation on the new volume through the usual gate,
+   * at once if demand is waiting.
+   */
+  async switchVolume(request: ManagedVolumeSwitchRequest): Promise<ManagedVolumeSwitchOutcome> {
+    if (!this.backend.readReplacement || !this.backend.recordedVolumeHolders) {
+      throw new ManagedVolumeSwitchRefused('NOT_APPLICABLE', `the ${this.backend.name} backend has no volume switch`);
+    }
+    // The same request again, already applied: answered as it stands, from a read. Its switch kicked the manager, whose
+    // pass may hold the lease right now; a retry of an answer that was lost must not be refused for that.
+    const current = await this.prisma.managedRunner.findUnique({ where: { id: request.mappingId } });
+    if (current && current.lastRequestKey === request.idempotencyKey && current.pvcUid === request.volumeUid) {
+      return { replayed: true, mapping: current, from: null, to: recordedVolume(current)!, at: null };
+    }
+    const holder = `${this.holder}/volume-switch/${randomUUID()}`;
+    const leased = await this.acquireLease(request.mappingId, holder);
+    if (!leased) {
+      const found = await this.prisma.managedRunner.findUnique({ where: { id: request.mappingId }, select: { backend: true } });
+      if (found && found.backend !== this.backend.name) {
+        throw new ManagedVolumeSwitchRefused('NOT_APPLICABLE', `the mapping is a ${found.backend} one, and this server runs ${this.backend.name}`);
+      }
+      throw new ManagedVolumeSwitchRefused('MAPPING_BUSY', found ? "another manager pass holds the mapping's lease" : 'the mapping is gone');
+    }
+    try {
+      return await this.switchLeased(leased, request, holder);
+    } catch (error) {
+      if (error instanceof ManagedVolumeSwitchRefused || error instanceof ManagedVolumeSwitchRevisionMoved) throw error;
+      const failure = this.backend.failure(error);
+      if (failure) throw new ManagedVolumeSwitchRefused('BACKEND_UNAVAILABLE', failure.retryable ? (error as Error).message : failure.log);
+      throw error;
+    } finally {
+      await this.releaseLease(request.mappingId, holder).catch((error: Error) =>
+        this.log.warn(`managed runner ${request.mappingId}: switch lease not released (it expires on its own): ${error.message}`),
+      );
+    }
+  }
+
+  private async switchLeased(mapping: ManagedRunner, request: ManagedVolumeSwitchRequest, holder: string): Promise<ManagedVolumeSwitchOutcome> {
+    const refuse = (check: VolumeSwitchCheck, detail: string) => new ManagedVolumeSwitchRefused(check, detail);
+    // Applied by another request with this key between the read in `switchVolume` and the lease.
+    if (mapping.lastRequestKey === request.idempotencyKey && mapping.pvcUid === request.volumeUid) {
+      return { replayed: true, mapping, from: null, to: recordedVolume(mapping)!, at: null };
+    }
+    if (mapping.revision !== request.revision) throw new ManagedVolumeSwitchRevisionMoved(mapping.revision);
+    const state = volumeSwitchStateProblem(mapping, request.confirmReplacement);
+    if (state) throw refuse(state.check, state.detail);
+    const { terms } = this.backend;
+    // A stopped instance still recorded (FAILED after it stopped): only on the proof the gate would need.
+    const proof = mapping.podUid ? stopProofFor(mapping.fencingReceipt, this.predecessorOf(mapping)) : null;
+    if (mapping.podUid && !proof) {
+      throw refuse('RECORDED_VOLUME_IN_USE', `nothing proves ${terms.instance} ${mapping.podUid} of generation ${mapping.generation} stopped`);
+    }
+
+    const found = await this.backend.readReplacement!(mapping);
+    const name = `${terms.volume} ${mapping.pvcName}`;
+    if (!found) throw refuse('VOLUME_NOT_FOUND', `no ${name} in ${mapping.namespace}`);
+    const { volume, backing } = found;
+    if (volume.uid === mapping.pvcUid) throw refuse('VOLUME_ALREADY_RECORDED', `${name} is ${volume.uid}, the recorded one`);
+    if (volume.uid !== request.volumeUid) throw refuse('VOLUME_NOT_VERIFIED', `${name} is ${volume.uid}, not ${request.volumeUid}`);
+    if (found.removing) throw refuse('VOLUME_NOT_FOUND', `${name} (${volume.uid}) is being deleted`);
+    if (!volume.boundTo || !backing) {
+      throw refuse('VOLUME_NOT_BOUND', volume.boundTo ? `${terms.backing} ${volume.boundTo} of ${name} cannot be read` : `${name} is not bound`);
+    }
+    if (found.problem) throw refuse('VOLUME_NOT_THIS_RUNNERS', found.problem);
+    const elsewhere = await this.prisma.managedRunner.findFirst({
+      where: { id: { not: mapping.id }, OR: [{ pvcUid: volume.uid }, { pvUid: backing.uid }, { volumeHandle: backing.handle }] },
+      select: { id: true },
+    });
+    if (elsewhere) {
+      throw refuse('VOLUME_OF_ANOTHER_ACCOUNT', `another managed runner's mapping records ${name} (${volume.uid}), its ${terms.backing} ${volume.boundTo} or its handle`);
+    }
+    if (found.foreign) throw refuse('VOLUME_OF_ANOTHER_ACCOUNT', found.foreign);
+    const holders = await this.backend.volumeHolders({ volume, backing });
+    if (holders.length > 0) throw refuse('VOLUME_IN_USE', `${name} (${volume.uid}) is held by ${holders.join(', ')}`);
+    const instance = await this.backend.readInstance(mapping);
+    if (instance) throw refuse('RECORDED_VOLUME_IN_USE', `${terms.instance} ${instance.name} (${instance.uid}) still exists`);
+    const recordedHolders = await this.backend.recordedVolumeHolders!(mapping, found);
+    if (recordedHolders.length > 0) {
+      throw refuse('RECORDED_VOLUME_IN_USE', `the recorded ${terms.backing} ${mapping.pvUid} (${mapping.volumeHandle}) is held by ${recordedHolders.join(', ')}`);
+    }
+    try {
+      await this.backend.requireInstanceGuard({ ...mapping, pvcUid: volume.uid });
+    } catch (error) {
+      if (error instanceof ManagedRunnerConflict) throw refuse('ADMISSION_GUARD_MISSING', `${error.code}: ${error.detail}`);
+      throw error;
+    }
+    return this.commitSwitch(mapping, request, holder, { volume, backing }, proof);
+  }
+
+  /**
+   * The switch, in one transaction: the mapping by a compare-and-set on what the checks read (revision, the switch's
+   * lease, state, generation and recorded instance), the runner's credential when a stopped instance is retired,
+   * the pool's compute share when one is still held, and the audit row.
+   */
+  private async commitSwitch(
+    mapping: ManagedRunner,
+    request: ManagedVolumeSwitchRequest,
+    holder: string,
+    to: VerifiedVolume,
+    proof: ManagedRunnerStopProof | null,
+  ): Promise<ManagedVolumeSwitchOutcome> {
+    const now = this.now();
+    const held = readReservation(mapping.reservation);
+    const compute = computeOf(held);
+    const from = recordedVolume(mapping)!;
+    const target: SwitchedVolume = { pvcName: mapping.pvcName, pvcUid: to.volume.uid, pvName: to.volume.boundTo!, pvUid: to.backing.uid, volumeHandle: to.backing.handle };
+    const retired = mapping.podUid ? { generation: mapping.generation, podUid: mapping.podUid, proof: proof!.kind } : null;
+    const payload = {
+      mappingId: mapping.id,
+      ownerId: mapping.ownerId,
+      runnerId: mapping.runnerId,
+      backend: mapping.backend,
+      clusterKey: mapping.clusterKey,
+      namespace: mapping.namespace,
+      generation: mapping.generation,
+      before: {
+        managementState: mapping.managementState,
+        desiredState: mapping.desiredState,
+        code: (mapping.lastError as { code?: string } | null)?.code ?? null,
+      },
+      from,
+      to: target,
+      retired,
+      confirmedReplacement: request.confirmReplacement,
+      reason: request.reason,
+      idempotencyKey: request.idempotencyKey,
+    };
+    try {
+      await withTransactionRetry(
+        this.prisma,
+        async (tx) => {
+          const { count } = await tx.managedRunner.updateMany({
+            where: {
+              id: mapping.id,
+              revision: mapping.revision,
+              leaseHolder: holder,
+              managementState: mapping.managementState,
+              generation: mapping.generation,
+              podUid: mapping.podUid,
+            },
+            data: {
+              pvcUid: target.pvcUid,
+              pvUid: target.pvUid,
+              volumeHandle: target.volumeHandle,
+              ...(retired
+                ? {
+                  generation: { increment: 1 },
+                  podName: null,
+                  podUid: null,
+                  nodeName: null,
+                  nodeUid: null,
+                  fencingReceipt: { ...proof!, retiredAt: now.toISOString() } as unknown as Prisma.InputJsonValue,
+                }
+                : {}),
+              managementState: 'SLEEPING',
+              stateEnteredAt: now,
+              attempt: 0,
+              nextAttemptAt: null,
+              startupDeadlineAt: null,
+              capacityRevision: null,
+              lastError: Prisma.DbNull,
+              drainDemandRevision: null,
+              stopRequestedAt: null,
+              stopAcknowledgedAt: null,
+              ...(held && compute ? { reservation: { ...held, compute: null } as unknown as Prisma.InputJsonValue } : {}),
+              lastRequestKey: request.idempotencyKey,
+              revision: { increment: 1 },
+              leaseExpiresAt: this.leaseUntil(now),
+            },
+          });
+          if (count === 0) throw new Superseded();
+          if (retired) await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+          if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
+          await tx.activity.create({
+            data: {
+              actorId: request.actorId,
+              type: MANAGED_RUNNER_VOLUME_SWITCHED_ACTIVITY,
+              payload: payload as unknown as Prisma.InputJsonValue,
+              credentialKind: 'LOGIN',
+              createdAt: now,
+            },
+          });
+        },
+        loggedRetry(this.log, 'managedRunners.switchVolume'),
+      );
+    } catch (error) {
+      if (error instanceof Superseded) throw new ManagedVolumeSwitchRevisionMoved((await this.reread(mapping.id)).revision);
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ManagedVolumeSwitchRefused('VOLUME_OF_ANOTHER_ACCOUNT', `another mapping recorded ${this.backend.terms.volume} ${target.pvcUid} or its handle meanwhile`);
+      }
+      throw error;
+    }
+    this.log.warn(
+      `managed runner ${mapping.id}: data volume switched by administrator ${request.actorId} from ${this.backend.terms.volume} ${from.pvcUid} `
+        + `(${from.volumeHandle}) to ${target.pvcUid} (${target.volumeHandle})`
+        + `${retired ? `; generation ${retired.generation} retired (${retired.proof})` : ''}; asleep, generation ${mapping.generation + (retired ? 1 : 0)} reserved`,
+    );
+    return { replayed: false, mapping: await this.reread(mapping.id), from, to: target, at: now };
+  }
+
   // ── resources ──────────────────────────────────────────────────────────────────────────────
 
   /** The mapping's data volume: created once, adopted by identity, never recreated once its UID is recorded. */
@@ -1500,19 +1737,22 @@ export class ManagedRunnerManager {
     return new Date(now.getTime() + this.profile.lifecycle.leaseSeconds * 1000);
   }
 
-  /** Take (or keep) the lease of one of this backend's mappings: free, expired, or already this replica's. */
-  private async acquireLease(id: string): Promise<ManagedRunner | null> {
+  /**
+   * Take (or keep) the lease of one of this backend's mappings: free, expired, or already `holder`'s — this
+   * replica's, or the holder of one administrator's switch (`switchVolume`).
+   */
+  private async acquireLease(id: string, holder = this.holder): Promise<ManagedRunner | null> {
     const now = this.now();
     const { count } = await this.prisma.managedRunner.updateMany({
-      where: { id, backend: this.backend.name, OR: [{ leaseHolder: null }, { leaseHolder: this.holder }, { leaseExpiresAt: { lte: now } }] },
-      data: { leaseHolder: this.holder, leaseExpiresAt: this.leaseUntil(now) },
+      where: { id, backend: this.backend.name, OR: [{ leaseHolder: null }, { leaseHolder: holder }, { leaseExpiresAt: { lte: now } }] },
+      data: { leaseHolder: holder, leaseExpiresAt: this.leaseUntil(now) },
     });
     return count === 0 ? null : this.reread(id);
   }
 
-  private async releaseLease(id: string): Promise<void> {
+  private async releaseLease(id: string, holder = this.holder): Promise<void> {
     await this.prisma.managedRunner.updateMany({
-      where: { id, leaseHolder: this.holder },
+      where: { id, leaseHolder: holder },
       data: { leaseHolder: null, leaseExpiresAt: null },
     });
   }

@@ -180,6 +180,7 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `wake-lab.py` | Wake, sleep and capacity on real k3s ([below](#wake-sleep-and-capacity-t06)), through manager-lab.py's gate, replica, views and `kill-runner`: a profile with a budget of one runner and a 60 s idle interval, accounts with a fake-model key, a self-managed runner and its dispatch, every kind of demand (a turn, a session, a task's Run Now or run time, all at once), waits on a mapping or on an answer quoting a marker, data on the runner's volume, the administrator's disable, a ResourceQuota of zero Pods, the switch-off check for demand, and a recorder with its timeline. |
 | `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
 | `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
+| `switch-lab.py` | Task T08b's run ([below](#a-restored-volume-back-under-its-runner-t08b)), on acceptance-lab.py's helpers: one account provisioned, data on its volume, an independent backup, the volume lost, the runbook's restore into a new claim under the runner's name, the administrator's volume switch and the wake on the restored claim, in one command that stops at the first failed check; `report` condenses a run. |
 
 A test window:
 
@@ -570,6 +571,46 @@ Left in the lab: `test-server-t08` with ann, bob and cy SLEEPING, their claims k
 `t08-restore-20261018t125553z` and its PV and image, as retained test data; the backup archive and its manifest in
 `/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z` (0700); the webhook removed; the test server, gate, replica,
 recorder and self-managed runner stopped; the VM off.
+
+## A restored volume back under its runner (T08b)
+
+Recorded 2026-10-18 by task T08b: one account through the volume switch on the lab's real k3s, in one run of `switch-lab.py`
+at `eccae61cd` (22 steps, 78 checks, all passed, 15:18:39–15:26:40 UTC, 8.0 minutes). The records are in
+[the evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md), and the procedure it follows is the runbook's
+[Put a restored volume back under its runner](managed-runner-kubernetes-operations.md#put-a-restored-volume-back-under-its-runner).
+fake-model.py stood in for a model as a DeepSeek-preset key, since the owner's key file did not exist. The runner image was
+T06b's, whose sources this branch does not change; nothing was built into an image or pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08b    # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08b-run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t08b-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/switch-lab.py run --out $OUT
+python3 scripts/managed-runner/lab/switch-lab.py report $OUT        # each step's time and checks, the intervals
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Before | ann signed in and was READY on a fake-model key, her first session holding an attachment and a file the engine committed in its worktree. The probe wrote 8 MiB of random bytes, 150 SQLite rows (WAL, `synchronous=FULL`) and a Git commit while a 150 s turn kept the runner up. Disabled, she was asleep 28.4 s later. Her 2 GiB RBD image was exported out of the VM in 8.2 s (18.2 MB gzip) and checked on the host with no cluster in 4.4 s. |
+| The loss | Her claim, its PV (Released, kept by `Retain`) and its RBD image deleted. Enabled again, a message: the wake failed `PVC_MISSING` 0.6 s later, no claim made in its place, the message waiting. |
+| The restore | A new claim `mr-data-<runner uuid>` with the manager's marks, `Bound` to a new PV and image; the claim, its binding and the backup's write into the image took 17.1 s, and the image read back with the backup's SHA-256. A check Pod on the claim was refused by the guard (`NOT_THE_MANAGER`). The manager kept `PVC_MISSING` and adopted nothing; its detail said the claim under the name was not the recorded one. |
+| The switch | ann's own request was refused 403, another UID 409 `VOLUME_NOT_VERIFIED`, a stale revision 409 with the current one; nothing was switched. The administrator's switch was answered 200 in 0.4 s: `SLEEPING`, desired `RUNNING`, generation 2, from the lost claim, PV and handle to the restored ones. One `activity` row named the administrator, the time and both volumes. The same request again: `replayed`, no second row. |
+| The wake | The waiting message woke the runner at once: Secret and Pod in the switch's second, the runner container 14 s later, the message answered 23.7 s after the switch and READY at 51 s. The same runner ID and workspace, generation 2 (the backed-up volume had last run generation 1), the Pod admitted for the restored claim's UID, `/var/lib/orbit` an ext4 RBD device. The engine's next request carried the earlier conversation. The probe's random bytes, rows and Git commit and every upload, worktree file, transcript and SQLite database (`integrity_check` ok) were as backed up. |
+| At the end | The database and k3s agreed; never more than one Pod on the volume in the recorder's timeline (sampled every second, 31 changes written); Ceph `HEALTH_OK`; the lost image gone and the restored one there; ann asleep on the restored claim. |
+
+Finding, fixed in `eccae61cd`: in the first full run (kept in the evidence's `trial/`), the same switch sent again right after
+it was refused `MAPPING_BUSY`. The switch kicks the manager, whose wake pass then held the mapping's lease. A replay is now
+answered from a read. That trial's run passed everything else; its directory is `test-server-t08b-dev`.
+
+Left in the lab: `test-server-t08b` (ann SLEEPING on her restored claim) and the trial's `test-server-t08b-dev` (its ann
+SLEEPING on its own); the two restored claims with their PVs and images, as retained test data; the backups
+`backups/t08b-20261018T150259Z` (the trial's) and `backups/t08b-20261018T152419Z` (0700). The lost volumes' claims, PVs and
+images were deleted, as the test required. The webhook is removed, the test server and gate are stopped, and the VM is off.
 
 ## Known limits
 

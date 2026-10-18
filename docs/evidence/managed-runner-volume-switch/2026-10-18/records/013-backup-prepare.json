@@ -1,0 +1,339 @@
+{
+ "checks": [
+  {
+   "check": "ann stayed READY through the probe",
+   "ok": true
+  },
+  {
+   "check": "ann is disabled: held asleep for the backup",
+   "ok": true,
+   "value": 200
+  },
+  {
+   "check": "ann: no Pod and no attachment on the volume",
+   "ok": true
+  },
+  {
+   "check": "ann: no RBD client watches the image",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T15:24:19.091+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "backup",
+ "result": {
+  "disabled": {
+   "answer": {
+    "disabledAt": "2026-10-18T15:23:45.835Z",
+    "email": "t08b-ann@lab.invalid",
+    "id": "34i7W1Pcy2TrsvLwGgFVW"
+   },
+   "at": "2026-10-18T15:23:45.830+00:00",
+   "disabled": true,
+   "owner": "ann",
+   "status": 200
+  },
+  "ensure": null,
+  "keeper": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 2,
+    "status": null
+   },
+   "at": "2026-10-18T15:21:14.374+00:00",
+   "kind": "turn",
+   "session": "34i7Wp9JTQ2gicVUMiahK",
+   "status": 201
+  },
+  "kept": {
+   "event": {
+    "created_at": "2026-10-18T15:23:44.515",
+    "ingested_at": "2026-10-18T15:23:44.633034+00:00",
+    "ingested_by_runner_id": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "seq": 20,
+    "session_id": "01a14f9a-464c-742b-81e1-7a152af2540e",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T15:21:14Z",
+     "kind": "text",
+     "messages": 8,
+     "n": 3,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "created_at": "2026-10-18T15:21:13.036",
+    "engine": "claude",
+    "id": "01a14f9a-464c-742b-81e1-7a152af2540e",
+    "provider": "deepseek",
+    "runtime_session_id": "9b02c95d-35c3-4a9b-b30a-3396af6be97e",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "probe": {
+   "action": "write",
+   "at": "2026-10-18T15:21:24.142+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "4fbe092504d39cf30f43317e949a2e12ff96f850",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "cbcb062b4abbe528d85aedff77bebe3ad9d7ed42faf1760eb443e13d03a158ca",
+    "rows": 150,
+    "rowsSha256": "2ac7f6950ab58d0e40747e06b764f40013c634a14d869746675199732d28c87e"
+   },
+   "generation": 1,
+   "owner": "ann",
+   "pod": "6356a1c8-f4c8-4254-ada3-fd43a22f3389",
+   "run": "b152114",
+   "volume": {
+    "managedInstance": {
+     "generation": 1,
+     "podUid": "6356a1c8-f4c8-4254-ada3-fd43a22f3389",
+     "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+    "worktrees": [
+     "01a14f9a-464c-742b-81e1-7a152af2540e"
+    ]
+   }
+  },
+  "slept": {
+   "at": "2026-10-18T15:24:14.227+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T15:23:45.887+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "READY",
+      "pod": "6356a1c8",
+      "reason": null,
+      "revision": 13
+     }
+    },
+    {
+     "at": "2026-10-18T15:23:48.617+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "asked",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "6356a1c8",
+      "reason": null,
+      "revision": 14
+     }
+    },
+    {
+     "at": "2026-10-18T15:24:14.227+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 2,
+      "management_state": "SLEEPING",
+      "pod": null,
+      "reason": null,
+      "revision": 18
+     }
+    }
+   ],
+   "reached": "SLEEPING",
+   "seconds": 28.4
+  },
+  "snapshot": {
+   "managedInstance": {
+    "generation": 1,
+    "podUid": "6356a1c8-f4c8-4254-ada3-fd43a22f3389",
+    "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ],
+   "podUid": "6356a1c8-f4c8-4254-ada3-fd43a22f3389",
+   "prefix": {},
+   "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+   "runs": {
+    "01a14f9a-464c-742b-81e1-7a152af2540e": {
+     "provider": "claude",
+     "runtimeSessionId": "9b02c95d-35c3-4a9b-b30a-3396af6be97e",
+     "sessionUuid": "9b02c95d-35c3-4a9b-b30a-3396af6be97e",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f9a-464c-742b-81e1-7a152af2540e"
+    }
+   },
+   "sqlite": {
+    "t08-probe/b152114/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-18T15:23:45.830+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f9a-464c-742b-81e1-7a152af2540e/9b02c95d-35c3-4a9b-b30a-3396af6be97e.jsonl": {
+     "lines": 36,
+     "sha256": "46d1c4bfbc7c4a5ee470398e9aa170d53787dc1633068d9e180f89a40aeaef91"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f9a-464c-742b-81e1-7a152af2540e/t08-ann-note.txt": "f134f372701c3d668cdd16f4b7684fa95c6b0e9d14ebbdca3c21cb108370d304"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "0d9897acc5c60fb073ab9808506280b0b11c0063",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD 0d9897acc5c60fb073ab9808506280b0b11c0063",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f9a-464c-742b-81e1-7a152af2540e",
+     "HEAD b9be4963596f1698ddc49f7479c036c49c2a99a9",
+     "branch refs/heads/orbit/t08-ann-first-session-0e3d22"
+    ]
+   },
+   "worktrees": {
+    "01a14f9a-464c-742b-81e1-7a152af2540e": {
+     "branch": "orbit/t08-ann-first-session-0e3d22",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+     },
+     "head": "b9be4963596f1698ddc49f7479c036c49c2a99a9",
+     "status": []
+    }
+   }
+  },
+  "storage": {
+   "at": "2026-10-18T15:24:18.995+00:00",
+   "ceph": {
+    "blocklist": "10.0.2.15:0/2035876603 2026-10-19T14:55:20.915396+0000\n10.0.2.15:0/3199216587 2026-10-19T14:55:20.915396+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/3695515242 2026-10-19T14:55:20.915396+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6825/3695515242 2026-10-19T14:55:20.915396+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1311698475 2026-10-19T14:55:20.915396+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/1763423388 2026-10-19T14:55:20.915396+0000\nlisted 61 entries",
+    "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "health": "HEALTH_OK",
+    "healthDetail": "HEALTH_OK",
+    "osdmap": {
+     "epoch": 195,
+     "num_in_osds": 3,
+     "num_osds": 3,
+     "num_remapped_pgs": 0,
+     "num_up_osds": 3,
+     "osd_in_since": 1792215315,
+     "osd_up_since": 1792335417
+    },
+    "pgs": [
+     {
+      "count": 33,
+      "state_name": "active+clean"
+     }
+    ],
+    "rbdInfo": {
+     "access_timestamp": "Sun Oct 18 15:20:41 2026",
+     "block_name_prefix": "rbd_data.31d7789cc863b",
+     "create_timestamp": "Sun Oct 18 15:20:41 2026",
+     "features": [
+      "layering"
+     ],
+     "flags": [],
+     "format": 2,
+     "id": "31d7789cc863b",
+     "modify_timestamp": "Sun Oct 18 15:20:41 2026",
+     "name": "csi-vol-1e64aa21-12ef-4b1c-a61f-3e219729115c",
+     "object_size": 4194304,
+     "objects": 512,
+     "op_features": [],
+     "order": 22,
+     "size": 2147483648,
+     "snapshot_count": 0
+    },
+    "rbdStatus": {
+     "watchers": []
+    }
+   },
+   "guest": [
+    "== kernel 7.0.0-34-generic, boot 9bf77bf5-47b6-4126-96a0-0c0050c0a0f3, up 1787.11 s",
+    "== rbd devices",
+    "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client204135 addr 10.0.2.15:0/1714185287",
+    "== RBD filesystems mounted",
+    "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+    "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+   ],
+   "mapping": {
+    "attachments": 0,
+    "attempt": 0,
+    "desired": "SLEEPING",
+    "generation": 2,
+    "operation": "DELETE_POD:COMPLETED",
+    "pod": null,
+    "podUid": null,
+    "proof": "OBSERVED_STOP",
+    "proofRetired": true,
+    "reason": null,
+    "secretGeneration": "1",
+    "state": "SLEEPING"
+   },
+   "objects": {
+    "bootstrapSecret": {
+     "createdAt": "2026-10-18T15:20:46Z",
+     "generation": "1",
+     "name": "mr-boot-01a14f99-caed-762f-92e2-6291c6d5ab95",
+     "uid": "770ac356-1b83-4ce8-9ba9-eb90d40455c8"
+    },
+    "pod": null,
+    "podsUsingTheClaim": [],
+    "pv": {
+     "claimUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+     "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "fsType": "ext4",
+     "image": "csi-vol-1e64aa21-12ef-4b1c-a61f-3e219729115c",
+     "name": "pvc-be5549db-33bc-4e32-af48-cae1f6758b4d",
+     "pool": "orbit-mr-rbd",
+     "reclaimPolicy": "Retain",
+     "uid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c"
+    },
+    "pvc": {
+     "accessModes": [
+      "ReadWriteOnce"
+     ],
+     "annotations": {
+      "orbit.dev/owner-id": "01a14f99-caba-748b-8c8b-97018f4ec00e",
+      "orbit.dev/runner-id": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+      "pv.kubernetes.io/bind-completed": "yes",
+      "pv.kubernetes.io/bound-by-controller": "yes",
+      "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+      "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+     },
+     "name": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+     "phase": "Bound",
+     "storageClassName": "runner-data",
+     "uid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+     "volumeName": "pvc-be5549db-33bc-4e32-af48-cae1f6758b4d"
+    },
+    "volumeAttachments": []
+   }
+  }
+ },
+ "seconds": 184.8,
+ "startedAt": "2026-10-18T15:21:14.333+00:00",
+ "step": "prepare"
+}
