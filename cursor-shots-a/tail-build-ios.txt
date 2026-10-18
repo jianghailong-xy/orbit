@@ -1,0 +1,300 @@
+    t =   612.10s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   612.96s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   613.77s Checking existence of `"Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button`
+    t =   614.44s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   615.13s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   616.17s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   617.44s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   618.21s Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   619.56s Tap "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   619.56s     Wait for io.orbitd.cursorprobe to idle
+    t =   619.57s     Find the "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   621.05s     Check for interrupting elements affecting "Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 2:36 AM" Button
+    t =   621.52s     Synthesize event
+    t =   621.89s     Wait for io.orbitd.cursorprobe to idle
+    t =   622.19s Waiting 20.0s for "Cursor CLI" NavigationBar to exist
+    t =   623.24s     Checking `Expect predicate `existsNoRetry == 1` for object "Cursor CLI" NavigationBar`
+    t =   623.24s         Checking existence of `"Cursor CLI" NavigationBar`
+    t =   623.58s Checking existence of `Any (First Match)`
+    t =   626.55s Checking existence of `Any (First Match)`
+    t =   627.57s Checking existence of `Any (First Match)`
+    t =   628.67s Checking existence of `Any (First Match)`
+    t =   629.63s Checking existence of `Any (First Match)`
+    t =   630.30s Checking existence of `Any (First Match)`
+    t =   631.27s Checking existence of `Any (First Match)`
+    t =   632.32s Checking existence of `Any (First Match)`
+    t =   633.40s Checking existence of `Any (First Match)`
+    t =   634.30s Checking existence of `Any (First Match)`
+    t =   635.19s Checking existence of `Any (First Match)`
+    t =   636.01s Checking existence of `Any (First Match)`
+    t =   636.84s Checking existence of `Any (First Match)`
+    t =   637.59s Checking existence of `Any (First Match)`
+    t =   638.52s Added attachment named 'ios2-c-cursor-engine-page-dark'
+    t =   638.53s Checking existence of `Any (First Match)`
+    t =   639.38s Find the Any (First Match)
+    t =   640.43s Find the "Orbit keeps Cursor CLI on the version it pins, 2026.10.14-941492e. Sign-ins live on this machine — a session spends that account’s Cursor plan." StaticText
+    t =   641.08s Find the "Orbit keeps Cursor CLI on the version it pins, 2026.10.14-941492e. Sign-ins live on this machine — a session spends that account’s Cursor plan." StaticText
+    t =   642.25s Added attachment named 'ios2-c2-cursor-engine-page-footer-dark'
+    t =   642.25s Requesting snapshot of accessibility hierarchy for app with pid 34063
+    t =   643.59s Requesting snapshot of accessibility hierarchy for app with pid 34063
+    t =   644.03s Terminate io.orbitd.cursorprobe:34063
+    t =   645.18s Open io.orbitd.cursorprobe
+    t =   645.18s     Launch io.orbitd.cursorprobe
+2026-10-18 22:36:50.714 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:36:50.715 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   648.79s         Setting up automation session
+    t =   652.64s         Wait for io.orbitd.cursorprobe to idle
+    t =   657.77s Checking existence of `Any (First Match)`
+    t =   659.85s Checking existence of `Any (First Match)`
+    t =   661.17s Checking existence of `Any (First Match)`
+    t =   664.55s Checking existence of `Any (First Match)`
+    t =   668.66s Waiting 30.0s for "build-box" NavigationBar to exist
+    t =   669.70s     Checking `Expect predicate `existsNoRetry == 1` for object "build-box" NavigationBar`
+    t =   669.70s         Checking existence of `"build-box" NavigationBar`
+    t =   672.04s Checking existence of `Any (First Match)`
+    t =   673.18s Find the Any (First Match)
+    t =   674.24s Find the "Cursor CLI, Not installed" Button
+    t =   674.72s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   675.46s Find the "Cursor CLI, Not installed" Button
+    t =   676.51s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   676.51s     Wait for io.orbitd.cursorprobe to idle
+    t =   676.51s     Find the Window (First Match)
+    t =   676.53s     Check for interrupting elements affecting Window
+    t =   676.73s     Synthesize event
+    t =   676.73s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   676.79s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   676.84s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   676.90s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   676.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   678.48s     Wait for io.orbitd.cursorprobe to idle
+    t =   679.51s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   680.30s Find the "Cursor CLI, Not installed" Button
+    t =   680.99s Find the "Cursor CLI, Not installed" Button
+    t =   681.68s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   682.48s Find the "Cursor CLI, Not installed" Button
+    t =   683.31s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   683.31s     Wait for io.orbitd.cursorprobe to idle
+    t =   683.31s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   683.33s     Check for interrupting elements affecting Window
+    t =   683.57s     Synthesize event
+    t =   683.57s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   683.60s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   683.74s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   683.76s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   683.79s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   685.27s     Wait for io.orbitd.cursorprobe to idle
+    t =   686.41s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   687.03s Find the "Cursor CLI, Not installed" Button
+    t =   687.79s Find the "Cursor CLI, Not installed" Button
+    t =   688.51s Find the "Cursor CLI, Not installed" Button
+    t =   689.21s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   689.85s Find the "Cursor CLI, Not installed" Button
+    t =   690.61s Find the "Cursor CLI, Not installed" Button
+    t =   691.31s Find the "Cursor CLI, Not installed" Button
+    t =   692.05s Find the "Cursor CLI, Not installed" Button
+    t =   692.79s Find the "Cursor CLI, Not installed" Button
+    t =   693.68s Checking existence of `Any (First Match)`
+    t =   694.36s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   695.45s Checking existence of `"Cursor CLI, Not installed" Button`
+    t =   696.44s Find the "Cursor CLI, Not installed" Button
+    t =   697.67s Added attachment named 'ios2-d-state-not-installed-dark'
+    t =   697.92s Added attachment named 'ios2-d-state-not-installed-page-dark'
+    t =   697.92s Requesting snapshot of accessibility hierarchy for app with pid 40625
+    t =   699.32s Requesting snapshot of accessibility hierarchy for app with pid 40625
+    t =   699.69s Tap "Cursor CLI, Not installed" Button
+    t =   699.69s     Wait for io.orbitd.cursorprobe to idle
+    t =   699.82s     Find the "Cursor CLI, Not installed" Button
+    t =   700.88s     Check for interrupting elements affecting "Cursor CLI, Not installed" Button
+    t =   701.19s     Synthesize event
+    t =   701.56s     Wait for io.orbitd.cursorprobe to idle
+    t =   701.97s Waiting 10.0s for "Cursor CLI" NavigationBar to exist
+    t =   702.99s     Checking `Expect predicate `existsNoRetry == 1` for object "Cursor CLI" NavigationBar`
+    t =   702.99s         Checking existence of `"Cursor CLI" NavigationBar`
+    t =   704.82s Checking existence of `Any (First Match)`
+    t =   705.88s Added attachment named 'ios2-d-state-not-installed-engine-page-dark'
+    t =   705.89s Terminate io.orbitd.cursorprobe:40625
+    t =   707.00s Open io.orbitd.cursorprobe
+    t =   707.00s     Launch io.orbitd.cursorprobe
+2026-10-18 22:37:51.597 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:37:51.597 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   707.95s         Setting up automation session
+    t =   710.14s         Wait for io.orbitd.cursorprobe to idle
+    t =   712.54s Checking existence of `Any (First Match)`
+    t =   714.03s Checking existence of `Any (First Match)`
+    t =   716.89s Checking existence of `Any (First Match)`
+    t =   721.14s Waiting 30.0s for "lab" NavigationBar to exist
+    t =   722.19s     Checking `Expect predicate `existsNoRetry == 1` for object "lab" NavigationBar`
+    t =   722.19s         Checking existence of `"lab" NavigationBar`
+    t =   724.40s Checking existence of `Any (First Match)`
+    t =   724.84s Find the Any (First Match)
+    t =   725.19s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   725.54s Checking existence of `"Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button`
+    t =   725.91s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   726.32s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   726.32s     Wait for io.orbitd.cursorprobe to idle
+    t =   726.32s     Find the Window (First Match)
+    t =   726.34s     Check for interrupting elements affecting Window
+    t =   726.46s     Synthesize event
+    t =   726.47s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   726.48s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   726.50s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   726.51s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   726.54s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   728.02s     Wait for io.orbitd.cursorprobe to idle
+    t =   729.06s Checking existence of `"Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button`
+    t =   729.68s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   730.59s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   731.50s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   732.38s Checking existence of `"Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button`
+    t =   732.86s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   733.33s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   734.16s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   734.82s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   736.01s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   737.19s Checking existence of `Any (First Match)`
+    t =   737.98s Checking existence of `"Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button`
+    t =   738.87s Checking existence of `"Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button`
+    t =   739.78s Find the "Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" Button
+    t =   740.94s Added attachment named 'ios2-e-state-signed-out-dark'
+    t =   741.19s Added attachment named 'ios2-e-state-signed-out-page-dark'
+    t =   741.20s Requesting snapshot of accessibility hierarchy for app with pid 43317
+    t =   742.50s Requesting snapshot of accessibility hierarchy for app with pid 43317
+    t =   742.75s Terminate io.orbitd.cursorprobe:43317
+    t =   743.79s Open io.orbitd.cursorprobe
+    t =   743.79s     Launch io.orbitd.cursorprobe
+2026-10-18 22:38:28.399 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:38:28.399 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   745.47s         Setting up automation session
+    t =   747.40s         Wait for io.orbitd.cursorprobe to idle
+    t =   749.84s Checking existence of `Any (First Match)`
+    t =   751.83s Checking existence of `Any (First Match)`
+    t =   753.77s Checking existence of `Any (First Match)`
+    t =   757.52s Waiting 30.0s for "mac-studio" NavigationBar to exist
+    t =   758.57s     Checking `Expect predicate `existsNoRetry == 1` for object "mac-studio" NavigationBar`
+    t =   758.57s         Checking existence of `"mac-studio" NavigationBar`
+    t =   760.95s Checking existence of `Any (First Match)`
+    t =   761.52s Find the Any (First Match)
+    t =   762.16s Find the "Cursor CLI" StaticText
+    t =   762.79s Checking existence of `"Cursor CLI" StaticText`
+    t =   763.51s Find the "Cursor CLI" StaticText
+    t =   765.09s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   765.09s     Wait for io.orbitd.cursorprobe to idle
+    t =   765.09s     Find the Window (First Match)
+    t =   765.16s     Check for interrupting elements affecting Window
+    t =   765.30s     Synthesize event
+    t =   765.30s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   765.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   765.34s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   765.36s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   765.38s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   766.84s     Wait for io.orbitd.cursorprobe to idle
+    t =   767.93s Checking existence of `"Cursor CLI" StaticText`
+    t =   768.52s Find the "Cursor CLI" StaticText
+    t =   769.81s Find the "Cursor CLI" StaticText
+    t =   770.72s Find the "Cursor CLI" StaticText
+    t =   771.39s Checking existence of `"Cursor CLI" StaticText`
+    t =   772.47s Find the "Cursor CLI" StaticText
+    t =   773.06s Find the "Cursor CLI" StaticText
+    t =   773.73s Find the "Cursor CLI" StaticText
+    t =   774.52s Find the "Cursor CLI" StaticText
+    t =   775.13s Find the "Cursor CLI" StaticText
+    t =   775.62s Checking existence of `Any (First Match)`
+    t =   775.94s Checking existence of `"Cursor CLI" StaticText`
+    t =   776.26s Checking existence of `"Cursor CLI" StaticText`
+    t =   776.58s Find the "Cursor CLI" StaticText
+    t =   776.93s Added attachment named 'ios2-f-state-update-runner-dark'
+    t =   777.12s Added attachment named 'ios2-f-state-update-runner-page-dark'
+    t =   777.12s Requesting snapshot of accessibility hierarchy for app with pid 44664
+    t =   777.97s Requesting snapshot of accessibility hierarchy for app with pid 44664
+    t =   778.17s Terminate io.orbitd.cursorprobe:44664
+    t =   779.30s Open io.orbitd.cursorprobe
+    t =   779.30s     Launch io.orbitd.cursorprobe
+2026-10-18 22:39:03.895 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:39:03.895 xcodebuild[4899:20509] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   780.49s         Setting up automation session
+    t =   782.20s         Wait for io.orbitd.cursorprobe to idle
+    t =   784.36s Checking existence of `Any (First Match)`
+    t =   787.06s Checking existence of `Any (First Match)`
+    t =   792.03s Waiting 30.0s for "gpu-box" NavigationBar to exist
+    t =   793.05s     Checking `Expect predicate `existsNoRetry == 1` for object "gpu-box" NavigationBar`
+    t =   793.05s         Checking existence of `"gpu-box" NavigationBar`
+    t =   795.29s Checking existence of `Any (First Match)`
+    t =   795.89s Find the Any (First Match)
+    t =   796.47s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   796.93s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   797.66s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   798.34s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   798.34s     Wait for io.orbitd.cursorprobe to idle
+    t =   798.34s     Find the Window (First Match)
+    t =   798.36s     Check for interrupting elements affecting Window
+    t =   798.57s     Synthesize event
+    t =   798.58s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   798.60s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   798.63s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   798.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   798.69s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   800.23s     Wait for io.orbitd.cursorprobe to idle
+    t =   801.26s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   802.05s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   802.88s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   803.83s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   804.49s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   805.16s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   805.17s     Wait for io.orbitd.cursorprobe to idle
+    t =   805.17s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   805.19s     Check for interrupting elements affecting Window
+    t =   805.42s     Synthesize event
+    t =   805.42s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   805.45s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   805.49s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   805.52s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   805.55s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   807.05s     Wait for io.orbitd.cursorprobe to idle
+    t =   808.08s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   809.21s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   809.87s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   810.82s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   811.75s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   812.73s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   813.37s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   814.14s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   814.94s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   815.50s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   816.21s Checking existence of `Any (First Match)`
+    t =   816.71s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   817.37s Checking existence of `"Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button`
+    t =   817.97s Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   818.68s Added attachment named 'ios2-g-state-unsupported-version-dark'
+    t =   819.07s Added attachment named 'ios2-g-state-unsupported-version-page-dark'
+    t =   819.08s Requesting snapshot of accessibility hierarchy for app with pid 46188
+    t =   821.12s Requesting snapshot of accessibility hierarchy for app with pid 46188
+    t =   821.62s Tap "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   821.62s     Wait for io.orbitd.cursorprobe to idle
+    t =   821.62s     Find the "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   822.23s     Check for interrupting elements affecting "Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." Button
+    t =   822.55s     Synthesize event
+    t =   822.94s     Wait for io.orbitd.cursorprobe to idle
+    t =   823.21s Waiting 10.0s for "Cursor CLI" NavigationBar to exist
+    t =   824.24s     Checking `Expect predicate `existsNoRetry == 1` for object "Cursor CLI" NavigationBar`
+    t =   824.24s         Checking existence of `"Cursor CLI" NavigationBar`
+    t =   825.99s Checking existence of `Any (First Match)`
+    t =   827.04s Added attachment named 'ios2-g-state-unsupported-version-engine-page-dark'
+    t =   827.04s Terminate io.orbitd.cursorprobe:46188
+    t =   831.22s Tear Down
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' passed (831.786 seconds).
+Test Suite 'CursorShotTests' passed at 2026-10-18 22:39:56.431.
+	 Executed 1 test, with 0 failures (0 unexpected) in 831.786 (831.849) seconds
+Test Suite 'CursorProbeUITests.xctest' passed at 2026-10-18 22:39:56.433.
+	 Executed 1 test, with 0 failures (0 unexpected) in 831.786 (831.851) seconds
+Test Suite 'Selected tests' passed at 2026-10-18 22:39:56.433.
+	 Executed 1 test, with 0 failures (0 unexpected) in 831.786 (831.864) seconds
+2026-10-18 22:40:35.180 xcodebuild[4899:20509] [MT] IDETestOperationsObserverDebug: 985.424 elapsed -- Testing started completed.
+2026-10-18 22:40:35.181 xcodebuild[4899:20509] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 22:40:35.181 xcodebuild[4899:20509] [MT] IDETestOperationsObserverDebug: 985.424 sec, +985.424 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.p7b-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

@@ -1,0 +1,8 @@
+Test Case '-[CursorProbeUITests.CursorShotTests test4Keys]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test4Keys]' passed (583.508 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test6ModesAndSwitch]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test6ModesAndSwitch]' passed (233.613 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 817.121 (817.126) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 817.121 (817.127) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 817.121 (817.128) seconds
+** TEST SUCCEEDED **

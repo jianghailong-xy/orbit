@@ -1,0 +1,6 @@
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' passed (831.786 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 831.786 (831.849) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 831.786 (831.851) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 831.786 (831.864) seconds
+** TEST SUCCEEDED **

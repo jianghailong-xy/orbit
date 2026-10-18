@@ -1,0 +1,300 @@
+    t =   118.17s         Checking existence of `"Model Auto" Button`
+    t =   118.28s Tap "Model Auto" Button
+    t =   118.28s     Wait for io.orbitd.cursorprobe to idle
+    t =   118.29s     Find the "Model Auto" Button
+    t =   118.38s     Check for interrupting elements affecting "Model Auto" Button
+    t =   118.52s     Synthesize event
+    t =   118.84s     Wait for io.orbitd.cursorprobe to idle
+    t =   119.22s Waiting 5.0s for Any (First Match) to exist
+    t =   120.29s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   120.29s         Checking existence of `Any (First Match)`
+    t =   123.27s Checking existence of `Any (First Match)`
+    t =   123.39s Checking existence of `Button (First Match)`
+    t =   123.53s Find the Button (First Match)
+    t =   123.72s Find the "Provider, Automatic" Button
+    t =   123.84s Find the "Provider, Automatic" Button
+    t =   123.99s Find the "Provider, Automatic" Button
+    t =   124.16s Find the "Provider, Automatic" Button
+    t =   124.39s Tap "Provider, Automatic" Button
+    t =   124.39s     Wait for io.orbitd.cursorprobe to idle
+    t =   124.39s     Find the "Provider, Automatic" Button
+    t =   124.63s     Check for interrupting elements affecting "Provider, Automatic" Button
+    t =   124.74s     Synthesize event
+    t =   125.13s     Wait for io.orbitd.cursorprobe to idle
+    t =   127.09s Waiting 4.0s for Any (First Match) to exist
+    t =   128.09s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   128.09s         Checking existence of `Any (First Match)`
+    t =   129.75s Checking existence of `Any (First Match)`
+    t =   129.85s Checking existence of `Any (First Match)`
+    t =   129.93s Checking existence of `Any (First Match)`
+    t =   130.01s Checking existence of `Any (First Match)`
+    t =   130.11s Checking existence of `Any (First Match)`
+    t =   130.42s Checking existence of `Any (First Match)`
+    t =   131.23s Added attachment named 'ios6-c-provider-draft-light'
+    t =   131.24s Requesting snapshot of accessibility hierarchy for app with pid 45988
+    t =   131.92s Requesting snapshot of accessibility hierarchy for app with pid 45988
+    t =   132.13s Terminate io.orbitd.cursorprobe:45988
+    t =   133.17s Open io.orbitd.cursorprobe
+    t =   133.17s     Launch io.orbitd.cursorprobe
+2026-10-18 22:37:29.689 xcodebuild[5778:23723] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:37:29.689 xcodebuild[5778:23723] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   135.26s         Setting up automation session
+    t =   137.32s         Wait for io.orbitd.cursorprobe to idle
+    t =   139.65s Checking existence of `Any (First Match)`
+    t =   143.69s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Accept Edits"'
+    t =   143.85s Checking existence of `Button (Element at index 0)`
+    t =   143.91s Find the Button (Element at index 0)
+    t =   144.00s Checking existence of `"Accept Edits" Button`
+    t =   144.08s Find the "Accept Edits" Button
+    t =   144.15s Find the "Accept Edits" Button
+    t =   144.22s Find the "Accept Edits" Button
+    t =   144.29s Find the "Accept Edits" Button
+    t =   144.37s Find the "Accept Edits" Button
+    t =   144.46s Tap "Accept Edits" Button
+    t =   144.46s     Wait for io.orbitd.cursorprobe to idle
+    t =   144.46s     Find the "Accept Edits" Button
+    t =   144.53s     Check for interrupting elements affecting "Accept Edits" Button
+    t =   144.60s     Synthesize event
+    t =   144.90s     Wait for io.orbitd.cursorprobe to idle
+    t =   146.28s Waiting 4.0s for Any (First Match) to exist
+    t =   147.31s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   147.31s         Checking existence of `Any (First Match)`
+    t =   148.92s Checking existence of `Any (First Match)`
+    t =   149.13s Checking existence of `Any (First Match)`
+    t =   149.28s Checking existence of `Any (First Match)`
+    t =   149.43s Checking existence of `Any (First Match)`
+    t =   149.58s Checking existence of `Any (First Match)`
+    t =   149.74s Checking existence of `Any (First Match)`
+    t =   150.29s Checking existence of `Button (First Match)`
+    t =   150.58s Find the Button (First Match)
+    t =   150.74s Find the "Default" Button
+    t =   150.99s Find the "Default" Button
+    t =   151.14s Find the "Default" Button
+    t =   151.34s Find the "Default" Button
+    t =   151.57s Checking existence of `"Default" Button`
+    t =   151.71s Find the "Default" Button
+    t =   151.85s Checking existence of `"Default" Button`
+    t =   152.02s Find the "Default" Button
+    t =   152.48s Added attachment named 'ios6-a-modes-dark'
+    t =   152.48s Requesting snapshot of accessibility hierarchy for app with pid 48128
+    t =   153.35s Requesting snapshot of accessibility hierarchy for app with pid 48128
+    t =   153.60s Terminate io.orbitd.cursorprobe:48128
+    t =   154.65s Open io.orbitd.cursorprobe
+    t =   154.65s     Launch io.orbitd.cursorprobe
+2026-10-18 22:37:51.110 xcodebuild[5778:23723] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:37:51.111 xcodebuild[5778:23723] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   155.90s         Setting up automation session
+    t =   157.49s         Wait for io.orbitd.cursorprobe to idle
+    t =   159.77s Checking existence of `Any (First Match)`
+    t =   163.82s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =   163.97s Checking existence of `Button (Element at index 0)`
+    t =   164.04s Find the Button (Element at index 0)
+    t =   164.14s Checking existence of `"Model Auto" Button`
+    t =   164.23s Find the "Model Auto" Button
+    t =   164.30s Find the "Model Auto" Button
+    t =   164.37s Find the "Model Auto" Button
+    t =   164.45s Find the "Model Auto" Button
+    t =   164.56s Find the "Model Auto" Button
+    t =   164.66s Waiting 20.0s for "Model Auto" Button to exist
+    t =   165.70s     Checking `Expect predicate `existsNoRetry == 1` for object "Model Auto" Button`
+    t =   165.71s         Checking existence of `"Model Auto" Button`
+    t =   165.83s Tap "Model Auto" Button
+    t =   165.83s     Wait for io.orbitd.cursorprobe to idle
+    t =   165.83s     Find the "Model Auto" Button
+    t =   165.91s     Check for interrupting elements affecting "Model Auto" Button
+    t =   165.99s     Synthesize event
+    t =   166.29s     Wait for io.orbitd.cursorprobe to idle
+    t =   166.62s Waiting 5.0s for Any (First Match) to exist
+    t =   167.69s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   167.69s         Checking existence of `Any (First Match)`
+    t =   169.49s Checking existence of `Any (First Match)`
+    t =   169.76s Checking existence of `Button (First Match)`
+    t =   170.07s Find the Button (First Match)
+    t =   170.25s Find the "Provider, Automatic" Button
+    t =   170.35s Find the "Provider, Automatic" Button
+    t =   170.44s Find the "Provider, Automatic" Button
+    t =   170.55s Find the "Provider, Automatic" Button
+    t =   170.65s Tap "Provider, Automatic" Button
+    t =   170.65s     Wait for io.orbitd.cursorprobe to idle
+    t =   170.65s     Find the "Provider, Automatic" Button
+    t =   170.75s     Check for interrupting elements affecting "Provider, Automatic" Button
+    t =   170.84s     Synthesize event
+    t =   171.13s     Wait for io.orbitd.cursorprobe to idle
+    t =   172.33s Waiting 4.0s for Any (First Match) to exist
+    t =   173.36s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   173.36s         Checking existence of `Any (First Match)`
+    t =   175.18s Checking existence of `Any (First Match)`
+    t =   175.31s Checking existence of `Any (First Match)`
+    t =   175.59s Checking existence of `Any (First Match)`
+    t =   175.71s Checking existence of `Any (First Match)`
+    t =   175.81s Checking existence of `Any (First Match)`
+    t =   175.93s Checking existence of `Any (First Match)`
+    t =   176.07s Checking existence of `Button (First Match)`
+    t =   176.26s Find the Button (First Match)
+    t =   176.42s Find the "Team" Button
+    t =   176.59s Find the "Team" Button
+    t =   176.74s Find the "Team" Button
+    t =   176.86s Find the "Team" Button
+    t =   176.98s Checking existence of `"Team" Button`
+    t =   177.07s Find the "Team" Button
+    t =   177.17s Checking existence of `"Team" Button`
+    t =   177.28s Find the "Team" Button
+    t =   177.39s Checking existence of `Button (First Match)`
+    t =   177.53s Find the Button (First Match)
+    t =   177.70s Find the "Default" Button
+    t =   178.04s Find the "Default" Button
+    t =   178.70s Find the "Default" Button
+    t =   178.91s Find the "Default" Button
+    t =   179.15s Checking existence of `"Default" Button`
+    t =   179.31s Find the "Default" Button
+    t =   179.45s Checking existence of `"Default" Button`
+    t =   179.58s Find the "Default" Button
+    t =   180.08s Added attachment named 'ios6-b-provider-blocked-dark'
+    t =   180.10s Requesting snapshot of accessibility hierarchy for app with pid 48903
+    t =   180.97s Requesting snapshot of accessibility hierarchy for app with pid 48903
+    t =   181.16s Checking existence of `Any (First Match)`
+    t =   181.33s Checking existence of `Button (First Match)`
+    t =   181.55s Find the Button (First Match)
+    t =   181.75s Find the "Start a new session to use one of these." Button
+    t =   181.93s Find the "Start a new session to use one of these." Button
+    t =   182.39s Find the "Start a new session to use one of these." Button
+    t =   183.05s Find the "Start a new session to use one of these." Button
+    t =   183.22s Terminate io.orbitd.cursorprobe:48903
+    t =   184.30s Open io.orbitd.cursorprobe
+    t =   184.30s     Launch io.orbitd.cursorprobe
+2026-10-18 22:38:20.761 xcodebuild[5778:23723] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 22:38:20.761 xcodebuild[5778:23723] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   185.94s         Setting up automation session
+    t =   190.93s         Wait for io.orbitd.cursorprobe to idle
+    t =   193.15s Checking existence of `Any (First Match)`
+    t =   197.16s Get number of matches for: Descendants matching type Keyboard
+    t =   197.35s Tap Window (First Match)[0.50, 0.20]
+    t =   197.35s     Wait for io.orbitd.cursorprobe to idle
+    t =   197.36s     Find the Window (First Match)
+    t =   197.39s     Check for interrupting elements affecting Window
+    t =   197.84s     Synthesize event
+    t =   197.84s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   197.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   198.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   198.49s     Wait for io.orbitd.cursorprobe to idle
+    t =   199.88s Get number of matches for: Descendants matching type Keyboard
+    t =   199.98s Get number of matches for: Descendants matching type Keyboard
+    t =   200.08s Get number of matches for: Descendants matching type Keyboard
+    t =   200.16s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =   200.25s Checking existence of `Button (Element at index 0)`
+    t =   200.32s Find the Button (Element at index 0)
+    t =   200.44s Checking existence of `"Engine: Claude Code. Switch" Button`
+    t =   200.54s Find the "Engine: Claude Code. Switch" Button
+    t =   200.62s Find the "Engine: Claude Code. Switch" Button
+    t =   200.68s Find the "Engine: Claude Code. Switch" Button
+    t =   200.75s Find the "Engine: Claude Code. Switch" Button
+    t =   200.83s Find the "Engine: Claude Code. Switch" Button
+    t =   200.93s Waiting 20.0s for "Engine: Claude Code. Switch" Button to exist
+    t =   201.95s     Checking `Expect predicate `existsNoRetry == 1` for object "Engine: Claude Code. Switch" Button`
+    t =   201.96s         Checking existence of `"Engine: Claude Code. Switch" Button`
+    t =   202.03s Tap "Engine: Claude Code. Switch" Button
+    t =   202.03s     Wait for io.orbitd.cursorprobe to idle
+    t =   202.04s     Find the "Engine: Claude Code. Switch" Button
+    t =   202.12s     Check for interrupting elements affecting "Engine: Claude Code. Switch" Button
+    t =   202.23s     Synthesize event
+    t =   202.59s     Wait for io.orbitd.cursorprobe to idle
+    t =   202.82s Waiting 15.0s for "Engine" NavigationBar to exist
+    t =   203.89s     Checking `Expect predicate `existsNoRetry == 1` for object "Engine" NavigationBar`
+    t =   203.89s         Checking existence of `"Engine" NavigationBar`
+    t =   205.36s Checking existence of `"Engine" NavigationBar`
+    t =   205.60s Press "Engine" NavigationBar[0.30, 0.50] for 0.1 seconds, then drag to "Engine" NavigationBar[0.30, 0.50] -> (0.0, -420.0) with velocity of 250.00 pixels per second, and then hold for 0.4 seconds 
+    t =   205.60s     Wait for io.orbitd.cursorprobe to idle
+    t =   205.60s     Find the "Engine" NavigationBar
+    t =   205.83s     Check for interrupting elements affecting "Engine" NavigationBar
+    t =   205.97s     Synthesize event
+    t =   205.97s         Find the "Engine" NavigationBar
+    t =   206.19s         Find the "Engine" NavigationBar
+    t =   206.35s         Find the "Engine" NavigationBar
+    t =   206.48s         Find the "Engine" NavigationBar
+    t =   206.59s         Find the "Engine" NavigationBar
+    t =   209.13s     Wait for io.orbitd.cursorprobe to idle
+    t =   211.01s Checking existence of `Button (First Match)`
+    t =   211.35s Find the Button (First Match)
+    t =   211.61s Find the "Cursor CLI, Auto" Button
+    t =   211.87s Find the "Cursor CLI, Auto" Button
+    t =   212.09s Find the "Cursor CLI, Auto" Button
+    t =   212.38s Find the "Cursor CLI, Auto" Button
+    t =   212.72s Checking existence of `"Cursor CLI, Auto" Button`
+    t =   212.99s Tap "Cursor CLI, Auto" Button
+    t =   212.99s     Wait for io.orbitd.cursorprobe to idle
+    t =   212.99s     Find the "Cursor CLI, Auto" Button
+    t =   213.26s     Check for interrupting elements affecting "Cursor CLI, Auto" Button
+    t =   213.35s     Synthesize event
+    t =   213.66s     Wait for io.orbitd.cursorprobe to idle
+    t =   214.18s Waiting 10.0s for Any (First Match) to exist
+    t =   215.22s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   215.22s         Checking existence of `Any (First Match)`
+    t =   216.83s Get number of matches for: Descendants matching type Keyboard
+    t =   216.91s Get number of matches for: Descendants matching type Keyboard
+    t =   216.96s Get number of matches for: Descendants matching type Keyboard
+    t =   217.07s Get number of matches for: Descendants matching type Keyboard
+    t =   217.12s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =   217.20s Checking existence of `Button (Element at index 0)`
+    t =   217.27s Find the Button (Element at index 0)
+    t =   217.38s Checking existence of `"Model Auto" Button`
+    t =   217.45s Find the "Model Auto" Button
+    t =   217.53s Find the "Model Auto" Button
+    t =   217.60s Find the "Model Auto" Button
+    t =   217.66s Find the "Model Auto" Button
+    t =   217.73s Find the "Model Auto" Button
+    t =   217.81s Waiting 20.0s for "Model Auto" Button to exist
+    t =   218.82s     Checking `Expect predicate `existsNoRetry == 1` for object "Model Auto" Button`
+    t =   218.82s         Checking existence of `"Model Auto" Button`
+    t =   218.88s Tap "Model Auto" Button
+    t =   218.88s     Wait for io.orbitd.cursorprobe to idle
+    t =   218.88s     Find the "Model Auto" Button
+    t =   218.94s     Check for interrupting elements affecting "Model Auto" Button
+    t =   219.01s     Synthesize event
+    t =   219.30s     Wait for io.orbitd.cursorprobe to idle
+    t =   219.53s Waiting 5.0s for Any (First Match) to exist
+    t =   220.61s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   220.61s         Checking existence of `Any (First Match)`
+    t =   223.20s Checking existence of `Any (First Match)`
+    t =   223.38s Checking existence of `Button (First Match)`
+    t =   223.78s Find the Button (First Match)
+    t =   223.94s Find the "Provider, Automatic" Button
+    t =   224.08s Find the "Provider, Automatic" Button
+    t =   224.29s Find the "Provider, Automatic" Button
+    t =   224.50s Find the "Provider, Automatic" Button
+    t =   224.70s Tap "Provider, Automatic" Button
+    t =   224.71s     Wait for io.orbitd.cursorprobe to idle
+    t =   224.71s     Find the "Provider, Automatic" Button
+    t =   224.94s     Check for interrupting elements affecting "Provider, Automatic" Button
+    t =   225.08s     Synthesize event
+    t =   225.40s     Wait for io.orbitd.cursorprobe to idle
+    t =   226.76s Waiting 4.0s for Any (First Match) to exist
+    t =   227.77s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   227.77s         Checking existence of `Any (First Match)`
+    t =   229.47s Checking existence of `Any (First Match)`
+    t =   229.61s Checking existence of `Any (First Match)`
+    t =   229.80s Checking existence of `Any (First Match)`
+    t =   229.94s Checking existence of `Any (First Match)`
+    t =   230.16s Checking existence of `Any (First Match)`
+    t =   230.34s Checking existence of `Any (First Match)`
+    t =   231.17s Added attachment named 'ios6-c-provider-draft-dark'
+    t =   231.19s Requesting snapshot of accessibility hierarchy for app with pid 50423
+    t =   231.85s Requesting snapshot of accessibility hierarchy for app with pid 50423
+    t =   231.96s Terminate io.orbitd.cursorprobe:50423
+    t =   233.04s Tear Down
+Test Case '-[CursorProbeUITests.CursorShotTests test6ModesAndSwitch]' passed (233.613 seconds).
+Test Suite 'CursorShotTests' passed at 2026-10-18 22:39:10.073.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 817.121 (817.126) seconds
+Test Suite 'CursorProbeUITests.xctest' passed at 2026-10-18 22:39:10.074.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 817.121 (817.127) seconds
+Test Suite 'Selected tests' passed at 2026-10-18 22:39:10.074.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 817.121 (817.128) seconds
+2026-10-18 22:39:38.151 xcodebuild[5778:23723] [MT] IDETestOperationsObserverDebug: 915.939 elapsed -- Testing started completed.
+2026-10-18 22:39:38.151 xcodebuild[5778:23723] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 22:39:38.151 xcodebuild[5778:23723] [MT] IDETestOperationsObserverDebug: 915.939 sec, +915.939 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.p7b-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
