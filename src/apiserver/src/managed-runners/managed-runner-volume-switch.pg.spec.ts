@@ -18,7 +18,7 @@
  *       runner's name, the administrator's switch is answered with the new identity, leaves the mapping SLEEPING and
  *       writes one audit row; the wake that was waiting starts the reserved generation on the new claim: the same
  *       runner, a Pod admitted for the new claim's UID, no claim created and the old PV untouched. The same request
- *       again is answered as it was, with no second audit row;
+ *       again, even while a manager pass holds the mapping, is answered as it was, with no second audit row;
  *   (2) the single writer, unchanged after a switch: another Pod on the new claim is refused by the guard, the next
  *       sleep's stop proof names the new claim and handle, a Pod gone without a report still fences, and a fenced
  *       runner is not switched;
@@ -365,11 +365,14 @@ test('managed runner volume switch: an administrator puts a restored volume back
     );
     assert.ok(logs.some((line) => line.includes(`data volume switched by administrator ${admin} from PVC ${failed.pvcUid}`)));
 
-    // The same request again: answered as it stands, nothing written.
+    // The same request again, while a manager pass holds the mapping (as the wake its switch kicked does): answered as
+    // it stands, nothing written.
+    await db.managedRunner.update({ where: { id: failed.id }, data: { leaseHolder: 'the-wake-it-kicked', leaseExpiresAt: new Date(w.now().getTime() + 60_000) } });
     const again = await send(asAdmin, failed.runnerId, body);
     assert.equal(again.status, 200, again.text);
     assert.deepEqual([again.json.replayed, again.json.revision, again.json.to.pvcUid, again.json.from], [true, failed.revision + 1, to.pvcUid, null]);
     assert.equal((await audits(failed)).length, 1, 'one audit row');
+    await db.managedRunner.update({ where: { id: failed.id }, data: { leaseHolder: null, leaseExpiresAt: null } });
 
     // The wake that was waiting: the reserved generation on the new claim, the same runner.
     assert.equal((await w.drive(ownerId)).at(-1), 'READY');

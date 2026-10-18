@@ -1401,6 +1401,12 @@ export class ManagedRunnerManager {
     if (!this.backend.readReplacement || !this.backend.recordedVolumeHolders) {
       throw new ManagedVolumeSwitchRefused('NOT_APPLICABLE', `the ${this.backend.name} backend has no volume switch`);
     }
+    // The same request again, already applied: answered as it stands, from a read. Its switch kicked the manager, whose
+    // pass may hold the lease right now; a retry of an answer that was lost must not be refused for that.
+    const current = await this.prisma.managedRunner.findUnique({ where: { id: request.mappingId } });
+    if (current && current.lastRequestKey === request.idempotencyKey && current.pvcUid === request.volumeUid) {
+      return { replayed: true, mapping: current, from: null, to: recordedVolume(current)!, at: null };
+    }
     const holder = `${this.holder}/volume-switch/${randomUUID()}`;
     const leased = await this.acquireLease(request.mappingId, holder);
     if (!leased) {
@@ -1426,7 +1432,7 @@ export class ManagedRunnerManager {
 
   private async switchLeased(mapping: ManagedRunner, request: ManagedVolumeSwitchRequest, holder: string): Promise<ManagedVolumeSwitchOutcome> {
     const refuse = (check: VolumeSwitchCheck, detail: string) => new ManagedVolumeSwitchRefused(check, detail);
-    // The same request again, already applied: answered as it stands.
+    // Applied by another request with this key between the read in `switchVolume` and the lease.
     if (mapping.lastRequestKey === request.idempotencyKey && mapping.pvcUid === request.volumeUid) {
       return { replayed: true, mapping, from: null, to: recordedVolume(mapping)!, at: null };
     }

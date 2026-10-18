@@ -310,14 +310,25 @@ def switch(ctx, step):
     restored = ctx['restore']
     path = switch_path(m['runner_id'])
     body = lambda **change: {'idempotencyKey': str(uuid.uuid4()), 'revision': m['revision'], 'volumeUid': restored['pvcUid'], 'reason': REASON, **change}
+    busy = []
+
+    def ask(request, token):
+        # MAPPING_BUSY says a manager pass is on the runner right now (the failed runner is looked at every poll): asked again.
+        for _ in range(40):
+            status, answer = ml.http('POST', path, request, token=token)
+            if not (status == 409 and isinstance(answer, dict) and answer.get('check') == 'MAPPING_BUSY'):
+                return status, answer
+            busy.append(now())
+            time.sleep(0.5)
+        return status, answer
     refusals = {}
     status, answer = ml.http('POST', path, body(), token=al.token(OWNER))
     refusals['member'] = {'status': status, 'answer': answer}
     step.check('a member is refused 403', status == 403, status)
-    status, answer = ml.http('POST', path, body(volumeUid=str(uuid.uuid4())), token=admin_token())
+    status, answer = ask(body(volumeUid=str(uuid.uuid4())), admin_token())
     refusals['anotherUid'] = {'status': status, 'answer': answer}
     step.check('another UID than the one verified is refused, VOLUME_NOT_VERIFIED', status == 409 and answer.get('check') == 'VOLUME_NOT_VERIFIED', answer)
-    status, answer = ml.http('POST', path, body(revision=m['revision'] - 1), token=admin_token())
+    status, answer = ask(body(revision=m['revision'] - 1), admin_token())
     refusals['staleRevision'] = {'status': status, 'answer': answer}
     step.check('a stale revision is refused with the current one', status == 409 and answer.get('code') == 'MANAGED_RUNNER_REVISION_CONFLICT'
                and answer.get('revision') == m['revision'], answer)
@@ -326,8 +337,8 @@ def switch(ctx, step):
                == {key: m[key] for key in ('revision', 'pvc_uid', 'pv_uid', 'volume_handle', 'management_state')})
     step.check('no audit row yet', not wl.sql_json(f"select id from activity where type = {wl.quote(SWITCHED)}"))
     at = now()
-    request = body()
-    status, answer = ml.http('POST', path, request, token=admin_token())
+    request = body(revision=mapping(OWNER)['revision'])
+    status, answer = ask(request, admin_token())
     step.check('the administrator\'s switch is answered 200', status == 200, {'status': status, 'answer': answer})
     ident = ctx['backup']['identity']
     step.check('answered with the new identity, asleep, the waiting demand kept', answer.get('managementState') == 'SLEEPING'
@@ -339,12 +350,12 @@ def switch(ctx, step):
     step.check('one audit row: the administrator, when, from which volume to which', len(audit) == 1 and audit[0]['actor_id'] == root_uuid
                and audit[0]['payload']['from']['pvcUid'] == ident['pvcUid'] and audit[0]['payload']['to']['pvcUid'] == restored['pvcUid']
                and audit[0]['payload']['mappingId'] == m['id'], audit)
-    replay = ml.http('POST', path, request, token=admin_token())
+    replay = ml.http('POST', path, request, token=admin_token())  # at once, while the wake it kicked runs: not asked again
     step.check('the same request again is answered as it stands, with no second audit row', replay[0] == 200 and (replay[1] or {}).get('replayed') is True
                and len(wl.sql_json(f"select id from activity where type = {wl.quote(SWITCHED)}")) == 1, replay)
     ctx['switch'] = {'at': at, 'answer': answer}
     return {'refusals': refusals, 'at': at, 'request': {key: request[key] for key in ('revision', 'volumeUid', 'reason')}, 'answer': answer, 'audit': audit,
-            'replay': replay[1]}
+            'replay': replay[1], 'mappingBusyAnswers': busy}
 
 
 # ---- the wake on the restored claim ---------------------------------------------------------------------------
@@ -359,9 +370,11 @@ def wake_on_restored(ctx, step):
                after['runnerId'] == before['runnerId'] and after['workspaceId'] == before['workspaceId'] and after['pvcName'] == before['pvcName']
                and after['pvcUid'] == restored['pvcUid'] and after['pvUid'] == restored['pvUid'] and after['volumeHandle'] == restored['volumeHandle']
                and after['rbdImage'] == restored['image'], {'before': before, 'after': after})
-    step.check('the generation the switch left reserved, later than the one backed up',
-               after['generation'] == ctx['switch']['answer']['generation'] and after['generation'] > before['generation'],
-               {'backedUp': before['generation'], 'reserved': ctx['switch']['answer']['generation'], 'woken': after['generation']})
+    # Asleep, the mapping already names the next generation; the volume names the last one that ran on it.
+    ran = (ctx['backup']['snapshot'].get('managedInstance') or {}).get('generation')
+    step.check('the generation the switch left reserved, later than the last one that ran on the backed-up volume',
+               after['generation'] == ctx['switch']['answer']['generation'] and isinstance(ran, int) and after['generation'] > ran,
+               {'ranOnTheBackedUpVolume': ran, 'reserved': ctx['switch']['answer']['generation'], 'woken': after['generation']})
     pod = kget('pod', f"mr-{after['runnerId']}")
     claims = [v['persistentVolumeClaim']['claimName'] for v in pod['spec']['volumes'] if v.get('persistentVolumeClaim')]
     step.check('its Pod is the runner\'s fixed one, admitted for the restored claim\'s UID', pod['metadata']['uid'] == after['podUid']
