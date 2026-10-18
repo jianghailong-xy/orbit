@@ -1,0 +1,31 @@
+==> replay ready on 127.0.0.1:8765 (pid 1966, after 2s)
+==> mac
+Test Case '-[T07MacProbeUITests.ReplayTests test21RootOnHome]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test21RootOnHome]' passed (33.242 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test22NiaNewAccountHome]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test22NiaNewAccountHome]' passed (28.582 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 61.824 (61.826) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 61.824 (61.827) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 61.824 (61.828) seconds
+** TEST SUCCEEDED **
+.t07-probe/run.sh: line 89:  1966 Terminated: 15          python3 -u replay.py 8765 "$1" scenes > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.t07-probe/shots/ios:
+total 0
+drwxr-xr-x  2 runner  staff   64 Oct 18 07:10 .
+drwxr-xr-x  4 runner  staff  128 Oct 18 07:10 ..
+
+/Users/runner/work/orbit/orbit/.t07-probe/shots/mac:
+total 1616
+drwxr-xr-x  13 runner  staff     416 Oct 18 07:15 .
+drwxr-xr-x   4 runner  staff     128 Oct 18 07:10 ..
+-rw-r--r--   1 runner  staff   74201 Oct 18 07:15 21-on-launch-landing.png
+-rw-r--r--   1 runner  staff   69927 Oct 18 07:15 22-new-account-launch-landing.png
+drwxr-xr-x   9 runner  staff     288 Oct 18 07:15 attachments
+-rw-r--r--   1 runner  staff    3718 Oct 18 07:15 replay.log
+-rw-r--r--   1 runner  staff      53 Oct 18 07:10 replay.log.out
+-rw-r--r--   1 runner  staff     211 Oct 18 07:15 ReplayTeststest21RootOnHome-notes
+-rw-r--r--   1 runner  staff     242 Oct 18 07:15 ReplayTeststest22NiaNewAccountHome-notes
+-rw-r--r--   1 runner  staff      94 Oct 18 07:15 verdict-21-root-on-home
+-rw-r--r--   1 runner  staff     102 Oct 18 07:15 verdict-22-nia-new-account-home
+-rw-r--r--   1 runner  staff       0 Oct 18 07:15 violations.txt
+-rw-r--r--   1 runner  staff  647636 Oct 18 07:15 xcodebuild-mac.log

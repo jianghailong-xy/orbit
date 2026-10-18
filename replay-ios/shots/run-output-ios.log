@@ -1,0 +1,37 @@
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+==> replay ready on 127.0.0.1:8765 (pid 3307, after 2s)
+==> ios
+Test Case '-[T07ProbeUITests.ReplayTests test21RootOnHome]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test21RootOnHome]' passed (84.920 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test22NiaNewAccountHome]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test22NiaNewAccountHome]' passed (20.346 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 105.266 (105.272) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 105.266 (105.273) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 105.266 (105.277) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/orbit/orbit/.t07-probe/shots/ios:
+total 1824
+drwxr-xr-x  18 runner  staff     576 Oct 18 07:22 .
+drwxr-xr-x   4 runner  staff     128 Oct 18 07:10 ..
+-rw-r--r--   1 runner  staff  113869 Oct 18 07:21 21-on-launch-landing.png
+-rw-r--r--   1 runner  staff  112714 Oct 18 07:21 22-new-account-launch-landing.png
+drwxr-xr-x  11 runner  staff     352 Oct 18 07:22 attachments
+-rw-r--r--   1 runner  staff     262 Oct 18 07:22 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff    6999 Oct 18 07:21 replay.log
+-rw-r--r--   1 runner  staff      53 Oct 18 07:13 replay.log.out
+-rw-r--r--   1 runner  staff     152 Oct 18 07:22 ReplayTeststest21RootOnHome-notes
+-rw-r--r--@  1 runner  staff     152 Oct 18 07:21 ReplayTeststest21RootOnHome-notes.txt
+-rw-r--r--   1 runner  staff     175 Oct 18 07:22 ReplayTeststest22NiaNewAccountHome-notes
+-rw-r--r--@  1 runner  staff     175 Oct 18 07:21 ReplayTeststest22NiaNewAccountHome-notes.txt
+-rw-r--r--   1 runner  staff      94 Oct 18 07:22 verdict-21-root-on-home
+-rw-r--r--@  1 runner  staff      94 Oct 18 07:21 verdict-21-root-on-home.json
+-rw-r--r--   1 runner  staff     102 Oct 18 07:22 verdict-22-nia-new-account-home
+-rw-r--r--@  1 runner  staff     102 Oct 18 07:21 verdict-22-nia-new-account-home.json
+-rw-r--r--   1 runner  staff       0 Oct 18 07:22 violations.txt
+-rw-r--r--   1 runner  staff  652272 Oct 18 07:22 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.t07-probe/shots/mac:
+total 0
+drwxr-xr-x  2 runner  staff   64 Oct 18 07:10 .
+drwxr-xr-x  4 runner  staff  128 Oct 18 07:10 ..
+.t07-probe/run.sh: line 92:  3307 Terminated: 15          python3 -u replay.py 8765 "$1" scenes > "$1.out" 2>&1

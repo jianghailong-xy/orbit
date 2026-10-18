@@ -1,0 +1,300 @@
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/PlugIns/T07MacProbeUITests.xctest (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Intermediates.noindex/T07Probe.build/Debug/T07MacProbeUITests.build/T07MacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/PlugIns/T07MacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/PlugIns/T07MacProbeUITests.xctest (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/PlugIns/T07MacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Intermediates.noindex/T07Probe.build/Debug/T07MacProbeUITests.build/T07MacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app: replacing existing signature
+
+Touch /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/PlugIns/T07MacProbeUITests.xctest (in target 'T07MacProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.t07-probe/.dd-mac/Build/Products/Debug/T07MacProbeUITests-Runner.app/Contents/PlugIns/T07MacProbeUITests.xctest
+
+2026-10-18 07:14:19.194179+0000 T07MacProbeUITests-Runner[8760:27588] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-18 07:14:20.749.
+Test Suite 'T07MacProbeUITests.xctest' started at 2026-10-18 07:14:20.750.
+Test Suite 'ReplayTests' started at 2026-10-18 07:14:20.750.
+Test Case '-[T07MacProbeUITests.ReplayTests test21RootOnHome]' started.
+    t =     0.00s Start Test at 2026-10-18 07:14:20.751
+    t =     1.06s Set Up
+    t =     1.38s Open io.orbitd.t07macprobe
+    t =     1.38s     Launch io.orbitd.t07macprobe
+2026-10-18 07:14:22.926 xcodebuild[1973:9230] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 07:14:22.926 xcodebuild[1973:9230] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     4.10s         Wait for accessibility to load
+    t =     4.63s         Setting up automation session
+    t =     4.75s         Wait for io.orbitd.t07macprobe to idle
+    t =     4.76s Waiting 20.0s for Window (First Match) to exist
+    t =     5.80s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     5.80s         Checking existence of `Window (First Match)`
+    t =     6.11s         Capturing element debug description
+    t =     6.78s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     6.78s         Checking existence of `Window (First Match)`
+    t =     6.86s         Capturing element debug description
+    t =     7.78s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     7.78s         Checking existence of `Window (First Match)`
+    t =     7.82s         Capturing element debug description
+    t =     8.77s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     8.77s         Checking existence of `Window (First Match)`
+    t =     8.82s         Capturing element debug description
+    t =     9.77s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     9.77s         Checking existence of `Window (First Match)`
+    t =     9.80s         Capturing element debug description
+    t =    10.80s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    10.80s         Checking existence of `Window (First Match)`
+    t =    10.83s         Capturing element debug description
+    t =    11.83s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    11.83s         Checking existence of `Window (First Match)`
+    t =    11.86s         Capturing element debug description
+    t =    12.77s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    12.77s         Checking existence of `Window (First Match)`
+    t =    12.79s         Capturing element debug description
+    t =    13.80s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    13.80s         Checking existence of `Window (First Match)`
+    t =    13.84s         Capturing element debug description
+    t =    14.77s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    14.77s         Checking existence of `Window (First Match)`
+    t =    14.80s         Capturing element debug description
+    t =    15.82s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    15.82s         Checking existence of `Window (First Match)`
+    t =    15.84s         Capturing element debug description
+    t =    16.78s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    16.78s         Checking existence of `Window (First Match)`
+    t =    16.81s         Capturing element debug description
+    t =    17.86s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    17.86s         Checking existence of `Window (First Match)`
+    t =    17.91s         Capturing element debug description
+    t =    18.83s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    18.83s         Checking existence of `Window (First Match)`
+    t =    18.85s         Capturing element debug description
+    t =    19.78s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    19.78s         Checking existence of `Window (First Match)`
+    t =    19.82s         Capturing element debug description
+    t =    20.83s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    20.83s         Checking existence of `Window (First Match)`
+    t =    20.85s         Capturing element debug description
+    t =    21.77s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    21.77s         Checking existence of `Window (First Match)`
+    t =    21.80s         Capturing element debug description
+    t =    22.82s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    22.82s         Checking existence of `Window (First Match)`
+    t =    22.86s         Capturing element debug description
+    t =    23.78s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    23.79s         Checking existence of `Window (First Match)`
+    t =    23.83s         Capturing element debug description
+    t =    24.77s     Checking existence of `Window (First Match)`
+    t =    24.82s Collecting debug information to assist test failure triage
+    t =    24.82s     Requesting snapshot of accessibility hierarchy for app with pid 8939
+    t =    24.89s Type 'n' key with modifiers '⌘' (0x10)
+    t =    24.89s     Wait for io.orbitd.t07macprobe to idle
+    t =    24.89s     Find the Target Application 'io.orbitd.t07macprobe'
+    t =    24.91s     Check for interrupting elements affecting "T07MacProbe" Application
+    t =    24.91s     Synthesize event
+    t =    26.69s     Wait for io.orbitd.t07macprobe to idle
+    t =    26.71s Checking existence of `Any (First Match)`
+    t =    27.00s Checking existence of `StaticText (First Match)`
+    t =    27.09s Checking existence of `Any (First Match)`
+    t =    27.23s Checking existence of `StaticText (First Match)`
+    t =    27.57s Checking existence of `TextView (First Match)`
+    t =    27.67s Checking existence of `Any (First Match)`
+    t =    27.75s Checking existence of `StaticText (First Match)`
+    t =    27.84s Checking existence of `TextView (First Match)`
+    t =    30.06s Checking existence of `Window (First Match)`
+    t =    30.06s Checking existence of `Window (First Match)`
+    t =    30.07s Find the Window (First Match)
+    t =    30.15s Added attachment named '21-on-launch-landing'
+    t =    32.16s Added attachment named 'verdict-21-root-on-home.json'
+    t =    32.16s Terminate io.orbitd.t07macprobe:8939
+    t =    33.18s Tear Down
+    t =    33.18s     Added attachment named 'ReplayTeststest21RootOnHome-notes.txt'
+Test Case '-[T07MacProbeUITests.ReplayTests test21RootOnHome]' passed (33.242 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test22NiaNewAccountHome]' started.
+    t =     0.00s Start Test at 2026-10-18 07:14:53.993
+    t =     0.16s Set Up
+    t =     0.18s Open io.orbitd.t07macprobe
+    t =     0.18s     Launch io.orbitd.t07macprobe
+2026-10-18 07:14:54.193 xcodebuild[1973:9230] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 07:14:54.193 xcodebuild[1973:9230] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.07s         Wait for accessibility to load
+    t =     1.20s         Setting up automation session
+    t =     1.23s         Wait for io.orbitd.t07macprobe to idle
+    t =     1.24s Waiting 20.0s for Window (First Match) to exist
+    t =     2.27s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.27s         Checking existence of `Window (First Match)`
+    t =     2.38s         Capturing element debug description
+    t =     3.31s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     3.32s         Checking existence of `Window (First Match)`
+    t =     3.34s         Capturing element debug description
+    t =     4.28s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     4.28s         Checking existence of `Window (First Match)`
+    t =     4.32s         Capturing element debug description
+    t =     5.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     5.25s         Checking existence of `Window (First Match)`
+    t =     5.28s         Capturing element debug description
+    t =     6.31s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     6.31s         Checking existence of `Window (First Match)`
+    t =     6.35s         Capturing element debug description
+    t =     7.28s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     7.28s         Checking existence of `Window (First Match)`
+    t =     7.31s         Capturing element debug description
+    t =     8.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     8.25s         Checking existence of `Window (First Match)`
+    t =     8.28s         Capturing element debug description
+    t =     9.29s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     9.29s         Checking existence of `Window (First Match)`
+    t =     9.32s         Capturing element debug description
+    t =    10.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    10.25s         Checking existence of `Window (First Match)`
+    t =    10.27s         Capturing element debug description
+    t =    11.31s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    11.31s         Checking existence of `Window (First Match)`
+    t =    11.35s         Capturing element debug description
+    t =    12.28s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    12.28s         Checking existence of `Window (First Match)`
+    t =    12.30s         Capturing element debug description
+    t =    13.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    13.26s         Checking existence of `Window (First Match)`
+    t =    13.30s         Capturing element debug description
+    t =    14.32s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    14.32s         Checking existence of `Window (First Match)`
+    t =    14.36s         Capturing element debug description
+    t =    15.29s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    15.29s         Checking existence of `Window (First Match)`
+    t =    15.31s         Capturing element debug description
+    t =    16.30s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    16.30s         Checking existence of `Window (First Match)`
+    t =    16.34s         Capturing element debug description
+    t =    17.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    17.25s         Checking existence of `Window (First Match)`
+    t =    17.28s         Capturing element debug description
+    t =    18.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    18.25s         Checking existence of `Window (First Match)`
+    t =    18.28s         Capturing element debug description
+    t =    19.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    19.25s         Checking existence of `Window (First Match)`
+    t =    19.29s         Capturing element debug description
+    t =    20.30s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    20.30s         Checking existence of `Window (First Match)`
+    t =    20.34s         Capturing element debug description
+    t =    21.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    21.25s         Checking existence of `Window (First Match)`
+    t =    21.29s         Capturing element debug description
+    t =    21.29s     Checking existence of `Window (First Match)`
+    t =    21.35s Collecting debug information to assist test failure triage
+    t =    21.35s     Requesting snapshot of accessibility hierarchy for app with pid 10082
+    t =    21.42s Type 'n' key with modifiers '⌘' (0x10)
+    t =    21.42s     Wait for io.orbitd.t07macprobe to idle
+    t =    21.43s     Find the Target Application 'io.orbitd.t07macprobe'
+    t =    21.45s     Check for interrupting elements affecting "T07MacProbe" Application
+    t =    21.45s     Synthesize event
+    t =    22.40s     Wait for io.orbitd.t07macprobe to idle
+    t =    22.42s Checking existence of `Any (First Match)`
+    t =    22.61s Checking existence of `StaticText (First Match)`
+    t =    22.68s Checking existence of `Any (First Match)`
+    t =    22.75s Checking existence of `StaticText (First Match)`
+    t =    22.80s Checking existence of `TextView (First Match)`
+    t =    22.88s Checking existence of `Any (First Match)`
+    t =    23.15s Checking existence of `StaticText (First Match)`
+    t =    23.22s Checking existence of `TextView (First Match)`
+    t =    25.41s Checking existence of `Window (First Match)`
+    t =    25.42s Checking existence of `Window (First Match)`
+    t =    25.42s Find the Window (First Match)
+    t =    25.48s Added attachment named '22-new-account-launch-landing'
+    t =    27.49s Added attachment named 'verdict-22-nia-new-account-home.json'
+    t =    27.49s Terminate io.orbitd.t07macprobe:10082
+    t =    28.54s Tear Down
+    t =    28.54s     Added attachment named 'ReplayTeststest22NiaNewAccountHome-notes.txt'
+Test Case '-[T07MacProbeUITests.ReplayTests test22NiaNewAccountHome]' passed (28.582 seconds).
+Test Suite 'ReplayTests' passed at 2026-10-18 07:15:22.576.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 61.824 (61.826) seconds
+Test Suite 'T07MacProbeUITests.xctest' passed at 2026-10-18 07:15:22.577.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 61.824 (61.827) seconds
+Test Suite 'All tests' passed at 2026-10-18 07:15:22.577.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 61.824 (61.828) seconds
+2026-10-18 07:15:23.181 xcodebuild[1973:9230] [MT] IDETestOperationsObserverDebug: 68.832 elapsed -- Testing started completed.
+2026-10-18 07:15:23.182 xcodebuild[1973:9230] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 07:15:23.182 xcodebuild[1973:9230] [MT] IDETestOperationsObserverDebug: 68.832 sec, +68.832 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.t07-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
