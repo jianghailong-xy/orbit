@@ -1,0 +1,138 @@
+{
+ "checks": [
+  {
+   "check": "ann is READY: both slots are taken",
+   "ok": true
+  },
+  {
+   "check": "bob is READY: both slots are taken",
+   "ok": true
+  },
+  {
+   "check": "cy waits for capacity",
+   "ok": true,
+   "value": {
+    "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "detail": "short of cpu, memory, ephemeralStorage, pods, attachments, activeUsers",
+    "message": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+    "retryable": true,
+    "short": [
+     "cpu",
+     "memory",
+     "ephemeralStorage",
+     "pods",
+     "attachments",
+     "activeUsers"
+    ]
+   }
+  },
+  {
+   "check": "nothing is created for cy while it waits",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "the pool holds two runners",
+   "ok": true,
+   "value": [
+    {
+     "active_users_reserved": 2,
+     "cpu_millis_reserved": 1000,
+     "memory_bytes_reserved": 1610612736,
+     "pods_reserved": 2
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T12:37:47.448+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "capacity",
+ "result": {
+  "created": {
+   "at": "2026-10-18T12:37:47.140+00:00",
+   "created": true,
+   "owner": "cy",
+   "signedIn": false
+  },
+  "display": {
+   "acceptsWork": true,
+   "detail": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+   "ensure": false,
+   "kind": "waitingCapacity",
+   "moving": true,
+   "retry": false,
+   "signIn": false,
+   "startsNewSession": false,
+   "title": "Waiting for capacity"
+  },
+  "key": {
+   "at": "2026-10-18T12:37:47.404+00:00",
+   "baseUrl": "http://10.0.2.2:13712/anthropic",
+   "defaultModel": "deepseek-v4-pro",
+   "enabled": true,
+   "id": "34i3WA9XiiyNs8tdnqVzL",
+   "label": "FAKE model (lab, not a model)",
+   "owner": "cy",
+   "presetSlug": "deepseek",
+   "runtime": "claude",
+   "slug": "deepseek-4"
+  },
+  "pool": [
+   {
+    "active_users_reserved": 2,
+    "cpu_millis_reserved": 1000,
+    "memory_bytes_reserved": 1610612736,
+    "pods_reserved": 2
+   }
+  ],
+  "signIn": {
+   "created": false,
+   "owner": "cy",
+   "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+   },
+   "signIn": {
+    "at": "2026-10-18T12:37:47.140+00:00",
+    "ms": 39.3,
+    "status": 201
+   },
+   "user": {
+    "email": "t08-cy@lab.invalid",
+    "id": "34i3W9iXW7O3kViAuhJiK"
+   }
+  },
+  "status": {
+   "managementState": "WAITING_CAPACITY",
+   "reason": {
+    "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "message": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+    "retryable": true
+   },
+   "retryAfter": "2026-10-18T12:38:17.195Z"
+  },
+  "waited": {
+   "at": "2026-10-18T12:37:47.231+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T12:37:47.231+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "WAITING_CAPACITY",
+      "pod": null,
+      "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+      "revision": 2
+     }
+    }
+   ],
+   "reached": "WAITING_CAPACITY",
+   "seconds": 0.0
+  }
+ },
+ "seconds": 0.4,
+ "startedAt": "2026-10-18T12:37:47.017+00:00",
+ "step": "wait"
+}

@@ -1,0 +1,52 @@
+== source eb16b3b5ed4881870e8941f64bec555de9421c76
+== docker-compose.yml: the switch, its profile and the channel's profile
+231:      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+232:      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+336:    profiles: [managed-runners-docker]
+== .env.example: managed-runner lines (commented unless a fresh install appends them)
+65:# installed without them keeps managed runners off. ORBIT_MANAGED_RUNNERS_ENABLED=false switches them off: no
+67:# ORBIT_MANAGED_RUNNERS_ENABLED=true
+68:# ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+69:# COMPOSE_PROFILES=managed-runners-docker
+== Kubernetes, Rook, Ceph and CSI words in the default entry points (files per word)
+kubernetes: 0
+kube: 0
+kubectl: 0
+kubeconfig: 0
+k3s: 0
+helm: 0
+rook: 0
+ceph: 0
+csi: 0
+storageclass: 0
+persistentvolumeclaim: 0
+== the same entry points naming the Kubernetes delivery, the lab or the webhook (files)
+scripts/managed-runner: 0
+pod-admission-webhook: 0
+managed-runner-lab: 0
+== deployment_boundary_test.py and new_deployment_test.py
+test_copying_env_example_alone_switches_nothing_on (scripts.managed-runner.deployment_boundary_test.DeploymentBoundaryTest.test_copying_env_example_alone_switches_nothing_on) ... ok
+test_default_entry_points_do_not_reference_the_kubernetes_delivery (scripts.managed-runner.deployment_boundary_test.DeploymentBoundaryTest.test_default_entry_points_do_not_reference_the_kubernetes_delivery) ... ok
+test_only_the_docker_backend_of_deploy_managed_runner_is_referenced (scripts.managed-runner.deployment_boundary_test.DeploymentBoundaryTest.test_only_the_docker_backend_of_deploy_managed_runner_is_referenced) ... ok
+test_the_entry_points_are_really_searched (scripts.managed-runner.deployment_boundary_test.DeploymentBoundaryTest.test_the_entry_points_are_really_searched) ... ok
+test_upgrade_never_writes_the_switch (scripts.managed-runner.deployment_boundary_test.DeploymentBoundaryTest.test_upgrade_never_writes_the_switch) ... ok
+test_a_fresh_install_builds_the_managed_runner_image_here_and_pushes_nothing (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_a_fresh_install_builds_the_managed_runner_image_here_and_pushes_nothing) ... ok
+test_a_fresh_install_writes_the_switch_the_directory_and_the_docker_profile (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_a_fresh_install_writes_the_switch_the_directory_and_the_docker_profile) ... ok
+test_a_switch_that_failed_before_the_channel_started_on_it_is_finished_by_the_next_upgrade (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_a_switch_that_failed_before_the_channel_started_on_it_is_finished_by_the_next_upgrade) ... ok
+test_an_administrator_switches_managed_runners_on_for_an_existing_deployment (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_administrator_switches_managed_runners_on_for_an_existing_deployment) ... ok
+test_an_apiserver_the_upgrade_recreated_already_is_not_recreated_again (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_apiserver_the_upgrade_recreated_already_is_not_recreated_again) ... ok
+test_an_install_never_touches_an_existing_deployment (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_install_never_touches_an_existing_deployment) ... ok
+test_an_install_without_managed_runners_writes_the_switch_off (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_install_without_managed_runners_writes_the_switch_off) ... ok
+test_an_upgrade_does_for_an_existing_deployment_exactly_what_it_did (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_upgrade_does_for_an_existing_deployment_exactly_what_it_did) ... ok
+test_an_upgrade_rebuilds_the_managed_runner_image_and_names_its_id_in_both_files (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_upgrade_rebuilds_the_managed_runner_image_and_names_its_id_in_both_files) ... ok
+test_an_upgrade_refuses_before_building_where_the_managed_runners_files_are_not_right (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_upgrade_refuses_before_building_where_the_managed_runners_files_are_not_right) ... ok
+test_an_upgrade_that_builds_the_same_image_changes_nothing_of_managed_runners (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_an_upgrade_that_builds_the_same_image_changes_nothing_of_managed_runners) ... ok
+test_both_copies_keep_the_managed_runners_section_the_same (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_both_copies_keep_the_managed_runners_section_the_same) ... ok
+test_nothing_is_switched_when_the_upgrade_stops_before_its_services_are_recreated (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_nothing_is_switched_when_the_upgrade_stops_before_its_services_are_recreated) ... ok
+test_switching_on_refuses_where_there_is_no_deployment_or_it_was_prepared_already (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_switching_on_refuses_where_there_is_no_deployment_or_it_was_prepared_already) ... ok
+test_with_pull_base_the_channel_still_follows_the_apiserver (scripts.managed-runner.new_deployment_test.NewDeploymentTest.test_with_pull_base_the_channel_still_follows_the_apiserver) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 1.455s
+
+OK

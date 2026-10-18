@@ -1,0 +1,77 @@
+{
+ "checks": [
+  {
+   "check": "ann: READY past the 90 s idle interval while busy",
+   "ok": true,
+   "value": "READY"
+  },
+  {
+   "check": "ann: the owner's sleep is refused 409 MANAGED_RUNNER_BUSY",
+   "ok": true,
+   "value": {
+    "code": "MANAGED_RUNNER_BUSY",
+    "status": 409
+   }
+  },
+  {
+   "check": "bob: READY past the 90 s idle interval while busy",
+   "ok": true,
+   "value": "READY"
+  },
+  {
+   "check": "bob: the owner's sleep is refused 409 MANAGED_RUNNER_BUSY",
+   "ok": true,
+   "value": {
+    "code": "MANAGED_RUNNER_BUSY",
+    "status": 409
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T12:39:40.973+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "ann": {
+   "secondsSinceBusyStart": 110.0,
+   "sleep": {
+    "code": "MANAGED_RUNNER_BUSY",
+    "status": 409
+   },
+   "state": "READY",
+   "workload": {
+    "activeTurns": 1,
+    "backgroundJobs": 0,
+    "draining": false,
+    "generation": 1,
+    "idleSeconds": 0,
+    "operations": 0,
+    "podUid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+    "receivedAt": "2026-10-18T12:39:26.535Z",
+    "unflushedEvents": 0
+   }
+  },
+  "bob": {
+   "secondsSinceBusyStart": 110.1,
+   "sleep": {
+    "code": "MANAGED_RUNNER_BUSY",
+    "status": 409
+   },
+   "state": "READY",
+   "workload": {
+    "activeTurns": 0,
+    "backgroundJobs": 1,
+    "draining": false,
+    "generation": 1,
+    "idleSeconds": 0,
+    "operations": 0,
+    "podUid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+    "receivedAt": "2026-10-18T12:39:26.542Z",
+    "unflushedEvents": 0
+   }
+  }
+ },
+ "seconds": 25.0,
+ "startedAt": "2026-10-18T12:39:16.010+00:00",
+ "step": "busy-refuse-sleep"
+}

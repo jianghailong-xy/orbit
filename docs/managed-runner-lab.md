@@ -169,7 +169,7 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
 | `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
 | `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
-| `test-server.sh start [--managed\|--managed-false]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`; `secrets` only makes the secrets and the lab CA. |
+| `test-server.sh start [--managed\|--managed-false\|--managed-false-no-profile]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`, `--managed-false-no-profile` sets `false` and names no profile (no Kubernetes or Ceph configuration at all); `secrets` only makes the secrets and the lab CA. |
 | `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
 | `manager-lab.py` | The manager against real k3s ([below](#manager-reconciliation-t04)): the T04 server directory, a second apiserver replica, owners and their concurrent sign-ins and ensures, the database against k3s (`consistency`), a recorder of every change, a stand-in Claude login on a runner's volume, a killed runner process, an operator's delete or eviction, an API outage, a controller crash timed on a create, the switch checks and one owner against another. |
 | `login-lab.py` | Sign-in provisioning on real k3s ([below](#sign-in-provisioning-t05)), through manager-lab.py's gate, replica and views: accounts and timed (concurrent) sign-ins, an account with its own runner and arranged workspaces, its landing by the web's own rule and its deep links, the switch-off check for new and existing accounts, a model key on fake-model.py's endpoint or the owner's key file, sessions in the managed default workspace, a provisioning timeline, the manager's requests by size, and a database trigger that refuses the sign-in's intent. |
@@ -178,7 +178,8 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
 | `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
 | `wake-lab.py` | Wake, sleep and capacity on real k3s ([below](#wake-sleep-and-capacity-t06)), through manager-lab.py's gate, replica, views and `kill-runner`: a profile with a budget of one runner and a 60 s idle interval, accounts with a fake-model key, a self-managed runner and its dispatch, every kind of demand (a turn, a session, a task's Run Now or run time, all at once), waits on a mapping or on an answer quoting a marker, data on the runner's volume, the administrator's disable, a ResourceQuota of zero Pods, the switch-off check for demand, and a recorder with its timeline. |
-| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
+| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
+| `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
 
 A test window:
 
@@ -520,6 +521,55 @@ $K/run-starting.sh OUT LABEL                   # sleep, wake, and a kill while t
 | Attempts and identity | Each run began with the runner READY for 125 s, and each restart counted attempt 1; no wait spent one. Generations 1 to 9 ran on the same PVC and PV, one Pod at a time. |
 
 Left in the lab: `amy` SLEEPING, its PVC kept; the webhook removed; the test server and the gate stopped; the VM off.
+
+## End-to-end acceptance (T08)
+
+Recorded 2026-10-18 by task T08: two accounts (`ann`, `bob`) and a third (`cy`) through the whole flow on the lab's real
+k3s, in one run of `acceptance-lab.py` on the project line (`eb16b3b5e`: 48 steps, 261 checks, all passed, 36.4 minutes),
+with the switch unset, `false` and on. The records are in [the evidence](evidence/managed-runner-acceptance/2026-10-18/README.md),
+and the runbook written from it is [Managed runners on Kubernetes](managed-runner-kubernetes-operations.md). The owner's
+DeepSeek key file did not exist, so every session ran on fake-model.py as a DeepSeek-preset key (T05's way), which is not a
+model. The runner image was T06b's (`…@sha256:cdb09014…`; nothing under `src/runner-go` or `deploy/managed-runner/image`
+changed since its source); nothing was built into an image or pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08     # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08-run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t08-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/acceptance-lab.py run --out $OUT --quiet-seconds 90
+python3 scripts/managed-runner/lab/acceptance-lab.py report $OUT        # each step's time and checks, the intervals
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset, then `false`, no profile | No Kubernetes or Ceph setting in the apiserver's environment. Sign-ins; `GET /api/managed-runner` `enabled: false` and no display; every managed write `404 MANAGED_RUNNER_DISABLED`; this checkout's runner as a real self-managed runner (Claude Code 2.1.302 on the host) answered a session, a task run now and a task's run time. No managed row, no namespace object changed and no connection to the gate in 90 s each. |
+| Provisioning | 16 concurrent sign-ins of ann and bob over two replicas, the admission guard absent: one mapping, claim and Secret each, `FAILED ADMISSION_GUARD_MISSING` 5.7 s later, no Pod. Guard installed, the owners' retries: the Pod 6.3 s after, the first heartbeat 31 s after the Pod, `MODEL_UNAVAILABLE`, then READY 1.1 s after each key. The gate saw two claim creates, two Secret creates, two probes, then two Pod creates. |
+| Capacity | A budget of two runners: cy waited `WAITING_CAPACITY` with nothing created, and got its claim the moment the first runner slept. |
+| Sessions | An attachment, and a file written and committed in the session's worktree by Claude Code's own Bash tool (`FAKE-WRITE`), answered 2.3–2.4 s after each first session was made. |
+| Busy, then idle | A 240 s turn (ann) and a 240 s background job (bob): READY past the 90 s idle interval, the owner's sleep `409 MANAGED_RUNNER_BUSY` at 110 s; 96 s after the work ended the drain began, 40 s later both were SLEEPING, Pod gone, volume detached, no RBD watcher, compute released. |
+| Between the accounts | The other owner's token and runner credential refused (403/404) on the runner, workspace, instance, session, events, turn, attachment and a session in the other's workspace; the other's mapping unchanged. The guard refused Pods mixing the owners and volumes, an unlabelled Pod on a runner's claim and a copy of a runner's Pod under another name. In each runner: one RBD filesystem at `/var/lib/orbit`, no service account token, no credential variable, no RBD device node, UID 10001 with no capabilities, `401` from the Kubernetes API. |
+| Wakes | A message to sleeping ann: answered 10.4 s later on a new Pod. A task due at a time for sleeping bob: answered 5.1 s after it was due. |
+| Rebuilds | An operator's `kubectl delete pod` of ann's runner (held by the stop-report finalizer, then the next generation by itself): READY again 14.7 s after the delete. A SIGKILL of bob's `orbit run`: READY again 25.0 s after its Pod failed. Each on a new Pod of the next generation, the same claim. |
+| Controller restart | Both apiservers SIGKILLed 0.4 s into bob's wake, his Pod just created (STARTING); down for 5 s, then started again (6.9 s). The restarted manager adopted that Pod (no second Pod create), bob was READY 12.5 s after the kill, and ann's 200 s turn, running through it, was answered on the same Pod. |
+| Image rollback | The previous lab image (T02a's build) pinned and the apiservers restarted: the running Pod kept its image, the next generation ran the previous one; forward again the same way. |
+| Data through it all | The probe's random bytes, SQLite rows (WAL, `synchronous=FULL`) and Git commit, the uploads, the worktree and its commit, and the engine's transcript: the same after every sleep, wake, rebuild, restart and image change, `integrity_check` `ok`; each resumed session's next request carried the earlier conversation. One runner, claim, PV, handle and RBD image per account throughout (ann generations 1–7), never two Pods on a volume in any of the 207 timeline samples. |
+| Independent backup | ann disabled (asleep 33.8 s later), her 2 GiB image exported out of the VM to the host (7.8 s, 27.0 MB gzip, 0.3 s copy), checked there with no cluster (`debugfs`; 4.3 s), written into a new claim's image that read back byte for byte as the backup, and checked in a Pod (25.8 s). The original untouched; ann woke on it. |
+| Off again, every runner asleep | Unset, then `false`: a message, a task run now and a task's run time per account made no managed write, changed nothing in the namespace and reached nothing for 90 s each; every claim kept; the self-managed runner kept working. Switched on, all six waiting pieces of work were answered, ann's last, once a runner had slept and freed a slot. |
+
+Findings: Ceph-CSI v3.18.0 with `attachRequired: true` refuses to publish a static PV whose handle is a plain image
+name, and its unpublish then panics, which holds the VolumeAttachment and the PV on the attacher's finalizer: the runbook
+restores into a claim the driver provisions instead. A sleep already advances a mapping's generation, so a wake's new Pod
+keeps the generation the sleeping row names. Two volumes writing on this VM's one HDD fsync three times as slowly as one.
+
+Left in the lab: `test-server-t08` with ann, bob and cy SLEEPING, their claims kept; the restored claim
+`t08-restore-20261018t125553z` and its PV and image, as retained test data; the backup archive and its manifest in
+`/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z` (0700); the webhook removed; the test server, gate, replica,
+recorder and self-managed runner stopped; the VM off.
 
 ## Known limits
 

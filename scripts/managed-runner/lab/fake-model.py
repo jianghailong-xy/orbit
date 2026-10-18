@@ -19,9 +19,12 @@ so a resumed engine visibly sends the history it reloaded from the persistent vo
   - "FAKE-APIERR <n> <word>" anywhere in the conversation: the first <n> requests that carry it are
     answered with Claude Code's own API-error sentence for an overloaded provider (529), which the
     control plane arms an automatic retry for; the request after them is answered as usual.
+  - "FAKE-WRITE <word>" in the last user message: a call (once per word and conversation) of Claude Code's
+    own Bash tool, run in the session's working directory (its Git worktree): it writes t08-<word>.txt,
+    commits it and prints "T08-WROTE-<WORD> <commit> <file SHA-256 prefix>" (task T08).
   - A request whose last message carries a tool result is answered with text that quotes it.
-  - Every "T06-<WORD>" (or T07's "T07-<WORD>") marker in the last user message is quoted after
-    "Answering:", so a driver can tell which message an answer belongs to.
+  - Every "T06-<WORD>" (or T07's "T07-<WORD>", T08's "T08-<WORD>") marker in the last user message is
+    quoted after "Answering:", so a driver can tell which message an answer belongs to.
 Usage: fake-model.py PORT LOG
 """
 
@@ -59,16 +62,25 @@ def parts(message):
     return [p for p in content if isinstance(p, dict)] if isinstance(content, list) else [{'type': 'text', 'text': content or ''}]
 
 
-def already_called(messages, name):
-    """Whether an answer in this conversation already called the tool: one call per conversation and tool."""
-    return any(p.get('type') == 'tool_use' and p.get('name') == name for m in messages if m.get('role') == 'assistant' for p in parts(m))
+def already_called(messages, name, same_input=None):
+    """Whether an answer in this conversation already called the tool: one call per conversation and tool
+    (and, given same_input, per input)."""
+    return any(p.get('type') == 'tool_use' and p.get('name') == name and (same_input is None or p.get('input') == same_input)
+               for m in messages if m.get('role') == 'assistant' for p in parts(m))
 
 
 def tool_call(last, offered):
-    """The tool call a FAKE-BG or FAKE-WAKEUP message asks for, as (name, input), or None."""
+    """The tool call a FAKE-BG, FAKE-WRITE or FAKE-WAKEUP message asks for, as (name, input), or None."""
     background = re.search(r'FAKE-BG (\d+)', last)
     if background:
         return 'mcp__orbit__bg_run', {'command': f'sleep {background[1]}', 'kind': 'job', 'wakeOnExit': True}
+    write = re.search(r'FAKE-WRITE (\w+)', last)
+    if write:
+        word = write[1].lower()
+        name = f't08-{word}.txt'
+        return 'Bash', {'command': f"printf 'T08 {word}\\n' > {name} && git add {name} && git commit -q -m 'T08 {word}' && "
+                                   f"echo T08-WROTE-{word.upper()} $(git rev-parse HEAD) $(sha256sum {name} | cut -c1-16)",
+                        'description': f'T08 lab: write and commit {name}'}
     wakeup = re.search(r'FAKE-WAKEUP (\d+) (\w+)', last)
     if wakeup:
         return 'mcp__orbit__schedule_wakeup', {'delaySeconds': int(wakeup[1]), 'reason': f'T06 lab: scheduled wake {wakeup[2]}',
@@ -118,7 +130,7 @@ class Handler(BaseHTTPRequestHandler):
         offered = sorted(t.get('name') for t in body.get('tools') or [] if isinstance(t, dict)
                          and t.get('name') in ('mcp__orbit__bg_run', 'mcp__orbit__schedule_wakeup'))
         call = None if results else tool_call(last, offered)
-        if call and already_called(messages, call[0]):
+        if call and already_called(messages, call[0], call[1] if call[0] == 'Bash' else None):
             call = None
         shape = [[m.get('role'), [p.get('type') for p in parts(m)]] for m in messages[-3:]]
         slow = None if results else re.search(r'FAKE-SLOW (\d+)', last)
@@ -147,7 +159,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             text = (f'FAKE MODEL reply #{number}: this conversation has {len(messages)} message(s); '
                     f'secrets seen: {", ".join(secrets) or "none"}.')
-            markers = re.findall(r'T0[67]-[A-Z0-9-]+', last)
+            markers = re.findall(r'T0[678]-[A-Z0-9-]+', last)
             if markers:
                 text += f' Answering: {" ".join(markers)}'
         usage = {'input_tokens': 10, 'output_tokens': 20}

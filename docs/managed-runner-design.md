@@ -1411,3 +1411,24 @@ Left to later work, or not shown here:
   of a runner that was still starting.
 - The host's real Docker was not run: the Docker backend's waits were checked against the fake channel only.
 - No model was used: fake-model.py stood in for the owner's DeepSeek key. Nothing crossed nodes.
+
+## Implementation record: two accounts end to end, an independent restore, and the Kubernetes runbook
+
+Recorded 2026-10-18 for task T08 on the single-machine lab, the "two-user end-to-end, independent backup restore and
+operator runbook" step of the order above. No product code changed; the record is of what the delivered system did, run
+by `scripts/managed-runner/lab/acceptance-lab.py` in one pass on the project line, and of the runbook written from it,
+[managed-runner-kubernetes-operations.md](managed-runner-kubernetes-operations.md).
+
+| Area | What the run established, and what it did not |
+| --- | --- |
+| The switch unset and `false` | Both groups ran with no profile, so with no Kubernetes or Ceph setting in the apiserver's environment. Sign-ins, the managed status (`enabled: false`, the shared display shows nothing), every managed write `404 MANAGED_RUNNER_DISABLED`, and a real self-managed runner (this checkout's build, Claude Code on the host) answering a session, a task run now and a task's run time. Nothing managed was written, no object in the namespace changed and no request reached Kubernetes for 90 s each. With every runner asleep, the same held for messages, a task run now and a task's run time; claims stayed, and the waiting work woke the runners once the switch was on again. |
+| Provisioning | Two accounts, sixteen concurrent sign-ins over two replicas, with no admission guard: one mapping, claim, Secret and probe each, `FAILED ADMISSION_GUARD_MISSING`, no Pod. With the guard installed, the owners' retries started them on the same claims; `MODEL_UNAVAILABLE` until each added a key, then READY. |
+| Capacity | A budget of two runners: a third account waited (`WAITING_CAPACITY`) with nothing created, and was admitted, with its claim made, only after a runner slept. |
+| Work and data | Sessions with an attachment, a file written and committed in the session's Git worktree by Claude Code's own Bash tool, and a probe of random bytes, SQLite rows in WAL mode and a Git commit. They kept their checksums, `integrity_check` and the engine's transcripts through idle sleep, a wake by a message and by a scheduled task, an operator's Pod delete, a killed runner, an image rollback and roll-forward, and a controller restart; each resumed session's next request carried the earlier conversation from the volume. The runner, claim, PV, volume handle and RBD image never changed, and no volume had more than one Pod in any sample of the run's timeline. |
+| Between the accounts | The other owner's token and runner credential could not read or act on a runner, workspace, instance, session or attachment, and the admission guard refused Pods mixing the two owners and volumes, and a second Pod on the same node and claim. A runner has no service account token and the Kubernetes API refuses it. |
+| Busy and idle | A long turn and a background job each kept their runner READY past the idle interval, and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; once the work ended each slept by itself. |
+| The controller | Both apiservers SIGKILLed while one runner was being woken and the other ran a turn: the turn finished, the waking runner came up without a second Pod create, and the database and Kubernetes agreed. |
+| Backup and restore | The RBD image of a disabled, asleep account exported out of the VM to the host, checked there with no cluster (`debugfs`, SQLite, Git, checksums), and written into a new claim's image, which read back byte for byte as the backup; a Pod found the data there. The original was untouched and its runner woke on it. A static PV naming an imported image cannot be used with this Ceph-CSI (its ControllerPublish refuses the handle and its ControllerUnpublish panics), so the runbook restores into a claim the driver provisions. |
+| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node. A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented. Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md), [the lab page](managed-runner-lab.md#end-to-end-acceptance-t08)).
