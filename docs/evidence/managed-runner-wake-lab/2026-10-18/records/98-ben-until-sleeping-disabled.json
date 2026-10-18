@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-18T02:00:42.062+00:00",
+  "changes": [
+    [
+      "2026-10-18T02:00:05.060+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 7,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 3,
+        "management_state": "STARTING",
+        "pod": "210ec2f2",
+        "reason": null,
+        "revision": 49
+      }
+    ],
+    [
+      "2026-10-18T02:00:06.696+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 7,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 3,
+        "management_state": "DRAINING",
+        "pod": "210ec2f2",
+        "reason": null,
+        "revision": 50
+      }
+    ],
+    [
+      "2026-10-18T02:00:31.731+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 7,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 3,
+        "management_state": "DRAINING",
+        "pod": "210ec2f2",
+        "reason": null,
+        "revision": 53
+      }
+    ],
+    [
+      "2026-10-18T02:00:42.062+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 7,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 4,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 54
+      }
+    ]
+  ],
+  "owner": "ben",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

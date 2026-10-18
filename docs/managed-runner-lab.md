@@ -177,7 +177,8 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `qmp.py SOCKET hostfwd-remove\|hostfwd-add` | Takes the 127.0.0.1 forward of the k3s API (or SSH) away and puts it back: an outage of the API server for everything on the host. |
 | `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
 | `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
-| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. |
+| `wake-lab.py` | Wake, sleep and capacity on real k3s ([below](#wake-sleep-and-capacity-t06)), through manager-lab.py's gate, replica, views and `kill-runner`: a profile with a budget of one runner and a 60 s idle interval, accounts with a fake-model key, a self-managed runner and its dispatch, every kind of demand (a turn, a session, a task's Run Now or run time, all at once), waits on a mapping or on an answer quoting a marker, data on the runner's volume, the administrator's disable, a ResourceQuota of zero Pods, the switch-off check for demand, and a recorder with its timeline. |
+| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
 
 A test window:
 
@@ -363,6 +364,44 @@ python3 scripts/managed-runner/lab/single-writer.py admission remove            
 | Concurrent and repeated | 16 concurrent first sign-ins over two replicas: one mapping, runner and workspace, and one PVC, Secret, admission probe and Pod create sent. Five later sign-ins left the mapping's revision as it was. |
 | An existing account | Its workspaces, their order, the web landing and every deep link were unchanged through sign-in, a capacity wait, start, READY and the switch `false`. The managed default was added last, matched by nothing. |
 | Failures | An intent the database refused, and a cluster without the admission guard (`FAILED`, `ADMISSION_GUARD_MISSING`): each sign-in still answered 201 with a working token. The next sign-in, or the owner's retry once the guard was back, made it READY, on the same PVC. A sign-in does not retry a FAILED mapping. |
+
+## Wake, sleep and capacity (T06)
+
+Recorded 2026-10-18 by task T06: a managed runner woken by messages, tasks and scheduled work, put to sleep when idle and only then,
+on a budget of one runner, through failed starts, disabled accounts and the switch unset and `false`. The records are in
+[the evidence](evidence/managed-runner-wake-lab/2026-10-18/README.md). The owner's DeepSeek key file did not exist, so every session ran on
+a DeepSeek-preset key whose endpoint is fake-model.py (T05's way), which is not a model.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t06
+W=scripts/managed-runner/lab/wake-lab.py
+python3 $W prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token, T04's identity; budget: one runner
+python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start    # unset: the bootstrap, then accounts without sign-in
+python3 $W account root && python3 $W account amy --no-signin && python3 $W selfhost root && python3 $W selfhost-dispatch root --label unset0
+sudo scripts/managed-runner/lab/test-server.sh start --managed                    # after stopping the apiserver unit
+python3 scripts/managed-runner/lab/single-writer.py admission install && python3 $W replica start && python3 $W record start
+python3 $W account amy && python3 $W key amy && python3 $W until amy READY
+python3 $W session amy --prompt "T06-AMY-S1 ..." && python3 $W answered amy T06-AMY-S1 && python3 $W probe amy write p1
+python3 $W until amy SLEEPING && python3 $W message amy SESSION --prompt "T06-AMY-M1 ..." && python3 $W answered amy T06-AMY-M1
+python3 $W task amy --prompt "T06-..." --run-now          # or --run-at-seconds S; a session with "FAKE-WAKEUP 240 WORD" for a wakeup
+python3 $W burst amy --prompt T06-AMY-BURST --messages S1,S2 --sessions 2 --tasks 2
+python3 $W quota on|off && python3 $W action amy retry && python3 $W disable ben on|off
+python3 $W off-check --label unset --seconds 330 --message ben:SESSION --task ben    # with the switch unset, then false
+python3 scripts/managed-runner/lab/single-writer.py admission remove                  # before the test server stops
+```
+
+| Check | Result |
+| --- | --- |
+| Scale to zero | 22 sleeps: the drain 60 s after the last work by the runner's own count, the runner's acceptance at its next heartbeat, its exit 0, the kubelet's report as the stop proof, the Pod removed, the volume detached; 35–41 s from the drain request to SLEEPING. The next start always on the same PVC, PV, RBD image, runner row and workspace (generations 1 → 17). |
+| Three kinds of wake | A message (answered 3.9 s after it was sent), a task's Run Now (17 s), a held wakeup (13 s after due), a task's run time (29 s after it). READY follows ~30 s after the Pod runs, at the woken instance's first heartbeat; the instance claims before that. |
+| No sleep while busy | Through a 150 s turn and a 180 s runner-hosted background job, the runner stayed READY and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; the job ran out (`completed`, exit 0) and only then did the runner sleep. |
+| Demand | Eight demands at once: one start, one Pod create. A message as the drain began called it off (`DEMAND`). |
+| Failed starts | A runner killed while starting was restarted by itself (D7: attempt 1 of 5, the next generation on the same volume). A ResourceQuota of zero Pods failed the start `KUBERNETES_FORBIDDEN`; with the quota gone the owner's retry ran the waiting message. |
+| Capacity | A new account and a wake each waited (`MANAGED_RUNNER_CAPACITY_UNAVAILABLE`, "Waiting for capacity") with nothing created, and started within seconds of the other runner's release. Never more than one managed Pod. |
+| Background work | A retry due while asleep woke the runner and was re-armed with no attempt spent until READY; one armed retry waited 15.7 minutes through the switch-off phases on the offline path, then ran. |
+| The finding | A woken runner's first run was finalized `runner offline` by the reaper, whose heartbeat was from before the sleep. Since this task the reaper counts the run's claim as presence (`reaper.service.ts`). |
+| Disabled accounts | A waiting mapping went to sleep with nothing made; a running one drained and slept 37–39 s after the disable, its PVC kept; demand while disabled was recorded and woke nothing; enabled again, the waiting work woke it on the same PVC and runner row. |
+| Switch unset and `false` | Messages, Run Now, held wakeups, run times and an armed retry: no mapping, pool or namespace change and no connection to the gate for 330 s each; owner writes `404 MANAGED_RUNNER_DISABLED`; a running instance kept serving as any runner and was never drained; a self-managed runner's dispatch worked. On again, the waiting work woke the runner. |
 
 ## Known limits
 
