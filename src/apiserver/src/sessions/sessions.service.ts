@@ -1,4 +1,7 @@
-import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryPrompt, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
+import {
+  SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryContinuePrompt, mergeRecoveryPrompt, mergeRecoveryReady,
+  type MergeRecoveryAction,
+} from '@orbit/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -3653,10 +3656,17 @@ export class SessionsService {
   }
 
   /**
-   * Start the repair conversation owned by a merge recovery. The parent link is written by the
-   * server so the original session can show the child's live/terminal state after navigation or a
-   * reload. A live child is reused, which makes repeated taps idempotent; a terminal child remains
-   * visible as the last result and a later explicit tap may start a fresh attempt.
+   * Hand a merge recovery to its repair conversation. The parent link is written by the server so
+   * the original session can show the child's live/terminal state after navigation or a reload.
+   *
+   * Continue repair, Reply in repair session and Prepare PR candidate all reach the repair the
+   * parent's detail shows (`mergeRepairSession`: its newest child not in Trash), so a repair keeps
+   * the context of its earlier rounds (S2 of project 34hIv3wbdtsxpc5RzDlOk):
+   *   - PENDING or RUNNING: answered as it is, with no message;
+   *   - waiting for input, or ended in a way that can be resumed: handed where the recovery stands
+   *     now (mergeRecoveryContinuePrompt) — see continueMergeRepair;
+   *   - FAILED, refused that message, or none at all: a new repair session, opened as it always was.
+   * The answer is the repair session in the shape it always had.
    */
   async startMergeRepair(ownerId: string, id: string, preparePR = false) {
     const parent = await this.prisma.session.findFirst({
@@ -3678,17 +3688,17 @@ export class SessionsService {
       throw new ConflictException('no merge recovery is available for this session');
     }
 
-    const existing = await this.prisma.session.findFirst({
-      where: {
-        ownerId,
-        parentSessionId: parent.id,
-        source: 'merge-repair',
-        deletedAt: null,
-        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-      },
+    const latest = await this.prisma.session.findFirst({
+      where: { ownerId, parentSessionId: parent.id, source: 'merge-repair', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
-    if (existing) return withSessionState(existing);
+    if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
+      return withSessionState(latest);
+    }
+    if (latest && latest.status !== RunStatus.FAILED) {
+      const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
+      if (continued) return withSessionState(continued);
+    }
 
     const created = await this.create(
       ownerId,
@@ -3703,6 +3713,41 @@ export class SessionsService {
       { source: 'merge-repair', parentSessionId: parent.id },
     );
     return withSessionState(created);
+  }
+
+  /**
+   * Send `repair` the next step of its recovery through the doors the owner's own message takes:
+   * createTurn for a session waiting for input, resume for one that ended, each with every refusal it
+   * has. Answers the repair session as that leaves it, or null when it refused the message — a new
+   * repair session then takes its place.
+   *
+   * Another tap's message makes this one send none. Under the session's lock, a message that has got it
+   * moving since it was read is joined instead of followed (`coalesce`); a refused resume is read again
+   * once the request holding the row has finished, and a revive that request committed is this
+   * tap's answer too.
+   */
+  private async continueMergeRepair(ownerId: string, repair: Session, content: string): Promise<Session | null> {
+    const message = { clientTurnId: randomUUID(), content, kind: 'message' as const };
+    try {
+      if (SessionsService.TERMINAL.includes(repair.status)) {
+        await this.resume(ownerId, repair.id, message);
+      } else {
+        await this.createTurn(ownerId, repair.id, { ...message, intent: 'NEXT_TURN' }, {
+          coalesce: async (tx, session) =>
+            session.status === RunStatus.AWAITING_INPUT || session.status === RunStatus.INTERRUPTED
+              ? null
+              : tx.conversationTurn.findFirst({ where: { sessionId: session.id }, orderBy: { seq: 'desc' } }),
+        });
+      }
+    } catch (error) {
+      // A refusal is a 4xx answer; anything else is not the session's to decide, and is thrown on.
+      if (!(error instanceof HttpException) || error.getStatus() >= 500) throw error;
+      // FOR SHARE waits for a revive still holding the row, so what it committed is read below.
+      await this.prisma.$queryRaw`SELECT 1 FROM "session" WHERE id = ${repair.id}::uuid FOR SHARE`;
+      const now = await this.prisma.session.findFirst({ where: { id: repair.id, ownerId, deletedAt: null } });
+      return now && (now.status === RunStatus.PENDING || now.status === RunStatus.RUNNING) ? now : null;
+    }
+    return this.prisma.session.findUniqueOrThrow({ where: { id: repair.id } });
   }
 
   /**

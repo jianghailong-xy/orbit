@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRecoveryCommitOrigin, mergeRecoveryPrompt, mergeRecoveryReady, mergeRecoveryTargetRelation, readMergeRecovery,
-  type MergeRecovery } from './mergeRecovery';
+import { mergeRecoveryCommitOrigin, mergeRecoveryContinuePrompt, mergeRecoveryPrompt, mergeRecoveryReady,
+  mergeRecoveryTargetRelation, readMergeRecovery, type MergeRecovery } from './mergeRecovery';
 
 const ready: MergeRecovery = {
   code: 'READY', targetBranch: 'develop', previewId: 'reviewed', sourceSha: 'a'.repeat(40),
@@ -77,11 +77,44 @@ describe('merge recovery wire contract', () => {
     expect(mergeRecoveryPrompt(ready, true)).toContain('organize commits on a separate PR candidate');
   });
   it('tells a repair that Orbit checks again when its turn ends, to commit, and to ask the owner directly', () => {
-    for (const prompt of [mergeRecoveryPrompt(ready), mergeRecoveryPrompt(ready, true)]) {
+    for (const prompt of [mergeRecoveryPrompt(ready), mergeRecoveryPrompt(ready, true),
+      mergeRecoveryContinuePrompt(ready), mergeRecoveryContinuePrompt(ready, true)]) {
       expect(prompt).toContain('When this turn ends, Orbit checks the recovery again by itself');
       expect(prompt).toContain('Commit the resolution in the repair worktree');
       expect(prompt).toContain('ask the owner directly');
       expect(prompt).not.toContain('owner will check');
     }
+  });
+  it('hands the repair session the next step of the same recovery, with where it stands now', () => {
+    const conflict: MergeRecovery = { ...ready, code: 'CONFLICT', phase: 'TARGET_SYNC', conflicts: ['a.ts', 'b.ts'],
+      repairBranch: 'orbit/recovery/abc', repairWorktree: '/private/abc' };
+    const prompt = mergeRecoveryContinuePrompt(conflict);
+    expect(prompt).toContain('This is the next step of the same merge recovery for develop');
+    expect(prompt).toContain('Check result: CONFLICT');
+    expect(prompt).toContain('Phase: TARGET_SYNC');
+    expect(prompt).toContain('Conflicting files: a.ts, b.ts');
+    expect(prompt).toContain('Repair branch: orbit/recovery/abc');
+    expect(prompt).toContain('Repair worktree: /private/abc');
+    expect(prompt).toContain(ready.remoteSha);
+    // The first message's asks, word for word, and no PR candidate unless one is asked for.
+    expect(prompt.slice(prompt.indexOf('Work only'))).toBe(mergeRecoveryPrompt(conflict).slice(mergeRecoveryPrompt(conflict).indexOf('Work only')));
+    expect(prompt).not.toContain('PR candidate');
+  });
+  it('lists what an unfinished repair left unresolved, and keeps to the repair it has when the check names none', () => {
+    const unfinished = mergeRecoveryContinuePrompt({ code: 'REPAIR_IN_PROGRESS', targetBranch: 'main', phase: 'SOURCE_REPLAY',
+      conflicts: ['Sources/AgentsModel.swift'] });
+    expect(unfinished).toContain('Check result: REPAIR_IN_PROGRESS');
+    expect(unfinished).toContain('Unresolved files: Sources/AgentsModel.swift');
+    expect(unfinished).not.toContain('Conflicting files');
+    expect(unfinished).toContain('Repair branch: the one you have been repairing on');
+    expect(unfinished).toContain('Repair worktree: the one you have been repairing in');
+    expect(unfinished).not.toContain('create a separate repair branch');
+  });
+  it('asks the repair session for a PR candidate when one is being prepared', () => {
+    const prompt = mergeRecoveryContinuePrompt({ ...ready, code: 'CONFLICT', conflicts: ['a.ts'] }, true);
+    expect(prompt).toContain('This is the next step of the same merge recovery for develop: prepare a reviewable PR candidate');
+    expect(prompt).toContain('organize commits on a separate PR candidate according to repository policy');
+    expect(prompt).toContain('Respect required linear history and branch protection.');
+    expect(prompt).toContain('Prepare a candidate branch and complete diff for review; do not claim it is merged.');
   });
 });
