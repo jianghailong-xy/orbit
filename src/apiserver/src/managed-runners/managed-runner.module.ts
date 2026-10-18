@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminRoleGuard } from '../users/admin-role.guard';
 import { kubeClientFromProfile } from './kube-http-client';
 import { MANAGED_RUNNER_GATE, ManagedRunnerEnabledGuard, type ManagedRunnerGate } from './managed-runner-gate';
 import { MANAGED_RUNNERS_PROFILE_ENV } from './managed-runner-profile';
@@ -15,6 +16,7 @@ import {
 } from './managed-runner-runtime';
 import { MANAGED_RUNNER_DEMAND, ManagedRunnerDemandService } from './managed-runner-demand';
 import { MANAGED_RUNNER_SIGN_IN } from './managed-runner-sign-in';
+import { ManagedRunnerAdminController } from './managed-runner-admin.controller';
 import { ManagedRunnerAdmissionController, ManagedRunnerAdmissionGuard } from './managed-runner-admission.controller';
 import { ManagedRunnerController } from './managed-runner.controller';
 import { ManagedRunnerService } from './managed-runner.service';
@@ -33,10 +35,13 @@ import { ManagedRunnerService } from './managed-runner.service';
  */
 @Global()
 @Module({
-  controllers: [ManagedRunnerController, ManagedRunnerAdmissionController],
+  controllers: [ManagedRunnerController, ManagedRunnerAdmissionController, ManagedRunnerAdminController],
   providers: [
     ManagedRunnerEnabledGuard,
     ManagedRunnerAdmissionGuard,
+    // The administrator's volume switch. AdminRoleGuard depends only on the global PrismaService, so it is
+    // provided here too, as the wiki and provider modules do (UsersModule does not export it).
+    AdminRoleGuard,
     {
       provide: MANAGED_RUNNER_RUNTIME,
       inject: [

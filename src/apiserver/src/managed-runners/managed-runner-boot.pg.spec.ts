@@ -5,8 +5,9 @@
  * "Verification and implementation handoff"). Four boots of one database:
  *
  *   (A) ORBIT_MANAGED_RUNNERS_ENABLED absent: first-user bootstrap, login, refresh, the capability
- *       and status reads, the five managed writes (401 without a login, then 404
- *       MANAGED_RUNNER_DISABLED), and a self-managed runner enrolling and heartbeating as before;
+ *       and status reads, the five managed writes and the administrator's volume switch (401 without
+ *       a login, then 404 MANAGED_RUNNER_DISABLED), and a self-managed runner enrolling and
+ *       heartbeating as before;
  *   (B) explicitly `false`: the same, on the existing account and runner;
  *   (C) `on` — not a value the switch knows: off, with one warning in the log;
  *   (D) `true` without an environment profile, and with a decoy kubeconfig, ~/.kube/config and
@@ -104,6 +105,13 @@ test('managed runners off: the production server starts without Kubernetes or Ce
         assert.equal(refused.json.code, 'MANAGED_RUNNER_DISABLED');
       }
     }
+    // The administrator's volume switch (the account is the first user, an administrator): the same answers.
+    const volumeSwitch = `/api/admin/managed-runners/${randomUUID()}/volume-switch`;
+    const switchBody = { idempotencyKey: 'k', revision: 1, volumeUid: randomUUID(), reason: 'a restore' };
+    assert.equal((await call(server, 'POST', volumeSwitch, undefined, switchBody)).status, 401, 'the volume switch without a login');
+    const switched = await call(server, 'POST', volumeSwitch, access, switchBody);
+    assert.equal(switched.status, enabled ? 503 : 404, `the volume switch: ${switched.text}`);
+    assert.equal(switched.json.code, enabled ? 'MANAGED_RUNNER_UNAVAILABLE' : 'MANAGED_RUNNER_DISABLED');
   }
 
   async function login(server: Apiserver): Promise<{ accessToken: string; refreshToken: string }> {
