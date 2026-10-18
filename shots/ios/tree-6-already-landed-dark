@@ -1,0 +1,253 @@
+Attributes: Application, 0x1196d5e00, pid: 68667, label: 'MrProbe'
+Element subtree:
+ →Application, 0x1196d5e00, pid: 68667, label: 'MrProbe'
+    Window (Main), 0x1196d5f40, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1196d6080, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1196d61c0, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1196d6300, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x1196d6440, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1196d6580, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x1196d66c0, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x1196d6800, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x1196d6940, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x1196d6a80, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x1196d6bc0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x1196d7c00, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x1196d7d40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x1196d7e80, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11966d900, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11966da40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11966db80, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x11966dcc0, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x11966de00, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x11966df40, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x11966e080, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11966e1c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11966e300, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11966e440, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11966e580, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11966e6c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x1196dc000, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x1196dc140, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x1196dc280, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x1196dc3c0, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x1196dc500, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1196dc640, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x1196dc780, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1196dc8c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1196dca00, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x1196dcb40, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1196dcc80, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x1196dcdc0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x1196dcf00, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1196dd040, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1196dd180, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1196dd2c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1196dd400, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1196dd540, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1196dd680, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1196dd7c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1196dd900, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1196dda40, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1196ddb80, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1196ddcc0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1196dde00, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1196ddf40, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1196de080, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1196de1c0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1196de300, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1196de440, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · workstation-gpu'
+                          Other, 0x1196de580, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1196de6c0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1196de800, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x1196de940, {{161.0, 317.7}, {96.0, 20.3}}, label: ' · workstation-gpu'
+                Other, 0x1196dea80, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1196debc0, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x1196ded00, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1196dee40, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x1196def80, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1196df0c0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1196df200, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1196df340, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1196df480, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1196df5c0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Button, 0x1196df700, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1196df840, {{346.0, 66.0}, {36.0, 36.0}}, label: 'Session actions'
+                    Other, 0x1196df980, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1196dfac0, {{350.0, 66.0}, {28.0, 36.0}}, label: 'Session actions'
+                        Button, 0x1196dfc00, {{350.0, 66.0}, {28.0, 36.0}}
+                          Image, 0x1196dfd40, {{354.0, 82.0}, {20.0, 4.3}}, identifier: 'ellipsis', label: 'More'
+                Other, 0x1196dfe80, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1196e0000, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1196e0140, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1196e0280, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x1196e03c0, {{0.0, 116.0}, {402.0, 554.7}}
+                        CollectionView, 0x1196e0500, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x1196e0640, {{0.0, -1632.0}, {402.0, 3648.0}}
+                          Other, 0x1196e0780, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x1196e08c0, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x1196e0a00, {{0.0, 605.9}, {402.0, 268.1}}
+                          Other, 0x1196e0b40, {{0.0, 0.0}, {402.0, 874.0}}
+                          Cell, 0x1196e0c80, {{0.0, 116.0}, {402.0, 69.0}}
+                            Other, 0x1196e0dc0, {{0.0, 116.0}, {402.0, 69.0}}
+                              Other, 0x1196e0f00, {{0.0, 116.0}, {402.0, 69.0}}
+                                Other, 0x1196e1040, {{0.0, 116.0}, {402.0, 69.0}}
+                            Other, 0x1196e1180, {{0.0, 116.0}, {402.0, 69.0}}
+                              Other, 0x1196e12c0, {{0.0, 116.0}, {402.0, 69.0}}
+                                Other, 0x1196e1400, {{0.0, 116.0}, {402.0, 69.0}}
+                                  TextView, 0x1196e1540, {{215.0, 130.0}, {159.0, 22.0}}, value: Merge this into ma...
+                                    TextView, 0x1196e1680, {{215.0, 130.0}, {159.0, 22.0}}, label: 'Merge this into main.'
+                                    Other, 0x1196e17c0, {{341.0, 130.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1196e1900, {{368.0, 113.0}, {3.0, 36.0}}
+                                    Other, 0x1196e1a40, {{215.0, 138.0}, {159.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x1196e1b80, {{218.0, 146.0}, {153.0, 3.0}}
+                                  Button, 0x1196e1cc0, {{315.7, 163.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x1196e1e00, {{349.7, 164.3}, {36.3, 13.3}}, label: '3h ago'
+                          Cell, 0x1196e1f40, {{0.0, 185.0}, {402.0, 62.0}}
+                            Other, 0x1196e2080, {{0.0, 185.0}, {402.0, 62.0}}
+                              Other, 0x1196e21c0, {{0.0, 185.0}, {402.0, 62.0}}
+                                Other, 0x1196e2300, {{0.0, 185.0}, {402.0, 62.0}}
+                            Other, 0x1196e2440, {{0.0, 185.0}, {402.0, 62.0}}
+                              Other, 0x1196e2580, {{0.0, 185.0}, {402.0, 62.0}}
+                                Other, 0x1196e26c0, {{0.0, 185.0}, {402.0, 62.0}}
+                                  TextView, 0x1196e2800, {{16.0, 191.0}, {363.0, 50.0}}, value: The merge is held ...
+                                    TextView, 0x1196e2940, {{16.0, 191.0}, {363.0, 49.3}}, label: 'The merge is held for target recovery: open the review on the branch bar.'
+                                    Other, 0x1196e2a80, {{346.0, 191.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1196e2bc0, {{373.0, 194.0}, {3.0, 44.0}}
+                                    Other, 0x1196e2d00, {{16.0, 213.0}, {363.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x1196e2e40, {{19.0, 235.0}, {357.0, 3.0}}
+                          Cell, 0x1196e2f80, {{0.0, 247.0}, {402.0, 21.0}}
+                            Other, 0x1196e30c0, {{0.0, 247.0}, {402.0, 21.0}}
+                              Other, 0x1196e3200, {{0.0, 247.0}, {402.0, 21.0}}
+                                Other, 0x1196e3340, {{0.0, 247.0}, {402.0, 21.0}}
+                            Other, 0x1196e3480, {{0.0, 247.0}, {402.0, 21.0}}
+                              Other, 0x1196e35c0, {{0.0, 247.0}, {402.0, 21.0}}
+                                Other, 0x1196e3700, {{0.0, 247.0}, {402.0, 21.0}}
+                                  Other, 0x1196e3840, {{0.0, 247.0}, {402.0, 21.0}}
+                          Other, 0x1196e3980, {{369.0, 116.0}, {30.0, 554.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1196e3ac0, {{396.0, 521.7}, {3.0, 146.0}}
+                          Other, 0x1196e3c00, {{369.0, 116.0}, {30.0, 554.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1196e3d40, {{396.0, 521.7}, {3.0, 146.0}}
+                        Image, 0x1196e3e80, {{33.3, 680.7}, {10.3, 10.3}}, identifier: 'arrow.triangle.branch', label: 'Divide'
+                        StaticText, 0x1196e4000, {{49.0, 677.8}, {136.7, 15.7}}, label: 'orbit/ios-workspace-switch-stale-callbacks-workspace-d0afa0'
+                        StaticText, 0x1196e4140, {{199.7, 677.8}, {161.0, 15.7}}, label: '+0 −0 · 0 files · committed'
+                        Button, 0x1196e4280, {{16.0, 701.0}, {370.0, 30.0}}, label: 'Already on origin/main'
+                          Image, 0x1196e43c0, {{28.3, 711.0}, {11.3, 10.3}}, identifier: 'exclamationmark.triangle.fill', label: 'Warning'
+                          StaticText, 0x1196e4500, {{50.0, 708.2}, {142.0, 15.7}}, label: 'Already on origin/main'
+                          Image, 0x1196e4640, {{369.7, 711.3}, {5.7, 9.7}}, identifier: 'chevron.right', label: 'Forward'
+                        TextView, 0x1196e4780, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x1196e48c0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x1196e4a00, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1196e4b40, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x1196e4c80, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x1196e4dc0, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x1196e4f00, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x1196e5040, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x1196e5180, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x1196e52c0, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                          Button, 0x1196e5400, {{64.0, 797.0}, {51.0, 18.0}}
+                            StaticText, 0x1196e5540, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                        Button, 0x1196e5680, {{212.7, 797.0}, {101.3, 18.0}}, label: 'Model Opus 5.5, effort High'
+                          Button, 0x1196e57c0, {{212.7, 797.0}, {101.3, 18.0}}
+                            StaticText, 0x1196e5900, {{212.7, 797.0}, {64.3, 18.0}}, label: 'Opus 5.5'
+                            StaticText, 0x1196e5a40, {{282.0, 797.0}, {32.0, 18.0}}, label: 'High'
+                        Button, 0x1196e5b80, {{322.0, 798.0}, {16.0, 16.0}}, label: 'Context window not reported yet'
+                        Button, 0x1196e5cc0, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x1196e5e00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1196e5f40, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1196e6080, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1196e61c0, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x1196e6300, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x1196e6440, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x1196e6580, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x1196e66c0, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x1196e6800, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x1196e6940, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x1196e6a80, {{0.0, 78.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                      Other, 0x1196e6bc0, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x1196e6d00, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x1196e6e40, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x1196e6f80, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x1196e70c0, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x1196e7200, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x1196e7340, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x1196e7480, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x1196e75c0, {{-16.0, -1492.0}, {434.0, 1806.7}}
+                              Other, 0x1196e7700, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x1196e7840, {{0.0, 62.0}, {402.0, 812.0}}
+                              Cell, 0x1196e7980, {{16.0, 167.0}, {370.0, 130.0}}
+                                Other, 0x1196e7ac0, {{16.0, 167.0}, {370.0, 130.0}}
+                                  Other, 0x1196e7c00, {{16.0, 167.0}, {370.0, 130.0}}
+                                    Other, 0x1196e7d40, {{16.0, 167.0}, {370.0, 130.0}}
+                                Other, 0x1196e7e80, {{16.0, 167.0}, {370.0, 130.0}}
+                                  Other, 0x1196e8000, {{16.0, 167.0}, {370.0, 130.0}}
+                                    Other, 0x1196e8140, {{16.0, 167.0}, {370.0, 130.0}}
+                                      StaticText, 0x1196e8280, {{32.0, 186.0}, {205.3, 24.0}}, label: 'Already on origin/main'
+                                      StaticText, 0x1196e83c0, {{32.0, 216.0}, {121.7, 18.0}}, label: 'Checked just now'
+                                      StaticText, 0x1196e8500, {{32.0, 240.0}, {322.3, 38.0}}, label: 'This session’s changes reached origin/main on Oct 11. Nothing is left to merge.'
+                              Other, 0x1196e8640, {{-16.0, 314.7}, {434.0, 240.7}}
+                              Cell, 0x1196e8780, {{16.0, 314.7}, {370.0, 40.3}}
+                                Other, 0x1196e88c0, {{16.0, 314.7}, {370.0, 40.3}}
+                                Other, 0x1196e8a00, {{16.0, 314.7}, {370.0, 40.3}}
+                                  Other, 0x1196e8b40, {{16.0, 314.7}, {370.0, 40.3}}
+                                    Other, 0x1196e8c80, {{16.0, 314.7}, {370.0, 40.3}}
+                                      StaticText, 0x1196e8dc0, {{32.0, 324.7}, {116.0, 20.3}}, label: 'On origin/main'
+                                      StaticText, 0x1196e8f00, {{286.7, 324.7}, {83.3, 20.3}}, label: '2 commits'
+                              Cell, 0x1196e9040, {{16.0, 355.0}, {370.0, 67.3}}
+                                Other, 0x1196e9180, {{16.0, 355.0}, {370.0, 67.3}}
+                                  Other, 0x1196e92c0, {{16.0, 355.0}, {370.0, 67.3}}
+                                Other, 0x1196e9400, {{16.0, 355.0}, {370.0, 67.3}}
+                                  Other, 0x1196e9540, {{16.0, 355.0}, {370.0, 67.3}}
+                                    Other, 0x1196e9680, {{16.0, 355.0}, {370.0, 67.3}}
+                                      StaticText, 0x1196e97c0, {{32.0, 372.0}, {321.0, 18.0}}, label: 'Explicit self in the session-list currency closure'
+                                      StaticText, 0x1196e9900, {{32.0, 392.0}, {210.0, 13.3}}, label: 'Merged Oct 11 · coordinator · bba5d7b3'
+                              Cell, 0x1196e9a40, {{16.0, 422.0}, {370.0, 87.3}}
+                                Other, 0x1196e9b80, {{16.0, 422.0}, {370.0, 87.3}}
+                                  Other, 0x1196e9cc0, {{16.0, 422.0}, {370.0, 87.3}}
+                                Other, 0x1196e9e00, {{16.0, 422.0}, {370.0, 87.3}}
+                                  Other, 0x1196e9f40, {{16.0, 422.0}, {370.0, 87.3}}
+                                    Other, 0x1196ea080, {{16.0, 422.0}, {370.0, 87.3}}
+                                      StaticText, 0x1196ea1c0, {{32.0, 439.0}, {240.7, 38.0}}, label: 'Update AgentsModel.swift, SessionListSwitchWiringTests.swift'
+                                      StaticText, 0x1196ea300, {{32.0, 479.0}, {210.0, 13.3}}, label: 'Merged Oct 11 · coordinator · 99cd5459'
+                              Other, 0x1196ea440, {{32.0, 421.0}, {338.0, 1.0}}
+                              Cell, 0x1196ea580, {{16.0, 509.7}, {370.0, 45.7}}
+                                Other, 0x1196ea6c0, {{16.0, 509.7}, {370.0, 45.7}}
+                                Other, 0x1196ea800, {{16.0, 509.7}, {370.0, 45.7}}
+                                  Other, 0x1196ea940, {{16.0, 509.7}, {370.0, 45.7}}
+                                    Other, 0x1196eaa80, {{16.0, 509.7}, {370.0, 45.7}}
+                                      StaticText, 0x1196eabc0, {{16.0, 509.7}, {370.0, 45.7}}, label: 'Matched by content — this branch was rewritten after these merged.'
+                              Other, 0x1196ead00, {{-16.0, 555.3}, {434.0, 1735.7}}
+                              Cell, 0x1196eae40, {{16.0, 572.7}, {370.0, 64.3}}
+                                Other, 0x1196eaf80, {{16.0, 572.7}, {370.0, 64.3}}
+                                  Other, 0x1196eb0c0, {{16.0, 572.7}, {370.0, 64.3}}
+                                Other, 0x1196eb200, {{16.0, 572.7}, {370.0, 64.3}}
+                                  Other, 0x1196eb340, {{16.0, 572.7}, {370.0, 64.3}}
+                                    Other, 0x1196eb480, {{16.0, 572.7}, {370.0, 64.3}}
+                                      Button, 0x1196eb5c0, {{16.0, 572.7}, {370.0, 64.3}}, label: 'orbit/ios-workspace-switch-stale-callbacks-workspace-d0afa0, main, Local main: 2 ahead, 1 behind origin/main'
+                                        StaticText, 0x1196eb700, {{32.0, 587.7}, {309.3, 34.3}}, label: 'orbit/ios-workspace-switch-stale-callbacks-workspace-d0afa0, main, Local main: 2 ahead, 1 behind origin/main'
+                                          Image, 0x1196eb840, {{33.3, 590.3}, {10.3, 10.3}}, identifier: 'arrow.triangle.branch', label: 'Divide'
+                                          StaticText, 0x1196eb980, {{51.0, 587.7}, {233.3, 15.7}}, label: 'orbit/ios-workspace-switch-stale-callbacks-workspace-d0afa0'
+                                          Image, 0x1196ebac0, {{291.7, 591.3}, {10.0, 8.3}}, identifier: 'arrow.right', label: 'Right'
+                                          StaticText, 0x1196ebc00, {{309.0, 587.7}, {32.3, 15.7}}, label: 'main'
+                                          StaticText, 0x1196ebd40, {{32.0, 606.3}, {249.3, 15.7}}, label: 'Local main: 2 ahead, 1 behind origin/main'
+                                        Image, 0x1196ebe80, {{360.7, 599.0}, {7.0, 12.0}}, identifier: 'chevron.forward'
+                              Cell, 0x1196ec000, {{16.0, 637.0}, {370.0, 29.7}}
+                                Other, 0x1196ec140, {{16.0, 637.0}, {370.0, 29.7}}
+                                Other, 0x1196ec280, {{16.0, 637.0}, {370.0, 29.7}}
+                                  Other, 0x1196ec3c0, {{16.0, 637.0}, {370.0, 29.7}}
+                                    Other, 0x1196ec500, {{16.0, 637.0}, {370.0, 29.7}}
+                                      StaticText, 0x1196ec640, {{16.0, 637.0}, {370.0, 29.7}}, label: 'Local main’s own 2 commits aren’t part of this session.'
+                              Other, 0x1196ec780, {{369.0, 132.0}, {30.0, 641.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x1196ec8c0, {{396.0, 763.7}, {3.0, 7.0}}
+                              Other, 0x1196eca00, {{369.0, 132.0}, {30.0, 641.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x1196ecb40, {{396.0, 763.7}, {3.0, 7.0}}
+                            Button, 0x1196ecc80, {{16.0, 783.7}, {370.0, 50.3}}, label: 'Done'
+                    Other, 0x1196ecdc0, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x1196ecf00, {{0.0, 62.0}, {402.0, 812.0}}
+Path to element:
+ →Application, 0x1196d5e00, pid: 68667, label: 'MrProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.mrprobe'
+  Output: {
+    Application, 0x1196ed040, pid: 68667, label: 'MrProbe'
+  }

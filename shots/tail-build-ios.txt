@@ -1,0 +1,300 @@
+    t =   290.03s Checking existence of `Any (First Match)`
+    t =   305.95s Checking existence of `Any (First Match)`
+    t =   307.64s Checking existence of `Any (First Match)`
+    t =   309.42s Checking existence of `Any (First Match)`
+    t =   311.67s Checking existence of `Any (First Match)`
+    t =   313.09s Checking existence of `Any (First Match)`
+    t =   315.04s Checking existence of `Any (First Match)`
+    t =   316.40s Checking existence of `Any (First Match)`
+    t =   317.50s Checking existence of `Any (First Match)`
+    t =   319.19s Added attachment named '8-failed-checking-dark'
+    t =   319.20s Requesting snapshot of accessibility hierarchy for app with pid 70570
+    t =   320.45s Requesting snapshot of accessibility hierarchy for app with pid 70570
+    t =   320.69s Added attachment named 'tree-8-failed-checking-dark.txt'
+    t =   320.70s Terminate io.orbitd.mrprobe:70570
+    t =   321.75s Tear Down
+    t =   321.75s     Added attachment named 'RepairLoopShotTeststestTheRepairLoopFramesDark-notes.txt'
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' passed (322.886 seconds).
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' started.
+    t =     0.00s Start Test at 2026-10-18 23:52:29.796
+    t =     0.12s Set Up
+    t =     0.15s Open io.orbitd.mrprobe
+    t =     0.15s     Launch io.orbitd.mrprobe
+2026-10-18 23:52:30.400 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:52:30.400 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.71s         Setting up automation session
+    t =     4.95s         Wait for io.orbitd.mrprobe to idle
+    t =     8.22s Checking existence of `Any (First Match)`
+    t =    10.61s Checking existence of `Any (First Match)`
+    t =    12.99s Checking existence of `Button (First Match)`
+    t =    13.10s Tap Button (First Match)
+    t =    13.10s     Wait for io.orbitd.mrprobe to idle
+    t =    13.10s     Find the Button (First Match)
+    t =    13.22s     Check for interrupting elements affecting "Your changes conflict with the synchronized target" Button
+    t =    13.35s     Synthesize event
+    t =    13.66s     Wait for io.orbitd.mrprobe to idle
+    t =    14.05s Checking existence of `Any (First Match)`
+    t =    16.86s Checking existence of `Any (First Match)`
+    t =    17.33s Checking existence of `Any (First Match)`
+    t =    17.86s Checking existence of `Any (First Match)`
+    t =    18.70s Checking existence of `Any (First Match)`
+    t =    19.53s Checking existence of `Any (First Match)`
+    t =    20.44s Checking existence of `Any (First Match)`
+    t =    20.94s Checking existence of `Any (First Match)`
+    t =    21.24s Checking existence of `Any (First Match)`
+    t =    21.67s Checking existence of `Any (First Match)`
+    t =    22.11s Checking existence of `Any (First Match)`
+    t =    22.73s Added attachment named '1-running-light'
+    t =    22.73s Requesting snapshot of accessibility hierarchy for app with pid 71954
+    t =    23.78s Requesting snapshot of accessibility hierarchy for app with pid 71954
+    t =    24.01s Added attachment named 'tree-1-running-light.txt'
+    t =    24.01s Terminate io.orbitd.mrprobe:71954
+    t =    25.13s Open io.orbitd.mrprobe
+    t =    25.13s     Launch io.orbitd.mrprobe
+2026-10-18 23:52:55.237 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:52:55.237 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    27.14s         Setting up automation session
+    t =    29.25s         Wait for io.orbitd.mrprobe to idle
+    t =    31.85s Checking existence of `Any (First Match)`
+    t =    34.48s Checking existence of `Any (First Match)`
+    t =    36.12s Checking existence of `Any (First Match)`
+    t =    38.75s Checking existence of `Button (First Match)`
+    t =    39.48s Tap Button (First Match)
+    t =    39.48s     Wait for io.orbitd.mrprobe to idle
+    t =    39.51s     Find the Button (First Match)
+    t =    40.09s     Check for interrupting elements affecting "Your changes conflict with the synchronized target" Button
+    t =    40.75s     Synthesize event
+    t =    41.46s     Wait for io.orbitd.mrprobe to idle
+    t =    42.25s Checking existence of `Any (First Match)`
+    t =    50.48s Checking existence of `Any (First Match)`
+    t =    54.52s Checking existence of `Any (First Match)`
+    t =    56.69s Checking existence of `Any (First Match)`
+    t =    58.11s Checking existence of `Any (First Match)`
+    t =    59.28s Checking existence of `Any (First Match)`
+    t =    60.78s Checking existence of `Any (First Match)`
+    t =    62.26s Checking existence of `Any (First Match)`
+    t =    63.66s Added attachment named '2-checking-light'
+    t =    63.66s Requesting snapshot of accessibility hierarchy for app with pid 72854
+    t =    64.79s Requesting snapshot of accessibility hierarchy for app with pid 72854
+    t =    65.07s Added attachment named 'tree-2-checking-light.txt'
+    t =    65.07s Terminate io.orbitd.mrprobe:72854
+    t =    66.16s Open io.orbitd.mrprobe
+    t =    66.16s     Launch io.orbitd.mrprobe
+2026-10-18 23:53:35.981 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:53:35.981 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    67.93s         Setting up automation session
+    t =    70.15s         Wait for io.orbitd.mrprobe to idle
+    t =    72.92s Checking existence of `Any (First Match)`
+    t =    76.02s Checking existence of `Any (First Match)`
+    t =    78.35s Checking existence of `Button (First Match)`
+    t =    78.45s Tap Button (First Match)
+    t =    78.45s     Wait for io.orbitd.mrprobe to idle
+    t =    78.45s     Find the Button (First Match)
+    t =    78.60s     Check for interrupting elements affecting "Review synchronization into main" Button
+    t =    78.72s     Synthesize event
+    t =    79.02s     Wait for io.orbitd.mrprobe to idle
+    t =    79.53s Checking existence of `Any (First Match)`
+    t =    82.45s Checking existence of `Any (First Match)`
+    t =    82.74s Checking existence of `Any (First Match)`
+    t =    83.27s Checking existence of `Any (First Match)`
+    t =    83.76s Checking existence of `Any (First Match)`
+    t =    84.29s Checking existence of `Any (First Match)`
+    t =    84.58s Checking existence of `Any (First Match)`
+    t =    85.02s Added attachment named '3-ready-light'
+    t =    85.02s Requesting snapshot of accessibility hierarchy for app with pid 74171
+    t =    86.10s Requesting snapshot of accessibility hierarchy for app with pid 74171
+    t =    86.33s Added attachment named 'tree-3-ready-light.txt'
+    t =    86.34s Terminate io.orbitd.mrprobe:74171
+    t =    87.40s Open io.orbitd.mrprobe
+    t =    87.41s     Launch io.orbitd.mrprobe
+2026-10-18 23:53:57.207 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:53:57.207 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    88.08s         Setting up automation session
+    t =    90.43s         Wait for io.orbitd.mrprobe to idle
+    t =    92.68s Checking existence of `Any (First Match)`
+    t =    95.09s Checking existence of `Any (First Match)`
+    t =    97.59s Checking existence of `Button (First Match)`
+    t =    97.81s Tap Button (First Match)
+    t =    97.81s     Wait for io.orbitd.mrprobe to idle
+    t =    97.82s     Find the Button (First Match)
+    t =    97.95s     Check for interrupting elements affecting "main synchronization has conflicts" Button
+    t =    98.09s     Synthesize event
+    t =    98.40s     Wait for io.orbitd.mrprobe to idle
+    t =    98.83s Checking existence of `Any (First Match)`
+    t =   101.42s Checking existence of `Any (First Match)`
+    t =   101.95s Checking existence of `Any (First Match)`
+    t =   102.68s Checking existence of `Any (First Match)`
+    t =   103.08s Checking existence of `Any (First Match)`
+    t =   103.54s Checking existence of `Any (First Match)`
+    t =   103.84s Checking existence of `Any (First Match)`
+    t =   104.45s Checking existence of `Any (First Match)`
+    t =   105.06s Checking existence of `Any (First Match)`
+    t =   105.40s Find the Any (First Match)
+    t =   106.01s Added attachment named '4-conflict-left-light'
+    t =   106.01s Requesting snapshot of accessibility hierarchy for app with pid 75060
+    t =   106.79s Requesting snapshot of accessibility hierarchy for app with pid 75060
+    t =   107.00s Added attachment named 'tree-4-conflict-left-light.txt'
+    t =   107.00s Terminate io.orbitd.mrprobe:75060
+    t =   108.06s Open io.orbitd.mrprobe
+    t =   108.06s     Launch io.orbitd.mrprobe
+2026-10-18 23:54:17.860 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:54:17.860 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   108.90s         Setting up automation session
+    t =   111.75s         Wait for io.orbitd.mrprobe to idle
+    t =   114.39s Checking existence of `Any (First Match)`
+    t =   116.31s Checking existence of `Any (First Match)`
+    t =   118.53s Checking existence of `Button (First Match)`
+    t =   118.69s Tap Button (First Match)
+    t =   118.69s     Wait for io.orbitd.mrprobe to idle
+    t =   118.69s     Find the Button (First Match)
+    t =   118.81s     Check for interrupting elements affecting "main synchronization has conflicts" Button
+    t =   118.93s     Synthesize event
+    t =   119.23s     Wait for io.orbitd.mrprobe to idle
+    t =   119.59s Checking existence of `Any (First Match)`
+    t =   122.52s Checking existence of `Any (First Match)`
+    t =   123.24s Checking existence of `Any (First Match)`
+    t =   123.94s Checking existence of `Any (First Match)`
+    t =   124.37s Checking existence of `Any (First Match)`
+    t =   125.00s Checking existence of `Any (First Match)`
+    t =   125.64s Checking existence of `Any (First Match)`
+    t =   126.06s Find the Any (First Match)
+    t =   126.62s Added attachment named '4b-conflicts-left-plural-light'
+    t =   126.62s Requesting snapshot of accessibility hierarchy for app with pid 75928
+    t =   127.55s Requesting snapshot of accessibility hierarchy for app with pid 75928
+    t =   127.78s Added attachment named 'tree-4b-conflicts-left-plural-light.txt'
+    t =   127.78s Terminate io.orbitd.mrprobe:75928
+    t =   128.87s Open io.orbitd.mrprobe
+2026-10-18 23:54:38.672 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:54:38.672 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   128.87s     Launch io.orbitd.mrprobe
+    t =   130.92s         Setting up automation session
+    t =   133.37s         Wait for io.orbitd.mrprobe to idle
+    t =   135.78s Checking existence of `Any (First Match)`
+    t =   141.02s Checking existence of `Any (First Match)`
+    t =   143.59s Checking existence of `Button (First Match)`
+    t =   144.23s Tap Button (First Match)
+    t =   144.23s     Wait for io.orbitd.mrprobe to idle
+    t =   144.23s     Find the Button (First Match)
+    t =   145.01s     Check for interrupting elements affecting "The repair isn’t finished" Button
+    t =   145.26s     Synthesize event
+    t =   145.59s     Wait for io.orbitd.mrprobe to idle
+    t =   146.29s Checking existence of `Any (First Match)`
+    t =   149.52s Checking existence of `Any (First Match)`
+    t =   150.13s Checking existence of `Any (First Match)`
+    t =   151.08s Checking existence of `Any (First Match)`
+    t =   151.68s Checking existence of `Any (First Match)`
+    t =   152.22s Checking existence of `Any (First Match)`
+    t =   152.81s Checking existence of `Any (First Match)`
+    t =   153.44s Checking existence of `Any (First Match)`
+    t =   153.96s Checking existence of `Any (First Match)`
+    t =   154.59s Added attachment named '5-needs-reply-light'
+    t =   154.59s Requesting snapshot of accessibility hierarchy for app with pid 76815
+    t =   155.81s Requesting snapshot of accessibility hierarchy for app with pid 76815
+    t =   156.12s Added attachment named 'tree-5-needs-reply-light.txt'
+    t =   156.13s Terminate io.orbitd.mrprobe:76815
+    t =   157.25s Open io.orbitd.mrprobe
+    t =   157.25s     Launch io.orbitd.mrprobe
+2026-10-18 23:55:07.052 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:55:07.053 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   159.01s         Setting up automation session
+    t =   161.86s         Wait for io.orbitd.mrprobe to idle
+    t =   164.66s Checking existence of `Any (First Match)`
+    t =   166.10s Checking existence of `Any (First Match)`
+    t =   168.06s Checking existence of `Any (First Match)`
+    t =   170.88s Checking existence of `Button (First Match)`
+    t =   171.44s Tap Button (First Match)
+    t =   171.44s     Wait for io.orbitd.mrprobe to idle
+    t =   171.44s     Find the Button (First Match)
+    t =   171.89s     Check for interrupting elements affecting "Already on origin/main" Button
+    t =   172.09s     Synthesize event
+    t =   172.41s     Wait for io.orbitd.mrprobe to idle
+    t =   172.86s Checking existence of `Any (First Match)`
+    t =   175.70s Checking existence of `Any (First Match)`
+    t =   176.17s Checking existence of `Any (First Match)`
+    t =   177.25s Checking existence of `Any (First Match)`
+    t =   177.72s Checking existence of `Any (First Match)`
+    t =   178.53s Checking existence of `Any (First Match)`
+    t =   179.00s Checking existence of `Any (First Match)`
+    t =   179.20s Checking existence of `Any (First Match)`
+    t =   179.49s Checking existence of `Any (First Match)`
+    t =   179.71s Checking existence of `Any (First Match)`
+    t =   180.18s Added attachment named '6-already-landed-light'
+    t =   180.18s Requesting snapshot of accessibility hierarchy for app with pid 78114
+    t =   180.83s Requesting snapshot of accessibility hierarchy for app with pid 78114
+    t =   181.00s Added attachment named 'tree-6-already-landed-light.txt'
+    t =   181.01s Terminate io.orbitd.mrprobe:78114
+    t =   182.06s Open io.orbitd.mrprobe
+    t =   182.06s     Launch io.orbitd.mrprobe
+2026-10-18 23:55:31.872 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:55:31.872 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   182.71s         Setting up automation session
+    t =   185.11s         Wait for io.orbitd.mrprobe to idle
+    t =   187.67s Checking existence of `Any (First Match)`
+    t =   190.01s Checking existence of `Any (First Match)`
+    t =   192.68s Checking existence of `Button (First Match)`
+    t =   192.93s Tap Button (First Match)
+    t =   192.93s     Wait for io.orbitd.mrprobe to idle
+    t =   192.93s     Find the Button (First Match)
+    t =   193.12s     Check for interrupting elements affecting "Your changes conflict with the synchronized target" Button
+    t =   193.33s     Synthesize event
+    t =   193.70s     Wait for io.orbitd.mrprobe to idle
+    t =   194.19s Checking existence of `Any (First Match)`
+    t =   197.12s Checking existence of `Any (First Match)`
+    t =   197.60s Checking existence of `Any (First Match)`
+    t =   198.46s Checking existence of `Any (First Match)`
+    t =   199.07s Checking existence of `Any (First Match)`
+    t =   199.35s Checking existence of `Any (First Match)`
+    t =   199.63s Checking existence of `Any (First Match)`
+    t =   200.48s Added attachment named '7-failed-light'
+    t =   200.49s Requesting snapshot of accessibility hierarchy for app with pid 79014
+    t =   201.13s Requesting snapshot of accessibility hierarchy for app with pid 79014
+    t =   201.29s Added attachment named 'tree-7-failed-light.txt'
+    t =   201.29s Terminate io.orbitd.mrprobe:79014
+    t =   202.37s Open io.orbitd.mrprobe
+    t =   202.37s     Launch io.orbitd.mrprobe
+2026-10-18 23:55:52.180 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 23:55:52.180 xcodebuild[41891:115246] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   203.48s         Setting up automation session
+    t =   204.98s         Wait for io.orbitd.mrprobe to idle
+    t =   207.21s Checking existence of `Any (First Match)`
+    t =   209.60s Checking existence of `Any (First Match)`
+    t =   212.14s Checking existence of `Button (First Match)`
+    t =   213.14s Tap Button (First Match)
+    t =   213.14s     Wait for io.orbitd.mrprobe to idle
+    t =   213.14s     Find the Button (First Match)
+    t =   214.44s     Check for interrupting elements affecting "Your changes conflict with the synchronized target" Button
+    t =   214.79s     Synthesize event
+    t =   215.22s     Wait for io.orbitd.mrprobe to idle
+    t =   215.86s Checking existence of `Any (First Match)`
+    t =   223.35s Checking existence of `Any (First Match)`
+    t =   224.63s Checking existence of `Any (First Match)`
+    t =   225.57s Checking existence of `Any (First Match)`
+    t =   226.24s Checking existence of `Any (First Match)`
+    t =   226.68s Checking existence of `Any (First Match)`
+    t =   227.55s Checking existence of `Any (First Match)`
+    t =   228.55s Checking existence of `Any (First Match)`
+    t =   229.14s Checking existence of `Any (First Match)`
+    t =   229.95s Added attachment named '8-failed-checking-light'
+    t =   229.95s Requesting snapshot of accessibility hierarchy for app with pid 79899
+    t =   231.09s Requesting snapshot of accessibility hierarchy for app with pid 79899
+    t =   231.30s Added attachment named 'tree-8-failed-checking-light.txt'
+    t =   231.30s Terminate io.orbitd.mrprobe:79899
+    t =   232.33s Tear Down
+    t =   232.33s     Added attachment named 'RepairLoopShotTeststestTheRepairLoopFramesLight-notes.txt'
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' passed (232.633 seconds).
+Test Suite 'RepairLoopShotTests' passed at 2026-10-18 23:56:22.430.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.525) seconds
+Test Suite 'MrProbeUITests.xctest' passed at 2026-10-18 23:56:22.431.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.526) seconds
+Test Suite 'All tests' passed at 2026-10-18 23:56:22.431.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.527) seconds
+2026-10-18 23:56:59.795 xcodebuild[41891:115246] [MT] IDETestOperationsObserverDebug: 640.692 elapsed -- Testing started completed.
+2026-10-18 23:56:59.796 xcodebuild[41891:115246] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 23:56:59.796 xcodebuild[41891:115246] [MT] IDETestOperationsObserverDebug: 640.692 sec, +640.692 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.mr-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

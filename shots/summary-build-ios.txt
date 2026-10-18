@@ -1,0 +1,8 @@
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' started.
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' passed (322.886 seconds).
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' started.
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' passed (232.633 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.525) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.526) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.527) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,146 @@
+Attributes: Application, 0x781f42800, pid: 39915, title: 'MrMacProbe', Disabled
+Element subtree:
+ →Application, 0x781f42800, pid: 39915, title: 'MrMacProbe', Disabled
+    MenuBar, 0x781f42940, {{0.0, 0.0}, {1024.0, 30.0}}
+      MenuBarItem, 0x781f42a80, {{10.0, 0.0}, {34.0, 30.0}}, title: 'Apple'
+        Menu, 0x781f42bc0, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f42d00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_aboutThisMacRequested:', title: 'About This Mac'
+          MenuItem, 0x781f42e40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemInformationRequested:', title: 'System Information'
+          MenuItem, 0x781f42f80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f430c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemSettingsRequested:', title: 'System Settings…, 1 update'
+          MenuItem, 0x781f43200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_appStoreRequested:', title: 'App Store'
+          MenuItem, 0x781f43340, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f43480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentsRequested:', title: 'Recent Items'
+            Menu, 0x781f435c0, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x781f43700, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Applications', Disabled
+              MenuItem, 0x781f43840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Installer'
+              MenuItem, 0x781f43980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “Installer” in Finder'
+              MenuItem, 0x781f43ac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'MrMacProbe'
+              MenuItem, 0x781f43c00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “MrMacProbe” in Finder'
+              MenuItem, 0x781f43d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'System Settings'
+              MenuItem, 0x781f43e80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “System Settings” in Finder'
+              MenuItem, 0x781ed0280, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x781ed0140, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Documents', Disabled
+              MenuItem, 0x781ed03c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'AnkaGuestAddons.pkg'
+              MenuItem, 0x781f14280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “AnkaGuestAddons.pkg” in Finder'
+              MenuItem, 0x781f14780, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x781f14500, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Servers', Disabled
+              MenuItem, 0x781f148c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Macintosh HD'
+              MenuItem, 0x781f143c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x781f14000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_clearRecentItemsRequested:', title: 'Clear Menu'
+          MenuItem, 0x781f44000, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f44140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitPanelRequested:', title: 'Force Quit…'
+          MenuItem, 0x781f44280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitRequested:', title: 'Force Quit MrMacProbe'
+          MenuItem, 0x781f443c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f44500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_sleepRequested:', title: 'Sleep'
+          MenuItem, 0x781f44640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartRequested:', title: 'Restart…'
+          MenuItem, 0x781f44780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartNowRequested:', title: 'Restart'
+          MenuItem, 0x781f448c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownRequested:', title: 'Shut Down…'
+          MenuItem, 0x781f44a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownNowRequested:', title: 'Shut Down'
+          MenuItem, 0x781f44b40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f44c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_lockScreenRequested:', title: 'Lock Screen'
+          MenuItem, 0x781f44dc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutRequested:', title: 'Log Out Anka…'
+          MenuItem, 0x781f44f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutNowRequested:', title: 'Log Out Anka'
+          MenuItem, 0x781f45040, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+      MenuBarItem, 0x781f45180, {{44.0, 0.0}, {103.0, 30.0}}, title: 'MrMacProbe'
+        Menu, 0x781f452c0, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f45400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontStandardAboutPanel:', title: 'About MrMacProbe'
+          MenuItem, 0x781f45540, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f45680, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Services'
+            Menu, 0x781f457c0, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x781f45900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Activity Monitor'
+              MenuItem, 0x781f45a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Allocations & Leaks'
+              MenuItem, 0x781f45b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'File Activity'
+              MenuItem, 0x781f45cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'System Trace'
+              MenuItem, 0x781f45e00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Active Application'
+              MenuItem, 0x781f45f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile App Under Mouse'
+              MenuItem, 0x781f46080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Entire System'
+              MenuItem, 0x781f461c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Toggle Instruments Recording'
+              MenuItem, 0x781f46300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_configureServicesMenu:', title: 'Services Settings…'
+          MenuItem, 0x781f46440, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f46580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hide:', title: 'Hide MrMacProbe'
+          MenuItem, 0x781f466c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hideOtherApplications:', title: 'Hide Others'
+          MenuItem, 0x781f46800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'unhideAllApplications:', title: 'Show All', Disabled
+          MenuItem, 0x781f46940, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f46a80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'terminate:', title: 'Quit MrMacProbe'
+          MenuItem, 0x781f46bc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'NSAlternateQuitMenuItem', title: 'Quit and Keep Windows'
+      MenuBarItem, 0x781f46d00, {{147.0, 0.0}, {42.0, 30.0}}, title: 'File'
+        Menu, 0x781f46e40, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f46f80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'menuAction:', title: 'New Window'
+          MenuItem, 0x781f470c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f47200, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f47340, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performClose:', title: 'Close', Disabled
+          MenuItem, 0x781f47480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'closeAll:', title: 'Close All', Disabled
+      MenuBarItem, 0x781f475c0, {{189.0, 0.0}, {44.0, 30.0}}, title: 'Edit'
+        Menu, 0x781f47700, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f47840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'undo:', title: 'Undo', Disabled
+          MenuItem, 0x781f47980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'redo:', title: 'Redo', Disabled
+          MenuItem, 0x781f47ac0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f47c00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'cut:', title: 'Cut', Disabled
+          MenuItem, 0x781f47d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'copy:', title: 'Copy', Disabled
+          MenuItem, 0x781f47e80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'paste:', title: 'Paste', Disabled
+          MenuItem, 0x781f4c000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'delete:', title: 'Delete', Disabled
+          MenuItem, 0x781f4c140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectAll:', title: 'Select All', Disabled
+          MenuItem, 0x781f4c280, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f4c3c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_NSMenuItemAutoFillIdentifier', title: 'AutoFill'
+            Menu, 0x781f4c500, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x781f4c640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromContactsCommand:', title: 'Contact…', Disabled
+              MenuItem, 0x781f4c780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromPasswordsCommand:', title: 'Passwords…', Disabled
+              MenuItem, 0x781f4c8c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromCreditCardsCommand:', title: 'Credit Card…', Disabled
+          MenuItem, 0x781f4ca00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'startDictation:', title: 'Start Dictation…'
+          MenuItem, 0x781f4cb40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontCharacterPalette:', title: 'Emoji & Symbols'
+      MenuBarItem, 0x781f4cc80, {{233.0, 0.0}, {50.0, 30.0}}, title: 'View'
+        Menu, 0x781f4cdc0, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f4cf00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleFullScreen:', title: 'Enter Full Screen', Disabled
+      MenuBarItem, 0x781f4d040, {{283.0, 0.0}, {69.0, 30.0}}, title: 'Window'
+        Menu, 0x781f4d180, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f4d2c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performMiniaturize:', title: 'Minimize', Disabled
+          MenuItem, 0x781f4d400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'miniaturizeAll:', title: 'Minimize All', Disabled
+          MenuItem, 0x781f4d540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performZoom:', title: 'Zoom', Disabled
+          MenuItem, 0x781f4d680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'zoomAll:', title: 'Zoom All', Disabled
+          MenuItem, 0x781f4d7c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomFill:', title: 'Fill', Disabled
+          MenuItem, 0x781f4d900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomCenter:', title: 'Center', Disabled
+          MenuItem, 0x781f4da40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f4db80, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Move & Resize'
+            Menu, 0x781f4dcc0, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0x781f4de00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Halves', Disabled
+              MenuItem, 0x781f4df40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeft:', title: 'Left', Disabled
+              MenuItem, 0x781f4e080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRight:', title: 'Right', Disabled
+              MenuItem, 0x781f4e1c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTop:', title: 'Top', Disabled
+              MenuItem, 0x781f4e300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottom:', title: 'Bottom', Disabled
+              MenuItem, 0x781f4e440, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x781f4e580, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Quarters', Disabled
+              MenuItem, 0x781f4e6c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopLeft:', title: 'Top Left', Disabled
+              MenuItem, 0x781f4e800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopRight:', title: 'Top Right', Disabled
+              MenuItem, 0x781f4e940, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomLeft:', title: 'Bottom Left', Disabled
+              MenuItem, 0x781f4ea80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomRight:', title: 'Bottom Right', Disabled
+              MenuItem, 0x781f4ebc0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x781f4ed00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Arrange', Disabled
+              MenuItem, 0x781f4ee40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftAndRight:', title: 'Left & Right', Disabled
+              MenuItem, 0x781f4ef80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftThreeUp:', title: 'Left & Quarters', Disabled
+              MenuItem, 0x781f4f0c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightAndLeft:', title: 'Right & Left', Disabled
+              MenuItem, 0x781f4f200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightThreeUp:', title: 'Right & Quarters', Disabled
+              MenuItem, 0x781f4f340, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopAndBottom:', title: 'Top & Bottom', Disabled
+              MenuItem, 0x781f4f480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopThreeUp:', title: 'Top & Quarters', Disabled
+              MenuItem, 0x781f4f5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomAndTop:', title: 'Bottom & Top', Disabled
+              MenuItem, 0x781f4f700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomThreeUp:', title: 'Bottom & Quarters', Disabled
+              MenuItem, 0x781f4f840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomQuarters:', title: 'Quarters', Disabled
+              MenuItem, 0x781f4f980, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0x781f4fac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomUntile:', title: 'Return to Previous Size', Disabled
+          MenuItem, 0x781f4fc00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Full Screen Tile', Disabled
+          MenuItem, 0x781f4fd40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f4fe80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_removeWindowFromStageManagerSet:', title: 'Remove Window from Set', Disabled
+          MenuItem, 0x781f50000, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0x781f50140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'arrangeInFront:', title: 'Bring All to Front', Disabled
+          MenuItem, 0x781f50280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'alternateArrangeInFront:', title: 'Arrange in Front', Disabled
+      MenuBarItem, 0x781f503c0, {{352.0, 0.0}, {48.0, 30.0}}, title: 'Help'
+        Menu, 0x781f50500, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0x781f50640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'showHelp:', title: 'MrMacProbe Help'
+    TouchBar, 0x781f50780, {{80.0, 0.0}, {685.0, 30.0}}, Disabled
+Path to element:
+ →Application, 0x781f42800, pid: 39915, title: 'MrMacProbe', Disabled
+Query chain:
+ →Find: Target Application 'io.orbitd.mrmacprobe'
+  Output: {
+    Application, 0x781f508c0, pid: 39915, title: 'MrMacProbe', Disabled
+  }

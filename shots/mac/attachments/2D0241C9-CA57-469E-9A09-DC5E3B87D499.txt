@@ -1,0 +1,29 @@
+1-running-light: no window after launch; pressing ⌘N
+1-running-light: 1 window(s)
+1-running-light: photographed
+2-checking-light: no window after launch; pressing ⌘N
+2-checking-light: 1 window(s)
+2-checking-light: photographed
+3-ready-light: no window after launch; pressing ⌘N
+3-ready-light: 1 window(s)
+3-ready-light: photographed
+4-conflict-left-light: no window after launch; pressing ⌘N
+4-conflict-left-light: 1 window(s)
+4-conflict-left-light: the footnote is 28.0 pt tall
+4-conflict-left-light: photographed
+4b-conflicts-left-plural-light: no window after launch; pressing ⌘N
+4b-conflicts-left-plural-light: 1 window(s)
+4b-conflicts-left-plural-light: the footnote is 28.0 pt tall
+4b-conflicts-left-plural-light: photographed
+5-needs-reply-light: no window after launch; pressing ⌘N
+5-needs-reply-light: 1 window(s)
+5-needs-reply-light: photographed
+6-already-landed-light: no window after launch; pressing ⌘N
+6-already-landed-light: 1 window(s)
+6-already-landed-light: photographed
+7-failed-light: no window after launch; pressing ⌘N
+7-failed-light: 1 window(s)
+7-failed-light: photographed
+8-failed-checking-light: no window after launch; pressing ⌘N
+8-failed-checking-light: 1 window(s)
+8-failed-checking-light: photographed

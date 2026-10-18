@@ -1,0 +1,158 @@
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+==> stub ready on 127.0.0.1:8765 (pid 6552, after 3s)
+==> mac
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' started.
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' passed (265.245 seconds).
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' started.
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' passed (246.984 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 512.228 (512.232) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 512.228 (512.234) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 512.228 (512.235) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 41873, after 2s)
+==> ios
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' started.
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' passed (322.886 seconds).
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' started.
+Test Case '-[MrProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' passed (232.633 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.525) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.526) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 555.519 (555.527) seconds
+** TEST SUCCEEDED **
+.mr-probe/run.sh: line 85: 41873 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.mr-probe/shots/ios:
+total 11088
+drwxr-xr-x  67 runner  staff    2144 Oct 18 23:57 .
+drwxr-xr-x   4 runner  staff     128 Oct 18 23:24 ..
+-rw-r--r--   1 runner  staff  218462 Oct 18 23:48 1-running-dark.png
+-rw-r--r--   1 runner  staff  220376 Oct 18 23:52 1-running-light.png
+-rw-r--r--   1 runner  staff  198112 Oct 18 23:48 2-checking-dark.png
+-rw-r--r--   1 runner  staff  202247 Oct 18 23:53 2-checking-light.png
+-rw-r--r--   1 runner  staff  240344 Oct 18 23:49 3-ready-dark.png
+-rw-r--r--   1 runner  staff  241032 Oct 18 23:53 3-ready-light.png
+-rw-r--r--   1 runner  staff  203627 Oct 18 23:49 4-conflict-left-dark.png
+-rw-r--r--   1 runner  staff  207299 Oct 18 23:54 4-conflict-left-light.png
+-rw-r--r--   1 runner  staff  212743 Oct 18 23:50 4b-conflicts-left-plural-dark.png
+-rw-r--r--   1 runner  staff  214474 Oct 18 23:54 4b-conflicts-left-plural-light.png
+-rw-r--r--   1 runner  staff  208273 Oct 18 23:50 5-needs-reply-dark.png
+-rw-r--r--   1 runner  staff  211520 Oct 18 23:55 5-needs-reply-light.png
+-rw-r--r--   1 runner  staff  217666 Oct 18 23:51 6-already-landed-dark.png
+-rw-r--r--   1 runner  staff  220155 Oct 18 23:55 6-already-landed-light.png
+-rw-r--r--   1 runner  staff  209906 Oct 18 23:51 7-failed-dark.png
+-rw-r--r--   1 runner  staff  211962 Oct 18 23:55 7-failed-light.png
+-rw-r--r--   1 runner  staff  201467 Oct 18 23:52 8-failed-checking-dark.png
+-rw-r--r--   1 runner  staff  205132 Oct 18 23:56 8-failed-checking-light.png
+drwxr-xr-x  43 runner  staff    1376 Oct 18 23:57 attachments
+-rw-r--r--   1 runner  staff     262 Oct 18 23:57 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff    1994 Oct 18 23:57 not-served.txt
+-rw-r--r--   1 runner  staff     435 Oct 18 23:57 RepairLoopShotTeststestTheRepairLoopFramesDark-notes
+-rw-r--r--@  1 runner  staff     435 Oct 18 23:52 RepairLoopShotTeststestTheRepairLoopFramesDark-notes.txt
+-rw-r--r--   1 runner  staff     446 Oct 18 23:57 RepairLoopShotTeststestTheRepairLoopFramesLight-notes
+-rw-r--r--@  1 runner  staff     446 Oct 18 23:56 RepairLoopShotTeststestTheRepairLoopFramesLight-notes.txt
+-rw-r--r--   1 runner  staff   63097 Oct 18 23:56 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 18 23:40 requests.log.out
+-rw-r--r--   1 runner  staff   25305 Oct 18 23:57 tree-1-running-dark
+-rw-r--r--@  1 runner  staff   25305 Oct 18 23:48 tree-1-running-dark.txt
+-rw-r--r--   1 runner  staff   25303 Oct 18 23:57 tree-1-running-light
+-rw-r--r--@  1 runner  staff   25303 Oct 18 23:52 tree-1-running-light.txt
+-rw-r--r--   1 runner  staff   25799 Oct 18 23:57 tree-2-checking-dark
+-rw-r--r--@  1 runner  staff   25799 Oct 18 23:48 tree-2-checking-dark.txt
+-rw-r--r--   1 runner  staff   25799 Oct 18 23:57 tree-2-checking-light
+-rw-r--r--@  1 runner  staff   25799 Oct 18 23:53 tree-2-checking-light.txt
+-rw-r--r--   1 runner  staff   26338 Oct 18 23:57 tree-3-ready-dark
+-rw-r--r--@  1 runner  staff   26338 Oct 18 23:49 tree-3-ready-dark.txt
+-rw-r--r--   1 runner  staff   26338 Oct 18 23:57 tree-3-ready-light
+-rw-r--r--@  1 runner  staff   26338 Oct 18 23:53 tree-3-ready-light.txt
+-rw-r--r--   1 runner  staff   26129 Oct 18 23:57 tree-4-conflict-left-dark
+-rw-r--r--@  1 runner  staff   26129 Oct 18 23:49 tree-4-conflict-left-dark.txt
+-rw-r--r--   1 runner  staff   26129 Oct 18 23:57 tree-4-conflict-left-light
+-rw-r--r--@  1 runner  staff   26129 Oct 18 23:54 tree-4-conflict-left-light.txt
+-rw-r--r--   1 runner  staff   25999 Oct 18 23:57 tree-4b-conflicts-left-plural-dark
+-rw-r--r--@  1 runner  staff   25999 Oct 18 23:50 tree-4b-conflicts-left-plural-dark.txt
+-rw-r--r--   1 runner  staff   25999 Oct 18 23:57 tree-4b-conflicts-left-plural-light
+-rw-r--r--@  1 runner  staff   25999 Oct 18 23:54 tree-4b-conflicts-left-plural-light.txt
+-rw-r--r--   1 runner  staff   24714 Oct 18 23:57 tree-5-needs-reply-dark
+-rw-r--r--@  1 runner  staff   24714 Oct 18 23:50 tree-5-needs-reply-dark.txt
+-rw-r--r--   1 runner  staff   24714 Oct 18 23:57 tree-5-needs-reply-light
+-rw-r--r--@  1 runner  staff   24714 Oct 18 23:55 tree-5-needs-reply-light.txt
+-rw-r--r--   1 runner  staff   22769 Oct 18 23:57 tree-6-already-landed-dark
+-rw-r--r--@  1 runner  staff   22769 Oct 18 23:51 tree-6-already-landed-dark.txt
+-rw-r--r--   1 runner  staff   22769 Oct 18 23:57 tree-6-already-landed-light
+-rw-r--r--@  1 runner  staff   22769 Oct 18 23:55 tree-6-already-landed-light.txt
+-rw-r--r--   1 runner  staff   25421 Oct 18 23:57 tree-7-failed-dark
+-rw-r--r--@  1 runner  staff   25421 Oct 18 23:51 tree-7-failed-dark.txt
+-rw-r--r--   1 runner  staff   25421 Oct 18 23:57 tree-7-failed-light
+-rw-r--r--@  1 runner  staff   25421 Oct 18 23:55 tree-7-failed-light.txt
+-rw-r--r--   1 runner  staff   25732 Oct 18 23:57 tree-8-failed-checking-dark
+-rw-r--r--@  1 runner  staff   25732 Oct 18 23:52 tree-8-failed-checking-dark.txt
+-rw-r--r--   1 runner  staff   25732 Oct 18 23:57 tree-8-failed-checking-light
+-rw-r--r--@  1 runner  staff   25732 Oct 18 23:56 tree-8-failed-checking-light.txt
+-rw-r--r--   1 runner  staff    1152 Oct 18 23:57 writes.txt
+-rw-r--r--   1 runner  staff  680641 Oct 18 23:57 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.mr-probe/shots/mac:
+total 9712
+drwxr-xr-x  64 runner  staff    2048 Oct 18 23:57 .
+drwxr-xr-x   4 runner  staff     128 Oct 18 23:24 ..
+-rw-r--r--   1 runner  staff  157788 Oct 18 23:40 1-running-dark.png
+-rw-r--r--   1 runner  staff  204513 Oct 18 23:40 1-running-light.png
+-rw-r--r--   1 runner  staff  153936 Oct 18 23:40 2-checking-dark.png
+-rw-r--r--   1 runner  staff  201395 Oct 18 23:40 2-checking-light.png
+-rw-r--r--   1 runner  staff  164959 Oct 18 23:40 3-ready-dark.png
+-rw-r--r--   1 runner  staff  211883 Oct 18 23:40 3-ready-light.png
+-rw-r--r--   1 runner  staff  154686 Oct 18 23:40 4-conflict-left-dark.png
+-rw-r--r--   1 runner  staff  201913 Oct 18 23:40 4-conflict-left-light.png
+-rw-r--r--   1 runner  staff  155059 Oct 18 23:40 4b-conflicts-left-plural-dark.png
+-rw-r--r--   1 runner  staff  202182 Oct 18 23:40 4b-conflicts-left-plural-light.png
+-rw-r--r--   1 runner  staff  159775 Oct 18 23:40 5-needs-reply-dark.png
+-rw-r--r--   1 runner  staff  206527 Oct 18 23:40 5-needs-reply-light.png
+-rw-r--r--   1 runner  staff  147067 Oct 18 23:40 6-already-landed-dark.png
+-rw-r--r--   1 runner  staff  194662 Oct 18 23:40 6-already-landed-light.png
+-rw-r--r--   1 runner  staff  156915 Oct 18 23:40 7-failed-dark.png
+-rw-r--r--   1 runner  staff  204162 Oct 18 23:40 7-failed-light.png
+-rw-r--r--   1 runner  staff  155074 Oct 18 23:40 8-failed-checking-dark.png
+-rw-r--r--   1 runner  staff  202394 Oct 18 23:40 8-failed-checking-light.png
+drwxr-xr-x  59 runner  staff    1888 Oct 18 23:40 attachments
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-1-running-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-1-running-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-2-checking-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-2-checking-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-3-ready-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-3-ready-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-4-conflict-left-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-4-conflict-left-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-4b-conflicts-left-plural-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-4b-conflicts-left-plural-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-5-needs-reply-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-5-needs-reply-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-6-already-landed-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-6-already-landed-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-7-failed-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-7-failed-light
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-8-failed-checking-dark
+-rw-r--r--   1 runner  staff   14666 Oct 18 23:40 no-window-8-failed-checking-light
+-rw-r--r--   1 runner  staff    1946 Oct 18 23:57 not-served.txt
+-rw-r--r--   1 runner  staff    1223 Oct 18 23:40 RepairLoopShotTeststestTheRepairLoopFramesDark-notes
+-rw-r--r--   1 runner  staff    1252 Oct 18 23:40 RepairLoopShotTeststestTheRepairLoopFramesLight-notes
+-rw-r--r--   1 runner  staff   49695 Oct 18 23:40 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 18 23:25 requests.log.out
+-rw-r--r--   1 runner  staff   30836 Oct 18 23:40 tree-1-running-dark
+-rw-r--r--   1 runner  staff   30836 Oct 18 23:40 tree-1-running-light
+-rw-r--r--   1 runner  staff   30873 Oct 18 23:40 tree-2-checking-dark
+-rw-r--r--   1 runner  staff   30873 Oct 18 23:40 tree-2-checking-light
+-rw-r--r--   1 runner  staff   31945 Oct 18 23:40 tree-3-ready-dark
+-rw-r--r--   1 runner  staff   31945 Oct 18 23:40 tree-3-ready-light
+-rw-r--r--   1 runner  staff   31041 Oct 18 23:40 tree-4-conflict-left-dark
+-rw-r--r--   1 runner  staff   31041 Oct 18 23:40 tree-4-conflict-left-light
+-rw-r--r--   1 runner  staff   31313 Oct 18 23:40 tree-4b-conflicts-left-plural-dark
+-rw-r--r--   1 runner  staff   31313 Oct 18 23:40 tree-4b-conflicts-left-plural-light
+-rw-r--r--   1 runner  staff   30716 Oct 18 23:40 tree-5-needs-reply-dark
+-rw-r--r--   1 runner  staff   30716 Oct 18 23:40 tree-5-needs-reply-light
+-rw-r--r--   1 runner  staff   29017 Oct 18 23:40 tree-6-already-landed-dark
+-rw-r--r--   1 runner  staff   28993 Oct 18 23:40 tree-6-already-landed-light
+-rw-r--r--   1 runner  staff   31000 Oct 18 23:40 tree-7-failed-dark
+-rw-r--r--   1 runner  staff   31000 Oct 18 23:40 tree-7-failed-light
+-rw-r--r--   1 runner  staff   30867 Oct 18 23:40 tree-8-failed-checking-dark
+-rw-r--r--   1 runner  staff   30867 Oct 18 23:40 tree-8-failed-checking-light
+-rw-r--r--   1 runner  staff    1152 Oct 18 23:57 writes.txt
+-rw-r--r--   1 runner  staff  743000 Oct 18 23:40 xcodebuild-mac.log

@@ -1,0 +1,11 @@
+1-running-dark: photographed
+2-checking-dark: photographed
+3-ready-dark: photographed
+4-conflict-left-dark: the footnote is 45.66666666666663 pt tall
+4-conflict-left-dark: photographed
+4b-conflicts-left-plural-dark: the footnote is 45.66666666666663 pt tall
+4b-conflicts-left-plural-dark: photographed
+5-needs-reply-dark: photographed
+6-already-landed-dark: photographed
+7-failed-dark: photographed
+8-failed-checking-dark: photographed

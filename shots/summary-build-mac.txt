@@ -1,0 +1,8 @@
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' started.
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesDark]' passed (265.245 seconds).
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' started.
+Test Case '-[MrMacProbeUITests.RepairLoopShotTests testTheRepairLoopFramesLight]' passed (246.984 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 512.228 (512.232) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 512.228 (512.234) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 512.228 (512.235) seconds
+** TEST SUCCEEDED **
