@@ -67,7 +67,8 @@ class WikiPlanContractTest {
     @Test fun theJobsClosedSetsAndRoutesAreTheContracts() {
         val jobs = plan.fobj("jobs")
         assertEquals(setOf("draft", "revise", "build"), jobs.fobj("kinds").keys)
-        assertEquals(setOf("space_created", "owner"), jobs.fobj("triggers").keys)
+        // `support`: an administrator asked for the build of the version in force again (plan.jobs.rebuild).
+        assertEquals(setOf("space_created", "owner", "support"), jobs.fobj("triggers").keys)
         val states = jobs.fobj("states").keys
         assertEquals(setOf("queued", "held", "running", "succeeded", "failed"), states)
         // A draft is on its way while it is queued, held or running — never once it ended.

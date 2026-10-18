@@ -1,0 +1,17 @@
+{
+  "created": false,
+  "owner": "nia",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "signIn": {
+    "at": "2026-10-18T06:10:13.202+00:00",
+    "ms": 43.8,
+    "status": 201
+  },
+  "user": {
+    "email": "t06-nia@lab.invalid",
+    "id": "34htzVJauc8aVmfSN2I1v"
+  }
+}

@@ -50,14 +50,22 @@ import {
   accountNameOf,
   accountPlanUsage,
   addsAntigravityAccounts,
+  addsCursorAccounts,
   addsKimiAccounts,
   defaultAccountName,
   engineKeepsAccounts,
   runsOnEnvKey,
 } from '../lib/engineAccounts';
 import {
+  CURSOR_STATE_LABEL,
+  cursorRunnerState,
+  cursorStateHint,
+  type CursorRunnerFacts,
+} from '../lib/cursorRuntime';
+import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
+  cursorUsageLimit,
   kimiNoQuotaLimit,
   planUsageSnapshotForProvider,
   type PlanUsageDisplayRow,
@@ -77,14 +85,22 @@ import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './Runne
 import { useRunnerTokenRotation } from './RunnerTokenRotation';
 import type { Runner } from './TasksSidePanel';
 
-const ENGINES = (Object.keys(ENGINE_NAME) as LoginEngine[]).filter(webShowsEngine);
+/** The engines a machine signs in, of those the page draws with these runners in view
+ *  (webShowsEngine: Cursor CLI once one of them knows it). */
+const shownEngines = (runners: readonly CursorRunnerFacts[]): LoginEngine[] =>
+  (Object.keys(ENGINE_NAME) as LoginEngine[]).filter((engine) => webShowsEngine(engine, runners));
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';
 
-/** Every engine a card can draw a row for: the CLIs a runner signs in with, and OpenCode — the one
- *  engine here with no sign-in to relay, whose row exists to be installed and kept current. */
+/** Every engine a card can draw a row for in the order it draws them: the CLIs a runner signs in with,
+ *  and OpenCode — the one engine here with no sign-in to relay, whose row exists to be installed and
+ *  kept current. DeepSeek Harness's line follows them, and Cursor CLI's row comes last
+ *  (MachineEngines), where a machine draws it at all. */
 const ROW_ENGINES: RowEngine[] = [...ENGINE_SLUGS, 'opencode'];
+
+/** The engines a deep link may name on a machine's card: every row's. */
+const FOCUS_ENGINES: InstallEngine[] = [...ROW_ENGINES, 'cursor'];
 
 /** The rows one card draws: those, minus OpenCode on a machine that never reports it. A runner
  *  reports every CLI on the machine, so the row appearing is that report's doing — and one that has
@@ -319,14 +335,22 @@ interface Quota {
   /** Kimi only: the login's quota was read and its plan carries no limit — no window to gauge
    *  (kimiNoQuotaLimit), said as "No quota limit" rather than "No quota reported". */
   noLimit: boolean;
+  /** Cursor CLI only: its account's plan, as Cursor names it, and whether a turn on it met Cursor's
+   *  usage limit this period (cursorUsageLimit). An account Cursor reports no usage for has no window
+   *  above, and says "Usage unavailable" rather than "No quota reported" or 0%. */
+  cursor?: { plan: string | null; spent: { resetsAt?: string } | null };
 }
 
 /** Older than this, a reading has missed three of the runner's reads (every 5 min with a session
  *  running, every 10 without, while the engine is signed in there) and is said to be as of then. */
 const STALE_QUOTA_MS = 30 * 60_000;
 
-function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number): Quota {
-  if (kind !== 'in' || !snapshot) return { windows: [], stale: null, noLimit: false };
+function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number, engine?: RowEngine): Quota {
+  const cursor =
+    engine === 'cursor'
+      ? { plan: snapshot?.planName ?? null, spent: kind === 'in' ? cursorUsageLimit(snapshot, now) : null }
+      : undefined;
+  if (kind !== 'in' || !snapshot) return { windows: [], stale: null, noLimit: false, ...(cursor ? { cursor } : {}) };
   const windows = currentPlanUsageRows(snapshot, now);
   const read = snapshot.fetchedAt;
   // An offline machine reads nothing, and the card already says it is offline: one note per row
@@ -335,12 +359,15 @@ function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: bool
     windows.length > 0 && online && read && now - Date.parse(read) > STALE_QUOTA_MS
       ? `Usage as of ${formatResetTime(read, now)} · ${ago(read, now)}`
       : null;
-  return { windows, stale, noLimit: kimiNoQuotaLimit(snapshot) };
+  return { windows, stale, noLimit: kimiNoQuotaLimit(snapshot), ...(cursor ? { cursor } : {}) };
 }
 
 /** What a row's tag says: whether that login can run a session now — and if its quota is spent, when
  *  it can — in the words the account pools use for theirs. */
 function statusOf(kind: RowKind, quota: Quota, now: number): { color: string; label: string } {
+  // A Cursor CLI account is spent when a turn on it met Cursor's limit, which no reading says.
+  const spent = kind === 'in' ? quota.cursor?.spent : null;
+  if (spent) return { color: 'orange', label: spent.resetsAt ? `Spent · resets ${formatResetTime(spent.resetsAt, now)}` : 'Spent' };
   const binding = bindingPlanUsageRow(quota.windows);
   // Signed in with nothing read: the sign-in is all there is to say.
   if (kind !== 'in' || !binding) return STATUS_TAG[kind];
@@ -351,7 +378,7 @@ function statusOf(kind: RowKind, quota: Quota, now: number): { color: string; la
 
 /** Whether a login can take a session now: signed in, and no window of its spent. */
 function available(kind: RowKind, quota: Quota): boolean {
-  return kind === 'in' && (bindingPlanUsageRow(quota.windows)?.window.utilization ?? 0) < 100;
+  return kind === 'in' && !quota.cursor?.spent && (bindingPlanUsageRow(quota.windows)?.window.utilization ?? 0) < 100;
 }
 
 /** The quota column: each window with how much of it is used and when it resets, or why there is
@@ -378,6 +405,24 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
             </div>
           ))}
           {quota.stale && <div className="re-stale">{quota.stale}</div>}
+        </>
+      ) : kind === 'in' && quota.cursor ? (
+        // Cursor reports no usage for this account, or only 0%, which is no reading (contract §11):
+        // under the plan's name, no number at all rather than one Orbit made up.
+        <>
+          {quota.cursor.plan && (
+            <div className="re-quota-head">
+              <b>{quota.cursor.plan} plan</b>
+            </div>
+          )}
+          <span
+            className="re-quota-none"
+            title={`Cursor doesn’t report how much of ${
+              quota.cursor.plan ? `the ${quota.cursor.plan} plan’s` : 'this account’s'
+            } usage is left, so Orbit shows no number rather than 0%.`}
+          >
+            Usage unavailable
+          </span>
         </>
       ) : (
         <span className="re-quota-none">
@@ -474,8 +519,8 @@ function FoldedAccounts({
   const signedOut = accounts.filter((account) => accountKindOf(account) === 'out' && !runsOnEnvKey(health, account)).length;
   const account = accounts.find((entry) => entry.id === next);
   const kind: RowKind = account ? (runsOnEnvKey(health, account) ? 'in' : accountKindOf(account)) : 'out';
-  const quota = account
-    ? quotaOf(kind, accountPlanUsage(usage, engine, account.id), !!runner.online, now)
+  const quota: Quota = account
+    ? quotaOf(kind, accountPlanUsage(usage, engine, account.id), !!runner.online, now, engine)
     : { windows: [], stale: null, noLimit: false };
   const binding = bindingPlanUsageRow(quota.windows);
   return (
@@ -491,7 +536,7 @@ function FoldedAccounts({
       )}
       <QuotaCell
         kind={kind}
-        quota={{ windows: binding ? [binding] : [], stale: quota.stale, noLimit: quota.noLimit }}
+        quota={{ ...quota, windows: binding ? [binding] : [] }}
         next={account && accountNameOf(account)}
       />
     </>
@@ -544,6 +589,13 @@ function EngineRow({
   const loginHint = googleLogin === 'unsupported_platform'
     ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.'
     : googleLogin === 'needs_update' ? 'Update this runner to sign in with Google.' : null;
+  // Cursor CLI's own admission (cursorRunnerState): a runner that predates it, a platform its pinned
+  // build was never measured on, or a build other than the pinned one. Each is the row's whole story —
+  // nothing signed in or read can change it — and says what fixes it under the row. Not installed is
+  // every engine's `missing`, with its Install.
+  const cursorState = engine === 'cursor' ? cursorRunnerState(runner) : 'ready';
+  const cursorBlocked = cursorState === 'updateRunner' || cursorState === 'unsupportedPlatform' || cursorState === 'unsupportedVersion';
+  const cursorHint = cursorBlocked ? cursorStateHint(cursorState, health) : null;
   // Nothing here signs OpenCode in, so the row says what does. Only once there is a CLI on the
   // machine to run it against: an install that hasn't happened yet has no sign-in to point at.
   const openCodeHint = loginEngine === null && health?.installed
@@ -586,14 +638,14 @@ function EngineRow({
     single?.pausedUntil ?? kept.map((account) => account.pausedUntil).filter((until) => accountIsPaused(until)).sort()[0],
   );
   const snapshot = planUsageSnapshotForProvider(usage, engine);
-  const quota = quotaOf(kind, snapshot, !!runner.online, now);
+  const quota = quotaOf(kind, snapshot, !!runner.online, now, engine);
   const ready = kept.filter((account) => {
     // Antigravity's Default on the machine's Gemini key says no for a Google sign-in it does not
     // need: it takes sessions on the key.
     const own = runsOnEnvKey(health, account) ? 'in' : accountKindOf(account);
     // An account's quota is its engine's to read, and only an engine with a sign-in has accounts.
     const accountQuota = loginEngine === null ? null : accountPlanUsage(usage, loginEngine, account.id);
-    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountQuota, !!runner.online, now));
+    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountQuota, !!runner.online, now, engine));
   }).length;
   // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
@@ -604,17 +656,29 @@ function EngineRow({
     loginEngine !== null && engineKeepsAccounts(loginEngine) &&
     (kind === 'in' || kind === 'out' || kind === 'unknown') &&
     (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner)) &&
-    (loginEngine !== 'kimi' || addsKimiAccounts(runner))
+    (loginEngine !== 'kimi' || addsKimiAccounts(runner)) &&
+    (loginEngine !== 'cursor' || (addsCursorAccounts(runner) && cursorState !== 'updateRunner' && cursorState !== 'unsupportedPlatform'))
       ? loginEngine
       : null;
 
   // An offline machine isn't updating anything, and the header already says so — repeating it
-  // per row as a warning would put three alarms on one fact the user has already read.
-  const note = kind === 'missing' ? null : updateNoteOf(health?.update);
+  // per row as a warning would put three alarms on one fact the user has already read. Cursor CLI's
+  // build is the one Orbit pins, which its note says.
+  const note = kind === 'missing' || (cursorBlocked && !health?.installed) ? null : updateNoteOf(health?.update, undefined, engine === 'cursor');
   const warn = note?.tone === 'warn' && !offline;
 
   const action = () => {
     if (antigravity?.supported === false) return null;
+    // A build other than the pinned one is put back the way a missing one is put there; a runner too
+    // old for Cursor CLI, or on a platform it doesn't run on, has nothing here to press.
+    if (cursorState === 'unsupportedVersion') {
+      return (
+        <Button size="small" className="re-action re-install" icon={<DownloadOutlined aria-hidden />} disabled={offline} loading={install.isPending} onClick={() => install.mutate()}>
+          Reinstall
+        </Button>
+      );
+    }
+    if (cursorBlocked) return null;
     if (engine === 'antigravity' && kind !== 'missing' && kind !== 'installing' && kind !== 'install-failed') {
       if (googleLogin !== 'available') return null;
       if (kind === 'in' && !envKey) return null;
@@ -666,7 +730,7 @@ function EngineRow({
     }
   };
 
-  const meta = (
+  const meta = cursorBlocked && !health?.installed ? null : (
     <>
       {grouped ? (
         <>
@@ -676,7 +740,8 @@ function EngineRow({
           </b>
         </>
       ) : (
-        <>{metaFor(kind, engine, health)}</>
+        // A build Orbit doesn't run says which it is; nothing it would answer about a sign-in matters.
+        <>{cursorBlocked ? versionOf(engine, health) : metaFor(kind, engine, health)}</>
       )}
       {/* Whether this CLI is being kept current, next to what it currently is — the two
           halves of the same question, and useless apart. */}
@@ -732,14 +797,24 @@ function EngineRow({
           <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={engineNameOf(engine)} size={28} />
           <div style={{ minWidth: 0 }}>
             <div className="re-name">{engineNameOf(engine)}</div>
-            <div className="re-meta">{meta}</div>
+            {meta && <div className="re-meta">{meta}</div>}
           </div>
         </div>
       )}
       {/* Signed in and quota are each account's, not the engine's: an open group's head has no
           columns for them, and its line runs the width of the row instead. Folded, it speaks for
           its accounts in those columns. */}
-      {!grouped && (
+      {!grouped && cursorBlocked && (
+        <>
+          <div className="re-status">
+            <Badge tone="orange">{CURSOR_STATE_LABEL[cursorState as Exclude<typeof cursorState, 'ready'>]}</Badge>
+          </div>
+          <div className="re-quota">
+            <span className="re-quota-none">—</span>
+          </div>
+        </>
+      )}
+      {!grouped && !cursorBlocked && (
         <>
           <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now)} />
           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
@@ -793,12 +868,13 @@ function EngineRow({
           </button>
         </div>
       )}
-      {!grouped && kind === 'out' && !loginHint && (
+      {!grouped && kind === 'out' && !loginHint && !cursorBlocked && (
         <div className="re-dup">
           <span>{signedOutNote(engineNameOf(engine), true)}</span>
         </div>
       )}
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
+      {cursorHint && <div className="re-panel-hint re-login-note">{cursorHint}</div>}
       {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
       {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
 
@@ -1058,7 +1134,7 @@ function AccountRow({
   // and an account it has not read shows none rather than borrowing another's limit.
   const now = usePauseClock(account.pausedUntil);
   const snapshot = accountPlanUsage(withEnginePlanUsage(runner.planUsage, runner.engines), engine, account.id);
-  const quota = quotaOf(kind, snapshot, !!runner.online, now);
+  const quota = quotaOf(kind, snapshot, !!runner.online, now, engine);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
   const expiring = envKey ? null : loginExpiresLine(account, now);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
@@ -1104,6 +1180,8 @@ function AccountRow({
               account says its site first, which is each account's own (kimi.com or kimi.ai). */}
           <div className="re-meta" title={accountDir(account)}>
             {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
+            {/* A Cursor CLI account says its plan first, as Cursor names it. */}
+            {engine === 'cursor' && snapshot?.planName && `${snapshot.planName} plan · `}
             {tildePath(accountDir(account))}
             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
           </div>
@@ -1313,7 +1391,14 @@ export function summaryOf(runner: Runner): string {
   // of the machine's updating has stopped. A runner reports every CLI on the machine, OpenCode
   // included, and OpenCode now has a row of its own below — but it has no sign-in to be in or out
   // of, so it is in neither half of this line; its drift is the machine page's news.
-  const engines = ENGINES.filter((engine) => engine !== 'antigravity' || runner.antigravity?.googleLogin === 'available');
+  // Cursor CLI wherever its row can get it signed in, installed or not, as every engine here — not on
+  // a runner too old for it or a platform it doesn't run on, whose row has nothing to sign in.
+  const cursorState = cursorRunnerState(runner);
+  const engines = shownEngines([runner]).filter(
+    (engine) =>
+      (engine !== 'antigravity' || runner.antigravity?.googleLogin === 'available') &&
+      (engine !== 'cursor' || (cursorState !== 'updateRunner' && cursorState !== 'unsupportedPlatform')),
+  );
   const shown = runner.engines.filter((e) => engines.includes(e.engine as LoginEngine));
   // An engine nothing has updated in a week is exactly the kind of quiet drift folding a card
   // would otherwise bury — it outranks the sign-in count, which is the good news.
@@ -1335,6 +1420,7 @@ function RunnerEngineCard({
   dragDisabled,
   openAccounts,
   onFoldAccounts,
+  fleet,
 }: {
   runner: Runner;
   collapsed: boolean;
@@ -1353,6 +1439,8 @@ function RunnerEngineCard({
   /** The engine whose group folded — a RowEngine, since a row is one, and only an engine that
    *  keeps accounts ever draws the toggle that calls this. */
   onFoldAccounts: (engine: RowEngine, open: boolean) => void;
+  /** Every runner of the account (MachineEngines). */
+  fleet: readonly CursorRunnerFacts[];
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
@@ -1482,6 +1570,7 @@ function RunnerEngineCard({
           focusEngine={focusEngine}
           openAccounts={openAccounts}
           onFoldAccounts={onFoldAccounts}
+          fleet={fleet}
         />
       )}
     </div>
@@ -1516,6 +1605,7 @@ export function MachineEngines({
   openAccounts,
   onFoldAccounts,
   machinePage = false,
+  fleet,
 }: {
   runner: Runner;
   /** The sign-in panel open on this machine, if any: an engine's, or one of its accounts'. */
@@ -1530,6 +1620,9 @@ export function MachineEngines({
   onFoldAccounts: (engine: RowEngine, open: boolean) => void;
   /** Laid out on the machine's own page, under the controls that update every CLI on it. */
   machinePage?: boolean;
+  /** Every runner of the account, which decides whether Cursor CLI has a row at all
+   *  (webShowsEngine); this machine alone without them. */
+  fleet?: readonly CursorRunnerFacts[];
 }) {
   const engines = runner.engines ?? null;
   if (!engines) {
@@ -1546,11 +1639,12 @@ export function MachineEngines({
     );
   }
   const rows = rowEnginesOf(engines);
-  return (
-    <>
-      {rows.map((engine) => {
+  const renderRow = (engine: RowEngine) => {
         const health = engineHealthOf(runner, engine);
-        const accounts = accountRowsOf(engine, health, runner.install);
+        // A runner that can't run Cursor CLI at all says so on the engine's row, which no account under
+        // it would change.
+        const cursorBlocked = engine === 'cursor' && cursorRunnerState(runner) !== 'ready' && cursorRunnerState(runner) !== 'notInstalled';
+        const accounts = cursorBlocked ? [] : accountRowsOf(engine, health, runner.install);
         // Read across the whole group, since a repeat is a fact about two of its rows.
         const repeats = duplicateAccounts(accounts);
         // The accounts under a row are an engine's own, and only an engine that keeps them has
@@ -1594,8 +1688,14 @@ export function MachineEngines({
             ))}
           </Fragment>
         );
-      })}
+  };
+  return (
+    <>
+      {rows.map(renderRow)}
       <DshRunnerStatus runner={runner} />
+      {/* Cursor CLI last, after DeepSeek Harness (the board's Web 2 ②): on every machine once a runner
+          of the account knows it, a machine that predates it included. */}
+      {webShowsEngine('cursor', fleet ?? [runner]) && renderRow('cursor')}
     </>
   );
 }
@@ -1634,7 +1734,7 @@ export function RunnerEngines({
   const [params] = useSearchParams();
   const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
-  const focusEngine: InstallEngine | null = ROW_ENGINES.find((e) => e === engineParam) ?? null;
+  const focusEngine: InstallEngine | null = FOCUS_ENGINES.find((e) => e === engineParam) ?? null;
   useEffect(() => {
     if (!focusRunner) return;
     setExpanded((prev) => (prev.includes(focusRunner) ? prev : writeExpanded([...prev, focusRunner])));
@@ -1669,6 +1769,7 @@ export function RunnerEngines({
         : false,
   });
   const list = (runners.data ?? []) as Runner[];
+  const engines = shownEngines(list);
   // Counted over the engines this section renders, not everything the runner reports: a machine
   // reports every CLI on it, and a count that included one without a row here would never add up
   // against what the page shows.
@@ -1676,7 +1777,7 @@ export function RunnerEngines({
     (n, r) =>
       n +
       (r.engines ?? []).filter(
-        (e) => signedIn(e) && ENGINES.some((engine) => engine === e.engine),
+        (e) => signedIn(e) && engines.some((engine) => engine === e.engine),
       ).length,
     0,
   );
@@ -1793,7 +1894,7 @@ export function RunnerEngines({
       {list.length === 0 ? (
         <div className="re-empty">
           <div className="re-empty-logos">
-            {ENGINES.map((engine) => (
+            {engines.map((engine) => (
               <ProviderTile
                 key={engine}
                 slug={ENGINE_PRESET[engine]}
@@ -1826,6 +1927,7 @@ export function RunnerEngines({
                 dragDisabled={reorderMut.isPending}
                 openAccounts={openAccounts}
                 onFoldAccounts={(engine, open) => foldAccounts(accountsGroup(runner.id, engine), open)}
+                fleet={list}
               />
             ))}
           </SortableContext>

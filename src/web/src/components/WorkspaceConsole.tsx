@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
-import { useManagedRunner } from '../lib/managedRunner';
+import { useFollowFirstSessionProvider, useManagedRunner } from '../lib/managedRunner';
 import { sessionQuery } from '../lib/queries';
 import { Button } from './ui/Button';
 import { Result } from './ui/Result';
@@ -58,6 +58,8 @@ export function WorkspaceConsole() {
   // state stands above the composer. Nothing waits on it — the console draws as before while it
   // loads, and with the capability missing or off there is none.
   const { managed } = useManagedRunner();
+  // The default workspace's draft starts where the workspace list says; follow it as the runner comes up.
+  useFollowFirstSessionProvider(managed);
   const consoleManaged =
     managed?.status.runnerId && viewRunner && routeId(managed.status.runnerId) === routeId(viewRunner.id)
       ? managed
@@ -67,7 +69,7 @@ export function WorkspaceConsole() {
     <main className="app-main">
       <div className="app-view">
         {viewRunner ? (
-          <WorkspaceView runner={viewRunner} managed={consoleManaged} />
+          <WorkspaceView runner={viewRunner} managed={consoleManaged} fleet={runners.data} />
         ) : sessionNotFound ? (
           <Result
             status="404"

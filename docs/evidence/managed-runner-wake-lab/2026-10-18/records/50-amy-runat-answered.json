@@ -1,0 +1,39 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:25:59.84",
+    "ingested_at": "2026-10-18T01:25:59.988676+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 8,
+    "session_id": "b03a3026-588b-52a9-bc47-4415540d5a3e",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-RUNAT",
+  "modelRequests": [],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:25:43.696",
+    "engine": "claude",
+    "id": "b03a3026-588b-52a9-bc47-4415540d5a3e",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14c95-8be0-72c1-897b-c0a347fb7c31",
+    "title": "Task: T06-AMY-RUNAT a task whose run time comes while its runner sleeps"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:26:00.003",
+      "client_turn_id": "initial-b03a3026-588b-52a9-bc47-4415540d5a3e",
+      "content": "Start the task \u201cT06-AMY-RUNAT a task whose run time comes while its runner sleeps\u201d.\n\nTask description:\nT06-AMY-RUNAT a task whose run time comes while its runne",
+      "created_at": "2026-10-18T01:25:58.165",
+      "delivered_at": "2026-10-18T01:25:59.631",
+      "id": "01a14c9d-9515-7617-82c8-3f521b44b8ff",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

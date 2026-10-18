@@ -1,0 +1,99 @@
+{
+ "checks": [
+  {
+   "check": "ann: probe p1 written (8 MiB random, 150 SQLite rows committed one by one in WAL mode with synchronous=FULL, a Git commit), integrity_check ok",
+   "ok": true,
+   "value": 150
+  },
+  {
+   "check": "bob: probe p1 written (8 MiB random, 150 SQLite rows committed one by one in WAL mode with synchronous=FULL, a Git commit), integrity_check ok",
+   "ok": true,
+   "value": 150
+  }
+ ],
+ "endedAt": "2026-10-18T12:39:13.076+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "ann": {
+   "action": "write",
+   "at": "2026-10-18T12:38:30.542+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "d7b23ac4189d90a2d300b38e3e74e33cec739388",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "40f97e5031520870b3132fc336fdc75ff265ac04ed495b52802dabe17d7c9e22",
+    "rows": 150,
+    "rowsSha256": "3ffa04699efae14a0d4ac7131e48e965464a41406769b3f56c0157d29c7b5654"
+   },
+   "generation": 1,
+   "owner": "ann",
+   "pod": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+   "run": "p1",
+   "volume": {
+    "managedInstance": {
+     "generation": 1,
+     "podUid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "worktrees": [
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    ]
+   }
+  },
+  "bob": {
+   "action": "write",
+   "at": "2026-10-18T12:39:13.076+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "4a360b598010aecf3623dcfa9a2b2312f7af0730",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd2",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "b356e3f5736553695d257fd9dd6b362c3f53f881c79d4a700bd46e8270111e42",
+    "rows": 150,
+    "rowsSha256": "9d524463da72e3d8d70cff13f279bbe32a26382d08b0e90c3940f12d86b4b195"
+   },
+   "generation": 1,
+   "owner": "bob",
+   "pod": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+   "run": "p1",
+   "volume": {
+    "managedInstance": {
+     "generation": 1,
+     "podUid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+     "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "worktrees": [
+     "01a14f04-a753-774e-ae62-e1572e6de075"
+    ]
+   }
+  }
+ },
+ "seconds": 81.1,
+ "startedAt": "2026-10-18T12:37:51.986+00:00",
+ "step": "probes"
+}

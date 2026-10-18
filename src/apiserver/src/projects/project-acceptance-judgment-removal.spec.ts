@@ -331,7 +331,10 @@ test('(e) the removal adds no compose service and no resident process', () => {
   // wiki-worker is the wiki's server-side executor, which the account owner added on 2026-10-07
   // (docs/wiki-server-execution-design.md §4.1), not this removal; test/compose-topology.test.mjs (l)
   // pins its whole definition.
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker']);
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
+  assert.deepEqual(services, ['apiserver', 'docker-channel', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker']);
 
   const service = readFileSync(path.join(API, 'src/projects/project-acceptance.service.ts'), 'utf8');
   assert.doesNotMatch(service, /setInterval|setTimeout|@Interval|@Cron|OnModuleInit|OnApplicationBootstrap/);

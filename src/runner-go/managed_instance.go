@@ -92,7 +92,9 @@ func checkManagedRunnerInstance() error {
 		return err
 	}
 	if instance != nil {
-		logln(fmt.Sprintf("managed runner instance: generation %s, Pod %s", instance.Generation, instance.PodUID))
+		// Said, not printed: the generation and instance UID go with every request. On the Docker
+		// backend they reach the container only as read-only files, never its environment or its log.
+		logln("managed runner instance identity read; it is sent with every request")
 	}
 	return nil
 }

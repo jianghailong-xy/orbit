@@ -1,0 +1,1454 @@
+{
+ "checks": [
+  {
+   "check": "the database and k3s agree",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "three mappings, three PVCs",
+   "ok": true,
+   "value": 3
+  },
+  {
+   "check": "the earlier tasks' objects in the namespace are unchanged",
+   "ok": true
+  },
+  {
+   "check": "never more than one Pod on any of the three volumes in the whole timeline",
+   "ok": true,
+   "value": {
+    "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36": 1,
+    "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb": 1,
+    "mr-data-01a14f04-a624-724f-b618-252c0e3e8e26": 1
+   }
+  },
+  {
+   "check": "ann: the PVC is the one made at its first provisioning",
+   "ok": true
+  },
+  {
+   "check": "bob: the PVC is the one made at its first provisioning",
+   "ok": true
+  },
+  {
+   "check": "cy: the PVC is the one made at its first provisioning",
+   "ok": true
+  },
+  {
+   "check": "Ceph is HEALTH_OK at the end",
+   "ok": true,
+   "value": "HEALTH_OK"
+  }
+ ],
+ "endedAt": "2026-10-18T13:06:22.477+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "final",
+ "result": {
+  "ceph": {
+   "df": {
+    "num_osds": 3,
+    "num_per_pool_omap_osds": 3,
+    "num_per_pool_osds": 3,
+    "total_avail_bytes": 61322870784,
+    "total_bytes": 64411926528,
+    "total_used_bytes": 3089055744,
+    "total_used_raw_bytes": 3089055744,
+    "total_used_raw_ratio": 0.04795782268047333
+   },
+   "health": {
+    "checks": {},
+    "mutes": [],
+    "status": "HEALTH_OK"
+   },
+   "rbd": [
+    "NAME                                          SIZE   PARENT  FMT  PROT  LOCK",
+    "csi-vol-052848c1-a418-42ac-a9f7-54fa8da73823  2 GiB            2            ",
+    "csi-vol-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada  2 GiB            2            ",
+    "csi-vol-10e58522-f866-4ee5-a23a-fb91c4a33e07  2 GiB            2            ",
+    "csi-vol-111f38fc-dfce-4abe-b4cd-4133070ba5a7  2 GiB            2            ",
+    "csi-vol-130690dd-994a-48fa-b7b2-8553b2ce7f8c  2 GiB            2            ",
+    "csi-vol-26bee6a0-0386-40cd-822b-71c0cb191d46  2 GiB            2            ",
+    "csi-vol-38019945-c3ad-47b0-87e2-7fdfa16e82fc  5 GiB            2            ",
+    "csi-vol-39cae3c6-4581-4b78-8e0c-5780730bbffc  2 GiB            2            ",
+    "csi-vol-4d4fff19-fa6f-4adc-ad17-967e7885d710  1 GiB            2            ",
+    "csi-vol-56323e4a-eccc-4500-a775-7f1da5fcc614  2 GiB            2            ",
+    "csi-vol-5d9bc8b5-7e96-4cce-9e70-4f3e14c98007  2 GiB            2            ",
+    "csi-vol-67891ddf-d094-47ed-a31a-2ec019223f3e  2 GiB            2            ",
+    "csi-vol-67e6ef38-31c5-4e2f-af41-70b4c6642b10  2 GiB            2            ",
+    "csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27  2 GiB            2            ",
+    "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834  2 GiB            2            ",
+    "csi-vol-858eb1c2-de92-40a6-8f0c-63b3103a00ef  2 GiB            2            ",
+    "csi-vol-88e08332-3821-4d19-88fd-a7051495dedc  2 GiB            2            ",
+    "csi-vol-8966bc0e-4088-4983-8d0f-398f944f3dd4  2 GiB            2            ",
+    "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8  2 GiB            2            ",
+    "csi-vol-8d69402c-79c4-4510-a1af-53a75ab41378  2 GiB            2            ",
+    "csi-vol-8df43b50-2e72-44e9-ad65-4737a09dd275  2 GiB            2            ",
+    "csi-vol-8e6e016f-60fb-440a-98e5-8c9b364ce025  1 GiB            2            ",
+    "csi-vol-a4b1fa80-eb6d-456b-86c7-ba778454d8e0  2 GiB            2            ",
+    "csi-vol-bbab8bdb-5e0a-4565-85ea-1704999073da  2 GiB            2            ",
+    "csi-vol-c2c96ac7-8e88-4245-8758-baf7ccc70d9d  2 GiB            2            ",
+    "csi-vol-ccb32d27-e1d9-48ee-9d08-027c6a3488ad  2 GiB            2            ",
+    "csi-vol-e54d641e-ac18-4b29-8f07-fd97b6101ba2  2 GiB            2            ",
+    "csi-vol-e8a426fe-c05b-47c8-9dfd-95d123ca4e21  1 GiB            2            ",
+    "csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd  1 GiB            2            ",
+    "csi-vol-fcf2a14e-ee95-4adf-bba0-ac1d2d119794  2 GiB            2"
+   ]
+  },
+  "foreign": {
+   "at": "2026-10-18T13:06:13.356+00:00",
+   "baseline": [
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+     "resourceVersion": "8484",
+     "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+     "resourceVersion": "9855",
+     "uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+     "resourceVersion": "10967",
+     "uid": "d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+     "resourceVersion": "10963",
+     "uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+     "resourceVersion": "12676",
+     "uid": "8278f180-68bf-4eea-ae49-c79d896e3c15"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c23-4d07-7679-812d-f74876266c72",
+     "resourceVersion": "14822",
+     "uid": "4ede0589-3cb3-44a8-bc3e-f7b414b71681"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+     "resourceVersion": "15275",
+     "uid": "928c943a-bc2a-4df9-9cea-97d88369f2f0"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3a-e9b4-77bb-8d63-0bb1fc697702",
+     "resourceVersion": "15410",
+     "uid": "fc1c9388-c2d1-49d5-a9fc-4325d9cdd413"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3c-502b-71cb-984b-0594e9adc118",
+     "resourceVersion": "15585",
+     "uid": "9bddfcba-1043-48d2-bbd5-f1453d65f862"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3d-df2c-701d-9013-6ead27f5922a",
+     "resourceVersion": "15696",
+     "uid": "10238454-a0bd-4438-9173-a17b35b2778b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+     "resourceVersion": "15789",
+     "uid": "d1075e02-0f32-4913-9884-5c3da5d1e57d"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+     "resourceVersion": "16250",
+     "uid": "9a7cd7cb-8c86-4071-a5b0-856fd5457b0e"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+     "resourceVersion": "16752",
+     "uid": "3831f550-8fc3-4718-8fbd-940a7979157b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+     "resourceVersion": "22159",
+     "uid": "9e102973-fe8d-4114-a3be-4178cab95865"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+     "resourceVersion": "25595",
+     "uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d31-2558-76b5-aa8a-f8f35df30d08",
+     "resourceVersion": "26643",
+     "uid": "949b525a-c46d-4899-abeb-c577bdddd26c"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d96-a6ec-7439-b0a3-bd794faeeed0",
+     "resourceVersion": "28061",
+     "uid": "1cfec193-c8bd-4597-8c52-d14596792053"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d97-23a7-747d-9f18-2512a70f4fff",
+     "resourceVersion": "28284",
+     "uid": "79150284-3469-4a91-ad9d-1b5b5cf6284f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "30468",
+     "uid": "dd00c73e-bba2-4d42-ac50-ab03891b413f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+     "resourceVersion": "30927",
+     "uid": "3d7239dd-281f-4a10-8720-e270c96cf7ec"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4",
+     "resourceVersion": "809",
+     "uid": "8780660e-7455-4612-8b16-3f1fddaf9ded"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3",
+     "resourceVersion": "650",
+     "uid": "e2daf0db-ed65-4a62-9841-ced57d71ed3b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf",
+     "resourceVersion": "2549",
+     "uid": "dd745a38-f385-4596-b359-8bc9f27828c6"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-b3c54306-e474-4fce-a316-228ce37a5266",
+     "resourceVersion": "2424",
+     "uid": "c869968e-0f44-4365-800c-0448f74f8892"
+    },
+    {
+     "kind": "Pod",
+     "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "32527",
+     "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+     "resourceVersion": "9344",
+     "uid": "ce22d189-59cc-4845-830b-65e5cf65aabb"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+     "resourceVersion": "9865",
+     "uid": "100d1f69-60ba-4e95-822b-c64d328d64e5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+     "resourceVersion": "14091",
+     "uid": "fbbfb039-9dc1-4ea9-b5e6-f45c927ffc73"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+     "resourceVersion": "13468",
+     "uid": "9255a698-de90-48eb-99f4-e5f355ac93e5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+     "resourceVersion": "13449",
+     "uid": "18cd9ede-0e57-42f7-89f4-2494da6b79eb"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c23-4d07-7679-812d-f74876266c72",
+     "resourceVersion": "15185",
+     "uid": "a07cb6b9-a5f9-4d59-98e6-a736bef20354"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+     "resourceVersion": "15282",
+     "uid": "88c8ad34-9f80-4c7b-aeae-2819c23a0404"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3a-e9b4-77bb-8d63-0bb1fc697702",
+     "resourceVersion": "15411",
+     "uid": "7b73793e-97ba-4ca5-987d-51f2c1de01d2"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3c-502b-71cb-984b-0594e9adc118",
+     "resourceVersion": "15587",
+     "uid": "7aead322-9d9a-4638-8018-197786d70235"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3d-df2c-701d-9013-6ead27f5922a",
+     "resourceVersion": "15697",
+     "uid": "31aa2d25-accb-400a-b947-f5fc750df9d5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+     "resourceVersion": "15793",
+     "uid": "908d7d51-860f-4926-9b40-013d8bbd3a3d"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+     "resourceVersion": "16259",
+     "uid": "d1a67c20-81a1-47c0-b661-de21d06c0479"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+     "resourceVersion": "24907",
+     "uid": "611bab40-10fd-4760-b913-abc47c50474c"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+     "resourceVersion": "24698",
+     "uid": "83d12252-d12e-4d9b-84e0-e7c7f4196415"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+     "resourceVersion": "27343",
+     "uid": "be217c00-c476-4958-8f48-0d495773a84a"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d31-2558-76b5-aa8a-f8f35df30d08",
+     "resourceVersion": "26650",
+     "uid": "1b186ea1-a9e5-4832-bb96-a1b37ef181a5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d96-a6ec-7439-b0a3-bd794faeeed0",
+     "resourceVersion": "28069",
+     "uid": "56e8368f-d230-4766-971f-e5cd47901c50"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d97-23a7-747d-9f18-2512a70f4fff",
+     "resourceVersion": "28992",
+     "uid": "1601d81a-ec90-456e-a736-8efd79df193c"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14da1-4096-72b1-acfd-5b094be3f16f",
+     "resourceVersion": "30025",
+     "uid": "39f452ec-3cf5-4ea8-862f-848130b34468"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "30473",
+     "uid": "586f8eac-5035-4d61-ae50-8dc22dec34e3"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+     "resourceVersion": "32392",
+     "uid": "43480a98-1235-4bf9-909c-c3218506c77c"
+    }
+   ],
+   "now": [
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+     "resourceVersion": "8484",
+     "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+     "resourceVersion": "9855",
+     "uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+     "resourceVersion": "10967",
+     "uid": "d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+     "resourceVersion": "10963",
+     "uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+     "resourceVersion": "12676",
+     "uid": "8278f180-68bf-4eea-ae49-c79d896e3c15"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c23-4d07-7679-812d-f74876266c72",
+     "resourceVersion": "14822",
+     "uid": "4ede0589-3cb3-44a8-bc3e-f7b414b71681"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+     "resourceVersion": "15275",
+     "uid": "928c943a-bc2a-4df9-9cea-97d88369f2f0"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3a-e9b4-77bb-8d63-0bb1fc697702",
+     "resourceVersion": "15410",
+     "uid": "fc1c9388-c2d1-49d5-a9fc-4325d9cdd413"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3c-502b-71cb-984b-0594e9adc118",
+     "resourceVersion": "15585",
+     "uid": "9bddfcba-1043-48d2-bbd5-f1453d65f862"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3d-df2c-701d-9013-6ead27f5922a",
+     "resourceVersion": "15696",
+     "uid": "10238454-a0bd-4438-9173-a17b35b2778b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+     "resourceVersion": "15789",
+     "uid": "d1075e02-0f32-4913-9884-5c3da5d1e57d"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+     "resourceVersion": "16250",
+     "uid": "9a7cd7cb-8c86-4071-a5b0-856fd5457b0e"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+     "resourceVersion": "16752",
+     "uid": "3831f550-8fc3-4718-8fbd-940a7979157b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+     "resourceVersion": "22159",
+     "uid": "9e102973-fe8d-4114-a3be-4178cab95865"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+     "resourceVersion": "25595",
+     "uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d31-2558-76b5-aa8a-f8f35df30d08",
+     "resourceVersion": "26643",
+     "uid": "949b525a-c46d-4899-abeb-c577bdddd26c"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d96-a6ec-7439-b0a3-bd794faeeed0",
+     "resourceVersion": "28061",
+     "uid": "1cfec193-c8bd-4597-8c52-d14596792053"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d97-23a7-747d-9f18-2512a70f4fff",
+     "resourceVersion": "28284",
+     "uid": "79150284-3469-4a91-ad9d-1b5b5cf6284f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "30468",
+     "uid": "dd00c73e-bba2-4d42-ac50-ab03891b413f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+     "resourceVersion": "30927",
+     "uid": "3d7239dd-281f-4a10-8720-e270c96cf7ec"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4",
+     "resourceVersion": "809",
+     "uid": "8780660e-7455-4612-8b16-3f1fddaf9ded"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3",
+     "resourceVersion": "650",
+     "uid": "e2daf0db-ed65-4a62-9841-ced57d71ed3b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf",
+     "resourceVersion": "2549",
+     "uid": "dd745a38-f385-4596-b359-8bc9f27828c6"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-b3c54306-e474-4fce-a316-228ce37a5266",
+     "resourceVersion": "2424",
+     "uid": "c869968e-0f44-4365-800c-0448f74f8892"
+    },
+    {
+     "kind": "Pod",
+     "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "32527",
+     "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+     "resourceVersion": "9344",
+     "uid": "ce22d189-59cc-4845-830b-65e5cf65aabb"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+     "resourceVersion": "9865",
+     "uid": "100d1f69-60ba-4e95-822b-c64d328d64e5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+     "resourceVersion": "14091",
+     "uid": "fbbfb039-9dc1-4ea9-b5e6-f45c927ffc73"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+     "resourceVersion": "13468",
+     "uid": "9255a698-de90-48eb-99f4-e5f355ac93e5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+     "resourceVersion": "13449",
+     "uid": "18cd9ede-0e57-42f7-89f4-2494da6b79eb"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c23-4d07-7679-812d-f74876266c72",
+     "resourceVersion": "15185",
+     "uid": "a07cb6b9-a5f9-4d59-98e6-a736bef20354"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+     "resourceVersion": "15282",
+     "uid": "88c8ad34-9f80-4c7b-aeae-2819c23a0404"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3a-e9b4-77bb-8d63-0bb1fc697702",
+     "resourceVersion": "15411",
+     "uid": "7b73793e-97ba-4ca5-987d-51f2c1de01d2"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3c-502b-71cb-984b-0594e9adc118",
+     "resourceVersion": "15587",
+     "uid": "7aead322-9d9a-4638-8018-197786d70235"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3d-df2c-701d-9013-6ead27f5922a",
+     "resourceVersion": "15697",
+     "uid": "31aa2d25-accb-400a-b947-f5fc750df9d5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+     "resourceVersion": "15793",
+     "uid": "908d7d51-860f-4926-9b40-013d8bbd3a3d"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+     "resourceVersion": "16259",
+     "uid": "d1a67c20-81a1-47c0-b661-de21d06c0479"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+     "resourceVersion": "24907",
+     "uid": "611bab40-10fd-4760-b913-abc47c50474c"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+     "resourceVersion": "24698",
+     "uid": "83d12252-d12e-4d9b-84e0-e7c7f4196415"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+     "resourceVersion": "27343",
+     "uid": "be217c00-c476-4958-8f48-0d495773a84a"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d31-2558-76b5-aa8a-f8f35df30d08",
+     "resourceVersion": "26650",
+     "uid": "1b186ea1-a9e5-4832-bb96-a1b37ef181a5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d96-a6ec-7439-b0a3-bd794faeeed0",
+     "resourceVersion": "28069",
+     "uid": "56e8368f-d230-4766-971f-e5cd47901c50"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d97-23a7-747d-9f18-2512a70f4fff",
+     "resourceVersion": "28992",
+     "uid": "1601d81a-ec90-456e-a736-8efd79df193c"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14da1-4096-72b1-acfd-5b094be3f16f",
+     "resourceVersion": "30025",
+     "uid": "39f452ec-3cf5-4ea8-862f-848130b34468"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "30473",
+     "uid": "586f8eac-5035-4d61-ae50-8dc22dec34e3"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+     "resourceVersion": "32392",
+     "uid": "43480a98-1235-4bf9-909c-c3218506c77c"
+    }
+   ],
+   "unchanged": true
+  },
+  "gate": {
+   "at": "2026-10-18T13:06:13.372+00:00",
+   "byKind": {
+    "PVC create": 3,
+    "Pod create": 14,
+    "Secret create": 14,
+    "admission probe": 16,
+    "other (reads, patches, deletes)": 3024
+   },
+   "connections": 3071,
+   "largestRecordSizes": {
+    "1111": 60,
+    "1136": 956,
+    "1147": 928,
+    "1155": 71,
+    "1170": 964,
+    "1287": 14,
+    "1295": 11,
+    "1457": 14,
+    "1623": 3,
+    "1669": 14,
+    "3437": 2,
+    "3464": 4,
+    "4084": 14,
+    "4111": 16
+   },
+   "since": "2026-10-18T12:36:59.416+00:00",
+   "until": null
+  },
+  "generationsSeen": {
+   "ann": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "bob": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "cy": [
+    1,
+    2,
+    3
+   ]
+  },
+  "mostPodsPerVolume": {
+   "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36": 1,
+   "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb": 1,
+   "mr-data-01a14f04-a624-724f-b618-252c0e3e8e26": 1
+  },
+  "pool": [
+   {
+    "active_users": 2,
+    "active_users_reserved": 0,
+    "attachments": 2,
+    "attachments_reserved": 0,
+    "cluster_key": "orbit-mr-lab",
+    "cpu_millis": 1000,
+    "cpu_millis_reserved": 0,
+    "created_at": "2026-10-18T12:36:53.977+00:00",
+    "durable_bytes_reserved": 6442450944,
+    "ephemeral_bytes": 2147483648,
+    "ephemeral_bytes_reserved": 0,
+    "id": "5a31fc1f-dbf0-44be-98d9-cf9e11acd522",
+    "memory_bytes": 1610612736,
+    "memory_bytes_reserved": 0,
+    "namespace": "orbit-mr-test",
+    "pods": 2,
+    "pods_reserved": 0,
+    "revision": 29,
+    "storage_headroom_bytes": 2147483648,
+    "storage_usable_bytes": 12884901888,
+    "updated_at": "2026-10-18T13:06:12.891+00:00"
+   }
+  ],
+  "restore": {
+   "pv": {
+    "lastPhaseTransitionTime": "2026-10-18T12:56:08Z",
+    "phase": "Bound"
+   },
+   "pvc": {
+    "accessModes": [
+     "ReadWriteOnce"
+    ],
+    "capacity": {
+     "storage": "2Gi"
+    },
+    "phase": "Bound"
+   }
+  },
+  "storage": {
+   "ann": {
+    "at": "2026-10-18T13:06:17.315+00:00",
+    "ceph": {
+     "blocklist": "10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\nlisted 55 entries",
+     "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "health": "HEALTH_OK",
+     "healthDetail": "HEALTH_OK",
+     "osdmap": {
+      "epoch": 188,
+      "num_in_osds": 3,
+      "num_osds": 3,
+      "num_remapped_pgs": 0,
+      "num_up_osds": 3,
+      "osd_in_since": 1792215315,
+      "osd_up_since": 1792317777
+     },
+     "pgs": [
+      {
+       "count": 33,
+       "state_name": "active+clean"
+      }
+     ],
+     "rbdInfo": {
+      "access_timestamp": "Sun Oct 18 12:55:56 2026",
+      "block_name_prefix": "rbd_data.2f67fd3d8d0a2",
+      "create_timestamp": "Sun Oct 18 12:36:59 2026",
+      "features": [
+       "layering"
+      ],
+      "flags": [],
+      "format": 2,
+      "id": "2f67fd3d8d0a2",
+      "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+      "name": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+      "object_size": 4194304,
+      "objects": 512,
+      "op_features": [],
+      "order": 22,
+      "size": 2147483648,
+      "snapshot_count": 0
+     },
+     "rbdStatus": {
+      "watchers": []
+     }
+    },
+    "guest": [
+     "== kernel 7.0.0-34-generic, boot f728e937-6023-44ca-a548-b190a5821993, up 11046.14 s",
+     "== rbd devices",
+     "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client194119 addr 10.0.2.15:0/4215951233",
+     "== RBD filesystems mounted",
+     "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+     "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+    ],
+    "mapping": {
+     "attachments": 0,
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 8,
+     "operation": "DELETE_POD:COMPLETED",
+     "pod": null,
+     "podUid": null,
+     "proof": "OBSERVED_STOP",
+     "proofRetired": true,
+     "reason": null,
+     "secretGeneration": "7",
+     "state": "SLEEPING"
+    },
+    "objects": {
+     "bootstrapSecret": {
+      "createdAt": "2026-10-18T13:05:23Z",
+      "generation": "7",
+      "name": "mr-boot-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "uid": "29dbd8a8-0b64-44f8-8eb8-233b52fc75b7"
+     },
+     "pod": null,
+     "podsUsingTheClaim": [],
+     "pv": {
+      "claimUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+      "name": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834"
+     },
+     "pvc": {
+      "accessModes": [
+       "ReadWriteOnce"
+      ],
+      "annotations": {
+       "orbit.dev/owner-id": "01a14eff-3644-71dc-bd3a-169457b10c34",
+       "orbit.dev/runner-id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+       "pv.kubernetes.io/bind-completed": "yes",
+       "pv.kubernetes.io/bound-by-controller": "yes",
+       "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+       "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "volumeName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154"
+     },
+     "volumeAttachments": []
+    }
+   },
+   "bob": {
+    "at": "2026-10-18T13:06:18.880+00:00",
+    "ceph": {
+     "blocklist": "10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\nlisted 55 entries",
+     "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "health": "HEALTH_OK",
+     "healthDetail": "HEALTH_OK",
+     "osdmap": {
+      "epoch": 188,
+      "num_in_osds": 3,
+      "num_osds": 3,
+      "num_remapped_pgs": 0,
+      "num_up_osds": 3,
+      "osd_in_since": 1792215315,
+      "osd_up_since": 1792317777
+     },
+     "pgs": [
+      {
+       "count": 33,
+       "state_name": "active+clean"
+      }
+     ],
+     "rbdInfo": {
+      "access_timestamp": "Sun Oct 18 12:36:59 2026",
+      "block_name_prefix": "rbd_data.2f67f956e7039",
+      "create_timestamp": "Sun Oct 18 12:36:59 2026",
+      "features": [
+       "layering"
+      ],
+      "flags": [],
+      "format": 2,
+      "id": "2f67f956e7039",
+      "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+      "name": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+      "object_size": 4194304,
+      "objects": 512,
+      "op_features": [],
+      "order": 22,
+      "size": 2147483648,
+      "snapshot_count": 0
+     },
+     "rbdStatus": {
+      "watchers": []
+     }
+    },
+    "guest": [
+     "== kernel 7.0.0-34-generic, boot f728e937-6023-44ca-a548-b190a5821993, up 11048.65 s",
+     "== rbd devices",
+     "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client194119 addr 10.0.2.15:0/4215951233",
+     "== RBD filesystems mounted",
+     "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+     "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+    ],
+    "mapping": {
+     "attachments": 0,
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 6,
+     "operation": "DELETE_POD:COMPLETED",
+     "pod": null,
+     "podUid": null,
+     "proof": "OBSERVED_STOP",
+     "proofRetired": true,
+     "reason": null,
+     "secretGeneration": "5",
+     "state": "SLEEPING"
+    },
+    "objects": {
+     "bootstrapSecret": {
+      "createdAt": "2026-10-18T13:02:59Z",
+      "generation": "5",
+      "name": "mr-boot-01a14f03-ec5a-749b-9877-e882a1a198eb",
+      "uid": "54c8026c-c17c-4b60-a5f1-80116198e380"
+     },
+     "pod": null,
+     "podsUsingTheClaim": [],
+     "pv": {
+      "claimUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+      "name": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+     },
+     "pvc": {
+      "accessModes": [
+       "ReadWriteOnce"
+      ],
+      "annotations": {
+       "orbit.dev/owner-id": "01a14eff-3688-71c7-b029-3e80a8f18065",
+       "orbit.dev/runner-id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+       "pv.kubernetes.io/bind-completed": "yes",
+       "pv.kubernetes.io/bound-by-controller": "yes",
+       "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+       "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "volumeName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483"
+     },
+     "volumeAttachments": []
+    }
+   },
+   "cy": {
+    "at": "2026-10-18T13:06:21.074+00:00",
+    "ceph": {
+     "blocklist": "10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\nlisted 55 entries",
+     "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "health": "HEALTH_OK",
+     "healthDetail": "HEALTH_OK",
+     "osdmap": {
+      "epoch": 188,
+      "num_in_osds": 3,
+      "num_osds": 3,
+      "num_remapped_pgs": 0,
+      "num_up_osds": 3,
+      "osd_in_since": 1792215315,
+      "osd_up_since": 1792317777
+     },
+     "pgs": [
+      {
+       "count": 33,
+       "state_name": "active+clean"
+      }
+     ],
+     "rbdInfo": {
+      "access_timestamp": "Sun Oct 18 12:44:08 2026",
+      "block_name_prefix": "rbd_data.2f67fb5a2253b",
+      "create_timestamp": "Sun Oct 18 12:44:08 2026",
+      "features": [
+       "layering"
+      ],
+      "flags": [],
+      "format": 2,
+      "id": "2f67fb5a2253b",
+      "modify_timestamp": "Sun Oct 18 12:44:08 2026",
+      "name": "csi-vol-8df43b50-2e72-44e9-ad65-4737a09dd275",
+      "object_size": 4194304,
+      "objects": 512,
+      "op_features": [],
+      "order": 22,
+      "size": 2147483648,
+      "snapshot_count": 0
+     },
+     "rbdStatus": {
+      "watchers": []
+     }
+    },
+    "guest": [
+     "== kernel 7.0.0-34-generic, boot f728e937-6023-44ca-a548-b190a5821993, up 11050.22 s",
+     "== rbd devices",
+     "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client194119 addr 10.0.2.15:0/4215951233",
+     "== RBD filesystems mounted",
+     "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+     "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+    ],
+    "mapping": {
+     "attachments": 0,
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 3,
+     "operation": "DELETE_POD:COMPLETED",
+     "pod": null,
+     "podUid": null,
+     "proof": "OBSERVED_STOP",
+     "proofRetired": true,
+     "reason": null,
+     "secretGeneration": "2",
+     "state": "SLEEPING"
+    },
+    "objects": {
+     "bootstrapSecret": {
+      "createdAt": "2026-10-18T13:02:59Z",
+      "generation": "2",
+      "name": "mr-boot-01a14f04-a624-724f-b618-252c0e3e8e26",
+      "uid": "ca8b0d4c-6589-4bc3-9ba5-276f2e973a75"
+     },
+     "pod": null,
+     "podsUsingTheClaim": [],
+     "pv": {
+      "claimUid": "989c98fe-b03c-4071-aadb-4a935f2ec311",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-8df43b50-2e72-44e9-ad65-4737a09dd275",
+      "name": "pvc-989c98fe-b03c-4071-aadb-4a935f2ec311",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "006fd890-e26c-49da-ada5-497602505e7b",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-8df43b50-2e72-44e9-ad65-4737a09dd275"
+     },
+     "pvc": {
+      "accessModes": [
+       "ReadWriteOnce"
+      ],
+      "annotations": {
+       "orbit.dev/owner-id": "01a14f04-a5fa-71ae-a1e5-105ef8124d70",
+       "orbit.dev/runner-id": "01a14f04-a624-724f-b618-252c0e3e8e26",
+       "pv.kubernetes.io/bind-completed": "yes",
+       "pv.kubernetes.io/bound-by-controller": "yes",
+       "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+       "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14f04-a624-724f-b618-252c0e3e8e26",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "989c98fe-b03c-4071-aadb-4a935f2ec311",
+      "volumeName": "pvc-989c98fe-b03c-4071-aadb-4a935f2ec311"
+     },
+     "volumeAttachments": []
+    }
+   }
+  },
+  "timelineLines": 207,
+  "verdict": {
+   "at": "2026-10-18T13:06:13.228+00:00",
+   "foreign": [
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+     "resourceVersion": "8484",
+     "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+     "resourceVersion": "9855",
+     "uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+     "resourceVersion": "10967",
+     "uid": "d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+     "resourceVersion": "10963",
+     "uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+     "resourceVersion": "12676",
+     "uid": "8278f180-68bf-4eea-ae49-c79d896e3c15"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c23-4d07-7679-812d-f74876266c72",
+     "resourceVersion": "14822",
+     "uid": "4ede0589-3cb3-44a8-bc3e-f7b414b71681"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+     "resourceVersion": "15275",
+     "uid": "928c943a-bc2a-4df9-9cea-97d88369f2f0"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3a-e9b4-77bb-8d63-0bb1fc697702",
+     "resourceVersion": "15410",
+     "uid": "fc1c9388-c2d1-49d5-a9fc-4325d9cdd413"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3c-502b-71cb-984b-0594e9adc118",
+     "resourceVersion": "15585",
+     "uid": "9bddfcba-1043-48d2-bbd5-f1453d65f862"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3d-df2c-701d-9013-6ead27f5922a",
+     "resourceVersion": "15696",
+     "uid": "10238454-a0bd-4438-9173-a17b35b2778b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+     "resourceVersion": "15789",
+     "uid": "d1075e02-0f32-4913-9884-5c3da5d1e57d"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+     "resourceVersion": "16250",
+     "uid": "9a7cd7cb-8c86-4071-a5b0-856fd5457b0e"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+     "resourceVersion": "16752",
+     "uid": "3831f550-8fc3-4718-8fbd-940a7979157b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+     "resourceVersion": "22159",
+     "uid": "9e102973-fe8d-4114-a3be-4178cab95865"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+     "resourceVersion": "25595",
+     "uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d31-2558-76b5-aa8a-f8f35df30d08",
+     "resourceVersion": "26643",
+     "uid": "949b525a-c46d-4899-abeb-c577bdddd26c"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d96-a6ec-7439-b0a3-bd794faeeed0",
+     "resourceVersion": "28061",
+     "uid": "1cfec193-c8bd-4597-8c52-d14596792053"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14d97-23a7-747d-9f18-2512a70f4fff",
+     "resourceVersion": "28284",
+     "uid": "79150284-3469-4a91-ad9d-1b5b5cf6284f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "30468",
+     "uid": "dd00c73e-bba2-4d42-ac50-ab03891b413f"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+     "resourceVersion": "30927",
+     "uid": "3d7239dd-281f-4a10-8720-e270c96cf7ec"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4",
+     "resourceVersion": "809",
+     "uid": "8780660e-7455-4612-8b16-3f1fddaf9ded"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3",
+     "resourceVersion": "650",
+     "uid": "e2daf0db-ed65-4a62-9841-ced57d71ed3b"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf",
+     "resourceVersion": "2549",
+     "uid": "dd745a38-f385-4596-b359-8bc9f27828c6"
+    },
+    {
+     "kind": "PersistentVolumeClaim",
+     "name": "mr-data-b3c54306-e474-4fce-a316-228ce37a5266",
+     "resourceVersion": "2424",
+     "uid": "c869968e-0f44-4365-800c-0448f74f8892"
+    },
+    {
+     "kind": "Pod",
+     "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "32527",
+     "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+     "resourceVersion": "9344",
+     "uid": "ce22d189-59cc-4845-830b-65e5cf65aabb"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+     "resourceVersion": "9865",
+     "uid": "100d1f69-60ba-4e95-822b-c64d328d64e5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+     "resourceVersion": "14091",
+     "uid": "fbbfb039-9dc1-4ea9-b5e6-f45c927ffc73"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+     "resourceVersion": "13468",
+     "uid": "9255a698-de90-48eb-99f4-e5f355ac93e5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+     "resourceVersion": "13449",
+     "uid": "18cd9ede-0e57-42f7-89f4-2494da6b79eb"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c23-4d07-7679-812d-f74876266c72",
+     "resourceVersion": "15185",
+     "uid": "a07cb6b9-a5f9-4d59-98e6-a736bef20354"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee",
+     "resourceVersion": "15282",
+     "uid": "88c8ad34-9f80-4c7b-aeae-2819c23a0404"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3a-e9b4-77bb-8d63-0bb1fc697702",
+     "resourceVersion": "15411",
+     "uid": "7b73793e-97ba-4ca5-987d-51f2c1de01d2"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3c-502b-71cb-984b-0594e9adc118",
+     "resourceVersion": "15587",
+     "uid": "7aead322-9d9a-4638-8018-197786d70235"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3d-df2c-701d-9013-6ead27f5922a",
+     "resourceVersion": "15697",
+     "uid": "31aa2d25-accb-400a-b947-f5fc750df9d5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+     "resourceVersion": "15793",
+     "uid": "908d7d51-860f-4926-9b40-013d8bbd3a3d"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0",
+     "resourceVersion": "16259",
+     "uid": "d1a67c20-81a1-47c0-b661-de21d06c0479"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+     "resourceVersion": "24907",
+     "uid": "611bab40-10fd-4760-b913-abc47c50474c"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+     "resourceVersion": "24698",
+     "uid": "83d12252-d12e-4d9b-84e0-e7c7f4196415"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+     "resourceVersion": "27343",
+     "uid": "be217c00-c476-4958-8f48-0d495773a84a"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d31-2558-76b5-aa8a-f8f35df30d08",
+     "resourceVersion": "26650",
+     "uid": "1b186ea1-a9e5-4832-bb96-a1b37ef181a5"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d96-a6ec-7439-b0a3-bd794faeeed0",
+     "resourceVersion": "28069",
+     "uid": "56e8368f-d230-4766-971f-e5cd47901c50"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14d97-23a7-747d-9f18-2512a70f4fff",
+     "resourceVersion": "28992",
+     "uid": "1601d81a-ec90-456e-a736-8efd79df193c"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14da1-4096-72b1-acfd-5b094be3f16f",
+     "resourceVersion": "30025",
+     "uid": "39f452ec-3cf5-4ea8-862f-848130b34468"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "resourceVersion": "30473",
+     "uid": "586f8eac-5035-4d61-ae50-8dc22dec34e3"
+    },
+    {
+     "kind": "Secret",
+     "name": "mr-boot-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+     "resourceVersion": "32392",
+     "uid": "43480a98-1235-4bf9-909c-c3218506c77c"
+    }
+   ],
+   "mappings": [
+    {
+     "attachments": [],
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 8,
+     "notes": [],
+     "owner": "ann",
+     "pod": null,
+     "podsUsingTheVolume": [],
+     "pv": {
+      "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+      "recorded": [
+       "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+       "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834"
+      ],
+      "uid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc"
+     },
+     "pvc": {
+      "phase": "Bound",
+      "recorded": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "uid": "4caa2267-5150-455d-9fc8-e9efd7e63154"
+     },
+     "reason": null,
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "secretGeneration": "7",
+     "state": "SLEEPING"
+    },
+    {
+     "attachments": [],
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 6,
+     "notes": [],
+     "owner": "bob",
+     "pod": null,
+     "podsUsingTheVolume": [],
+     "pv": {
+      "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+      "recorded": [
+       "c700b627-4ede-49b3-838b-2d34f0a720e4",
+       "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+      ],
+      "uid": "c700b627-4ede-49b3-838b-2d34f0a720e4"
+     },
+     "pvc": {
+      "phase": "Bound",
+      "recorded": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "uid": "f5cccf9b-6093-453e-b5de-f05993a2a483"
+     },
+     "reason": null,
+     "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+     "secretGeneration": "5",
+     "state": "SLEEPING"
+    },
+    {
+     "attachments": [],
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 3,
+     "notes": [],
+     "owner": "cy",
+     "pod": null,
+     "podsUsingTheVolume": [],
+     "pv": {
+      "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-8df43b50-2e72-44e9-ad65-4737a09dd275",
+      "recorded": [
+       "006fd890-e26c-49da-ada5-497602505e7b",
+       "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-8df43b50-2e72-44e9-ad65-4737a09dd275"
+      ],
+      "uid": "006fd890-e26c-49da-ada5-497602505e7b"
+     },
+     "pvc": {
+      "phase": "Bound",
+      "recorded": "989c98fe-b03c-4071-aadb-4a935f2ec311",
+      "uid": "989c98fe-b03c-4071-aadb-4a935f2ec311"
+     },
+     "reason": null,
+     "runnerId": "01a14f04-a624-724f-b618-252c0e3e8e26",
+     "secretGeneration": "2",
+     "state": "SLEEPING"
+    }
+   ],
+   "problems": [],
+   "via": "host"
+  }
+ },
+ "seconds": 9.4,
+ "startedAt": "2026-10-18T13:06:13.109+00:00",
+ "step": "checks"
+}

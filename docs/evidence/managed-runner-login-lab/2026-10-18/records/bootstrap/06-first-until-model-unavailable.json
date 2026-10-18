@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T23:49:44.046+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:49:12.647+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "STARTING",
+        "pod": "c9a95e6c",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:49:44.046+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:49:43.117",
+        "management_state": "STARTING",
+        "pod": "c9a95e6c",
+        "reason": "MODEL_UNAVAILABLE",
+        "revision": 12,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "first",
+  "reached": {
+    "reason": "MODEL_UNAVAILABLE",
+    "state": "STARTING"
+  }
+}

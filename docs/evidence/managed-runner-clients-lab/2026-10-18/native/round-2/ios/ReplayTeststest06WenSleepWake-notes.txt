@@ -1,0 +1,7 @@
+scene 06-wen-sleep-wake: 120 s, actions (
+)
+06-wen-sleep-wake-00: "Managed runner going to sleep" shows
+06-wen-sleep-wake-01: "Managed runner asleep" shows
+06-wen-sleep-wake-02: "Answering: T07-WEN-M1" shows
+06-wen-sleep-wake: 125 requests, 0 violations, actions left [], notes (
+)

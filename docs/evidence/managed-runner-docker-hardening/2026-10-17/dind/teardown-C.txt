@@ -1,0 +1,9 @@
+ Network orbit_default Removed 
+volumes: [] containers: [] networks: bridge host none 
+ddd7a599485772f9f8ecbe68564ffa8d16b7369d
+Dockerfile
+Dockerfile.dockerignore
+README.md
+channel.example.json
+channel.py
+manager-profile.example.json

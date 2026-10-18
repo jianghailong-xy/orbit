@@ -1,0 +1,139 @@
+{
+ "checks": [
+  {
+   "check": "ann: the session ran on ann's managed runner",
+   "ok": true,
+   "value": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+  },
+  {
+   "check": "ann: the engine committed a file in the session's Git worktree",
+   "ok": true,
+   "value": {
+    "commit": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+    "file": "t08-ann1.txt",
+    "fileSha256Prefix": "dd4a213dc6ebc5bc"
+   }
+  },
+  {
+   "check": "bob: the session ran on bob's managed runner",
+   "ok": true,
+   "value": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+  },
+  {
+   "check": "bob: the engine committed a file in the session's Git worktree",
+   "ok": true,
+   "value": {
+    "commit": "32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+    "file": "t08-bob1.txt",
+    "fileSha256Prefix": "60477fcb9906a12d"
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T12:37:50.854+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "ann": {
+   "attachment": {
+    "bytes": 49175,
+    "fileName": "t08-ann-note.txt",
+    "id": "34i3WAEDmjnCJEOMrOtPg",
+    "sha256": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+   },
+   "createdAt": "2026-10-18T12:37:47.464+00:00",
+   "event": {
+    "event": {
+     "created_at": "2026-10-18T12:37:49.624",
+     "ingested_at": "2026-10-18T12:37:49.855187+00:00",
+     "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "seq": 9,
+     "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "type": "tool_result"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-18T12:37:49Z",
+      "kind": "tool_result_reply",
+      "messages": 5,
+      "n": 9,
+      "secrets": [
+       "annfirst"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "created_at": "2026-10-18T12:37:47.476",
+     "engine": "claude",
+     "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "provider": "deepseek-2",
+     "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "status": "AWAITING_INPUT",
+     "task_id": null
+    }
+   },
+   "secret": "annfirst",
+   "session": "34i3WAGGhr09tgpAvF8px",
+   "sessionUuid": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+   "wrote": {
+    "commit": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+    "file": "t08-ann1.txt",
+    "fileSha256Prefix": "dd4a213dc6ebc5bc"
+   }
+  },
+  "bob": {
+   "attachment": {
+    "bytes": 49175,
+    "fileName": "t08-bob-note.txt",
+    "id": "34i3WAE7oqld9193F2FTs",
+    "sha256": "a4d8206da6b9d5bfd2f59d07f1b3ebc632cf7d5becbde43db75b54b84f735216"
+   },
+   "createdAt": "2026-10-18T12:37:47.460+00:00",
+   "event": {
+    "event": {
+     "created_at": "2026-10-18T12:37:49.627",
+     "ingested_at": "2026-10-18T12:37:49.793377+00:00",
+     "ingested_by_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+     "seq": 9,
+     "session_id": "01a14f04-a753-774e-ae62-e1572e6de075",
+     "type": "tool_result"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-18T12:37:49Z",
+      "kind": "tool_result_reply",
+      "messages": 5,
+      "n": 10,
+      "secrets": [
+       "bobfirst"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+     "created_at": "2026-10-18T12:37:47.475",
+     "engine": "claude",
+     "id": "01a14f04-a753-774e-ae62-e1572e6de075",
+     "provider": "deepseek-3",
+     "runtime_session_id": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+     "status": "AWAITING_INPUT",
+     "task_id": null
+    }
+   },
+   "secret": "bobfirst",
+   "session": "34i3WAGAkWMoXGCZw2Tmn",
+   "sessionUuid": "01a14f04-a753-774e-ae62-e1572e6de075",
+   "wrote": {
+    "commit": "32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+    "file": "t08-bob1.txt",
+    "fileSha256Prefix": "60477fcb9906a12d"
+   }
+  }
+ },
+ "seconds": 3.4,
+ "startedAt": "2026-10-18T12:37:47.448+00:00",
+ "step": "first"
+}

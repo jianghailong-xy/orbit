@@ -1,6 +1,7 @@
 import type { AccountEngine, LoginEngine, PlanUsage, PlanUsageSnapshot, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { ACCOUNT_ENGINES as SHARED_ACCOUNT_ENGINES, codexAccountSnapshot, isAccountEngine } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
+import { CURSOR_ACCOUNT_LOGIN_CAPABILITY } from './cursorRuntime';
 import { planUsageSnapshotForProvider } from './planUsage';
 
 /**
@@ -40,6 +41,13 @@ export const KIMI_ACCOUNT_LOGIN_CAPABILITY = 'kimi-account-login/v1';
 
 export function addsKimiAccounts(runner: Pick<Runner, 'capabilities'>): boolean {
   return !!runner.capabilities?.includes(KIMI_ACCOUNT_LOGIN_CAPABILITY);
+}
+
+/** Whether "Add account" can add a Cursor CLI account on this runner: one that signs a named account
+ *  into its own directory (CURSOR_ACCOUNT_LOGIN_CAPABILITY) — a Linux runner today; any other keeps
+ *  Default alone (contract §16.2, D4). */
+export function addsCursorAccounts(runner: Pick<Runner, 'capabilities'>): boolean {
+  return !!runner.capabilities?.includes(CURSOR_ACCOUNT_LOGIN_CAPABILITY);
 }
 
 /**

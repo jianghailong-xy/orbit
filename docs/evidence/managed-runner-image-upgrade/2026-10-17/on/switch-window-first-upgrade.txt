@@ -1,0 +1,53 @@
+== orbit-apiserver e4255ed4f6d9ac0ae10a3c3650d353228a5805c28860bc405243160b935af52b started 2026-10-17T14:27:40.76200942Z: its managed runner lines
+[Nest] 117  - 10/17/2026, 2:27:45 PM     LOG [ManagedRunners] managed runners are enabled in orbit-6742fb0e (Docker instance orbit-6742fb0e)
+[Nest] 117  - 10/17/2026, 2:27:45 PM     LOG [InstanceLoader] ManagedRunnerGateModule dependencies initialized +0ms
+[Nest] 117  - 10/17/2026, 2:27:45 PM     LOG [InstanceLoader] ManagedRunnerModule dependencies initialized +0ms
+[Nest] 117  - 10/17/2026, 2:27:45 PM     LOG [RoutesResolver] ManagedRunnerController {/api/managed-runner}: +0ms
+[Nest] 117  - 10/17/2026, 2:27:45 PM     LOG [RoutesResolver] ManagedRunnerAdmissionController {/api/managed-runner/admission}: +0ms
+[Nest] 117  - 10/17/2026, 2:27:46 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-6742fb0e with image sha256:efa7b75f9ac00974dbb46bf411b4b39005b370e92109ac6b6a1edf1906607837; this profile names orbit-6742fb0e with sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394
+[Nest] 117  - 10/17/2026, 2:27:51 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-6742fb0e with image sha256:efa7b75f9ac00974dbb46bf411b4b39005b370e92109ac6b6a1edf1906607837; this profile names orbit-6742fb0e with sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394
+[Nest] 117  - 10/17/2026, 2:29:52 PM    WARN [ManagedRunnerManager] managed runner 01a14a29-e542-709b-8156-6f8802c8386a: idle and asked to sleep; draining generation 1 to sleep
+[Nest] 117  - 10/17/2026, 2:29:57 PM    WARN [ManagedRunnerManager] managed runner 01a14a29-e542-709b-8156-6f8802c8386a: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 117  - 10/17/2026, 2:31:14 PM    WARN [ManagedRunnerManager] managed runner 01a14a29-e542-709b-8156-6f8802c8386a: waking for demand (generation 2)
+
+== orbit-docker-channel 1d5eee98d0b18dc986582d1e3006c2dc4521734da0dd7504f0f6acd8d681338d started 2026-10-17T14:27:52.589610542Z: its first 40 lines
+2026-10-17T14:27:53Z orbit-docker-channel: instance orbit-6742fb0e serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394, network orbit-managed-runners
+2026-10-17T14:27:56Z orbit-docker-channel: GET /v1/info -> 200
+2026-10-17T14:27:56Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:27:56Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:01Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:01Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:06Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:06Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:11Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:11Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:16Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:16Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:21Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:21Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:26Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:26Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:31Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:31Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:36Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:36Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:41Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:41Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:46Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:46Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:51Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:51Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:56Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:28:56Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:01Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:01Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:06Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:06Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:11Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:11Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:16Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:16Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:21Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:21Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:26Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200
+2026-10-17T14:29:26Z orbit-docker-channel: GET /v1/containers/mr-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200

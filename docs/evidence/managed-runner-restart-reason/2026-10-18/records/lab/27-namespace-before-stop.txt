@@ -1,0 +1,22 @@
+NAME                                          READY   STATUS    RESTARTS       AGE
+pod/lab-20261017061552-b                      1/1     Running   12 (24m ago)   27h
+pod/mr-01a14db1-e2b6-7199-8613-d95d4616d6a7   0/1     Unknown   0              175m
+
+NAME                                                                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799   Bound    pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab   2Gi        RWO            runner-data    <unset>                 13h
+persistentvolumeclaim/mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee   Bound    pvc-f00e77e6-337a-464f-9a54-0c6fb3bfcc1f   2Gi        RWO            runner-data    <unset>                 13h
+persistentvolumeclaim/mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4   Bound    pvc-d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250   2Gi        RWO            runner-data    <unset>                 11h
+persistentvolumeclaim/mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b   Bound    pvc-e8aa1f8c-ce3f-4bba-8674-89fbdb37615f   2Gi        RWO            runner-data    <unset>                 11h
+persistentvolumeclaim/mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd   Bound    pvc-8278f180-68bf-4eea-ae49-c79d896e3c15   2Gi        RWO            runner-data    <unset>                 11h
+persistentvolumeclaim/mr-data-01a14c23-4d07-7679-812d-f74876266c72   Bound    pvc-4ede0589-3cb3-44a8-bc3e-f7b414b71681   2Gi        RWO            runner-data    <unset>                 10h
+persistentvolumeclaim/mr-data-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee   Bound    pvc-928c943a-bc2a-4df9-9cea-97d88369f2f0   2Gi        RWO            runner-data    <unset>                 9h
+persistentvolumeclaim/mr-data-01a14c3a-e9b4-77bb-8d63-0bb1fc697702   Bound    pvc-fc1c9388-c2d1-49d5-a9fc-4325d9cdd413   2Gi        RWO            runner-data    <unset>                 9h
+persistentvolumeclaim/mr-data-01a14c3c-502b-71cb-984b-0594e9adc118   Bound    pvc-9bddfcba-1043-48d2-bbd5-f1453d65f862   2Gi        RWO            runner-data    <unset>                 9h
+persistentvolumeclaim/mr-data-01a14c3d-df2c-701d-9013-6ead27f5922a   Bound    pvc-10238454-a0bd-4438-9173-a17b35b2778b   2Gi        RWO            runner-data    <unset>                 9h
+persistentvolumeclaim/mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1   Bound    pvc-d1075e02-0f32-4913-9884-5c3da5d1e57d   2Gi        RWO            runner-data    <unset>                 9h
+persistentvolumeclaim/mr-data-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0   Bound    pvc-9a7cd7cb-8c86-4071-a5b0-856fd5457b0e   2Gi        RWO            runner-data    <unset>                 9h
+persistentvolumeclaim/mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585   Bound    pvc-3831f550-8fc3-4718-8fbd-940a7979157b   2Gi        RWO            runner-data    <unset>                 8h
+persistentvolumeclaim/mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360   Bound    pvc-9e102973-fe8d-4114-a3be-4178cab95865   2Gi        RWO            runner-data    <unset>                 7h32m
+persistentvolumeclaim/mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5   Bound    pvc-4a06a82f-fcfd-4b7e-a32c-aea44e40d388   2Gi        RWO            runner-data    <unset>                 5h27m
+NAME                                                                   ATTACHER           PV                                         NODE           ATTACHED   AGE
+csi-1603ccb7471b09ba2c720a4ef62f32ac595d065c6d54d1e368c2248305b198ce   rbd.csi.ceph.com   pvc-c869968e-0f44-4365-800c-0448f74f8892   orbit-mr-lab   true       27h

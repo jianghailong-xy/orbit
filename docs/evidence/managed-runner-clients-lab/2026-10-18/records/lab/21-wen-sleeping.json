@@ -1,0 +1,94 @@
+{
+  "at": "2026-10-18T06:02:56.398+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:01:54.900+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "READY",
+        "pod": "c6f34ee6",
+        "reason": null,
+        "revision": 17
+      }
+    ],
+    [
+      "2026-10-18T06:02:25.943+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "c6f34ee6",
+        "reason": null,
+        "revision": 18
+      }
+    ],
+    [
+      "2026-10-18T06:02:43.914+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "c6f34ee6",
+        "reason": null,
+        "revision": 18
+      }
+    ],
+    [
+      "2026-10-18T06:02:46.078+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "c6f34ee6",
+        "reason": null,
+        "revision": 20
+      }
+    ],
+    [
+      "2026-10-18T06:02:46.624+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "c6f34ee6",
+        "reason": null,
+        "revision": 21
+      }
+    ],
+    [
+      "2026-10-18T06:02:56.398+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 2,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 22
+      }
+    ]
+  ],
+  "owner": "wen",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

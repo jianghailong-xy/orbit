@@ -1,0 +1,56 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:37:32.5",
+    "ingested_at": "2026-10-18T01:37:32.537405+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 8,
+    "session_id": "01a14ca7-ebd3-71f2-a14c-a9343227050b",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-BURST-S0",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:37:32Z",
+      "kind": "text",
+      "messages": 1,
+      "n": 8,
+      "tool": null
+    },
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:37:32Z",
+      "kind": "text",
+      "messages": 2,
+      "n": 9,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:37:15.731",
+    "engine": "claude",
+    "id": "01a14ca7-ebd3-71f2-a14c-a9343227050b",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-BURST-S0 a new session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:37:32.664",
+      "client_turn_id": "initial-01a14ca7-ebd3-71f2-a14c-a9343227050b",
+      "content": "T06-AMY-BURST-S0 a new session",
+      "created_at": "2026-10-18T01:37:31.686",
+      "delivered_at": "2026-10-18T01:37:32.181",
+      "id": "01a14ca8-2a26-70cb-b2a6-6347dd1a6339",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}
