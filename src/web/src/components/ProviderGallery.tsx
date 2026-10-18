@@ -15,11 +15,13 @@ import { runnersQuery } from '../lib/queries';
 import { webShowsEngine } from '../lib/runnerEngines';
 import { brandForProvider, ENGINE_PRESET } from '../lib/sessionProviderChoices';
 
-/** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
+/** Just the part of a runner this gallery reads: which engines it is signed into, and its name — and
+ *  what it declares, which says whether Cursor CLI is drawn at all (webShowsEngine). */
 interface SignedInRunner {
   name: string;
   displayName?: string | null;
   engines?: RunnerEngineHealth[] | null;
+  capabilities?: string[] | null;
 }
 
 // Match the iOS provider tile: a white glyph over the brand gradient, or a monogram when unknown.
@@ -63,7 +65,8 @@ export function ProviderTile({
         height: size,
         borderRadius: radius,
         background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
-        border: glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
+        // A near-black tile keeps an edge against a dark page (Antigravity's, and Cursor's cube).
+        border: glyphKey === 'antigravity' || glyphKey === 'cursor-api' ? '1px solid rgba(255,255,255,0.16)' : undefined,
       }}
     >
       {glyph ? (
@@ -165,9 +168,10 @@ export function ProviderGallery() {
   return (
     <div className="provider-gallery">
       {/* A vendor whose keys run on no engine this page draws is not offered: Cursor's run on Cursor CLI
-          alone, which the web draws once P7a builds it (webShowsEngine). */}
+          alone, which the web draws once a runner of the account knows it (webShowsEngine). */}
       {PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
-        && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl }).some(webShowsEngine)).map((p) => {
+        && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
+          .some((engine) => webShowsEngine(engine, (runners.data ?? []) as SignedInRunner[]))).map((p) => {
         const count = connected.get(p.slug) ?? 0;
         return (
           <Link

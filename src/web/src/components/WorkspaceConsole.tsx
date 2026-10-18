@@ -69,7 +69,7 @@ export function WorkspaceConsole() {
     <main className="app-main">
       <div className="app-view">
         {viewRunner ? (
-          <WorkspaceView runner={viewRunner} managed={consoleManaged} />
+          <WorkspaceView runner={viewRunner} managed={consoleManaged} fleet={runners.data} />
         ) : sessionNotFound ? (
           <Result
             status="404"
