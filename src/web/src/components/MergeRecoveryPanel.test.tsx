@@ -220,19 +220,51 @@ it('repair waiting for the owner: its question is quoted and the next step is Re
   expect(h.repair).toHaveBeenCalledExactlyOnceWith(false);
 });
 
-it('repair failed: the row shows why, and the next step still continues the repair', async () => {
+it('repair failed: the row shows why, and the next step resolves it in a new repair session', async () => {
   const failed = repairOf({ status: 'FAILED', runState: 'FAILED', error: 'The model provider rejected the request' });
   const h = await mountRepair(conflicted, failed);
   expect(rowOf(h.element)?.className).toContain('is-failed');
   expect(rowOf(h.element)?.querySelector('strong')?.textContent).toBe('Repair session failed');
   expect(rowOf(h.element)?.querySelector('.wt-recovery-repair-note')?.textContent).toBe('The model provider rejected the request');
-  expect(primaryOf(h.element).textContent).toBe('Continue repair');
+  expect(primaryOf(h.element).textContent).toBe('Resolve in repair session');
+  expect(actionLabels(h.element)).toEqual(['Resolve in repair session', 'Prepare PR candidate']);
+  await act(async () => primaryOf(h.element).click());
+  expect(h.repair).toHaveBeenCalledExactlyOnceWith(false);
   // While Orbit checks what it left, the row keeps saying it failed.
   await act(async () => root!.unmount()); root = null; container?.remove();
   const checking = await mountRepair(conflicted, failed, true);
   expect(rowOf(checking.element)?.querySelector('strong')?.textContent).toBe('Repair session failed');
   expect(checking.element.querySelector('.wt-recovery-checked')?.textContent).toBe(' Checking the repair…');
   expect(primaryOf(checking.element).textContent).toBe(' Checking…');
+});
+
+it('names the repair step by what the server does with the attached session: a failed one is replaced, the rest go on', async () => {
+  // S2: POST /merge-repair continues the repair session it finds, unless that session failed; then it opens a new one.
+  const unmount = async () => { await act(async () => root!.unmount()); root = null; container?.remove(); };
+  const failed = { status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED' };
+  const resumable = [
+    { status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT' },
+    { status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED' },
+    { status: 'CANCELLED', runStatus: 'CANCELLED', runState: 'ENDED' },
+    { status: 'INTERRUPTED', runStatus: 'INTERRUPTED', runState: 'INTERRUPTED' },
+  ];
+  const h = await mountRepair(conflicted, repairOf(failed));
+  expect(primaryOf(h.element).textContent).toBe('Resolve in repair session');
+  expect(actionLabels(h.element)).toEqual(['Resolve in repair session', 'Prepare PR candidate']);
+  await unmount();
+  for (const state of resumable) {
+    const going = await mountRepair(conflicted, repairOf(state));
+    expect(primaryOf(going.element).textContent, state.status).toBe('Continue repair');
+    expect(actionLabels(going.element), state.status).toEqual(['Continue repair', 'Prepare PR candidate']);
+    await unmount();
+  }
+  // Nor is a failed session replied to when its repair is unfinished.
+  const unfinished = { ...conflicted, code: 'REPAIR_IN_PROGRESS', conflicts: [WIRING] };
+  const replaced = await mountRepair(unfinished, repairOf(failed));
+  expect(actionLabels(replaced.element)).toEqual(['Resolve in repair session']);
+  await unmount();
+  const asked = await mountRepair(unfinished, repairOf());
+  expect(actionLabels(asked.element)).toEqual(['Reply in repair session']);
 });
 
 it('a result from before the repair stopped is not that repair’s result', async () => {

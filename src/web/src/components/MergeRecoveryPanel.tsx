@@ -197,10 +197,11 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
               {retry && <button type="button" disabled={busy} onClick={() => onAction!('apply', r.previewId)}>Check result / retry reviewed candidate</button>}
             </>)}
           {r.repairWorktree && onRepair && !pendingLocal && (loop
-            // The same repair session takes the next step (S2): it carries on from its earlier rounds.
+            // The same repair session takes the next step and carries on from its earlier rounds (S2), except a failed one:
+            // the server opens a new repair session in its place, so that step is named as a new repair is.
             ? <>
               {!ready && <button type="button" className={r.code === 'CONFLICT' || unfinished ? 'wt-merge-btn' : undefined} disabled={busy}
-                onClick={() => onRepair(false)}>{unfinished ? 'Reply in repair session' : 'Continue repair'}</button>}
+                onClick={() => onRepair(false)}>{repairFailed ? 'Resolve in repair session' : unfinished ? 'Reply in repair session' : 'Continue repair'}</button>}
               {!unfinished && <button type="button" disabled={busy} onClick={() => onRepair(true)}>Prepare PR candidate</button>}
             </>
             : <>
