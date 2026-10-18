@@ -230,7 +230,8 @@ describe('the existing composer control inventory', () => {
     // toolbar — or from the model control's menu — without being named here.
     //
     // Three pills since provider, model, effort and fast mode folded into one model control
-    // (Workspace, Mode, Model); the menu behind it carries the four fields. Deliberately a
+    // (Workspace, Mode, Model); the menu behind it carries the four fields, and a Cursor CLI model's
+    // own context size and fast lane, which it writes into the model value. Deliberately a
     // whole-inventory assertion rather than a ">= N": the point is that adding a control is a
     // decision somebody has to write down, and a count that only grew would let the next one
     // arrive unnamed.
@@ -258,7 +259,8 @@ describe('the existing composer control inventory', () => {
       model: menu.includes('key: `model:${option.value}`'),
       effort: menu.includes('onSelect: () => pickEffort(option.value)'),
       fastMode: menu.includes('onSelect: () => pickFastMode(option.value)'),
-    }).toEqual({ provider: true, model: true, effort: true, fastMode: true });
+      cursorSettings: menu.includes('onSelect: () => pickCursorSetting(setting.id, option.value)'),
+    }).toEqual({ provider: true, model: true, effort: true, fastMode: true, cursorSettings: true });
     expect(menu.match(/key: '(provider|effort|speed)',/g) ?? []).toHaveLength(3);
   });
 });

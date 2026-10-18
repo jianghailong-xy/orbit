@@ -77,6 +77,13 @@ type fakeCursorACPScript struct {
 	// HoldAfter stops the replay once the runner has answered the request the CLI sent under this recorded
 	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running.
 	HoldAfter string `json:"holdAfter,omitempty"`
+	// Config answers a session/set_config_option the recording does not hold with the same params the way
+	// the recording shows the CLI answering one (§10), from the recording's own data: selecting a model
+	// lists the mode, the model and that model's own options as the recording's cursor/list_available_models
+	// lists them, at their defaults; setting an option moves its currentValue; and a model, option or value
+	// the CLI does not list is refused -32602, as the recording refuses one. A set_config_option the
+	// recording holds with the same params is replayed as recorded.
+	Config bool `json:"config,omitempty"`
 }
 
 // fakeCursorScopeProcessEnv starts this test binary as one of the processes a Spawn script starts
@@ -361,8 +368,22 @@ func runFakeCursorACP(dir string) int {
 		return 2
 	}
 	defer received.Close()
+	// What a Config script answers from: every model the recording's catalogue lists, with its own options,
+	// and the options the CLI last listed for the session.
+	catalogue := map[string][]interface{}{}
+	for _, line := range lines {
+		models, _ := mapValue(line.msg["result"])["models"].([]interface{})
+		for _, raw := range models {
+			model := mapValue(raw)
+			catalogue[firstString(model, "value")], _ = model["configOptions"].([]interface{})
+		}
+	}
+	var options []interface{}
 	out := bufio.NewWriter(os.Stdout)
 	write := func(msg map[string]interface{}) {
+		if listed, ok := mapValue(msg["result"])["configOptions"].([]interface{}); ok {
+			options = listed
+		}
 		if line, err := json.Marshal(msg); err == nil {
 			_, _ = out.Write(append(line, '\n'))
 			_ = out.Flush()
@@ -456,11 +477,22 @@ func runFakeCursorACP(dir string) int {
 		switch {
 		case method != "" && id != nil:
 			match := -1
-			for i := next; i < len(requests) && script.MatchParams; i++ {
+			configures := script.Config && method == "session/set_config_option"
+			for i := next; i < len(requests) && (script.MatchParams || configures); i++ {
 				if requests[i].method == method && fakeCursorSameParams(requests[i].params, params) {
 					match = i
 					break
 				}
+			}
+			if match < 0 && configures {
+				listed, refusal := fakeCursorConfigAnswer(options, catalogue, firstString(params, "configId"), firstString(params, "value"))
+				if refusal != "" {
+					write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{
+						"code": -32602, "message": "Invalid params", "data": map[string]interface{}{"message": refusal}}})
+				} else {
+					write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": map[string]interface{}{"configOptions": listed}})
+				}
+				continue
 			}
 			for i := next; i < len(requests) && match < 0; i++ {
 				if requests[i].method == method {
@@ -530,6 +562,40 @@ func runFakeCursorACP(dir string) int {
 	}
 	time.Sleep(60 * time.Second)
 	return 0
+}
+
+// fakeCursorConfigAnswer is the options a Config script's CLI lists once a session/set_config_option the
+// recording does not hold has set id to value, or the refusal the CLI answers it with (§10). Selecting a
+// model keeps the mode and the model, at its new value, and lists that model's own options from the
+// catalogue in place of the last model's.
+func fakeCursorConfigAnswer(options []interface{}, catalogue map[string][]interface{}, id, value string) ([]interface{}, string) {
+	var listed []interface{}
+	set := false
+	for _, raw := range options {
+		var option map[string]interface{}
+		if wire, err := json.Marshal(raw); err != nil || json.Unmarshal(wire, &option) != nil {
+			continue
+		}
+		switch other := firstString(option, "id"); {
+		case other == id && !cursorOffers(option, value) && id == "model":
+			return nil, "Invalid model value: " + value
+		case other == id && !cursorOffers(option, value):
+			return nil, "Invalid value for " + id + ": " + value
+		case other == id:
+			option["currentValue"] = value
+			set = true
+		case id == "model" && other != "mode":
+			continue // the last model's own option
+		}
+		listed = append(listed, option)
+	}
+	if !set {
+		return nil, "Invalid value for " + id + ": " + value
+	}
+	if id == "model" {
+		listed = append(listed, catalogue[value]...)
+	}
+	return listed, ""
 }
 
 // fakeCursorSameParams is whether a request's params are a recorded one's, the session id and the working
