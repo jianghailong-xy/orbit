@@ -8,7 +8,8 @@ import type { Runner } from './TasksSidePanel';
 
 /**
  * A Cursor CLI session's composer (the owner's board, docs/mocks/cursor-engine Web 5 and Web 6): the model
- * menu titled Cursor CLI, Auto with no effort to set and a line on why, a model's own efforts; a context
+ * menu titled Cursor CLI, Auto with no effort or context to set and a line on why, a model's own efforts,
+ * context sizes and fast lane — written into the session's model value — and the chip that names them; a context
  * gauge that is unavailable rather than 0%; a placeholder that says a message written mid-turn waits; and
  * the account rule the server keeps (P6b, D5) — a session that has talked lists its other accounts and
  * keys but can't move to them on a runner that can't carry its conversation, and says why; one that has
@@ -34,7 +35,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueuedTurns } = await import('../api');
+const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueuedTurns, updateSessionConfig } = await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
@@ -65,12 +66,29 @@ const RUNNER = {
       ],
     },
   ],
+  // As the runner reports Cursor CLI's parameterized picker (testdata/cursor/parameterized-model-picker).
   modelCatalog: {
     cursor: [
       { value: 'default', label: 'Auto' },
-      { value: 'claude-opus-5-5', label: 'Claude Opus 5.5', reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-      { value: 'composer-2.5', label: 'Composer 2.5' },
+      {
+        value: 'claude-opus-5-5',
+        label: 'Claude Opus 5.5',
+        reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningLevel: 'medium',
+        parameters: [
+          { id: 'context', label: 'Context', category: 'model_config', default: '300k', values: [{ value: '300k', label: '300K' }, { value: '1m', label: '1M' }] },
+          { id: 'effort', label: 'Effort', category: 'thought_level', default: 'medium', values: ['low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({ value, label: value })) },
+          { id: 'fast', label: 'Fast', category: 'model_config', default: 'false', values: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'Fast' }] },
+        ],
+      },
+      {
+        value: 'composer-2.5',
+        label: 'Composer 2.5',
+        parameters: [{ id: 'fast', label: 'Fast', category: 'model_config', default: 'true', values: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'Fast' }] }],
+      },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
     ],
+    claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5', fastMode: true }],
   },
   planUsage: {
     cursor: {
@@ -134,7 +152,7 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     if (!container) throw new Error('WorkspaceView is not mounted');
     return container;
   };
-  const mount = async () => {
+  const mount = async (model: RegExp = /Auto|Claude Opus 5.5/) => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
     container = document.createElement('div');
     root = createRoot(container);
@@ -158,7 +176,7 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     });
     // The detail row — the session's account, its engine — and the providers list land a beat later.
     await act(async () => {
-      await vi.waitFor(() => expect(mounted().querySelector('.composer-model-name')?.textContent).toMatch(/Auto|Claude Opus 5.5/), {
+      await vi.waitFor(() => expect(mounted().querySelector('.composer-model-name')?.textContent).toMatch(model), {
         timeout: 20_000,
         interval: 20,
       });
@@ -199,6 +217,24 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     return words?.textContent ?? '';
   };
   const foot = () => document.querySelector('[role="menu"][data-nested] .composer-provider-foot')?.textContent ?? null;
+  /** The model menu's own rows, by what each says: its label, then the value it shows on its right. */
+  const modelMenuRows = async () => {
+    const menu = await openModelMenu();
+    return [...menu.querySelectorAll<HTMLElement>(':scope > [role="menuitem"]')].map((item) => item.textContent?.trim() ?? '');
+  };
+  /** Opens the row of the model menu that starts with `title`, and returns the rows a level down. */
+  const subMenuRows = async (title: string) => {
+    await openModelMenu();
+    const row = [...document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"][aria-haspopup="menu"]')].find((el) =>
+      el.textContent?.startsWith(title),
+    );
+    if (!row) return null;
+    await click(row);
+    await render(() => document.querySelector('[role="menu"][data-nested] [role="menuitem"]'));
+    return [...document.querySelectorAll<HTMLElement>('[role="menu"][data-nested] [role="menuitem"]')];
+  };
+  const checked = (row: HTMLElement) => !!row.querySelector('.scope-menu-check .anticon');
+  const configCalls = () => vi.mocked(updateSessionConfig).mock.calls.map(([, cfg]) => cfg);
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -277,9 +313,11 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((item) => item.textContent?.trim());
     expect(items).toEqual(expect.arrayContaining(['Auto', 'Claude Opus 5.5', 'Composer 2.5']));
     expect(items.some((item) => item?.startsWith('Effort'))).toBe(false);
+    expect(items.some((item) => item?.startsWith('Context') || item?.startsWith('Speed'))).toBe(false);
     expect(menu.querySelector('.composer-route-reason')?.textContent).toBe(
-      'Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort to set.',
+      'Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set.',
     );
+    expect(mounted().querySelector('.composer-model-chip')?.textContent).toBe('Auto');
     expect(mounted().querySelector('.composer-model-chip .composer-model-effort')).toBeNull();
   });
 
@@ -334,5 +372,108 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     rows = (await providerMenuRows())!;
     expect(rows.map((row) => row.getAttribute('aria-disabled'))).toEqual([null, null, null, null]);
     expect(foot()).toBeNull();
+  });
+  it('Cursor variants: a model with a context size and a fast lane offers Context and Speed under Effort, and the chip names them', async () => {
+    detail = session({ model: 'claude-opus-5-5[context=1m,fast=true]', effort: 'high' });
+    await mount();
+    // The board's chip (Web 5 ⑤): the model, then its effort, context and fast lane.
+    const chip = mounted().querySelector('.composer-model-chip');
+    expect(chip?.querySelector('.composer-model-name')?.textContent).toBe('Claude Opus 5.5');
+    expect(chip?.querySelector('.composer-model-effort')?.textContent).toBe('High · 1M · Fast');
+    const rows = await modelMenuRows();
+    // Under the models, in the board's order (Web 5 ①): Effort, Context, Speed.
+    expect(rows.slice(-3)).toEqual(['EffortHigh', 'Context1M', 'SpeedFast']);
+    const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-closed])')!;
+    const opus = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Claude Opus 5.5');
+    expect(opus && checked(opus)).toBe(true);
+    // Each row offers the values the runner's catalogue lists for the model, by their own names.
+    const context = (await subMenuRows('Context'))!;
+    expect(context.map((row) => [row.textContent?.trim(), checked(row)])).toEqual([['300K', false], ['1M', true]]);
+  });
+
+  it("Cursor variants: picking a context or a speed writes it into the session's model value", async () => {
+    vi.mocked(updateSessionConfig).mockReset();
+    vi.mocked(updateSessionConfig).mockResolvedValue({} as never);
+    detail = session({ model: 'claude-opus-5-5', effort: 'high' });
+    await mount();
+    expect(mounted().querySelector('.composer-model-chip .composer-model-effort')?.textContent).toBe('High');
+    // The model's own 300K and fast lane off are what it shows, and picking them again changes nothing.
+    let context = (await subMenuRows('Context'))!;
+    expect(context.map((row) => [row.textContent?.trim(), checked(row)])).toEqual([['300K', true], ['1M', false]]);
+    await click(context[0]);
+    expect(configCalls()).toEqual([]);
+    context = (await subMenuRows('Context'))!;
+    await click(context.find((row) => row.textContent?.trim() === '1M'));
+    expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[context=1m]' }]);
+
+    vi.mocked(updateSessionConfig).mockClear();
+    await act(async () => root?.unmount());
+    container?.remove();
+    detail = session({ model: 'claude-opus-5-5[context=1m]', effort: 'high' });
+    await mount();
+    expect(mounted().querySelector('.composer-model-chip .composer-model-effort')?.textContent).toBe('High · 1M');
+    const speed = (await subMenuRows('Speed'))!;
+    expect(speed.map((row) => [row.textContent?.trim(), checked(row)])).toEqual([['Standard', true], ['Fast', false]]);
+    await click(speed.find((row) => row.textContent?.trim() === 'Fast'));
+    expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[context=1m,fast=true]' }]);
+    // Back at the model's own default, a setting leaves the model value: the runner sets the default.
+    vi.mocked(updateSessionConfig).mockClear();
+    await act(async () => root?.unmount());
+    container?.remove();
+    detail = session({ model: 'claude-opus-5-5[context=1m,fast=true]', effort: 'high' });
+    await mount();
+    context = (await subMenuRows('Context'))!;
+    await click(context.find((row) => row.textContent?.trim() === '300K'));
+    expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[fast=true]' }]);
+    await click((await subMenuRows('Speed'))!.find((row) => row.textContent?.trim() === 'Standard'));
+    expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[fast=true]' }, { model: 'claude-opus-5-5[context=1m]' }]);
+    // Another model starts on its own settings: its bare name.
+    vi.mocked(updateSessionConfig).mockClear();
+    await openModelMenu();
+    const composer = [...document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === 'Composer 2.5',
+    );
+    await click(composer);
+    expect(configCalls()).toEqual([expect.objectContaining({ model: 'composer-2.5' })]);
+  });
+
+  it('Cursor variants: a model shows only the rows its catalogue lists, and Fast only while it is on', async () => {
+    // Composer 2.5 has a fast lane, on by default, and no context sizes.
+    detail = session({ model: 'composer-2.5' });
+    await mount(/Composer 2.5/);
+    expect(mounted().querySelector('.composer-model-chip .composer-model-effort')?.textContent).toBe('Default · Fast');
+    let rows = await modelMenuRows();
+    expect(rows.some((row) => row.startsWith('Context'))).toBe(false);
+    expect(rows.at(-1)).toBe('SpeedFast');
+
+    await act(async () => root?.unmount());
+    container?.remove();
+    detail = session({ model: 'composer-2.5[fast=false]' });
+    await mount(/Composer 2.5/);
+    expect(mounted().querySelector('.composer-model-chip .composer-model-effort')?.textContent).toBe('Default');
+    expect((await modelMenuRows()).at(-1)).toBe('SpeedStandard');
+
+    // A model with neither offers neither; a value the model does not offer shows what it runs on.
+    await act(async () => root?.unmount());
+    container?.remove();
+    detail = session({ model: 'gemini-3.1-pro[context=1m,fast=true]' });
+    await mount(/Gemini 3.1 Pro/);
+    expect(mounted().querySelector('.composer-model-chip')?.textContent).toBe('Gemini 3.1 ProDefault');
+    rows = await modelMenuRows();
+    expect(rows.some((row) => row.startsWith('Context') || row.startsWith('Speed'))).toBe(false);
+  });
+
+  it('Cursor variants: another engine keeps its own Speed row and menu, with no Context row', async () => {
+    detail = session({ engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high', fastMode: true, cursorAccount: null });
+    await mount(/Opus 5.5/);
+    const chip = mounted().querySelector('.composer-model-chip');
+    expect(chip?.querySelector('.composer-model-name')?.textContent).toBe('Opus 5.5');
+    expect(chip?.querySelector('.composer-model-effort')?.textContent).toBe('High · Fast');
+    const rows = await modelMenuRows();
+    expect(rows.some((row) => row.startsWith('Context'))).toBe(false);
+    expect(rows.at(-1)).toBe('SpeedFast');
+    // The engine's fast mode, Standard or Fast, as it always was.
+    const speed = (await subMenuRows('Speed'))!;
+    expect(speed.map((row) => [row.textContent?.trim(), checked(row)])).toEqual([['Standard', false], ['Fast', true]]);
   });
 });

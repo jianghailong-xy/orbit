@@ -28,9 +28,70 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 var errCursorSignedOut = errors.New("cursor catalogue: the Default account is signed out")
+
+// cursorVariantParameters are the settings a session's model value carries beside the model's name, by
+// Cursor's option ids (§10): the context size and the fast lane. The effort is the session's own field,
+// and the mode is its permission mode's, so a model value names neither.
+var cursorVariantParameters = []string{"context", "fast"}
+
+// cursorModelSetting is one `id=value` a session's model value names.
+type cursorModelSetting struct{ id, value string }
+
+// decodeCursorModel reads a session's model value as shared's decodeCursorModel does
+// (src/shared/src/cursorModels.ts): `name[id=value,…]`, with at least one setting, is the model `name` with
+// those settings, written the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`), and
+// anything else is a model's name as it stands, naming no settings — `default[]` and every other empty
+// `[]` among them, which reach the CLI unread, as they did before variants.
+func decodeCursorModel(value string) (string, []cursorModelSetting) {
+	text := strings.TrimSpace(value)
+	open := strings.Index(text, "[")
+	if open <= 0 || !strings.HasSuffix(text, "]") || strings.Index(text, "]") != len(text)-1 || strings.LastIndex(text, "[") != open {
+		return text, nil
+	}
+	var settings []cursorModelSetting
+	seen := map[string]bool{}
+	for _, pair := range strings.Split(text[open+1:len(text)-1], ",") {
+		id, setting, _ := strings.Cut(pair, "=")
+		if !cursorSettingToken(id) || !cursorSettingToken(setting) || seen[id] {
+			return text, nil
+		}
+		seen[id] = true
+		settings = append(settings, cursorModelSetting{id: id, value: setting})
+	}
+	return text[:open], settings
+}
+
+// cursorSettingToken is one side of an `id=value`: something, and nothing the syntax is made of.
+func cursorSettingToken(token string) bool {
+	return token != "" && !strings.ContainsAny(token, "=,[]") && !strings.ContainsFunc(token, unicode.IsSpace)
+}
+
+// cursorParameterDefault is the value a model starts one of its settings on, as this runner's catalogue
+// lists it (the CLI's own, read in a throwaway home), or "" while the catalogue has nothing to say: before
+// its first read, or while the Default account is signed out.
+func cursorParameterDefault(model, id string) string {
+	modelWindowMu.RLock()
+	catalog := modelWindows
+	modelWindowMu.RUnlock()
+	if catalog == nil {
+		return ""
+	}
+	for _, info := range catalog.Cursor {
+		if info.Value != model {
+			continue
+		}
+		for _, parameter := range info.Parameters {
+			if parameter.ID == id {
+				return parameter.Default
+			}
+		}
+	}
+	return ""
+}
 
 type cursorCatalogModel struct {
 	Value         string               `json:"value"`

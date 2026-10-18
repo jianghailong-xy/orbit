@@ -1,4 +1,12 @@
-import { AgentProvider, ENGINE_CLI_NAMES, type RunnerEngineHealth } from '@orbit/shared';
+import {
+  AgentProvider,
+  decodeCursorModel,
+  ENGINE_CLI_NAMES,
+  runnerCatalogRow,
+  type RunnerEngineHealth,
+  type RunnerModelCatalog,
+  type RunnerModelInfo,
+} from '@orbit/shared';
 
 /**
  * What the clients need to know about Cursor CLI (`cursor`) that no other engine shares, read the way
@@ -129,7 +137,65 @@ export const CURSOR_MOVE_BLOCKED_NOTE =
 
 /** In the model menu under Auto, which has no parameters to set (contract §10). */
 export const CURSOR_AUTO_NOTE =
-  'Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort to set.';
+  'Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set.';
+
+/** A Cursor CLI session's model value read against the runner's catalogue: the model the menu checks, its
+ *  row, and the settings the value names beside it (shared cursorModels.ts, contract §10). A value the
+ *  catalogue lists as it stands is a model of its own, as the server reads it (runnerCatalogRow). */
+export interface CursorModelPick {
+  model: string;
+  row?: RunnerModelInfo;
+  parameters: Record<string, string>;
+}
+
+export function cursorModelPick(value: string, modelCatalog?: RunnerModelCatalog | null): CursorModelPick {
+  const row = runnerCatalogRow(AgentProvider.CURSOR, value, modelCatalog);
+  if (row && row.value === value) return { model: value, row, parameters: {} };
+  const { model, parameters } = decodeCursorModel(value);
+  return { model, row, parameters };
+}
+
+/** A row of the model menu for one of a Cursor model's own settings: what it is called there, the value
+ *  in effect — the one the session's model value names when the model offers it, else the model's own —
+ *  and the values to pick from, all as the runner's catalogue lists them. */
+export interface CursorSettingRow {
+  id: string;
+  title: string;
+  value: string;
+  label: string;
+  defaultValue: string;
+  values: Array<{ value: string; label: string }>;
+}
+
+/** The menu's rows for a Cursor model's context size and fast lane, in the board's order (Web 5 ①), each
+ *  only where the model's row lists it: Context, then Speed, which is Cursor's `fast` and reads Standard or
+ *  Fast as every engine's Speed row does. Auto has none. */
+export function cursorSettingRows(pick: CursorModelPick | null | undefined): CursorSettingRow[] {
+  if (!pick) return [];
+  return [
+    { id: 'context', title: 'Context' },
+    { id: 'fast', title: 'Speed' },
+  ].flatMap(({ id, title }) => {
+    const parameter = pick.row?.parameters?.find((candidate) => candidate.id === id);
+    const values = (parameter?.values ?? [])
+      .filter((option) => option.value)
+      .map((option) => (id === 'fast' && option.value !== 'true' ? { ...option, label: 'Standard' } : option));
+    if (!parameter || values.length === 0) return [];
+    const defaultValue = parameter.default ?? '';
+    const named = pick.parameters[id];
+    const value = values.some((option) => option.value === named) ? named : defaultValue;
+    const label = values.find((option) => option.value === value)?.label ?? value;
+    return [{ id, title, value, label, defaultValue, values }];
+  });
+}
+
+/** What the composer's chip says after the effort of a Cursor model (board Web 5 ⑤, "Claude Opus 5.5 High ·
+ *  1M · Fast"): a context other than the model's own, then the fast lane when it is on. */
+export function cursorChipSettings(rows: readonly CursorSettingRow[]): string[] {
+  return rows.flatMap((row) =>
+    (row.id === 'fast' ? row.value === 'true' : row.value !== row.defaultValue) ? [row.label] : [],
+  );
+}
 
 /** Under the tray of messages waiting for a running Cursor CLI turn (contract §3.2: a prompt sent
  *  mid-turn cancels the turn, so Orbit queues it). */

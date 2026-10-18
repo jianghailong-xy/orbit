@@ -300,6 +300,20 @@ export interface RunnerModelInfo {
   /** Whether this model has the runtime's fast lane, from the same probe. Absent is "the runner
    *  could not say" and false is "it said no"; only the first falls back to the static table. */
   fastMode?: boolean;
+  /** Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+   *  context size, fast lane and thinking (runner-go cursor_models.go). Absent for a runtime that
+   *  lists none. A Cursor session names the ones it sets in its model value (cursorModels.ts). */
+  parameters?: RunnerModelParameter[];
+}
+
+/** One setting a model takes: the id that selects it, which is the model's own (one model's effort is
+ *  `effort`, another's `reasoning_effort`), the values it accepts and the one it starts on. */
+export interface RunnerModelParameter {
+  id: string;
+  label: string;
+  category?: string;
+  default?: string;
+  values: Array<{ value: string; label: string }>;
 }
 
 /** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows

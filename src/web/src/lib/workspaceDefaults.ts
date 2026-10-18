@@ -3,11 +3,13 @@ import {
   autoAvailable,
   CURSOR_DEFAULT_PERMISSION_MODE,
   CURSOR_PERMISSION_MODES,
+  decodeCursorModel,
   DSH_PERMISSION_MODES,
   isEngine,
   isRetiredModel,
   keyDialect,
   openCodeKeyOf,
+  runnerCatalogRow,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
@@ -396,7 +398,8 @@ export const defaultModelFor = (
  * what dispatch runs, including which pins are left alone: OpenCode owns its own selection, a
  * third-party key's list is a document rather than a live probe, and an id the Runtime itself
  * reports (`opus`, `opusplan`, a gateway id) is current by definition. Judged against the catalogue
- * of the engine that runs it — DeepSeek Harness's own, whichever key it spends.
+ * of the engine that runs it — DeepSeek Harness's own, whichever key it spends. A Cursor CLI variant
+ * (`claude-opus-5-5[context=1m]`, shared cursorModels.ts) is offered when its model is.
  */
 export const livePinnedModel = (
   model: string | null | undefined,
@@ -413,9 +416,8 @@ export const livePinnedModel = (
   if (!model) return !row && engine === AgentProvider.ANTIGRAVITY ? undefined : model;
   if (engine !== AgentProvider.DSH && row && !row.modelsFromRuntime) return model;
   const judge = engine === AgentProvider.DSH || !row ? engine : nativeEngine(row.runtime);
-  return isRetiredModel(model, catalogOptions(judge, modelCatalog), runtimeDefaultModels?.[judge])
-    ? undefined
-    : model;
+  const retired = (id: string) => isRetiredModel(id, catalogOptions(judge, modelCatalog), runtimeDefaultModels?.[judge]);
+  return retired(model) && (judge !== AgentProvider.CURSOR || retired(decodeCursorModel(model).model)) ? undefined : model;
 };
 
 /** The key a model picked for `engine` on `provider` is remembered under in
@@ -620,13 +622,16 @@ const effortWithinDeclaredLevels = (effort: string, levels: string[]): string =>
  *  opaque like its model values. A model the runner hasn't reported offers Default only: there is
  *  no static list to fall back on, and a guessed level would be refused at dispatch. Cursor CLI's
  *  are read the same way: each model's own effort parameter, by its own values (§10), and Auto has
- *  none. */
+ *  none — a variant's are its model's. */
 const dshEffortOptions = (
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   engine: AgentProvider.DSH | AgentProvider.CURSOR = AgentProvider.DSH,
 ) => {
-  const row = modelCatalog?.[engine]?.find((entry) => entry.value === model);
+  const row =
+    engine === AgentProvider.CURSOR
+      ? runnerCatalogRow(engine, model ?? '', modelCatalog)
+      : modelCatalog?.[engine]?.find((entry) => entry.value === model);
   const levels = [...new Set((row?.reasoningLevels ?? []).filter(Boolean))];
   return [{ value: '', label: 'Default' }, ...levels.map((level) => ({ value: level, label: effortLabel(level) }))];
 };
