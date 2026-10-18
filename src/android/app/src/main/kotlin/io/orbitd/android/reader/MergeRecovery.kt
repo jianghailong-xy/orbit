@@ -41,8 +41,11 @@ internal data class MergeRecovery(
         val running: Boolean get() = runState in setOf("PENDING", "QUEUED", "RUNNING")
     }
 
-    /** The repair row's six states on the board, and FINISHED: a stopped repair whose check found none of theirs (or an older server's row). */
-    enum class RepairState { RUNNING, CHECKING, READY, CONFLICTS, NEEDS_REPLY, FAILED, FINISHED }
+    /**
+     * The repair row's six states on the board; FINISHED, a stopped repair with no verdict of theirs to show — the check on screen
+     * predates its stop, or found something else; and COMPLETED, the row a server that does not check repairs by itself gets.
+     */
+    enum class RepairState { RUNNING, CHECKING, READY, CONFLICTS, NEEDS_REPLY, FAILED, FINISHED, COMPLETED }
     data class RepairRow(val state: RepairState, val headline: String, val line: String?)
 
     val ready: Boolean get() = code == "READY" && !previewId.isNullOrEmpty() && patch != null && check?.status in setOf("passed", "unconfigured") &&
@@ -58,13 +61,13 @@ internal data class MergeRecovery(
         code == "PREVIEW_CHANGED" -> "Branches changed — check again"
         code == "FETCH_FAILED" -> "Could not check the remote"
         code in setOf("PUSH_FAILED", "REMOTE_NOT_VERIFIED") -> "Could not confirm the target push"
-        code == "REPAIR_IN_PROGRESS" -> "The repair isn't finished"
+        code == "REPAIR_IN_PROGRESS" -> "The repair isn’t finished"
         code == "ALREADY_LANDED" -> "Already on origin/$targetBranch"
         else -> "$targetBranch needs synchronization"
     }
 
     /** The sentence under the title, for the states that have one. */
-    fun lede(zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
+    fun lede(zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault(), now: Instant = Instant.now()): String? {
         val t = targetBranch
         if (ready) return if (!pushCommits.isNullOrEmpty()) null else "Preserves both target histories." + if (addsMergeCommit == true) " Adds one merge commit." else ""
         return when (code) {
@@ -73,8 +76,8 @@ internal data class MergeRecovery(
             "LOCAL_SYNC_PENDING" -> "The remote contains the reviewed candidate. Save blocking local edits before syncing; this action only updates this machine."
             "REPAIR_IN_PROGRESS" -> "Some files in the repair worktree are still unresolved."
             // The newest landed commit is when the last of this session's changes reached origin.
-            "ALREADY_LANDED" -> "This session's changes reached origin/$t" +
-                (landedCommits?.firstOrNull()?.let { " on " + day(it.date, zone, locale) } ?: "") + ". Nothing is left to merge."
+            "ALREADY_LANDED" -> (landedCommits?.firstOrNull()?.let { "This session’s changes reached origin/$t on ${day(it.date, zone, locale, now)}. " } ?: "") +
+                "Nothing is left to merge."
             else -> null
         }
     }
@@ -88,18 +91,19 @@ internal data class MergeRecovery(
      * fresh SOURCE_REPLAY conflict with nothing moved, so it is TARGET_SYNC's alone.
      */
     val movedAfterRepairNote: String? get() {
-        if (code != "CONFLICT" || phase != "TARGET_SYNC" || repairBranch == "orbit/recovery/$previewId") return null
+        if (code != "CONFLICT" || phase != "TARGET_SYNC" || repairBranch == null || previewId == null || repairBranch == "orbit/recovery/$previewId") return null
         return "origin/$targetBranch moved after the repair. The repair was kept; " +
             if (conflicts.orEmpty().size > 1) "only these files conflict with the new commits." else "only this file conflicts with the new commits."
     }
 
     /** ALREADY_LANDED, under the commits on origin: they carry copies of this session's, so its branch was rewritten after they merged. */
-    val landedNote: String? get() =
-        if (landedCommits.orEmpty().any { it.sha != it.sourceSha }) "Matched by content — this branch was rewritten after these merged." else null
+    val landedNote: String? get() = landedCommits.orEmpty().takeIf { commits -> commits.any { it.sha != it.sourceSha } }?.let {
+        "Matched by content — this branch was rewritten after ${if (it.size == 1) "it" else "these"} merged."
+    }
 
     /** ALREADY_LANDED, under the branches: the local target's own commits, which are not this session's to push. */
     val localNote: String? get() = localCommits?.size?.takeIf { it > 0 }?.let { n ->
-        "Local $targetBranch's own $n ${if (n == 1) "commit isn't" else "commits aren't"} part of this session."
+        "Local $targetBranch’s own $n ${if (n == 1) "commit isn’t" else "commits aren’t"} part of this session."
     }
 
     /** Local-only first: an unpublished local merge is still unpublished. */
@@ -160,20 +164,23 @@ internal data class MergeRecovery(
     fun repairRow(repair: Repair, loop: Boolean, checking: Boolean, now: Instant = Instant.now()): RepairRow {
         val finished = "Repair session finished"
         fun ago(iso: String) = TaskTime.relative(iso, now) ?: iso
-        fun verdict(text: String) = checkedAt?.let { "Checked ${ago(it)} — $text" } ?: text.replaceFirstChar { it.uppercase() }
+        // Only a check made after the repair stopped speaks for what the repair did.
+        val stopped = TaskTime.parse(repair.stoppedAt)
+        val checked = checkedAt?.takeIf { stopped != null && TaskTime.parse(it)?.isBefore(stopped) == false }?.let(::ago)
+        val asked = repair.stoppedAt?.let(::ago)
         return when {
             repair.running -> RepairRow(RepairState.RUNNING, "Repair session running", "Tap to open the running session")
             repair.runState == "FAILED" -> RepairRow(RepairState.FAILED, "Repair session failed", repair.error?.trim()?.ifEmpty { null }?.takeIf { loop })
-            !loop -> RepairRow(RepairState.FINISHED, "Repair session completed", "Ready to check again")
+            !loop -> RepairRow(RepairState.COMPLETED, "Repair session completed", "Ready to check again")
             checking -> RepairRow(RepairState.CHECKING, finished, "Checking its result…")
+            checked == null -> RepairRow(RepairState.FINISHED, finished, null)
             // The check found the repair unfinished: it stopped to ask, and what it asked is its last word.
-            code == "REPAIR_IN_PROGRESS" -> RepairRow(RepairState.NEEDS_REPLY, "Repair session needs your reply", listOfNotNull(
-                repair.lastAssistantText?.trim()?.replace(Regex("\\s+"), " ")?.ifEmpty { null }?.let { "“$it”" },
-                repair.stoppedAt?.let(::ago)).joinToString(" · ").ifEmpty { null })
-            ready -> RepairRow(RepairState.READY, finished, verdict("ready to merge"))
+            code == "REPAIR_IN_PROGRESS" -> RepairRow(RepairState.NEEDS_REPLY, "Repair session needs your reply",
+                repair.lastAssistantText?.trim()?.replace(Regex("\\s+"), " ")?.ifEmpty { null }?.let { "“$it” · $asked" })
+            ready -> RepairRow(RepairState.READY, finished, "Checked $checked — ready to merge")
             code == "CONFLICT" -> conflicts.orEmpty().size.let { n ->
-                RepairRow(RepairState.CONFLICTS, finished, verdict("$n ${if (n == 1) "conflict" else "conflicts"} left")) }
-            else -> RepairRow(RepairState.FINISHED, finished, checkedAt?.let { "Checked ${ago(it)}" })
+                RepairRow(RepairState.CONFLICTS, finished, "Checked $checked — $n ${if (n == 1) "conflict" else "conflicts"} left") }
+            else -> RepairRow(RepairState.FINISHED, finished, "Checked $checked")
         }
     }
 
@@ -244,9 +251,13 @@ internal data class MergeRecovery(
         fun checking(detail: JsonObject): Boolean =
             detail.string("mergeStatus") == "pending" && detail.string("mergeRecoveryAction") == "preview" || detail.string("mergeRepairTurnEndedAt") != null
 
-        /** A commit's day as the review writes it ("Oct 11"), in the reader's zone; the date as sent when it does not parse. */
-        fun day(iso: String, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
-            runCatching { DateTimeFormatter.ofPattern("MMM d", locale).format(OffsetDateTime.parse(iso).atZoneSameInstant(zone)) }.getOrDefault(iso)
+        /** A commit's day as the review writes it ("Oct 11", with the year when it is not this one), in the reader's zone; the date as sent
+         *  when it does not parse. */
+        fun day(iso: String, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault(), now: Instant = Instant.now()): String =
+            runCatching {
+                val date = OffsetDateTime.parse(iso).atZoneSameInstant(zone)
+                DateTimeFormatter.ofPattern(if (date.year == now.atZone(zone).year) "MMM d" else "MMM d, yyyy", locale).format(date)
+            }.getOrDefault(iso)
 
         private fun isSha(sha: String?) = sha != null && sha.length == 40 && sha.all { it in "0123456789abcdef" }
     }

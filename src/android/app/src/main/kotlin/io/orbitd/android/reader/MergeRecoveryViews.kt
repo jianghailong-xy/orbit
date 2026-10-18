@@ -202,12 +202,14 @@ private fun RepairRowView(row: MergeRecovery.RepairRow, title: String, open: () 
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         when (row.state) {
             MergeRecovery.RepairState.RUNNING, MergeRecovery.RepairState.CHECKING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
+            // No verdict of the repair's to show, so no sign either.
+            MergeRecovery.RepairState.FINISHED -> Unit
             else -> Icon(painterResource(when (row.state) {
                 MergeRecovery.RepairState.CONFLICTS -> R.drawable.ic_warning
                 MergeRecovery.RepairState.NEEDS_REPLY -> R.drawable.ic_suggestion
                 MergeRecovery.RepairState.FAILED -> R.drawable.ic_x_circle
                 else -> R.drawable.ic_check_circle
-            }), null, Modifier.size(18.dp), tint = if (row.state == MergeRecovery.RepairState.FINISHED) colors.success else tint)
+            }), null, Modifier.size(18.dp), tint = if (row.state == MergeRecovery.RepairState.COMPLETED) colors.success else tint)
         }
         Column(Modifier.weight(1f)) {
             Text(row.headline, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
