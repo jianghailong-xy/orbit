@@ -487,6 +487,40 @@ One finding is reported, not fixed here: on k3s the restart reason is lost after
 notes two behaviours from before this task: a Retry pressed on another client shows at the next 30 s read, and the
 web composer under a failed notice reads "Reply…" while the runner row is still online.
 
+## The restart reason through the detach wait (T07b)
+
+Recorded 2026-10-18 by task T07b, which fixed T07's finding above. It records what a runner's owner is told while a
+READY runner restarts by itself, before and after the fix. The records are in
+[the evidence](evidence/managed-runner-restart-reason/2026-10-18/README.md).
+
+- **Setup.** One account (`amy`), T06b's image (already in the guest) and T07's profile: one runner, its memory limit
+  1Gi. The idle interval was raised to an hour, so that sleep stayed out of the way.
+- **Model.** fake-model.py stood in as the owner's DeepSeek-preset key. No session ran, and nothing was built into an
+  image or pushed.
+- **What was read.** The status, as the owner reads it, every 0.5 s (`kit/t07b.py watch`).
+- **Control.** For one run, the test server ran a build of the previous manager.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t07b    # earlier tasks' databases untouched
+W=scripts/managed-runner/lab/wake-lab.py; K=docs/evidence/managed-runner-restart-reason/2026-10-18/kit
+python3 $W prepare --image REF && python3 $K/t07b.py profile                 # then idleSeconds 3600 in the profile
+python3 $W gate start && sudo -E scripts/managed-runner/lab/test-server.sh start && python3 $W account root
+sudo -E scripts/managed-runner/lab/test-server.sh start --managed           # after stopping the apiserver unit
+python3 scripts/managed-runner/lab/single-writer.py admission install && python3 $W record start
+python3 $W account amy && python3 $W key amy && python3 $W until amy READY
+$K/run.sh OUT LABEL kill|oom natural|held      # READY for 125 s first; the status every 0.5 s until READY again
+$K/run-starting.sh OUT LABEL                   # sleep, wake, and a kill while the woken runner is still starting
+```
+
+| Check | Result |
+| --- | --- |
+| The detach wait, with the fix | The stopped Pod's own VolumeAttachment was kept by a finalizer of the kit's (`detach-hold`) after the cluster had detached the volume, as a slow detach keeps it. After a SIGKILL of `orbit run`: REQUESTED `POD_RESTARTING` (4.5 s), REQUESTED `VOLUME_STILL_ATTACHED` (15 s, the restart carried), STARTING `POD_RESTARTING` on the next generation, READY with no reason. After the container ran out of memory: the same, with `POD_RESTARTING_OUT_OF_MEMORY`, and the clients' out-of-memory sentence before and after the wait. |
+| The same, before the fix | REQUESTED `POD_RESTARTING`, REQUESTED `VOLUME_STILL_ATTACHED`, then STARTING with no reason for 20 s: "It is starting again", T07's finding. |
+| Without the hold | Two kills and an out-of-memory kill while READY, and a kill while a woken runner started. Each time the volume was detached 3.3–6.1 s after the Pod failed, before the gate looked (one poll and a 3.75 s backoff after the stop), so there was no wait. The restart's reason stood until READY. T07 saw the natural wait in a crash loop of a runner still starting. |
+| Attempts and identity | Each run began with the runner READY for 125 s, and each restart counted attempt 1; no wait spent one. Generations 1 to 9 ran on the same PVC and PV, one Pod at a time. |
+
+Left in the lab: `amy` SLEEPING, its PVC kept; the webhook removed; the test server and the gate stopped; the VM off.
+
 ## Known limits
 
 - **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2
