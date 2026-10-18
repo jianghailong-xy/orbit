@@ -1271,7 +1271,9 @@ export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
 export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
 
 /** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
- *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
+ *  OpenCode, which are installed without one — the relay needs an install command, not a way in.
+ *  Cursor CLI's (`cursor`, the same request for Install and Reinstall) goes only to a runner that knows
+ *  Cursor CLI: it declares `provider:cursor` or reports the engine. */
 export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
 
 /**
