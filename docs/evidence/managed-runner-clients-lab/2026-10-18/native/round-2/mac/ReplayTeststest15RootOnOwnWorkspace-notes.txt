@@ -1,0 +1,6 @@
+scene 15-root-on-own-workspace: 88.193 s, actions (
+)
+15-root-on-own-workspace: no window after launch; File > New Window
+15-root-on-own-workspace-00: "Claude Code" shows
+15-root-on-own-workspace: 26 requests, 0 violations, actions left [], notes (
+)

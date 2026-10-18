@@ -1,0 +1,5 @@
+scene 02-off-false-compose: 104.887 s, actions (
+)
+02-off-false-compose-00: "Claude Code" shows
+02-off-false-compose: 35 requests, 0 violations, actions left [], notes (
+)

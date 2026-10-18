@@ -1,0 +1,14 @@
+{
+  "action": "off",
+  "answer": "volumeattachment.storage.k8s.io \"t07-left-behind-01a14da1\" deleted",
+  "at": "2026-10-18T06:22:02.369+00:00",
+  "attachmentsOfThePv": [
+    {
+      "attached": true,
+      "name": "csi-c9ba4f9f232900d301d853874795c58909e88b4d3c967f7c939f32289eda503b",
+      "node": "orbit-mr-lab"
+    }
+  ],
+  "owner": "nia",
+  "pv": "pvc-ad73e57d-788a-44c0-904a-babd6200ac67"
+}

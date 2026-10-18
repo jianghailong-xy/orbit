@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T06:22:07.759",
+    "ingested_at": "2026-10-18T06:22:07.895027+00:00",
+    "ingested_by_runner_id": "01a14da1-4096-72b1-acfd-5b094be3f16f",
+    "seq": 41,
+    "session_id": "01a14da2-21e3-7158-b2f4-9f2f57eb0601",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T07-NIA-V1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T06:22:07Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 11,
+      "tool": null
+    }
+  ],
+  "owner": "nia",
+  "session": {
+    "assigned_runner_id": "01a14da1-4096-72b1-acfd-5b094be3f16f",
+    "created_at": "2026-10-18T06:10:33.571",
+    "engine": "claude",
+    "id": "01a14da2-21e3-7158-b2f4-9f2f57eb0601",
+    "provider": "deepseek-3",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T07-NIA-S1 a first session from the iPhone composer while the runner waits for c"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T06:22:07.919",
+      "client_turn_id": "7ac65341-1bf2-4660-a582-9478624cb574",
+      "content": "T07-NIA-V1 wake while an attachment of the volume is left behind",
+      "created_at": "2026-10-18T06:21:14.935",
+      "delivered_at": "2026-10-18T06:22:07.376",
+      "id": "01a14dab-eb37-71c0-b276-602d830f9926",
+      "kind": "message",
+      "seq": 4,
+      "status": "ANSWERED"
+    }
+  ]
+}
