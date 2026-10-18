@@ -42,10 +42,10 @@ var cursorVariantParameters = []string{"context", "fast"}
 type cursorModelSetting struct{ id, value string }
 
 // decodeCursorModel reads a session's model value as shared's decodeCursorModel does
-// (src/shared/src/cursorModels.ts): `name[id=value,…]` is the model `name` with those settings, written
-// the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`), and anything else is a
-// model's name as it stands — Auto's `default[]` is `default`, and a value not written as a variant
-// names no settings.
+// (src/shared/src/cursorModels.ts): `name[id=value,…]`, with at least one setting, is the model `name` with
+// those settings, written the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`), and
+// anything else is a model's name as it stands, naming no settings — `default[]` and every other empty
+// `[]` among them, which reach the CLI unread, as they did before variants.
 func decodeCursorModel(value string) (string, []cursorModelSetting) {
 	text := strings.TrimSpace(value)
 	open := strings.Index(text, "[")
@@ -53,16 +53,14 @@ func decodeCursorModel(value string) (string, []cursorModelSetting) {
 		return text, nil
 	}
 	var settings []cursorModelSetting
-	if inner := text[open+1 : len(text)-1]; inner != "" {
-		seen := map[string]bool{}
-		for _, pair := range strings.Split(inner, ",") {
-			id, setting, _ := strings.Cut(pair, "=")
-			if !cursorSettingToken(id) || !cursorSettingToken(setting) || seen[id] {
-				return text, nil
-			}
-			seen[id] = true
-			settings = append(settings, cursorModelSetting{id: id, value: setting})
+	seen := map[string]bool{}
+	for _, pair := range strings.Split(text[open+1:len(text)-1], ",") {
+		id, setting, _ := strings.Cut(pair, "=")
+		if !cursorSettingToken(id) || !cursorSettingToken(setting) || seen[id] {
+			return text, nil
 		}
+		seen[id] = true
+		settings = append(settings, cursorModelSetting{id: id, value: setting})
 	}
 	return text[:open], settings
 }

@@ -60,8 +60,6 @@ describe('Cursor model variants', () => {
     expect(CURSOR_AUTO_MODEL).toBe('default');
     expect(encodeCursorModel('default', { context: '1m', fast: 'true' })).toBe('default');
     expect(encodeCursorModel('', { fast: 'true' })).toBe('');
-    // Auto without the parameterized picker, `default[]`, is Auto.
-    expect(decodeCursorModel('default[]')).toEqual({ model: 'default', parameters: {} });
     expect(decodeCursorModel('')).toEqual({ model: '', parameters: {} });
     expect(decodeCursorModel(null)).toEqual({ model: '', parameters: {} });
     expect(encodeCursorModel('claude-opus-5-5', { context: '', fast: undefined })).toBe('claude-opus-5-5');
@@ -81,6 +79,9 @@ describe('Cursor model variants', () => {
 
   it('Cursor variants: a value not written as a variant is a model name as it stands', () => {
     for (const value of [
+      // Empty brackets name no settings: Cursor CLI reads such a value itself, as it always has.
+      'default[]',
+      'no-such-model[]',
       'claude-opus-5[1m]', // Claude Code's 1M model id
       '["deepseek", "deepseek-v4-pro"]', // DeepSeek Harness's opaque ACP value
       '[context=1m]',

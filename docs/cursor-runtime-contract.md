@@ -822,7 +822,7 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   - 编码和解码用 `src/shared/src/cursorModels.ts` 的 `encodeCursorModel` / `decodeCursorModel`。runner 在 `cursor_models.go` 里有同样读法的 `decodeCursorModel`。
     - 参数按 id 排序写出（`context` 在 `fast` 前，和 Cursor 自己的变体串同序）。
     - 等于模型默认值的参数不写，所以全是默认值的模型就是不带括号的模型名。`encodeCursorModel` 传入该模型的目录行时按它的 `default` 去掉。
-    - 写不成变体的值当作原样的模型名，例如 Claude Code 的 `claude-opus-5[1m]`、空模型名、写坏或重复的参数。
+    - 方括号里至少要有一个参数才算变体。其余的值都当作原样的模型名，不读里面的参数，原样交给 Cursor CLI，和有变体之前一样。例如空方括号（`default[]`、`no-such-model[]`）、Claude Code 的 `claude-opus-5[1m]`、空模型名、写坏或重复的参数。
   - **runner**（`configure`）的顺序：
     1. 用不带参数的模型名调 `session/set_config_option` 设 model。
     2. 对模型有的 `context`、`fast` 各定一个值：值里写了就用它，没写就用 runner 模型目录里该模型的 `default`；和当前值不同才调。

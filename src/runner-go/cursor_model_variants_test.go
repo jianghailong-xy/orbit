@@ -121,7 +121,7 @@ func TestCursorModelVariants(t *testing.T) {
 	})
 	t.Run("auto", func(t *testing.T) {
 		// A new session is on Auto already, and Auto has no settings to set, whatever its value names.
-		for _, model := range []string{"default", "", "default[]"} {
+		for _, model := range []string{"default", ""} {
 			got, _ := configureCursorModel(t, model, "")
 			wantSelections(t, got)
 		}
@@ -194,20 +194,21 @@ func TestCursorModelVariants(t *testing.T) {
 		for value, want := range map[string]decoded{
 			"claude-opus-5-5[context=1m,fast=true]":              {"claude-opus-5-5", []cursorModelSetting{{"context", "1m"}, {"fast", "true"}}},
 			" gpt-5.5[context=272k,reasoning=medium,fast=false]": {"gpt-5.5", []cursorModelSetting{{"context", "272k"}, {"reasoning", "medium"}, {"fast", "false"}}},
-			"claude-opus-5-5":                                    {"claude-opus-5-5", nil},
-			"default[]":                                          {"default", nil},
-			"":                                                   {"", nil},
-			"claude-opus-5[1m]":                                  {"claude-opus-5[1m]", nil},
-			`["deepseek", "deepseek-v4-pro"]`:                    {`["deepseek", "deepseek-v4-pro"]`, nil},
-			"[context=1m]":                                       {"[context=1m]", nil},
-			"claude-opus-5-5[context=1m":                         {"claude-opus-5-5[context=1m", nil},
-			"claude-opus-5-5[context=1m]x":                       {"claude-opus-5-5[context=1m]x", nil},
-			"claude-opus-5-5[context=1m][fast=true]":             {"claude-opus-5-5[context=1m][fast=true]", nil},
-			"claude-opus-5-5[context]":                           {"claude-opus-5-5[context]", nil},
-			"claude-opus-5-5[context=]":                          {"claude-opus-5-5[context=]", nil},
-			"claude-opus-5-5[context=1m,]":                       {"claude-opus-5-5[context=1m,]", nil},
-			"claude-opus-5-5[context=1m,context=300k]":           {"claude-opus-5-5[context=1m,context=300k]", nil},
-			"claude-opus-5-5[context=1=m]":                       {"claude-opus-5-5[context=1=m]", nil},
+			"claude-opus-5-5":                          {"claude-opus-5-5", nil},
+			"default[]":                                {"default[]", nil},
+			"no-such-model[]":                          {"no-such-model[]", nil},
+			"":                                         {"", nil},
+			"claude-opus-5[1m]":                        {"claude-opus-5[1m]", nil},
+			`["deepseek", "deepseek-v4-pro"]`:          {`["deepseek", "deepseek-v4-pro"]`, nil},
+			"[context=1m]":                             {"[context=1m]", nil},
+			"claude-opus-5-5[context=1m":               {"claude-opus-5-5[context=1m", nil},
+			"claude-opus-5-5[context=1m]x":             {"claude-opus-5-5[context=1m]x", nil},
+			"claude-opus-5-5[context=1m][fast=true]":   {"claude-opus-5-5[context=1m][fast=true]", nil},
+			"claude-opus-5-5[context]":                 {"claude-opus-5-5[context]", nil},
+			"claude-opus-5-5[context=]":                {"claude-opus-5-5[context=]", nil},
+			"claude-opus-5-5[context=1m,]":             {"claude-opus-5-5[context=1m,]", nil},
+			"claude-opus-5-5[context=1m,context=300k]": {"claude-opus-5-5[context=1m,context=300k]", nil},
+			"claude-opus-5-5[context=1=m]":             {"claude-opus-5-5[context=1=m]", nil},
 		} {
 			model, settings := decodeCursorModel(value)
 			if model != want.model || !reflect.DeepEqual(settings, want.settings) {

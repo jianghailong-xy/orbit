@@ -38,10 +38,10 @@ export interface CursorModelVariant {
 const PAIR = /^([^\s=,[\]]+)=([^\s=,[\]]+)$/;
 
 /**
- * Reads a Cursor model value: `name[id=value,…]` is the model `name` with those settings, and anything
- * else is a model's name as it stands — Auto's `default[]` is `default`, and a value that is not
- * written as a variant (Claude Code's `claude-opus-5[1m]`, a value with an empty name or a malformed or
- * repeated setting) names no settings at all.
+ * Reads a Cursor model value: `name[id=value,…]`, with at least one setting, is the model `name` with
+ * those settings, and anything else is a model's name as it stands, naming no settings — `default[]`
+ * and every other empty `[]`, Claude Code's `claude-opus-5[1m]`, a value with an empty name or a
+ * malformed or repeated setting. Such a value reaches Cursor CLI unread, as it did before variants.
  */
 export function decodeCursorModel(value: string | null | undefined): CursorModelVariant {
   const text = (value ?? '').trim();
@@ -50,17 +50,13 @@ export function decodeCursorModel(value: string | null | undefined): CursorModel
   if (open <= 0 || !text.endsWith(']') || text.indexOf(']') !== text.length - 1 || text.lastIndexOf('[') !== open) {
     return asIs;
   }
-  const model = text.slice(0, open);
-  const inner = text.slice(open + 1, -1);
   const parameters: Record<string, string> = {};
-  if (inner !== '') {
-    for (const pair of inner.split(',')) {
-      const match = PAIR.exec(pair);
-      if (!match || match[1] in parameters) return asIs;
-      parameters[match[1]] = match[2];
-    }
+  for (const pair of text.slice(open + 1, -1).split(',')) {
+    const match = PAIR.exec(pair);
+    if (!match || match[1] in parameters) return asIs;
+    parameters[match[1]] = match[2];
   }
-  return { model, parameters };
+  return { model: text.slice(0, open), parameters };
 }
 
 /**
