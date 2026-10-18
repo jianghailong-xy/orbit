@@ -22,6 +22,19 @@ export const MERGE_RECEIPT_RESULTS = ['MERGED', 'ALREADY_MERGED', 'CONFLICT', 'E
 
 export type MergeReceiptResult = (typeof MERGE_RECEIPT_RESULTS)[number];
 
+/**
+ * The owner's Done on an ALREADY_LANDED merge recovery (0432): origin/<target> already carries every one of the
+ * session's commits as OTHER commits — the same `git patch-id --stable`, such as rebase copies — and the owner
+ * confirmed it. Nothing moved.
+ *
+ * Not one of MERGE_RECEIPT_RESULTS, on purpose. No receipt door accepts it: only the server writes it, from the
+ * recovery a runner check produced. And it is not a landed result: `sourceSha` is NOT an ancestor of the target,
+ * so a dependency closure, a criterion's landing or a promotion reading it as ALREADY_MERGED would take a commit
+ * the target does not contain. Its one reader is mergeDispatchGate, which answers a merge of the same source into
+ * the same target as already landed instead of sending it to a runner again.
+ */
+export const MATCHED_BY_CONTENT = 'MATCHED_BY_CONTENT';
+
 /** WHO recorded it. Provenance, never an input to a decision. */
 export const MERGE_RECEIPT_RECORDERS = ['RUNNER', 'AGENT', 'USER'] as const;
 
@@ -66,7 +79,7 @@ export function mergeReceiptIdempotencyKey(input: {
   sessionId: string;
   sourceSha: string;
   targetBranch: string;
-  result: MergeReceiptResult;
+  result: MergeReceiptResult | typeof MATCHED_BY_CONTENT;
 }): string {
   return createHash('sha256')
     .update(

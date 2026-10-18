@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRecoveryCommitOrigin, mergeRecoveryContinuePrompt, mergeRecoveryPrompt, mergeRecoveryReady,
-  mergeRecoveryTargetRelation, readMergeRecovery, type MergeRecovery } from './mergeRecovery';
+import { mergeRecoveryCommitOrigin, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
+  mergeRecoveryReady, mergeRecoveryTargetRelation, readMergeRecovery, type MergeRecovery } from './mergeRecovery';
 
 const ready: MergeRecovery = {
   code: 'READY', targetBranch: 'develop', previewId: 'reviewed', sourceSha: 'a'.repeat(40),
@@ -48,6 +48,20 @@ describe('merge recovery wire contract', () => {
       remoteSha: 'c'.repeat(40), checkedAt: '2026-10-17T06:00:00Z', patch: '', landedCommits: landed });
     expect(r?.landedCommits).toEqual(landed);
     expect(mergeRecoveryReady(r)).toBe(false);
+  });
+  it('offers Done only on an ALREADY_LANDED check stored with a previewId and naming its source, and never as a candidate', () => {
+    const landed: MergeRecovery = { code: 'ALREADY_LANDED', targetBranch: 'main', previewId: 'stored', sourceSha: 'a'.repeat(40),
+      localSha: 'b'.repeat(40), remoteSha: 'c'.repeat(40), patch: '', checkedAt: '2026-10-17T06:00:00Z',
+      landedCommits: [{ sha: 'f'.repeat(40), subject: 'Agents model', author: 'Alice', date: '2026-10-11T09:36:00Z', sourceSha: 'a'.repeat(40) }] };
+    expect(mergeRecoveryConfirmable(readMergeRecovery(landed))).toBe(true);
+    for (const not of [null, undefined, { ...landed, previewId: undefined }, { ...landed, previewId: '' },
+      { ...landed, sourceSha: undefined }, { ...landed, sourceSha: 'a'.repeat(7) }, { ...landed, code: 'READY' },
+      { ...landed, code: 'CONFLICT' }, { ...landed, code: 'TARGET_DIVERGED' }, ready]) {
+      expect(mergeRecoveryConfirmable(not)).toBe(false);
+    }
+    // The previewId the server gives it changes none of the existing judgments: it is no candidate to apply.
+    expect(mergeRecoveryReady(landed)).toBe(false);
+    expect(mergeRecoveryReady({ ...landed, candidateSha: 'd'.repeat(40), candidateTreeSha: 'e'.repeat(40), check: { status: 'passed' } })).toBe(false);
   });
   it('rejects landedCommits of the wrong shape', () => {
     const commit = { sha: 'f'.repeat(40), subject: 'Agents model', author: 'Alice', date: '2026-10-11T09:36:00Z' };

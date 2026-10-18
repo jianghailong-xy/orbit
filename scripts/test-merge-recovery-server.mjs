@@ -1,18 +1,32 @@
-// Acceptance for S2 of the merge-recovery project (34hIv3wbdtsxpc5RzDlOk): Continue repair, Reply in repair session
-// and Prepare PR candidate — POST /sessions/:id/merge-repair — go to the newest repair session that can go on, with
-// where the recovery stands now. One waiting for input, or ended in a way that can be resumed, is reused and sent one
-// message naming the check result, the phase, the files in conflict or left unresolved, and the repair branch and
-// worktree (with preparePR, the PR candidate's requirements too); one running is answered as it is, with no message; a
-// failed one, one in Trash, one whose doors refuse the message, or none at all is replaced by a new one, opened as
-// before; and two taps send one message. Run from the repository root:
+// Acceptance for S2 and S3 of the merge-recovery project (34hIv3wbdtsxpc5RzDlOk).
+//
+// S2: Continue repair, Reply in repair session and Prepare PR candidate — POST /sessions/:id/merge-repair — go to the
+// newest repair session that can go on, with where the recovery stands now. One waiting for input, or ended in a way
+// that can be resumed, is reused and sent one message naming the check result, the phase, the files in conflict or
+// left unresolved, and the repair branch and worktree (with preparePR, the PR candidate's requirements too); one
+// running is answered as it is, with no message; a failed one, one in Trash, one whose doors refuse the message, or
+// none at all is replaced by a new one, opened as before; and two taps send one message.
+//
+// S3: a check that found every commit of the session already on origin (ALREADY_LANDED) is ended by the owner's Done
+// — POST /sessions/:id/merge with recoveryAction confirm-landed and the result's previewId — on the server alone: the
+// session is recorded merged at the source the check found, the recovery is cleared, and a later merge of that source
+// into that target is answered as already landed from the MATCHED_BY_CONTENT receipt Done leaves, with nothing sent to
+// a runner. A stale previewId, or a result other than ALREADY_LANDED, is 409 with nothing written. Every other write
+// that records the session as landed — an integration landing, a merge receipt, an ordinary merge — clears the
+// recovery it was holding. A match by content is no ALREADY_MERGED: no reader of landed receipts counts it, and the
+// ancestry check an ALREADY_MERGED receipt has to pass at the runner's CLI and MCP doors still refuses a sha the target
+// does not contain (its Go tests, run by name beside the PostgreSQL scenarios).
+//
+// Run from the repository root:
 //
 //   node scripts/test-merge-recovery-server.mjs
 //
 // Every scenario below is named, and each is required to run and pass exactly once: a scenario missing, renamed,
 // unmatched, skipped, marked todo or failing, or a test process that did not start, is a non-zero exit. The guards are
-// scripts/test-dsh-routing.mjs's (assertTapResults) and scripts/test-dsh-provider-gate.mjs's (runLogged), each shown
-// the reports it has to refuse before it is trusted. The scenarios run through scripts/run-pg-spec.sh on a throwaway
-// PostgreSQL, through the controller's door and SessionsService over real rows.
+// scripts/test-dsh-routing.mjs's (assertTapResults), scripts/test-dsh-provider-gate.mjs's (runLogged) and
+// scripts/test-dsh-runtime-environment.mjs's (Go), each shown the reports it has to refuse before it is trusted. The
+// PostgreSQL scenarios run through scripts/run-pg-spec.sh on a throwaway PostgreSQL, through the controllers' doors,
+// SessionsService, MergeReceiptService and the runner's routes over real rows.
 import assert from 'node:assert/strict';
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -21,6 +35,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertTapResults } from './test-dsh-routing.mjs';
 import { runLogged } from './test-dsh-provider-gate.mjs';
+import { assertGoResults, goTestPattern, runLogged as runGoLogged, runnerEnvironment } from './test-dsh-runtime-environment.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -45,6 +60,41 @@ export const pgCases = {
     'S2 with preparePR the message carries the PR candidate requirements',
     // The file's one top-level test, whose subtests the scenarios above are.
     'S2 the merge repair door hands the next step to the same repair session on PostgreSQL',
+  ],
+  'sessions/merge-recovery-done': [
+    // The check's ALREADY_LANDED — from Check again and from an ordinary Merge — stored with a previewId of the
+    // server's; Done through the owner's door: merged at the recovery's source, merged now, the recovery and its
+    // action cleared, one MATCHED_BY_CONTENT receipt, the gate's answer, and no operation for a runner.
+    'S3 Done records the session merged and clears the recovery',
+    // A previewId of another check, none, another target, no recovery; CONFLICT, TARGET_DIVERGED, READY,
+    // REPAIR_IN_PROGRESS, an ALREADY_LANDED naming no source; a check in flight: 409, the row and receipts unchanged.
+    'S3 Done with a stale previewId or on a result other than ALREADY_LANDED is refused 409 and writes nothing',
+    // The Merge button and a waiting caller after Done: answered from the receipt, the row unchanged, nothing handed
+    // out at the heartbeat; a merge of the same source into another target still goes to the runner.
+    'S3 after Done a merge of the same source is answered as already landed and is not dispatched',
+    // A task's LAND_TASK on the project branch, and the promotion that merges it into main: each clears the recovery
+    // in the transaction of its receipt; a session with a check in flight keeps its own.
+    'S3 an integration landing clears the recovery its session was holding',
+    // MERGED through the owner's door and ALREADY_MERGED through an agent's clear it; a CONFLICT, and a landing
+    // recorded while a check is in flight, keep it.
+    'S3 a merge-receipt landing clears the recovery its session was holding',
+    // An ordinary Merge, and an applied candidate synced to DONE, leave neither the recovery nor its action;
+    // LOCAL_SYNC_PENDING keeps both for sync-local.
+    'S3 an ordinary merge that lands leaves no recovery and no recovery action behind',
+    // The Done receipt is not landed as every reader is shown it; taskLanding and its SQL, the landing evidence and
+    // a dependent's wait (J9) do not count it; no receipt door records it; an ALREADY_MERGED of the work does count.
+    'S3 a match by content is no ALREADY_MERGED and no reader of landed receipts counts it',
+    // The file's one top-level test, whose subtests the scenarios above are.
+    'S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewhere clears one, on PostgreSQL',
+  ],
+};
+
+// The ancestry check every ALREADY_MERGED receipt has to pass at the runner's doors, unchanged by S3: a sha the
+// target does not contain is refused before anything reaches the control plane (src/runner-go/merge_receipt_check.go).
+export const goCases = {
+  'merge_receipt_check_test.go': [
+    'TestMCPMergeReceiptRefusesAlreadyMergedShaNotInTarget',
+    'TestCLIMergeReceiptRefusesAlreadyMergedShaNotInTarget',
   ],
 };
 
@@ -95,10 +145,41 @@ export function checkGuards(scratch) {
   assert.throws(() => assertTapResults(one, []));
   process.stdout.write('PASS guard: failed scenarios and absent, doubled or wrong summaries are refused\n');
 
+  const goNames = Object.values(goCases).flat();
+  const goEvents = (names) => [{ Action: 'start', Package: 'orbit' },
+    ...names.flatMap((Test) => [{ Action: 'run', Package: 'orbit', Test }, { Action: 'pass', Package: 'orbit', Test }]),
+    { Action: 'pass', Package: 'orbit' }];
+  const json = (events) => `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
+  const events = goEvents(goNames);
+  assertGoResults(json(events), goNames);
+  for (const name of goNames) {
+    assert.throws(() => assertGoResults(json(events.filter((event) => event.Test !== name)), goNames), undefined, `accepted a missing ${name}`);
+    assert.throws(() => assertGoResults(json(events.map((event) => (event.Test === name && event.Action === 'pass' ? { ...event, Action: 'skip' } : event))), goNames),
+      undefined, `accepted a skipped ${name}`);
+    assert.throws(() => assertGoResults(json(events.map((event) => (event.Test === name && event.Action === 'pass' ? { ...event, Action: 'fail' } : event))), goNames),
+      undefined, `accepted a failed ${name}`);
+    assert.throws(() => assertGoResults(json(events.filter((event) => !(event.Test === name && event.Action === 'pass'))), goNames),
+      undefined, `accepted an unfinished ${name}`);
+  }
+  assert.throws(() => assertGoResults(json([...events.slice(0, -1), ...goEvents([goNames[0]]).slice(1, -1), events.at(-1)]), goNames), undefined,
+    'accepted a Go scenario reported twice');
+  assert.throws(() => assertGoResults(json([...events.slice(0, -1), { Action: 'run', Package: 'orbit', Test: 'TestNotNamedHere' },
+    { Action: 'pass', Package: 'orbit', Test: 'TestNotNamedHere' }, events.at(-1)]), goNames), undefined, 'accepted an unmatched Go test');
+  assert.throws(() => assertGoResults(json([...events.slice(0, -1), { Action: 'fail', Package: 'orbit' }]), goNames), undefined, 'accepted a failed Go package');
+  assert.throws(() => assertGoResults(json([{ Action: 'start', Package: 'orbit' }, { Action: 'pass', Package: 'orbit' }]), goNames), undefined,
+    'accepted a Go package that only says pass');
+  assert.throws(() => assertGoResults('', goNames), undefined, 'accepted no Go output');
+  const selector = new RegExp(goTestPattern(goNames));
+  assert.ok(goNames.every((name) => selector.test(name)), 'the -run pattern misses a named Go scenario');
+  assert.ok(!selector.test(`${goNames[0]}Extra`) && !selector.test('TestMCPMergeReceipt'), 'the -run pattern matches more than the named Go scenarios');
+  process.stdout.write('PASS guard: every mandatory Go scenario is required, and a missing, skipped, failed, unfinished, repeated or unmatched one is refused\n');
+
   const log = path.join(scratch, 'guard.log');
   assert.throws(() => runLogged(path.join(scratch, 'missing-executable'), [], log), /startup or execution failed/);
   assert.throws(() => runLogged(process.execPath, ['-e', 'process.exit(17)'], log), /exit 17/);
   assert.equal(runLogged(process.execPath, ['-e', 'process.stdout.write("started")'], log), 'started');
+  assert.throws(() => runGoLogged(path.join(scratch, 'missing-executable'), [], log), /startup or execution failed/);
+  assert.throws(() => runGoLogged(process.execPath, ['-e', 'process.exit(17)'], log), /exit 17/);
   process.stdout.write('PASS guard: missing executables and startup failures are refused\n');
 
   for (const [file, names] of Object.entries(pgCases)) {
@@ -106,8 +187,15 @@ export function checkGuards(scratch) {
     assert.equal(new Set(names).size, names.length, `${file} names a scenario twice`);
     assert.ok(existsSync(path.join(root, `src/apiserver/src/${file}.pg.spec.ts`)), `missing required test file: ${file}.pg.spec.ts`);
   }
+  assert.equal(new Set(Object.values(pgCases).flat()).size, Object.values(pgCases).flat().length, 'a scenario is named in two files');
+  for (const [file, names] of Object.entries(goCases)) {
+    assert.ok(names.length > 0, `${file} names no scenario`);
+    assert.ok(existsSync(path.join(root, 'src/runner-go', file)), `missing required Go test source: src/runner-go/${file}`);
+  }
+  assert.equal(new Set(goNames).size, goNames.length, 'a Go scenario is named twice');
   assert.equal(pgLogName(0, 'sessions/merge-repair-continue'), '1-merge-repair-continue.pg.spec.tap');
-  process.stdout.write('PASS guard: the scenario table names each scenario once, and only a file that exists\n');
+  assert.equal(pgLogName(1, 'sessions/merge-recovery-done'), '2-merge-recovery-done.pg.spec.tap');
+  process.stdout.write('PASS guard: the scenario tables name each scenario once, and only a file that exists\n');
 }
 
 async function prismaEngineEnvironment() {
@@ -153,7 +241,19 @@ async function runAcceptance() {
       total += pgCases[file].length;
     });
 
-    process.stdout.write(`S2 acceptance passed: ${total} named PostgreSQL scenarios, none missing, unmatched, skipped or failing.\n`);
+    // Real git in throwaway repositories; nothing but git and the Go toolchain is needed on PATH.
+    const toolPath = [path.dirname(process.execPath), '/usr/local/go/bin', '/usr/local/bin', '/usr/bin', '/bin'].join(path.delimiter);
+    const goNames = Object.values(goCases).flat();
+    const goOutput = runGoLogged('go', ['test', '-json', '-count=1', '-timeout=600s', '-run', goTestPattern(goNames), '.'],
+      path.join(scratch, 'runner.json'), {
+        cwd: path.join(root, 'src/runner-go'), env: runnerEnvironment(process.env, scratch, toolPath), timeout: 900_000,
+      });
+    process.stdout.write(goOutput);
+    assertGoResults(goOutput, goNames);
+    for (const name of goNames) process.stdout.write(`PASS ${name}\n`);
+
+    process.stdout.write(`S2 and S3 acceptance passed: ${total} named PostgreSQL scenarios and ${goNames.length} named Go scenarios, ` +
+      'none missing, unmatched, skipped or failing.\n');
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
