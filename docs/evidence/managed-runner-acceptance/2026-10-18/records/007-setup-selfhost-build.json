@@ -1,0 +1,26 @@
+{
+ "checks": [
+  {
+   "check": "the runner binary was built",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-18T12:30:10.653+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "setup",
+ "result": {
+  "claude": {
+   "from": "/root/.local/share/claude/versions/2.1.302",
+   "version": "2.1.302 (Claude Code)"
+  },
+  "runner": {
+   "buildSeconds": 0.4,
+   "sha256": "539f5dbadd51833da5d202ab9019965e5eb1e6aec4b87270035477c16cf4ddf2",
+   "source": "eb16b3b5ed4881870e8941f64bec555de9421c76"
+  }
+ },
+ "seconds": 2.9,
+ "startedAt": "2026-10-18T12:30:07.728+00:00",
+ "step": "selfhost-build"
+}

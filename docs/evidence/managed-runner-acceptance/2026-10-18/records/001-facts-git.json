@@ -1,0 +1,31 @@
+{
+ "checks": [
+  {
+   "check": "the runner image sources are unchanged since the image was built",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the apiserver is built in this checkout",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-18T12:30:02.592+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "apiserverBuiltAt": "2026-10-18T10:01:51+00:00",
+  "branch": "orbit/task-9f9f9b",
+  "head": "eb16b3b5ed4881870e8941f64bec555de9421c76",
+  "imageSource": "ebf54ab8d",
+  "originMain": "1c1c78d72aae5a8c12bb7ace2276a300acac1928",
+  "projectLine": "da89a8185b00dc65db726c52804b181265ae780a",
+  "projectLineIsAncestor": true,
+  "subject": "fix(managed-runners): T08's replica sign-ins leave the lab client on the primary apiserver",
+  "uncommitted": []
+ },
+ "seconds": 3.0,
+ "startedAt": "2026-10-18T12:29:59.569+00:00",
+ "step": "git"
+}

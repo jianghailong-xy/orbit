@@ -1,0 +1,10 @@
+2026-10-18T13:07:12Z
+unit orbit-mr-lab: memory.current 4548 MiB, memory.peak 4992 MiB, swap 17 MiB, memory.max 6979321856
+host: MemAvailable 5829 MiB, SwapFree 33926 MiB
+13:07:13Z ACPI shutdown requested; waiting up to 600 s
+13:07:28Z orbit-mr-lab stopped after 15 s
+host: MemAvailable 10359 MiB
+stop-exit=0
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM: stopped (orbit-mr-lab.service inactive)
+host: MemAvailable 10360 MiB
