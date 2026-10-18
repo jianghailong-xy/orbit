@@ -193,6 +193,9 @@ class CursorDeviceTest {
 
     // iOS 2, 3 and 4 · Infrastructure, a machine, Cursor CLI's engine page, its accounts and a Cursor key
 
+    /** hpc's row among the machines — not a "Needs you" line that names it. */
+    private val hpcRow = hasText("hpc") and hasText(" running", substring = true) and hasClickAction()
+
     private fun infrastructure(pass: String) {
         back()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
@@ -212,7 +215,7 @@ class CursorDeviceTest {
         capture("ios4-key-rejected-$pass")
         back()
         // hpc: Cursor CLI last among its engines, then its engine page.
-        click(hasText("hpc") and hasClickAction())
+        click(hpcRow)
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("engine-row:cursor").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("engine-row:cursor").performScrollTo()
         capture("ios2-machine-$pass")
@@ -225,7 +228,7 @@ class CursorDeviceTest {
         for (state in listOf("signed-out", "update-runner", "wrong-version", "not-installed")) {
             cursorState = state
             back()
-            click(hasText("hpc") and hasClickAction())
+            click(hpcRow)
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("engine-row:cursor").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("engine-row:cursor").performScrollTo()
             capture("ios2-state-$state-$pass")
