@@ -228,7 +228,7 @@ final class MergeRecoveryTests: XCTestCase {
         let reply = try row(["code": "REPAIR_IN_PROGRESS"],
                             repair: repairSession("AWAITING_INPUT", lastTurnAt: "2026-10-11T11:18:00Z",
                                                   said: "Keep the target's\n  version?"))
-        XCTAssertEqual(words(reply), ["Repair session needs your reply", "“Keep the target’s version?” · 2m ago"],
+        XCTAssertEqual(words(reply), ["Repair session needs your reply", "“Keep the target's version?” · 2m ago"],
                        "AWAITING_INPUT is no longer \"completed\": it stopped with the repair unfinished")
 
         let failed = try row(["code": "CONFLICT"], repair: repairSession("FAILED", error: "The model provider rejected the request"),
