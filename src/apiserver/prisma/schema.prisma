@@ -2041,6 +2041,9 @@ model SessionMergeReceipt {
   /// `MERGED` (the target moved and now contains this source), `ALREADY_MERGED` (it was already
   /// there — the external-ff-only and re-run cases, which are a RESULT and not a no-op), `CONFLICT`
   /// (git refused, `conflicts` names the paths) and `ERROR` (everything else, `detail` says what).
+  /// 0432 adds `MATCHED_BY_CONTENT`: the owner's Done on a recovery check that found every commit of
+  /// the session on the target as other commits with the same patch-id. Written by the server alone,
+  /// and not a landed result — the source is no ancestor of the target (sessions/merge-receipt.ts).
   result String
 
   sourceBranch String  @map("source_branch")

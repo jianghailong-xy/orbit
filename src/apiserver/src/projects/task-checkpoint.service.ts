@@ -17,6 +17,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MATCHED_BY_CONTENT } from '../sessions/merge-receipt';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { ScopeActor } from './convergence-contract';
@@ -435,13 +436,15 @@ export async function mergeDispatchGate(
            AND "owner_id" = ${args.ownerId}::uuid
            AND "target_branch" = ${args.targetBranch}
            AND "source_sha" = ${frozen}
-           AND "result" IN ('MERGED', 'ALREADY_MERGED')
+           AND "result" IN ('MERGED', 'ALREADY_MERGED', ${MATCHED_BY_CONTENT})
          ORDER BY "created_at" DESC, "id" DESC
          LIMIT 1
       `,
     );
     // A landed receipt naming this exact source in this exact target IS the proof the target
-    // contains it — `targetShaAfter` is where the target stood once it did.
+    // contains it — `targetShaAfter` is where the target stood once it did. So is the owner's Done
+    // on a check that found every commit of it there by content (MATCHED_BY_CONTENT): the one reader
+    // of that receipt, and only for this session, this source and this target.
     if (landed && landedVerdict(frozen, landed.targetShaAfter, true) !== 'NOT_LANDED') {
       return {
         decision: 'ALREADY_LANDED',

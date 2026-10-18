@@ -7487,7 +7487,13 @@ export class RunnerApiController {
         return;
       }
       const approved = readMergeRecovery(current.mergeRecovery);
-      const recovery = readMergeRecovery(dto.recovery);
+      const reported = readMergeRecovery(dto.recovery);
+      // Done (`confirm-landed`) is fenced on the previewId of the result it closes, as every other recovery
+      // action is, and the runner mints one only for a check that goes on to build a candidate. A check that
+      // found the session already on origin comes back without one, so it is given one of its own here.
+      const recovery = reported?.code === 'ALREADY_LANDED' && !reported.previewId
+        ? { ...reported, previewId: randomUUID().replace(/-/g, '') }
+        : reported;
       if (current.mergeRecoveryAction === 'preview' && merged) {
         throw new ConflictException('a read-only recovery preview cannot report a landing');
       }
@@ -7533,11 +7539,15 @@ export class RunnerApiController {
         landedCheckpointId = authority.checkpointId;
       }
 
+      // A landing that leaves no recovery standing ends the recovery action with it. LOCAL_SYNC_PENDING is the
+      // landing still being finished: it keeps both, for sync-local.
+      const recoveryKept = !!recovery && recovery.code !== 'DONE';
       await tx.session.update({
         where: { id: sessionId },
         data: {
           mergeStatus: dto.status,
-          mergeRecovery: recovery && recovery.code !== 'DONE' ? recovery as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+          mergeRecovery: recoveryKept ? recovery as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+          ...(merged && !recoveryKept ? { mergeRecoveryAction: null } : {}),
           mergeError: merged && recovery?.code !== 'LOCAL_SYNC_PENDING' ? null : (dto.message ?? null),
           ...(!['preview', 'sync-local'].includes(current.mergeRecoveryAction ?? '') ? { mergedAt: merged ? new Date() : null } : {}),
           // A successful merge is authoritative even when ancestry/patch-id heuristics cannot

@@ -1,6 +1,8 @@
 /** Recovery travels on the existing fenced merge operation. Old clients keep reading message. */
 export const SESSION_MERGE_RECOVERY_V1 = 'session-merge-recovery-v1';
-export type MergeRecoveryAction = 'preview' | 'apply' | 'sync-local';
+/** `confirm-landed` is the owner's Done on an ALREADY_LANDED check (see mergeRecoveryConfirmable). The server
+ *  records the session merged by itself and no runner is sent anything; clients that predate it never offer it. */
+export type MergeRecoveryAction = 'preview' | 'apply' | 'sync-local' | 'confirm-landed';
 export interface MergeRecoveryCommit {
   sha: string;
   subject: string;
@@ -70,6 +72,14 @@ export function mergeRecoveryReady(r: MergeRecovery | null | undefined): boolean
     [r.sourceSha, r.localSha, r.remoteSha, r.candidateSha, r.candidateTreeSha]
       .every((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha)) &&
     typeof r.patch === 'string' && ['passed', 'unconfigured'].includes(r.check?.status ?? '');
+}
+
+/** Whether Done (`confirm-landed`) may close this recovery: a check that found every one of the session's commits
+ *  already on origin, naming the source it checked and the previewId it was stored under. The runner mints no
+ *  previewId for this result; the server gives it one when it stores it. */
+export function mergeRecoveryConfirmable(r: MergeRecovery | null | undefined): boolean {
+  return !!r && r.code === 'ALREADY_LANDED' && !!r.previewId &&
+    typeof r.sourceSha === 'string' && /^[0-9a-f]{40}$/.test(r.sourceSha);
 }
 
 /** Where a commit the push adds comes from. Local-only first: an unpublished local merge is still unpublished. */

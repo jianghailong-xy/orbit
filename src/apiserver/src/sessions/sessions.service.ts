@@ -1,6 +1,6 @@
 import {
-  SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryContinuePrompt, mergeRecoveryPrompt, mergeRecoveryReady,
-  type MergeRecoveryAction,
+  SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -148,8 +148,10 @@ import {
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
 import {
+  MATCHED_BY_CONTENT,
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
+  mergeReceiptIdempotencyKey,
   mergeReceiptRow,
   mergeStatusForResult,
 } from './merge-receipt';
@@ -6447,7 +6449,7 @@ export class SessionsService {
     waitSeconds?: number,
     options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
   ) {
-    if (options.recoveryAction && !['preview', 'apply', 'sync-local'].includes(options.recoveryAction)) {
+    if (options.recoveryAction && !['preview', 'apply', 'sync-local', 'confirm-landed'].includes(options.recoveryAction)) {
       throw new BadRequestException('invalid merge recovery action');
     }
     const wait = SessionsService.mergeWaitSeconds(waitSeconds);
@@ -6546,6 +6548,10 @@ export class SessionsService {
       throw new BadRequestException("can't merge a branch into itself");
     }
     if (session.mergeStatus === 'pending') {
+      // Done answers the recovery as it stands, and the operation in flight is about to replace it.
+      if (options.recoveryAction === 'confirm-landed') {
+        throw new ConflictException('wait for the merge or check in flight to finish');
+      }
       // Idempotent, and that is what a waiting caller waits on: the operation already in flight
       // IS this call's operation. Minting a second one here would merge the same branch twice
       // because somebody asked twice.
@@ -6558,14 +6564,17 @@ export class SessionsService {
     if (SessionsService.mergeWaitsForTurn(session)) {
       throw new ConflictException('wait for the current turn to finish before merging');
     }
+    const recovery = readMergeRecovery(session.mergeRecovery);
     if (options.recoveryAction) {
-      const runner = await tx.runner.findUnique({
-        where: { id: session.assignedRunnerId }, select: { capabilities: true },
-      });
-      if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
-        throw new ConflictException('upgrade this runner to check and repair target branches');
+      // Done asks nothing of the runner: the server records it alone.
+      if (options.recoveryAction !== 'confirm-landed') {
+        const runner = await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId }, select: { capabilities: true },
+        });
+        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
+          throw new ConflictException('upgrade this runner to check and repair target branches');
+        }
       }
-      const recovery = readMergeRecovery(session.mergeRecovery);
       if (options.recoveryAction !== 'preview') {
         if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
             (target && recovery.targetBranch !== target)) {
@@ -6578,6 +6587,10 @@ export class SessionsService {
         }
         if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
           throw new ConflictException('no landed candidate is waiting for local sync');
+        }
+        if (options.recoveryAction === 'confirm-landed' && !mergeRecoveryConfirmable(recovery)) {
+          throw new ConflictException(
+            `the last check did not find this session already on origin/${recovery.targetBranch}; there is nothing to confirm`);
         }
       }
     }
@@ -6609,6 +6622,9 @@ export class SessionsService {
     if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
       throw new ConflictException(`${gate.decision}: ${gate.detail}`);
     }
+    if (options.recoveryAction === 'confirm-landed') {
+      return { outcome: { alreadyLanded: await this.confirmLanded(tx, session, recovery!) }, operationId: null, queuedOn: null };
+    }
 
     const operationId = randomUUID();
     await tx.session.update({
@@ -6637,6 +6653,80 @@ export class SessionsService {
       },
     });
     return { outcome: session.workspaceId, operationId, queuedOn: session.assignedRunnerId };
+  }
+
+  /**
+   * Done on a check that found the session already on origin — `confirm-landed`, S3 of the merge-recovery repair
+   * loop — inside {@link queueMerge}'s transaction, after every refusal it makes: the recovery is current (its
+   * previewId) and is an ALREADY_LANDED check naming its source (mergeRecoveryConfirmable), no operation is in
+   * flight, and the §7 gate allows it. Nothing is sent to a runner. The session is recorded merged at the source
+   * the check found on origin, in one write of its row (I3), and the MATCHED_BY_CONTENT receipt beside it is what
+   * mergeDispatchGate answers a later merge of that source into that target with. Answers as that gate does.
+   *
+   * The receipt is written here rather than by MergeReceiptService because that service reaches TasksService,
+   * which nothing this file imports may reach.
+   */
+  private async confirmLanded(
+    tx: Prisma.TransactionClient,
+    session: { id: string; ownerId: string; taskId: string | null; branch: string | null },
+    recovery: MergeRecovery,
+  ) {
+    const sourceSha = recovery.sourceSha!;
+    const tip = /^[0-9a-f]{40}$/.test(recovery.remoteSha ?? '') ? recovery.remoteSha! : null;
+    await tx.session.update({
+      where: { id: session.id },
+      data: {
+        mergeStatus: 'merged',
+        mergeTarget: recovery.targetBranch,
+        mergeError: null,
+        mergeRecovery: Prisma.DbNull,
+        mergeRecoveryAction: null,
+        mergedAt: new Date(),
+        mergedSourceSha: sourceSha,
+        branchMerged: true,
+      },
+    });
+    const task = session.taskId
+      ? await tx.task.findUnique({ where: { id: session.taskId }, select: { projectId: true } })
+      : null;
+    const idempotencyKey = mergeReceiptIdempotencyKey({
+      sessionId: session.id, sourceSha, targetBranch: recovery.targetBranch, result: MATCHED_BY_CONTENT,
+    });
+    // What the check found and the owner confirmed: origin/<target>, at the tip the check read, carries every one
+    // of the session's commits as the commits `landedCommits` names. Nothing moved, so the tip is named before
+    // and after, as the runner's own already-merged answer names it. A second Done of the same source keeps the
+    // first receipt.
+    await tx.sessionMergeReceipt.createMany({
+      data: [{
+        ownerId: session.ownerId,
+        sessionId: session.id,
+        taskId: session.taskId,
+        projectId: task?.projectId ?? null,
+        result: MATCHED_BY_CONTENT,
+        sourceBranch: session.branch!,
+        sourceSha,
+        targetBranch: recovery.targetBranch,
+        targetShaBefore: tip,
+        targetShaAfter: tip,
+        rebaseBaseSha: null,
+        conflicts: [],
+        recordedBy: 'USER',
+        detail: {
+          source: 'confirm-landed',
+          previewId: recovery.previewId,
+          ...(recovery.checkedAt ? { checkedAt: recovery.checkedAt } : {}),
+          // The origin commit that carries each of the session's: what keeps this row checkable later.
+          landedCommits: (recovery.landedCommits ?? []).map((c) => ({ sha: c.sha, sourceSha: c.sourceSha })),
+        },
+        idempotencyKey,
+      }],
+      skipDuplicates: true,
+    });
+    const receipt = await tx.sessionMergeReceipt.findFirstOrThrow({
+      where: { sessionId: session.id, idempotencyKey },
+      select: { id: true },
+    });
+    return { decision: 'ALREADY_LANDED' as const, receiptId: receipt.id, sourceSha, targetSha: tip };
   }
 
   /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
