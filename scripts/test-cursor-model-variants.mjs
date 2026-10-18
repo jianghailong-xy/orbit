@@ -3,10 +3,10 @@
 // value, the way Cursor writes a variant — `claude-opus-5-5[context=1m,fast=true]`, with the effort in the
 // session's effort and Auto the bare `default` (docs/cursor-runtime-contract.md §10). Covered, each by the
 // scenarios named below:
-//   - the runner selects the bare model, then the context and fast lane the session chose, with
-//     session/set_config_option; a setting or value the model does not list is left at the model's own and
-//     logged; Auto sets nothing. On P0's parameterized-model-picker recording, replayed by
-//     src/runner-go/fake_cursor_acp_test.go;
+//   - the runner selects the bare model, then the context and fast lane the session chose — the model's
+//     default for one its value leaves out — with session/set_config_option; a setting or value the model
+//     does not list is left at the model's own and logged; Auto sets nothing. On P0's
+//     parameterized-model-picker recording, replayed by src/runner-go/fake_cursor_acp_test.go;
 //   - shared's encodeCursorModel and decodeCursorModel (src/shared/src/cursorModels.ts), and the server,
 //     which keeps a variant as long as the runner's catalogue lists its model;
 //   - the web's model menu offers Context and Speed on a model that has them, and its chip reads
@@ -52,6 +52,10 @@ export const mandatoryGoCases = {
     // The mode and the effort are not the model value's to set; a setting already in effect is not set again.
     'TestCursorModelVariants/only-context-and-fast',
     'TestCursorModelVariants/settings-already-current',
+    // A setting the value does not name goes back to the model's default the runner's catalogue lists, and is
+    // left as the process has it while there is no catalogue.
+    'TestCursorModelVariants/unnamed-settings-take-the-default',
+    'TestCursorModelVariants/no-catalogue',
     // A live session told its new value sets only what moved.
     'TestCursorModelVariants/reload',
     // The runner reads a model value as shared does.
@@ -72,7 +76,7 @@ export const mandatoryGoCases = {
 export const sharedCases = {
   'src/cursor-model-variants.spec.ts': [
     'Cursor variants: a model value carries context and fast in brackets, and reads back the same',
-    'Cursor variants: Auto takes no settings, and a setting with no value is left out',
+    "Cursor variants: Auto takes no settings, and a setting with no value or at the model's default is left out",
     'Cursor variants: a value not written as a variant is a model name as it stands',
     "Cursor variants: a variant is its model's row in the catalogue, on Cursor CLI alone",
   ],

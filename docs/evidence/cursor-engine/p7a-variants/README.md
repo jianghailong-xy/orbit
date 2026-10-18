@@ -8,6 +8,8 @@ The board is `docs/mocks/cursor-engine/` (T0, af84e78dc), Web 5 ①. The coordin
 
 The session has no field for either, so both go in its model value, written the way Cursor writes a variant: `claude-opus-5-5[context=1m,fast=true]`. The effort stays in `effort`. Auto is the bare `default`.
 
+- A setting at the model's own default is left out, so a model on every default is its bare name.
+- The runner sets each context and fast lane the model lists: the one the value names, else the model's default from the runner's catalogue. The CLI keeps its last selection in its config (contract §3.1), so a process can start on settings another session chose.
 - shared's `encodeCursorModel` and `decodeCursorModel` (`src/shared/src/cursorModels.ts`) write and read the value. The runner's `decodeCursorModel` (`src/runner-go/cursor_models.go`) reads it the same way.
 - The contract states the convention in §10 ("会话里怎么写 context 和 fast"). iOS (P7b) and Android (P7c) follow it.
 
@@ -36,6 +38,8 @@ The two Web 5 ① frames were taken again from the real page, light and dark, an
   - `data.mjs` gives Opus 5.5's settings the labels the pinned CLI lists and the runner reports (`300K`/`1M`, `Off`/`Fast`, `Extra High`), where P7a's copy labelled each value with itself;
   - `scene-list.mjs` puts `w5-model-variant`'s session on `claude-opus-5-5[context=1m,fast=true]` with effort `high`, hovers Context, and marks Effort, Context, Speed and the chip, as the board's own kit does.
 - `retired-pin-probe.cjs`: the server-side check below.
+
+**Taken again from the final tree.** After the project line was merged in and the convention settled on leaving defaults out, the kit ran again: all four frames came out byte-identical to these.
 
 To take them again:
 

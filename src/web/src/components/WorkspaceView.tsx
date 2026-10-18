@@ -9218,11 +9218,12 @@ export function WorkspaceView({
   const cursorAuto = shownEngine === AgentProvider.CURSOR && (!shownModelName || shownModelName === 'default');
   // A Cursor model's context size and fast lane, where its row in the runner's catalogue lists them.
   const cursorSettings = cursorAuto ? [] : cursorSettingRows(shownCursorPick);
-  // A setting picked is written into the model value, the model's own default included, so the runner
-  // sets exactly what is shown (contract §10). It moves the model value only, as a model pick does.
+  // A setting picked is written into the model value, and one back at the model's own default is taken
+  // out of it, which the runner sets as the default (contract §10). It moves the model value only, as a
+  // model pick does.
   const pickCursorSetting = (id: string, value: string): void => {
     if (!shownCursorPick || cursorSettings.find((row) => row.id === id)?.value === value) return;
-    const next = encodeCursorModel(shownCursorPick.model, { ...shownCursorPick.parameters, [id]: value });
+    const next = encodeCursorModel(shownCursorPick.model, { ...shownCursorPick.parameters, [id]: value }, shownCursorPick.row);
     if (live) {
       configMut.mutate({ model: next });
       return;

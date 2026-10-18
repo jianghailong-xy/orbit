@@ -168,7 +168,8 @@ export interface CursorSettingRow {
 }
 
 /** The menu's rows for a Cursor model's context size and fast lane, in the board's order (Web 5 ①), each
- *  only where the model's row lists it: Context, then Speed, which is Cursor's `fast`. Auto has none. */
+ *  only where the model's row lists it: Context, then Speed, which is Cursor's `fast` and reads Standard or
+ *  Fast as every engine's Speed row does. Auto has none. */
 export function cursorSettingRows(pick: CursorModelPick | null | undefined): CursorSettingRow[] {
   if (!pick) return [];
   return [
@@ -176,7 +177,9 @@ export function cursorSettingRows(pick: CursorModelPick | null | undefined): Cur
     { id: 'fast', title: 'Speed' },
   ].flatMap(({ id, title }) => {
     const parameter = pick.row?.parameters?.find((candidate) => candidate.id === id);
-    const values = (parameter?.values ?? []).filter((option) => option.value);
+    const values = (parameter?.values ?? [])
+      .filter((option) => option.value)
+      .map((option) => (id === 'fast' && option.value !== 'true' ? { ...option, label: 'Standard' } : option));
     if (!parameter || values.length === 0) return [];
     const defaultValue = parameter.default ?? '';
     const named = pick.parameters[id];

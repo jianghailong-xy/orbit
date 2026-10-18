@@ -72,6 +72,29 @@ func cursorSettingToken(token string) bool {
 	return token != "" && !strings.ContainsAny(token, "=,[]") && !strings.ContainsFunc(token, unicode.IsSpace)
 }
 
+// cursorParameterDefault is the value a model starts one of its settings on, as this runner's catalogue
+// lists it (the CLI's own, read in a throwaway home), or "" while the catalogue has nothing to say: before
+// its first read, or while the Default account is signed out.
+func cursorParameterDefault(model, id string) string {
+	modelWindowMu.RLock()
+	catalog := modelWindows
+	modelWindowMu.RUnlock()
+	if catalog == nil {
+		return ""
+	}
+	for _, info := range catalog.Cursor {
+		if info.Value != model {
+			continue
+		}
+		for _, parameter := range info.Parameters {
+			if parameter.ID == id {
+				return parameter.Default
+			}
+		}
+	}
+	return ""
+}
+
 type cursorCatalogModel struct {
 	Value         string               `json:"value"`
 	Name          string               `json:"name"`

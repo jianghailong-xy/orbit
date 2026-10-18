@@ -820,12 +820,13 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
     - id 和值都用目录里该模型 `parameters` 的原值，例如 `context`：`300k`/`1m`；`fast`：`false`/`true`。
     - effort 照旧放在会话的 `effort` 字段。Auto 不带参数，就是 `default`。
   - 编码和解码用 `src/shared/src/cursorModels.ts` 的 `encodeCursorModel` / `decodeCursorModel`。runner 在 `cursor_models.go` 里有同样读法的 `decodeCursorModel`。
-    - 参数按 id 排序写出。
-    - 客户端选了什么就写什么，选的是模型默认值也照写。
+    - 参数按 id 排序写出（`context` 在 `fast` 前，和 Cursor 自己的变体串同序）。
+    - 等于模型默认值的参数不写，所以全是默认值的模型就是不带括号的模型名。`encodeCursorModel` 传入该模型的目录行时按它的 `default` 去掉。
     - 写不成变体的值当作原样的模型名，例如 Claude Code 的 `claude-opus-5[1m]`、空模型名、写坏或重复的参数。
   - **runner**（`configure`）的顺序：
     1. 用不带参数的模型名调 `session/set_config_option` 设 model。
-    2. 对值里写的 `context`、`fast` 各调一次；已经是当前值的跳过。
+    2. 对模型有的 `context`、`fast` 各定一个值：值里写了就用它，没写就用 runner 模型目录里该模型的 `default`；和当前值不同才调。
+       没写的也要设回默认值：模型选择是进程级的，还会写进 `cli-config.json`（§3.1），进程可能停在之前选的参数上。目录还没有（首次读取前、Default 账号未登录）时，没写的参数保持进程当前的值。
     3. 设 effort。
     - 模型没有这个参数，或不提供这个值，就留模型自己的值并记日志，做法同 effort。
     - 其他 id（`effort`、`mode` 等）不从 model 值里设，只记日志。
@@ -834,7 +835,7 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   - **服务端**：变体按它的模型判断是否下架，目录里有这个模型就不算下架；effort 档位也读这个模型那一行。
     对应 `retiredPin`、`runtimeCatalogReasoningLevels` 和 shared 的 `runnerCatalogRow`。目录里原样列着的值仍按原样认。
   - **客户端**：
-    - 目录里带 `context`、`fast` 参数的模型，模型菜单在 Effort 下面加 Context、Speed 两行，取值和名字都来自目录。
+    - 目录里带 `context`、`fast` 参数的模型，模型菜单在 Effort 下面加 Context、Speed 两行，取值来自目录。Context 的名字用目录给的（300K、1M）；Speed 和其他 engine 的 Speed 行一样写 Standard / Fast，Fast 是目录给的名字。
     - chip 写「模型 Effort · Context · Speed」：context 只在不是模型默认值时写，`fast=true` 时写目录给的名字「Fast」，例如「Claude Opus 5.5 High · 1M · Fast」。
     - 换模型时参数不跟过去，新模型从它自己的默认值开始。
     - Web 已经实现；iOS（P7b）、Android（P7c）按同样的约定做。

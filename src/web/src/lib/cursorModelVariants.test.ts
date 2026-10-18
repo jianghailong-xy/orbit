@@ -65,13 +65,15 @@ describe('a Cursor model value on the web', () => {
   });
 
   it('Cursor variants: Context and Speed are offered where the model lists them, at the value in effect', () => {
-    expect(shown('claude-opus-5-5')).toEqual(['Context 300K', 'Speed Off']);
+    expect(shown('claude-opus-5-5')).toEqual(['Context 300K', 'Speed Standard']);
     expect(shown('claude-opus-5-5[context=1m,fast=true]')).toEqual(['Context 1M', 'Speed Fast']);
     expect(rows('claude-opus-5-5')[0].values).toEqual([{ value: '300k', label: '300K' }, { value: '1m', label: '1M' }]);
+    // Speed reads Standard or Fast, as every engine's Speed row does: Fast is the catalogue's own name.
+    expect(rows('claude-opus-5-5')[1].values).toEqual([{ value: 'false', label: 'Standard' }, { value: 'true', label: 'Fast' }]);
     expect(shown('grok-4.7[context=500k]')).toEqual(['Context 500K', 'Speed Fast']);
-    expect(shown('composer-2.5[fast=false]')).toEqual(['Speed Off']);
+    expect(shown('composer-2.5[fast=false]')).toEqual(['Speed Standard']);
     // A value the model does not offer is left at the model's own, as the runner leaves it.
-    expect(shown('claude-opus-5-5[context=2m]')).toEqual(['Context 300K', 'Speed Off']);
+    expect(shown('claude-opus-5-5[context=2m]')).toEqual(['Context 300K', 'Speed Standard']);
     expect(shown('gemini-3.1-pro[context=1m,fast=true]')).toEqual([]);
     expect(shown('default')).toEqual([]);
     expect(cursorSettingRows(null)).toEqual([]);

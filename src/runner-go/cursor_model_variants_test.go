@@ -2,11 +2,12 @@ package main
 
 // A Cursor CLI session's model value names the context size and fast lane it runs its model with, the way
 // Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`; contract §10, shared cursorModels.ts):
-// configure selects the bare model, then each of those settings the model lists, then the effort. The
-// parameterized picker's P0 recording (testdata/cursor/parameterized-model-picker) is replayed — what it
-// recorded, Opus 5.5 selected and then its 1M context, as recorded, and the rest the way the recording
-// shows the CLI answering (fakeCursorACPScript.Config). scripts/test-cursor-model-variants.mjs runs every
-// case below by name.
+// configure selects the bare model, then each of those settings the model lists — the one named, else the
+// model's default from the runner's catalogue — then the effort. The parameterized picker's P0 recording
+// (testdata/cursor/parameterized-model-picker) is replayed — what it recorded, Opus 5.5 selected and then its
+// 1M context, as recorded, and the rest the way the recording shows the CLI answering
+// (fakeCursorACPScript.Config) — with the catalogue its cursor/list_available_models answer lists published
+// as the runner's own. scripts/test-cursor-model-variants.mjs runs every case below by name.
 
 import (
 	"path/filepath"
@@ -34,9 +35,27 @@ func cursorSelections(t *testing.T, fake *cursorReplay) []cursorSelection {
 	return selections
 }
 
+// publishCursorPickerCatalog makes the recording's own catalogue the runner's, as a refresh would.
+func publishCursorPickerCatalog(t *testing.T) {
+	t.Helper()
+	models, err := parseCursorModelCatalog(recordedCursorResult(t, 7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishModelCatalog(&ModelCatalog{Cursor: models})
+	t.Cleanup(func() { publishModelCatalog(nil) })
+}
+
 // configureCursorModel runs a session on the recording with this model value and effort, then ends it,
-// and returns what it selected and what the runner logged.
+// and returns what it selected and what the runner logged. The runner's catalogue is the recording's.
 func configureCursorModel(t *testing.T, model, effort string, more ...RunInboxResponse) ([]cursorSelection, string) {
+	t.Helper()
+	publishCursorPickerCatalog(t)
+	return configureCursorModelOn(t, model, effort, more...)
+}
+
+// configureCursorModelOn is configureCursorModel with whatever catalogue the runner has.
+func configureCursorModelOn(t *testing.T, model, effort string, more ...RunInboxResponse) ([]cursorSelection, string) {
 	t.Helper()
 	var run cursorRun
 	logs := captureLogs(t, func() {
@@ -96,7 +115,7 @@ func TestCursorModelVariants(t *testing.T) {
 	t.Run("value-the-model-lacks", func(t *testing.T) {
 		got, logs := configureCursorModel(t, "claude-opus-5-5[context=2m,fast=true]", "")
 		wantSelections(t, got, cursorSelection{"model", "claude-opus-5-5"}, cursorSelection{"fast", "true"})
-		if !strings.Contains(logs, "cursor: the session's model does not offer context 2m; leaving it at 300k") {
+		if !strings.Contains(logs, "cursor: the session's model does not offer context 2m; leaving it at the model's own 300k") {
 			t.Fatalf("no log of the context left at the model's own:\n%s", logs)
 		}
 	})
@@ -108,9 +127,11 @@ func TestCursorModelVariants(t *testing.T) {
 		}
 		got, logs := configureCursorModel(t, "default[context=1m,fast=true]", "high")
 		wantSelections(t, got)
-		if !strings.Contains(logs, "cursor: Auto takes no model settings; ignoring default[context=1m,fast=true]") ||
-			!strings.Contains(logs, "cursor: the session's model takes no effort; ignoring high") {
-			t.Fatalf("no log of Auto's settings left alone:\n%s", logs)
+		for _, line := range []string{"cursor: Auto takes no model settings; ignoring context=1m", "cursor: Auto takes no model settings; ignoring fast=true",
+			"cursor: the session's model takes no effort; ignoring high"} {
+			if !strings.Contains(logs, line) {
+				t.Fatalf("no log %q of Auto's settings left alone:\n%s", line, logs)
+			}
 		}
 	})
 	t.Run("only-context-and-fast", func(t *testing.T) {
@@ -127,6 +148,29 @@ func TestCursorModelVariants(t *testing.T) {
 		// Opus 5.5 starts on 300K and its fast lane off: nothing to set beyond the model.
 		got, _ := configureCursorModel(t, "claude-opus-5-5[context=300k,fast=false]", "")
 		wantSelections(t, got, cursorSelection{"model", "claude-opus-5-5"})
+	})
+	t.Run("unnamed-settings-take-the-default", func(t *testing.T) {
+		// A value that names a setting no longer — it went back to the model's own — sets the default the
+		// runner's catalogue lists, whatever the process was left on.
+		reload := func(id, model string) RunInboxResponse {
+			return RunInboxResponse{TurnID: id, Kind: "reload", Content: `{"model":"` + model + `"}`}
+		}
+		got, _ := configureCursorModel(t, "claude-opus-5-5[context=1m,fast=true]", "",
+			reload("reload-context", "claude-opus-5-5[fast=true]"), reload("reload-bare", "claude-opus-5-5"))
+		wantSelections(t, got,
+			cursorSelection{"model", "claude-opus-5-5"},
+			cursorSelection{"context", "1m"},
+			cursorSelection{"fast", "true"},
+			cursorSelection{"context", "300k"},
+			cursorSelection{"fast", "false"})
+	})
+	t.Run("no-catalogue", func(t *testing.T) {
+		// With no catalogue to say what the model starts on, a setting the value does not name is left as the
+		// process has it; what it names is still set.
+		publishModelCatalog(nil)
+		reload := RunInboxResponse{TurnID: "reload-bare", Kind: "reload", Content: `{"model":"claude-opus-5-5"}`}
+		got, _ := configureCursorModelOn(t, "claude-opus-5-5[context=1m]", "", reload)
+		wantSelections(t, got, cursorSelection{"model", "claude-opus-5-5"}, cursorSelection{"context", "1m"})
 	})
 	t.Run("reload", func(t *testing.T) {
 		// A live session told its new value sets only what moved, and back on Auto sets the model alone.

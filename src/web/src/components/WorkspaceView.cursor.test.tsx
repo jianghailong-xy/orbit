@@ -413,9 +413,20 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     await mount();
     expect(mounted().querySelector('.composer-model-chip .composer-model-effort')?.textContent).toBe('High · 1M');
     const speed = (await subMenuRows('Speed'))!;
-    expect(speed.map((row) => [row.textContent?.trim(), checked(row)])).toEqual([['Off', true], ['Fast', false]]);
+    expect(speed.map((row) => [row.textContent?.trim(), checked(row)])).toEqual([['Standard', true], ['Fast', false]]);
     await click(speed.find((row) => row.textContent?.trim() === 'Fast'));
     expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[context=1m,fast=true]' }]);
+    // Back at the model's own default, a setting leaves the model value: the runner sets the default.
+    vi.mocked(updateSessionConfig).mockClear();
+    await act(async () => root?.unmount());
+    container?.remove();
+    detail = session({ model: 'claude-opus-5-5[context=1m,fast=true]', effort: 'high' });
+    await mount();
+    context = (await subMenuRows('Context'))!;
+    await click(context.find((row) => row.textContent?.trim() === '300K'));
+    expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[fast=true]' }]);
+    await click((await subMenuRows('Speed'))!.find((row) => row.textContent?.trim() === 'Standard'));
+    expect(configCalls()).toEqual([{ model: 'claude-opus-5-5[fast=true]' }, { model: 'claude-opus-5-5[context=1m]' }]);
     // Another model starts on its own settings: its bare name.
     vi.mocked(updateSessionConfig).mockClear();
     await openModelMenu();
@@ -440,7 +451,7 @@ describe('a Cursor CLI session’s composer', { timeout: 60_000 }, () => {
     detail = session({ model: 'composer-2.5[fast=false]' });
     await mount(/Composer 2.5/);
     expect(mounted().querySelector('.composer-model-chip .composer-model-effort')?.textContent).toBe('Default');
-    expect((await modelMenuRows()).at(-1)).toBe('SpeedOff');
+    expect((await modelMenuRows()).at(-1)).toBe('SpeedStandard');
 
     // A model with neither offers neither; a value the model does not offer shows what it runs on.
     await act(async () => root?.unmount());

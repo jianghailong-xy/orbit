@@ -40,7 +40,7 @@ describe('Cursor model variants', () => {
     // The board's chip, "Claude Opus 5.5 High · 1M · Fast": the effort is the session's own field.
     expect(value).toBe('claude-opus-5-5[context=1m,fast=true]');
     expect(decodeCursorModel(value)).toEqual({ model: 'claude-opus-5-5', parameters: { context: '1m', fast: 'true' } });
-    // One setting, and the model's own default named outright: what was picked is what is written.
+    // One setting; with no catalogue row to say the model's own, every setting given is written.
     expect(encodeCursorModel('claude-opus-5-5', { context: '300k' })).toBe('claude-opus-5-5[context=300k]');
     expect(encodeCursorModel('composer-2.5', { fast: 'false' })).toBe('composer-2.5[fast=false]');
     // A bare model is its own value, with no settings.
@@ -56,7 +56,7 @@ describe('Cursor model variants', () => {
     );
   });
 
-  it('Cursor variants: Auto takes no settings, and a setting with no value is left out', () => {
+  it("Cursor variants: Auto takes no settings, and a setting with no value or at the model's default is left out", () => {
     expect(CURSOR_AUTO_MODEL).toBe('default');
     expect(encodeCursorModel('default', { context: '1m', fast: 'true' })).toBe('default');
     expect(encodeCursorModel('', { fast: 'true' })).toBe('');
@@ -68,6 +68,15 @@ describe('Cursor model variants', () => {
     expect(encodeCursorModel('claude-opus-5-5', { context: null, fast: 'true' })).toBe('claude-opus-5-5[fast=true]');
     // Nothing the syntax cannot hold is written.
     expect(encodeCursorModel('claude-opus-5-5', { context: '1m,fast=true', 'fa st': 'true' })).toBe('claude-opus-5-5');
+    // A model on its own defaults is its bare name: a value is written once, whichever way it was reached.
+    const opus = catalog.cursor![1];
+    expect(encodeCursorModel('claude-opus-5-5', { context: '300k', fast: 'false' }, opus)).toBe('claude-opus-5-5');
+    expect(encodeCursorModel('claude-opus-5-5', { context: '300k', fast: 'true' }, opus)).toBe('claude-opus-5-5[fast=true]');
+    expect(encodeCursorModel('claude-opus-5-5', { context: '1m', fast: 'true' }, opus)).toBe('claude-opus-5-5[context=1m,fast=true]');
+    // Composer 2.5's fast lane is on by default, so off is what is written.
+    const composer = { parameters: [{ id: 'fast', label: 'Fast', default: 'true', values: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'Fast' }] }] };
+    expect(encodeCursorModel('composer-2.5', { fast: 'true' }, composer)).toBe('composer-2.5');
+    expect(encodeCursorModel('composer-2.5', { fast: 'false' }, composer)).toBe('composer-2.5[fast=false]');
   });
 
   it('Cursor variants: a value not written as a variant is a model name as it stands', () => {
