@@ -63,6 +63,10 @@ class CursorDeviceTest {
     @Volatile private var mode = "acceptEdits"
     /** The sign-in relay as GET runners/:id/login reads it; POST login and DELETE move it on. */
     @Volatile private var loginRelay = """{"status":null}"""
+    /** What POST login answers first: the relay the runner picks up on its next check-in, or the link it then relays. */
+    @Volatile private var loginStarts = "link"
+    /** The account Add Account added, once its sign-in landed. */
+    @Volatile private var added = false
     @Volatile private var accountRemove = "null"
 
     @Test fun cursorScreensLight() = tour("light")
@@ -227,17 +231,32 @@ class CursorDeviceTest {
         cursorState = "ready"
     }
 
-    /** iOS 3: Add Account's link, its expiry, an account's menu, Sign In Again, and Remove with its refusal. */
+    /** iOS 3: Add Account's start, its link and its expiry, an account's menu, Sign In Again, Remove with its refusal, and an added
+     * account landing. */
     private fun accounts(pass: String) {
-        loginRelay = """{"status":null}"""
+        loginRelay = """{"status":null}"""; loginStarts = "pending"
         click(hasText("Add Account") and hasClickAction())
+        await("Starting sign-in on the runner…")
+        capture("ios3-add-pending-$pass")
+        loginRelay = link(null)
         await("Sign in on cursor.com with the account you are adding:")
         await("link expires in")
         capture("ios3-add-link-$pass")
         loginRelay = """{"status":"failed","engine":"cursor","reason":"expired","message":"The sign-in link expired before anyone signed in with it."}"""
         await("The sign-in link expired before anyone signed in with it.")
         capture("ios3-add-expired-$pass")
-        click(hasText("Close") and hasClickAction())
+        // A new link, and this time somebody signs in with it: the runner reports the account (the page reads it every 10 s), and
+        // the card folds back into its row.
+        loginStarts = "link"
+        click(hasText("Get a New Link") and hasClickAction())
+        await("link expires in")
+        added = true
+        loginRelay = """{"status":"done","engine":"cursor","account":null}"""
+        val row = "~/.orbit/cursor-accounts/9b1f42c7"
+        compose.waitUntil(30_000) { compose.onAllNodesWithText(row, substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(30_000) { compose.onAllNodes(hasText("Add Account") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(row, substring = true).performScrollTo()
+        capture("ios3-add-done-$pass")
         loginRelay = """{"status":null}"""
         click(hasContentDescription("More for Team"))
         await("Sign In Again")
@@ -303,12 +322,15 @@ class CursorDeviceTest {
           {"id":"fast","label":"Fast","category":"model_config","default":"false","values":[{"value":"false","label":"Off"},{"value":"true","label":"Fast"}]}]}"""
     private val cursorCatalog = """[{"value":"default","label":"Auto"},$opus,{"value":"claude-sonnet-5-5","label":"Claude Sonnet 5.5"},{"value":"gpt-5.5","label":"GPT-5.5"},
         {"value":"gemini-3.8-pro","label":"Gemini 3.8 Pro"},{"value":"grok-4.7","label":"Grok 4.7"},{"value":"composer-2.5","label":"Composer 2.5"}]"""
-    private val cursorAccounts = """[{"id":"default","auth":"yes","home":"/root/.orbit/cursor/default"},
-        {"id":"5c2e91a0","name":"Team","auth":"yes","home":"/root/.orbit/cursor-accounts/5c2e91a0"}]"""
+    private fun cursorAccounts() = """[{"id":"default","auth":"yes","home":"/root/.orbit/cursor/default"},
+        {"id":"5c2e91a0","name":"Team","auth":"yes","home":"/root/.orbit/cursor-accounts/5c2e91a0"}${if (!added) "" else """,
+        {"id":"9b1f42c7","name":"Account 3","auth":"yes","home":"/root/.orbit/cursor-accounts/9b1f42c7"}"""}]"""
     private fun cursorUsage() = """{"cursor":{"provider":"cursor","account":"default","planName":"Free",
         "includedUsage":{"startsAt":"${at(-25 * 24 * 60)}","resetsAt":"${at(5 * 24 * 60)}"${if (quota) ""","limitReachedAt":"${at(-30)}"""" else ""}},
         "accounts":{"5c2e91a0":{"provider":"cursor","account":"5c2e91a0","planName":"Pro",
-          "includedUsage":{"period":"monthly","startsAt":"${at(-15 * 24 * 60)}","resetsAt":"${at(6 * 24 * 60)}","percentUsed":34}}}}}"""
+          "includedUsage":{"period":"monthly","startsAt":"${at(-15 * 24 * 60)}","resetsAt":"${at(6 * 24 * 60)}","percentUsed":34}}${if (!added) "" else """,
+          "9b1f42c7":{"provider":"cursor","account":"9b1f42c7","planName":"Pro",
+            "includedUsage":{"period":"monthly","startsAt":"${at(-3 * 24 * 60)}","resetsAt":"${at(27 * 24 * 60)}","percentUsed":3}}"""}}}}"""
     /** hpc: every engine, and Cursor CLI in [cursorState]. */
     private fun hpcRunner(): String {
         val cursor = when (cursorState) {
@@ -318,7 +340,7 @@ class CursorDeviceTest {
             "wrong-version" -> """{"engine":"cursor","installed":true,"version":"2026.10.16-e3cb207",
                 "installationError":"CURSOR_VERSION_INCOMPATIBLE: Cursor CLI 2026.10.16-e3cb207 is installed, and Orbit runs exactly 2026.10.14-941492e"}"""
             else -> """{"engine":"cursor","installed":true,"version":"2026.10.14-941492e","auth":"yes",
-                "update":{"status":"checked","at":"${at(-6)}","okAt":"${at(-6)}"},"accounts":$cursorAccounts}"""
+                "update":{"status":"checked","at":"${at(-6)}","okAt":"${at(-6)}"},"accounts":${cursorAccounts()}}"""
         }
         val capabilities = listOfNotNull("\"provider:dsh\"", "\"provider:cursor\"".takeIf { cursorState in setOf("ready", "signed-out") },
             "\"cursor-account-login/v1\"".takeIf { cursorState != "update-runner" }).joinToString(",")
@@ -366,6 +388,9 @@ class CursorDeviceTest {
             (if (running) listOf(event(3, "user", "Run the whole suite before you commit.")) else emptyList())
         return """{"events":${list.joinToString(",", "[", "]")},"hasMore":false}"""
     }
+    /** Cursor CLI's sign-in link as the runner relays it, with when it stops working. */
+    private fun link(account: String?) = """{"status":"awaiting_approval","engine":"cursor","account":${account?.let { "\"$it\"" } ?: "null"},
+        "url":"https://cursor.com/loginDeepControl?challenge=Q2hhbGxlbmdlRm9yT3JiaXRQN2M&uuid=7d2e4f61&mode=login&redirectTarget=cli","expiresAt":"${at(26)}"}"""
     private fun keys() = """[{"id":"$keyValid","slug":"cursor-api","label":"Cursor","runtime":"cursor","presetSlug":"cursor-api","baseUrl":"https://api2.cursor.sh",
           "hasApiKey":true,"enabled":true,"models":[],"defaultModel":"","engines":["cursor"],"keyCheckState":"VALID","keyCheckedAt":"${at(-4)}"},
         {"id":"$keyRejected","slug":"cursor-api-2","label":"Cursor 2","runtime":"cursor","presetSlug":"cursor-api","baseUrl":"https://api2.cursor.sh",
@@ -396,11 +421,8 @@ class CursorDeviceTest {
                 "/api/runners/$hpc" -> hpcRunner()
                 "/api/runners/$hpc/login" -> when (request.method) {
                     "POST" -> {
-                        val start = bodyOf()
-                        val account = start["account"]?.jsonPrimitive?.content
-                        loginRelay = """{"status":"awaiting_approval","engine":"cursor","account":${account?.let { "\"$it\"" } ?: "null"},
-                            "url":"https://cursor.com/loginDeepControl?challenge=Q2hhbGxlbmdlRm9yT3JiaXRQN2M&uuid=7d2e4f61&mode=login&redirectTarget=cli",
-                            "expiresAt":"${at(26)}"}"""
+                        val account = bodyOf()["account"]?.jsonPrimitive?.content
+                        loginRelay = if (loginStarts == "pending") """{"status":"pending","engine":"cursor","account":null}""" else link(account)
                         loginRelay
                     }
                     "DELETE" -> { loginRelay = """{"status":"cancelled"}"""; loginRelay }
