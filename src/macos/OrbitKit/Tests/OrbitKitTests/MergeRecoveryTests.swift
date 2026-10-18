@@ -303,6 +303,18 @@ final class MergeRecoveryTests: XCTestCase {
                                    ["mergeStatus": "pending", "mergeRecoveryAction": "preview"]),
                        MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Checking…", action: .preview, waiting: true),
                                             secondary: [], headerCheck: nil))
+        // The coordinator's ruling (as web's panel): a failed repair session keeps its row while a check is in
+        // flight or owed, and the disabled Checking… is still the only step.
+        for inFlight: [String: Any] in [["mergeStatus": "pending", "mergeRecoveryAction": "preview"],
+                                         ["mergeRepairTurnEndedAt": roundEnded]] {
+            let failed = try detail(["code": "CONFLICT"], repair: repairSession("FAILED", error: "rejected"), inFlight)
+            let row = try XCTUnwrap(MergeRepairRow(detail: failed))
+            XCTAssertEqual(row.state, .failed("rejected"))
+            XCTAssertTrue(row.checking)
+            XCTAssertEqual(try XCTUnwrap(failed.mergeRecovery).buttons(supported: true, repair: row),
+                           MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Checking…", action: .preview, waiting: true),
+                                                secondary: [], headerCheck: nil), "\(inFlight)")
+        }
         XCTAssertEqual(try buttons(repair: repairSession("AWAITING_INPUT")), MergeRecoveryButtons(
             primary: MergeRecoveryButton(title: "Sync develop and merge", action: .apply), secondary: [preparePR], headerCheck: check))
         for resumable in ["AWAITING_INPUT", "SUCCEEDED", "CANCELLED", "INTERRUPTED"] {
