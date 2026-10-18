@@ -283,11 +283,17 @@ export class KubernetesBackend implements ManagedRunnerBackend {
     if (error instanceof KubeUnreachableError) return { retryable: true, unreachable: true };
     if (isRetryableKubeError(error)) return { retryable: true };
     if (!(error instanceof KubeApiError)) return null;
+    const log = `Kubernetes answered ${error.status} ${error.reason}: ${error.message}`;
+    // A namespace ResourceQuota refused the create — its admission answers 403 with "exceeded quota:
+    // <quota>, requested: …, used: …, limited: …" — and nothing was made. Not a permission: room lets
+    // the same create through.
+    const quota = error.status === 403 ? /exceeded quota: .*/.exec(error.message) : null;
+    if (quota) return { retryable: false, waitForRoom: true, code: 'KUBERNETES_QUOTA_EXCEEDED', detail: quota[0], log };
     return {
       retryable: false,
       code: error.status === 401 || error.status === 403 ? 'KUBERNETES_FORBIDDEN' : 'KUBERNETES_REJECTED',
       detail: `HTTP ${error.status} ${error.reason}`.trim(),
-      log: `Kubernetes answered ${error.status} ${error.reason}: ${error.message}`,
+      log,
     };
   }
 

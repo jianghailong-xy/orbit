@@ -1235,6 +1235,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
 	sleeper := newManagedSleep()
 	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
+	// Closed once a managed instance's first heartbeat has been taken, or given up on
+	// (managedStartupBeat); its claims wait for it.
+	startupBeatDone := make(chan struct{})
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
@@ -1255,9 +1258,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Repository operations this process has in flight, for the same reason: the claim is exclusive
 		// in the control plane, but a redelivered heartbeat must not start the same snapshot twice.
 		repoOpsNow := map[string]bool{}
+		// Whether the last beat was answered: what a managed instance's first beat is retried on.
+		beatTaken := false
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		beat := func() {
+			beatTaken = false
 			draining := loopCtx.Err() != nil
 			assetMu.Lock()
 			cmds, skills := hbCommands, hbSkills
@@ -1298,6 +1304,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				return
 			}
+			beatTaken = true
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.
@@ -1762,6 +1769,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// the reason the history scan is.
 			startCursorKeyChecks(resp.CursorKeyChecks, &heartbeatOps, t.cursorKeyCheckResult)
 		}
+		// A managed instance beats before it claims anything: as soon as the engine probe has answered,
+		// rather than at the first tick, so that the control plane sees it online, with its engines,
+		// before its first claim. The ticker keeps its cadence from the start.
+		if currentManagedInstance() != nil {
+			managedStartupBeat(loopCtx, engineHealth.probed(), managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,
+				func() bool { beat(); return beatTaken })
+		}
+		close(startupBeatDone)
 		beatUntilStopped(hbStop, ticker.C, hbNow, beat)
 	}()
 
@@ -1943,6 +1958,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		liveSet := pool.ids()
 		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
 		gcUploads(liveSet)
+	}
+
+	// A managed instance claims nothing before its first heartbeat (managedStartupBeat): the manager's
+	// READY waits for one, and an instance that claimed first served turns while its mapping read
+	// STARTING. A self-managed runner claims at once, as it always has.
+	if currentManagedInstance() != nil {
+		select {
+		case <-startupBeatDone:
+		case <-loopCtx.Done():
+		}
 	}
 
 	// Consecutive claim failures at the transport, which is what the retry backoff below is paced by.

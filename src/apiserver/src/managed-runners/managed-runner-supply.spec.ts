@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { MODEL_UNAVAILABLE } from '@orbit/shared';
 
-import { assertManagedFirstSessionRuntime, managedKeySupply, managedRuntimeReady, managedRuntimeSupply } from './managed-runner-supply';
+import { assertManagedFirstSessionRuntime, managedFirstSessionKey, managedKeySupply, managedRuntimeReady, managedRuntimeSupply } from './managed-runner-supply';
 
 // Model supply on a managed runner: what its heartbeat reported installed and signed in, and the
 // order a first session takes it in. A runtime that is not reported ready is never supply.
@@ -146,4 +146,37 @@ test('a key no managed runtime runs is no supply: a Cursor key, a protocol no en
   const runner = { engines: [engine('claude', { auth: 'no' }), engine('cursor', { auth: 'no' })], capabilities: ['provider:cursor'] };
   assert.equal(await managedKeySupply(keysOf([key('cursor-key', { runtime: 'cursor', baseUrl: 'https://api.cursor.com', presetSlug: 'cursor' })]).prisma, 'o', runner), null);
   assert.equal(await managedKeySupply(keysOf([key('odd', { runtime: 'not-a-protocol', presetSlug: null })]).prisma, 'o', runner), null);
+});
+
+// Before the runner has reported its engines — it waits for capacity, is being provisioned, or has not
+// been heard from yet — a first session on one of the owner's keys is queued for it, not refused.
+
+test('the key a first session waits on before the runner was ready is the first READY would consider', async () => {
+  const { prisma, asked } = keysOf([key('kimi'), key('cursor-key', { runtime: 'cursor', baseUrl: 'https://api.cursor.com', presetSlug: 'cursor' }), key('deepseek'), key('later')]);
+  assert.equal(await managedFirstSessionKey(prisma, 'owner-1'), 'deepseek');
+  assert.deepEqual(asked, [{
+    where: { ownerId: 'owner-1', enabled: true },
+    orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: { slug: true, runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
+  }]);
+  assert.equal(await managedFirstSessionKey(keysOf([]).prisma, 'owner-1'), null, 'no key of their own');
+});
+
+test('a first session on its own credential is queued for a runner that has reported nothing yet; one on a sign-in is not', async () => {
+  const prisma = { session: { findFirst: async () => null } } as never;
+  const unreported = { engines: null, capabilities: [] };
+  // The owner's model key on Claude Code: queued, and run once the runner is READY.
+  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'codex', bringsOwnCredentials: true, runner: unreported });
+  const refused = (error: unknown) => error instanceof ConflictException && (error.getResponse() as { code: string }).code === MODEL_UNAVAILABLE;
+  // Claude Code's own sign-in: nobody could have signed it in on a runner that has never come up.
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: false, runner: unreported }), refused);
+  // A runtime that is no supply waits for nothing.
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'opencode', bringsOwnCredentials: true, runner: unreported }), refused);
+  // Once the runner has reported, what it said decides, as before: Claude Code not installed, the key's session is refused.
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { engines: [] } }), refused);
+  await assert.rejects(
+    assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { engines: [engine('claude', { installed: false })] } }),
+    refused,
+  );
 });
