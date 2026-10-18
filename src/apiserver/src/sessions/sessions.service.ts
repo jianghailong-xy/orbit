@@ -648,6 +648,24 @@ interface ResolvedProviderSwitch extends SessionSwitch {
  */
 export class SessionNotSendable extends ConflictException {}
 
+/** What SessionsService.checkAfterRepairTurn did about a merge recovery after a repair session's turn. */
+export type RepairTurnCheck =
+  /** A preview is queued, as the owner's Check again queues one. */
+  | 'QUEUED'
+  /** The session runs a turn of its own; the check waits for its end. */
+  | 'DEFERRED'
+  /** Its own turn ended and no repair turn's check was waiting for it. */
+  | 'NOTHING_OWED'
+  | 'NO_RECOVERY'
+  /** LOCAL_SYNC_PENDING, PUSH_FAILED or REMOTE_NOT_VERIFIED: a landing being finished. */
+  | 'LANDING_UNFINISHED'
+  /** The recovery was checked after the turn ended. */
+  | 'ALREADY_CHECKED'
+  /** A merge or commit of the session is in flight. */
+  | 'OPERATION_IN_FLIGHT'
+  /** Its runner does not declare SESSION_MERGE_RECOVERY_V1. */
+  | 'RUNNER_CANNOT_CHECK';
+
 /**
  * The account Automatic starts a session moved onto the built-in `engine` on (accountOnProviderSwitch):
  * automaticAccount, when its workspace leaves the account to Orbit. Null leaves the session's own
@@ -3513,6 +3531,7 @@ export class SessionsService {
             startedAt: true,
             finishedAt: true,
             lastTurnAt: true,
+            lastAssistantText: true,
           },
         },
       },
@@ -3606,7 +3625,13 @@ export class SessionsService {
       route,
       poolCodexLogin,
       mergeTarget,
-      mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
+      // When its turn last ended or it finished, and what it last said — what a repair waiting for the
+      // owner asked — clipped to the session list's preview length, in code points as `left()` counts.
+      mergeRepairSession: children[0] ? withSessionState({
+        ...children[0],
+        lastAssistantText: children[0].lastAssistantText == null ? null
+          : [...children[0].lastAssistantText].slice(0, SessionsService.PREVIEW_LEN).join(''),
+      }) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
@@ -6391,119 +6416,10 @@ export class SessionsService {
     // closure, so a re-run competes for it from the state that exists. The runner is only told
     // about the operation after this returns.
     const workspaceId = await withTransactionRetry(this.prisma, async (tx) => {
-      queuedOn = null;
-      // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
-      // all linearize on this row. An old click therefore cannot create a fresh
-      // operation after the session has already entered a new turn epoch.
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-        FOR UPDATE`;
-      if (locked.length === 0) throw new NotFoundException('session not found');
-      const session = await tx.session.findUniqueOrThrow({ where: { id } });
-      if (session.isolationStatus !== 'worktree' || !session.branch) {
-        throw new BadRequestException('session has no worktree branch to merge');
-      }
-      if (!session.assignedRunnerId) {
-        throw new ConflictException('no runner is associated with this session');
-      }
-      if (target && target === session.branch) {
-        throw new BadRequestException("can't merge a branch into itself");
-      }
-      if (session.mergeStatus === 'pending') {
-        // Idempotent, and that is what a waiting caller waits on: the operation already in flight
-        // IS this call's operation. Minting a second one here would merge the same branch twice
-        // because somebody asked twice.
-        operationId = session.mergeOperationId;
-        return null;
-      }
-
-      if (session.commitStatus === 'pending') {
-        throw new ConflictException('wait for the pending worktree commit to finish');
-      }
-      if (
-        !SessionsService.TERMINAL.includes(session.status) &&
-        (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt)
-      ) {
-        throw new ConflictException('wait for the current turn to finish before merging');
-      }
-      if (options.recoveryAction) {
-        const runner = await tx.runner.findUnique({
-          where: { id: session.assignedRunnerId }, select: { capabilities: true },
-        });
-        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
-          throw new ConflictException('upgrade this runner to check and repair target branches');
-        }
-        const recovery = readMergeRecovery(session.mergeRecovery);
-        if (options.recoveryAction !== 'preview') {
-          if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
-              (target && recovery.targetBranch !== target)) {
-            throw new ConflictException('the recovery preview is no longer current; check again');
-          }
-          const retry = session.mergeRecoveryAction === 'apply' &&
-            ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
-          if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
-            throw new ConflictException('review a ready candidate before applying it');
-          }
-          if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
-            throw new ConflictException('no landed candidate is waiting for local sync');
-          }
-        }
-      }
-      // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
-      // touched. Two questions, and the ORDER is the point.
-      //
-      // "Is it already there" comes first, because a source the target already contains needs no
-      // checkpoint, no evidence and no scope comparison — there is nothing to merge, so every
-      // refusal below would be answering a question nobody is asking. That order is exactly what
-      // was missing when a session whose branch and `main` pointed at the SAME commit was asked to
-      // merge again: the one guard in the path compared the two branch NAMES, which differed, and
-      // twenty-two commits were replayed from a base recorded days earlier onto a target that
-      // already contained every one of them.
-      //
-      // The refusals are `[K1]`'s frozen §7 codes and are terminal: no queue, no backoff, no
-      // operation. What this deliberately does NOT judge is the branch tip and the evidence digest
-      // — the API server has no repository, and a gate that guessed there would be refusing on a
-      // value it invented. Those two are decided by the runner against `requiredSourceSha`, and by
-      // the receipt writer when a caller claims a landing and names the commit it landed.
-      const gate = await mergeDispatchGate(tx, {
-        ownerId,
-        sessionId: id,
-        taskId: session.taskId,
-        targetBranch: target ?? session.mergeTarget ?? '',
-      });
-      if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) return { alreadyLanded: gate };
-      if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
-        throw new ConflictException(`${gate.decision}: ${gate.detail}`);
-      }
-
-      operationId = randomUUID();
-      await tx.session.update({
-        where: { id },
-        data: {
-          mergeStatus: 'pending',
-          mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
-          mergeRecoveryAction: options.recoveryAction ?? null,
-          ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
-          mergeRequestedAt: new Date(),
-          mergeOperationId: operationId,
-          // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
-          // operation id it is part of. When the result comes back the server checks the reported
-          // commit against this rather than against anything the runner sent — a gate that only
-          // holds when the client cooperates is not a gate. Null for unmanaged work, which is
-          // almost every merge, and which is then unaffected by all of this.
-          mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
-          mergeOperationOwner: null,
-          mergeError: null,
-          ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
-            mergedAt: null,
-            mergedSourceSha: null,
-            branchMerged: null,
-          } : {}),
-        },
-      });
-      queuedOn = session.assignedRunnerId;
-      return session.workspaceId;
+      const queued = await this.queueMerge(tx, ownerId, id, target, options);
+      operationId = queued.operationId;
+      queuedOn = queued.queuedOn;
+      return queued.outcome;
     }, loggedRetry(this.logger, 'sessions.mergeToMain'));
     // Have that runner heartbeat now instead of at its next 30s tick: whoever pressed Merge is
     // watching a spinner. Only a nudge; a lost wake leaves the merge to that tick.
@@ -6547,6 +6463,225 @@ export class SessionsService {
     }
     if (wait !== null) return this.awaitMergeConclusion(ownerId, id, operationId, wait);
     return { ok: true };
+  }
+
+  /**
+   * The half of {@link mergeToMain} that runs inside its transaction: the Session row lock, every
+   * refusal, the `[K6]` §7 gate and the one write that queues the operation. Shared with
+   * {@link checkAfterRepairTurn}, so the check the server queues after a repair session's turn takes
+   * the very path the owner's Check again takes. `also` rides in that same write, which keeps the row
+   * written once (common/lock-order.ts, I3). Answers what the transaction answers — null when a merge
+   * is already pending, the gate when the work already landed, else the session's workspace — with
+   * the operation it is about and the runner to wake.
+   */
+  private async queueMerge(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    id: string,
+    target: string | null,
+    options: { recoveryAction?: MergeRecoveryAction; previewId?: string },
+    also: Pick<Prisma.SessionUncheckedUpdateInput, 'mergeRepairTurnEndedAt'> = {},
+  ) {
+    // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
+    // all linearize on this row. An old click therefore cannot create a fresh
+    // operation after the session has already entered a new turn epoch.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "session"
+      WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+      FOR UPDATE`;
+    if (locked.length === 0) throw new NotFoundException('session not found');
+    const session = await tx.session.findUniqueOrThrow({ where: { id } });
+    if (session.isolationStatus !== 'worktree' || !session.branch) {
+      throw new BadRequestException('session has no worktree branch to merge');
+    }
+    if (!session.assignedRunnerId) {
+      throw new ConflictException('no runner is associated with this session');
+    }
+    if (target && target === session.branch) {
+      throw new BadRequestException("can't merge a branch into itself");
+    }
+    if (session.mergeStatus === 'pending') {
+      // Idempotent, and that is what a waiting caller waits on: the operation already in flight
+      // IS this call's operation. Minting a second one here would merge the same branch twice
+      // because somebody asked twice.
+      return { outcome: null, operationId: session.mergeOperationId, queuedOn: null };
+    }
+
+    if (session.commitStatus === 'pending') {
+      throw new ConflictException('wait for the pending worktree commit to finish');
+    }
+    if (SessionsService.mergeWaitsForTurn(session)) {
+      throw new ConflictException('wait for the current turn to finish before merging');
+    }
+    if (options.recoveryAction) {
+      const runner = await tx.runner.findUnique({
+        where: { id: session.assignedRunnerId }, select: { capabilities: true },
+      });
+      if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
+        throw new ConflictException('upgrade this runner to check and repair target branches');
+      }
+      const recovery = readMergeRecovery(session.mergeRecovery);
+      if (options.recoveryAction !== 'preview') {
+        if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
+            (target && recovery.targetBranch !== target)) {
+          throw new ConflictException('the recovery preview is no longer current; check again');
+        }
+        const retry = session.mergeRecoveryAction === 'apply' &&
+          ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
+        if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
+          throw new ConflictException('review a ready candidate before applying it');
+        }
+        if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
+          throw new ConflictException('no landed candidate is waiting for local sync');
+        }
+      }
+    }
+    // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
+    // touched. Two questions, and the ORDER is the point.
+    //
+    // "Is it already there" comes first, because a source the target already contains needs no
+    // checkpoint, no evidence and no scope comparison — there is nothing to merge, so every
+    // refusal below would be answering a question nobody is asking. That order is exactly what
+    // was missing when a session whose branch and `main` pointed at the SAME commit was asked to
+    // merge again: the one guard in the path compared the two branch NAMES, which differed, and
+    // twenty-two commits were replayed from a base recorded days earlier onto a target that
+    // already contained every one of them.
+    //
+    // The refusals are `[K1]`'s frozen §7 codes and are terminal: no queue, no backoff, no
+    // operation. What this deliberately does NOT judge is the branch tip and the evidence digest
+    // — the API server has no repository, and a gate that guessed there would be refusing on a
+    // value it invented. Those two are decided by the runner against `requiredSourceSha`, and by
+    // the receipt writer when a caller claims a landing and names the commit it landed.
+    const gate = await mergeDispatchGate(tx, {
+      ownerId,
+      sessionId: id,
+      taskId: session.taskId,
+      targetBranch: target ?? session.mergeTarget ?? '',
+    });
+    if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) {
+      return { outcome: { alreadyLanded: gate }, operationId: null, queuedOn: null };
+    }
+    if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
+      throw new ConflictException(`${gate.decision}: ${gate.detail}`);
+    }
+
+    const operationId = randomUUID();
+    await tx.session.update({
+      where: { id },
+      data: {
+        mergeStatus: 'pending',
+        mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
+        mergeRecoveryAction: options.recoveryAction ?? null,
+        ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
+        mergeRequestedAt: new Date(),
+        mergeOperationId: operationId,
+        // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
+        // operation id it is part of. When the result comes back the server checks the reported
+        // commit against this rather than against anything the runner sent — a gate that only
+        // holds when the client cooperates is not a gate. Null for unmanaged work, which is
+        // almost every merge, and which is then unaffected by all of this.
+        mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
+        mergeOperationOwner: null,
+        mergeError: null,
+        ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
+          mergedAt: null,
+          mergedSourceSha: null,
+          branchMerged: null,
+        } : {}),
+        ...also,
+      },
+    });
+    return { outcome: session.workspaceId, operationId, queuedOn: session.assignedRunnerId };
+  }
+
+  /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
+   *  idle, or it is being ended. */
+  private static mergeWaitsForTurn(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
+    return !SessionsService.TERMINAL.includes(session.status) &&
+      (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
+  }
+
+  /** Recoveries a preview may not replace: each is a landing being finished, by its own retry or sync. */
+  private static readonly LANDING_UNFINISHED = ['LOCAL_SYNC_PENDING', 'PUSH_FAILED', 'REMOTE_NOT_VERIFIED'];
+
+  /**
+   * Check a merge recovery again because a repair session's turn ended — S1 of the merge-recovery
+   * repair loop (project 34hIv3wbdtsxpc5RzDlOk). `id` is the session that owns the recovery, the repair
+   * session's parent, and `turnEndedAt` when that repair turn ended; null takes up only the check this
+   * session already owes, which the end of its own turn is the moment for.
+   *
+   * The check is a preview queued through {@link queueMerge}, the path the owner's Check again takes,
+   * and it is queued when every one of these holds: the recovery is not a landing still being finished
+   * (LANDING_UNFINISHED); the turn ended after the recovery was last checked (`checkedAt` — a recovery
+   * without one reads as checked before it); no merge or commit is in flight on this session; and its
+   * runner can check (SESSION_MERGE_RECOVERY_V1). While this session runs a turn of its own, when
+   * mergeToMain refuses a merge, the turn's end is kept in `mergeRepairTurnEndedAt` instead, and all of
+   * it is judged again when that turn ends.
+   *
+   * Once per repair turn. Each turn's end reaches here once — only the completion that answers a turn
+   * applies, and a finalize only for a turn that was still running — and what is owed is taken up under
+   * this row's lock and cleared in the one write that queues the check or finds it unneeded. A check
+   * that fails is that turn's answer: nothing queues it again. No client asks for any of it.
+   */
+  async checkAfterRepairTurn(id: string, turnEndedAt: Date | null): Promise<RepairTurnCheck> {
+    // What the committed attempt did, for the wake and the announcement after it; reset by each run.
+    let queuedOn: string | null = null;
+    let wrote = false;
+    const outcome = await withTransactionRetry(this.prisma, async (tx): Promise<RepairTurnCheck> => {
+      queuedOn = null;
+      wrote = false;
+      // The row mergeToMain locks: this decision, a merge being queued and a turn starting or ending
+      // on this session are serial, so a turn cannot start between the judgment and the write.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'NOTHING_OWED';
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          ownerId: true, status: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
+          commitStatus: true, mergeRecovery: true, mergeRepairTurnEndedAt: true,
+        },
+      });
+      const owed = session.mergeRepairTurnEndedAt;
+      const endedAt = owed && (!turnEndedAt || owed > turnEndedAt) ? owed : turnEndedAt;
+      if (!endedAt) return 'NOTHING_OWED';
+      // Whatever is decided below, a check owed until now is taken up by it.
+      const settle = owed ? { mergeRepairTurnEndedAt: null } : {};
+      const recovery = readMergeRecovery(session.mergeRecovery);
+      let verdict: RepairTurnCheck;
+      if (!recovery) verdict = 'NO_RECOVERY';
+      else if (SessionsService.LANDING_UNFINISHED.includes(recovery.code)) verdict = 'LANDING_UNFINISHED';
+      // NaN — no checkedAt, or one that does not parse — is never >=, so it reads as earlier.
+      else if (Date.parse(recovery.checkedAt ?? '') >= endedAt.getTime()) verdict = 'ALREADY_CHECKED';
+      else if (SessionsService.mergeWaitsForTurn(session)) verdict = 'DEFERRED';
+      else if (session.mergeStatus === 'pending' || session.commitStatus === 'pending') verdict = 'OPERATION_IN_FLIGHT';
+      else {
+        const runner = session.assignedRunnerId
+          ? await tx.runner.findUnique({ where: { id: session.assignedRunnerId }, select: { capabilities: true } })
+          : null;
+        verdict = runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ? 'QUEUED' : 'RUNNER_CANNOT_CHECK';
+      }
+      if (verdict === 'QUEUED') {
+        const queued = await this.queueMerge(tx, session.ownerId, id, recovery!.targetBranch,
+          { recoveryAction: 'preview' }, settle);
+        queuedOn = queued.queuedOn;
+        wrote = true;
+      } else if (verdict === 'DEFERRED') {
+        if (owed?.getTime() !== endedAt.getTime()) {
+          await tx.session.update({ where: { id }, data: { mergeRepairTurnEndedAt: endedAt } });
+          wrote = true;
+        }
+      } else if (owed) {
+        await tx.session.update({ where: { id }, data: settle });
+        wrote = true;
+      }
+      return verdict;
+    }, loggedRetry(this.logger, 'sessions.checkAfterRepairTurn'));
+    // As mergeToMain does: the runner heartbeats now rather than at its next tick.
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    // No client asked, so none is waiting on a response: the detail it shows has to be told it moved.
+    if (wrote) this.realtime.publishSessionUpdated(id);
+    return outcome;
   }
 
   /**

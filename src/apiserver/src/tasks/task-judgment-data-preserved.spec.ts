@@ -2316,7 +2316,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // any of the six preserved triggers/functions, and no function, trigger or type is created, replaced
       // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every
       // stored key reads unchecked.
-      '0428_model_provider_key_check'],
+      '0428_model_provider_key_check',
+      // The recovery check a repair session's turn is owed (0431, S1 of the merge-recovery repair loop):
+      // one nullable TIMESTAMP(3) with no default and no constraint on `session`
+      // (`merge_repair_turn_ended_at`) — catalog-only. Only that table is altered: no `task`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
+      // function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0431_session_merge_repair_turn_ended_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
