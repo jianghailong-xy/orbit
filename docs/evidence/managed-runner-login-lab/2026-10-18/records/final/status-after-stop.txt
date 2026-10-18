@@ -1,0 +1,3 @@
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM: stopped (orbit-mr-lab.service inactive)
+host: MemAvailable 10424 MiB

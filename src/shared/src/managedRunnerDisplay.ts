@@ -114,7 +114,7 @@ export const MANAGED_RUNNER_COPY = {
     notOffered: 'This Orbit server does not give your account a managed runner. Your own runners are unaffected.',
     preparing: 'Orbit is setting up a runner for you. Sessions can start here once it is ready.',
     waking: 'It is starting again. Messages sent meanwhile wait for it and run once it is up.',
-    modelUnavailable: 'None of its runtimes is installed and signed in yet, so it cannot start a session. Sign one in from Infrastructure.',
+    modelUnavailable: 'None of its runtimes is signed in yet and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure.',
     waitingCapacity: 'The managed environment has no room for it right now. It starts by itself when room frees up.',
     available: 'Sessions here run on the runner Orbit manages for you.',
     unresponsive: 'Orbit has not heard from it recently. Messages sent meanwhile wait for it.',

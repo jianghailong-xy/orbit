@@ -43,7 +43,7 @@ import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
-import { managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
+import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
 
 /**
@@ -64,8 +64,9 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  * This version provisions: REQUESTED → PROVISIONING (data volume, the storage it is bound to and its
  * handle, the bootstrap credential of the generation and the runner credential it carries) →
  * STARTING (the one instance of the current generation, until the runner row has a fresh heartbeat
- * reporting a runtime installed and signed in — the one READY records as `initialProvider`; without
- * one it reports MODEL_UNAVAILABLE) → READY; and FAILED, with a structured cause, when the attempt
+ * reporting a runtime installed and signed in, or one installed that a model key of the owner's own
+ * runs on — the runtime, or the key's slug, is what READY records as `initialProvider`; without either
+ * it reports MODEL_UNAVAILABLE) → READY; and FAILED, with a structured cause, when the attempt
  * budget is spent or what the backend holds is not what the mapping recorded. It never deletes a
  * data volume, a runner row or a workspace. The only objects it removes, always by UID, are an
  * instance whose host reported it stopped, when it is replaced or put to sleep, and the bootstrap
@@ -170,7 +171,7 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
   [MODEL_UNAVAILABLE]: {
-    message: 'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+    message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.',
     retryable: true,
   },
   POD_RESTARTING: {
@@ -707,9 +708,12 @@ export class ManagedRunnerManager {
     if (instance.removing) return this.waitWithin(mapping);
     const report = instance.running ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
     if (!report) return this.waitWithin(mapping);
-    // READY needs model supply as well as a live instance: the runtime it is found ready with is the
-    // one a default workspace with no history starts on, recorded, never guessed later.
-    const [initialProvider] = managedRuntimeSupply(report);
+    // READY needs model supply as well as a live instance: a runtime signed in on the runner, or else
+    // one of the owner's own model keys a runtime it has installed runs. What it is found ready with —
+    // the runtime's name, or the key's slug — is what a default workspace with no history starts on,
+    // recorded, never guessed later.
+    const [runtime] = managedRuntimeSupply(report);
+    const initialProvider = runtime ?? (await managedKeySupply(this.prisma, mapping.ownerId, report));
     if (!initialProvider) return this.withoutSupply(mapping);
     // The attempts it took stay counted until it has stayed up (`stoodUp`): a crash loop that
     // reaches READY each time still ends.
@@ -1555,13 +1559,14 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The instance is up and reporting, with no runtime installed and signed in: not READY. Said as
-   * MODEL_UNAVAILABLE while the startup deadline lasts — a runtime signed in meanwhile makes the next
-   * pass READY — and then FAILED with that cause, retryable, so the owner can retry once one is.
+   * The instance is up and reporting, with no runtime installed and signed in and no model key of the
+   * owner's own it can run: not READY. Said as MODEL_UNAVAILABLE while the startup deadline lasts — a
+   * runtime signed in or a key added meanwhile makes the next pass READY — and then FAILED with that
+   * cause, retryable, so the owner can retry once one is.
    */
   private async withoutSupply(mapping: ManagedRunner): Promise<Step> {
     if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= this.now()) {
-      return this.fail(mapping, MODEL_UNAVAILABLE, `no runtime installed and signed in by ${mapping.startupDeadlineAt.toISOString()}`);
+      return this.fail(mapping, MODEL_UNAVAILABLE, `no runtime signed in and no model key of the owner's it runs by ${mapping.startupDeadlineAt.toISOString()}`);
     }
     if ((mapping.lastError as { code?: unknown } | null)?.code !== MODEL_UNAVAILABLE) {
       await this.commit(mapping, { lastError: { ...managedRunnerReason(MODEL_UNAVAILABLE) } });

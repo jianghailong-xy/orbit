@@ -434,7 +434,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -455,7 +455,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
           "retryable": true
         },
         "retryAfter": null,
@@ -573,6 +573,59 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": true,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "available: ready on one of the owner's model keys",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "READY",
+          "desiredState": "RUNNING",
+          "revision": 8,
+          "generation": 1,
+          "initialProvider": "deepseek"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:45.000Z"
+        }
+      },
+      "display": {
+        "kind": "available",
+        "title": "Managed runner ready",
+        "detail": "Sessions here run on the runner Orbit manages for you.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 8,
+        "managementState": "READY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
+        "usable": true,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": "deepseek",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1279,7 +1332,7 @@
       "display": {
         "kind": "failed",
         "title": "Managed runner failed",
-        "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
         "retry": true,
         "ensure": false,
         "signIn": true,
@@ -1300,7 +1353,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
           "retryable": true
         },
         "retryAfter": null,

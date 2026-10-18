@@ -58,11 +58,12 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * database: 4.7ms and 930 rows scanned → 0.3ms and one row per workspace.
  *
  * One kind of workspace has a default before it has history: a managed runner's default workspace,
- * once its runner became READY with a runtime installed and signed in (`managed_runner.initial_provider`,
- * docs/managed-runner-design.md "Provisioning retry wake and sleep" 3). Its first session starts there
- * rather than on the floor below, which that runner may not have; from then on its history decides,
- * as everywhere. No other workspace is affected — the floor stays Claude. A managed runner's
- * `initial_provider` is a built-in engine's name, so it is both the engine and the credential.
+ * once its runner became READY (`managed_runner.initial_provider`, docs/managed-runner-design.md
+ * "Provisioning retry wake and sleep" 3). Its first session starts there rather than on the floor
+ * below, which that runner may not have; from then on its history decides, as everywhere. No other
+ * workspace is affected — the floor stays Claude. A managed runner's `initial_provider` is either a
+ * built-in engine's name — a runtime signed in on it, both the engine and the credential — or the slug
+ * of one of its owner's own model keys, which runs on the engine the key's row names.
  *
  * The session's engine is its recorded one; a row an older API replica wrote has none, and is placed by
  * the rules dispatch followed before the split (legacySessionEngine), read here only for those rows.
@@ -74,11 +75,17 @@ export async function lastProviderByWorkspace(
 ): Promise<Map<string, AgentProviderSeed>> {
   const ids = [...new Set(workspaceIds.filter((id): id is string => !!id))];
   if (ids.length === 0) return new Map();
-  const rows = await prisma.$queryRaw<
-    Array<{ workspace_id: string; engine: string | null; provider: string; provider_builtin: boolean; owner_id: string | null }>
-  >(Prisma.sql`
+  const rows = await prisma.$queryRaw<Array<{
+    workspace_id: string;
+    engine: string | null;
+    provider: string;
+    provider_builtin: boolean;
+    owner_id: string | null;
+    managed_owner_id: string | null;
+  }>>(Prisma.sql`
     WITH a(id) AS (SELECT unnest(ARRAY[${Prisma.join(ids)}]::uuid[]))
-    SELECT a.id AS workspace_id, s.engine, s.provider, s.provider_builtin, s.owner_id::text AS owner_id
+    SELECT a.id AS workspace_id, s.engine, s.provider, s.provider_builtin, s.owner_id::text AS owner_id,
+           NULL::text AS managed_owner_id
     FROM a
     CROSS JOIN LATERAL (
       SELECT engine, provider, provider_builtin, owner_id
@@ -88,7 +95,7 @@ export async function lastProviderByWorkspace(
       LIMIT 1
     ) s
     UNION ALL
-    SELECT a.id, m.initial_provider, m.initial_provider, true, NULL
+    SELECT a.id, m.initial_provider, m.initial_provider, true, NULL, m.owner_id::text
     FROM a
     JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NOT NULL
     WHERE NOT EXISTS (
@@ -98,6 +105,12 @@ export async function lastProviderByWorkspace(
   `);
   const seeds = new Map<string, AgentProviderSeed>();
   for (const r of rows) {
+    // A managed runner READY on one of its owner's model keys: that key, on the engine its row names.
+    if (r.managed_owner_id && !recordedEngine(r.provider)) {
+      const engine = await legacySessionEngine(prisma, { provider: r.provider, providerBuiltin: false, ownerId: r.managed_owner_id });
+      seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: false });
+      continue;
+    }
     const engine = recordedEngine(r.engine) ?? (r.owner_id
       ? await legacySessionEngine(prisma, { provider: r.provider, providerBuiltin: r.provider_builtin, ownerId: r.owner_id })
       : null);
