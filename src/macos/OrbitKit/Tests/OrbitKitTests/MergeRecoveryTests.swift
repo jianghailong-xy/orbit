@@ -311,6 +311,10 @@ final class MergeRecoveryTests: XCTestCase {
         XCTAssertEqual(try buttons(["code": "REPAIR_IN_PROGRESS"], repair: repairSession("AWAITING_INPUT", said: "Keep the target's version?")),
                        MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Reply in repair session", action: .repair(preparePR: false)),
                                             secondary: [], headerCheck: check))
+        XCTAssertEqual(try buttons(["code": "REPAIR_IN_PROGRESS"], repair: repairSession("FAILED", error: "rejected")),
+                       MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Resolve in repair session", action: .repair(preparePR: false)),
+                                            secondary: [], headerCheck: check),
+                       "a failed repair session can't be replied to: a new one resolves it, and still no PR candidate")
         XCTAssertEqual(try decode(payload(["code": "REPAIR_IN_PROGRESS"])).buttons(supported: true).primary, check,
                        "no repair session to reply in: the existing rule")
         XCTAssertEqual(try buttons(["code": "ALREADY_LANDED"], repair: repairSession("AWAITING_INPUT")).primary,

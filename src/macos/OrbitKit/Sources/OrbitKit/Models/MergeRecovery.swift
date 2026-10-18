@@ -290,9 +290,10 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
                 primary: continues ? MergeRecoveryButton(title: "Continue repair", action: .repair(preparePR: false)) : resolve,
                 secondary: [preparePR], headerCheck: check)
         }
-        if code == "REPAIR_IN_PROGRESS", continues {
-            return MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Reply in repair session", action: .repair(preparePR: false)),
-                                        secondary: [], headerCheck: check)
+        if code == "REPAIR_IN_PROGRESS", repair != nil {
+            return MergeRecoveryButtons(
+                primary: continues ? MergeRecoveryButton(title: "Reply in repair session", action: .repair(preparePR: false)) : resolve,
+                secondary: [], headerCheck: check)
         }
         return MergeRecoveryButtons(primary: check, secondary: repairs, headerCheck: nil)
     }
