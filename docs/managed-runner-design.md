@@ -528,9 +528,15 @@ Shared status fields, defined in `@orbit/shared` and mirrored in OrbitKit, are:
 ```text
 contractVersion, revision, managementState, desiredState,
 runnerId?, workspaceId?, heartbeatStatus?, lastHeartbeatAt?, usable,
-reason? { code, message, retryable }, retryAfter?, initialProvider?,
+reason? { code, message, retryable }, retryAfter?, initialProvider?, firstSessionProvider?,
 actions { canEnsure, canWake, canSleep, canRetry, canDelete }
 ```
+
+`firstSessionProvider` (since 2026-10-18, task T07) is what a first session in the default workspace, sent with
+nothing named, starts on now: `initialProvider` once the runner has been READY, before that the owner's own model key
+such a session is queued on while the runner has not reported its engines or reported that key's engine installed, and
+null when the session would be refused `MODEL_UNAVAILABLE`. A client offers that session exactly when it is set; a
+server that predates the field is read by `initialProvider`.
 
 IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the
 mapping exists. Do not expose Ceph endpoints/keys, kubeconfig, node control credentials, Secret
@@ -1311,3 +1317,52 @@ Left to later work, or not shown here:
 - The clients still offer no draft in a managed default workspace before `initialProvider` is known (C7's `startsNewSession`). A new account can therefore queue its first session through the API, the CLI or a task, but not from a composer. Opening that gate needs the status to say what a first session would start on before READY.
 - A queued first session on a key whose engine the runner turns out not to have waits, while the runner ends `MODEL_UNAVAILABLE`.
 - No model was used: fake-model.py stood in for the owner's DeepSeek key.
+
+## Implementation record: the three clients against the lab
+
+Recorded 2026-10-18 for task T07. Web, macOS and iOS were run against the lab's test server, and this record covers the
+changes that needed ([lab page](managed-runner-lab.md#the-three-clients-t07),
+[evidence](evidence/managed-runner-clients-lab/2026-10-18/README.md)). It builds on the client status record above
+(C7), which proved the three clients against the shared fixture only. It closes the first item that T06b's record left
+to later work.
+
+| Area | As implemented, and why |
+| --- | --- |
+| What a first session starts on, before READY | T06b queued a new account's first session on the owner's key while the runner waits for capacity or starts. The clients still offered no draft until `initialProvider` existed (C7's `startsNewSession`). The status now names it in `firstSessionProvider`: `initialProvider` once the runner has been READY. Before that, it is the owner's own model key such a session is queued on (`managedFirstSessionKey`), while the runner has not reported its engines or has reported that key's engine installed. It is null when the create would refuse the session `MODEL_UNAVAILABLE`. The status read computes it with the create's own rule (`managedFirstSessionProvider`, beside `assertManagedFirstSessionRuntime`). It asks for the owner's keys only while the switch is on and nothing was recorded. The shared display offers the first session when the field is set (`startsNewSession`) and reads a server that predates it by `initialProvider`; OrbitKit mirrors this. The field is additive, so the contract version stays 1. |
+| The draft follows the key | The draft's default provider and model come from the workspace list (`lastProvider`, which the server derives). The list went stale when the key arrived, so a draft opened by the status would have offered Claude Code's floor and its model. The web reads the workspace list again when the first-session provider changes (`useFollowFirstSessionProvider`). The native apps reload their workspaces, and with them the provider list (`ManagedRunnerModel.onFirstSessionProviderChanged`). On the lab, the web draft opened on the key and its model 3.4 s after the key was added. |
+| Waking, shown at once | Found on the lab: a message to a runner asleep for 15 s woke it and was answered 4.4 s later. Meanwhile the web said "Managed runner asleep" until its next 30 s read. Web and native read the managed status again right after a send only when the runner row read offline, and a just-slept managed runner's row still reads online until its last beat goes stale. Both now read it whenever the managed status is anything but available. On the lab after the fix, "Waking your managed runner" showed 0.7 s after the send. |
+| Not changed: the restart reason after a held volume | On Kubernetes a restart waits a few seconds for the old Pod's volume to detach (`VOLUME_STILL_ATTACHED`, "…still detaching"). When that wait ends, the reason is cleared rather than going back to `POD_RESTARTING`, so for the rest of the restart the clients show the generic "It is starting again". `restartReason` keeps a restart reason only while it is still the stored one. Reported to the coordinator. |
+
+Verified on 2026-10-18:
+
+- Unit tests:
+  - `managed-runner-status.spec.ts` and `managed-runner-supply.spec.ts`: a table test that the status's rule agrees
+    with the create's;
+  - `managedRunnerDisplay.spec.ts`;
+  - the shared fixture's four new states (39 in all), held by the apiserver, shared, web and Swift tests;
+  - `WorkspaceView.managedRunner.test.tsx`: the draft offered on the key, the workspaces read again, and waking shown
+    for a just-slept runner whose row still reads online. The last two were mutation-checked.
+  - OrbitKit's `ManagedRunnerLogicTests` and `ManagedRunnerWiringTests`.
+- `managed-runner-first-session.pg.spec.ts`, on both backends: with no key the status names nothing, the display offers
+  nothing, and a session with nothing named is refused 409 `MODEL_UNAVAILABLE`. With the key, the status names it and
+  the display offers the first session. After READY, `firstSessionProvider` is the key's slug.
+- The lab's real k3s, a budget of one runner, the web live. Covered: new accounts, first sessions, sleep and wake, a
+  crash loop and an out-of-memory loop each with Retry, a quota, a held and a deleted volume, and an environment the
+  server cannot use. The switch was also tested unset, `false`, missing and on, for an account with its own runner.
+- The host's real Docker, the web live: `CONTAINER_LIMIT` while preparing and waking, `VOLUME_IN_USE`, and
+  `PVC_MISSING` then `PVC_RESTORED` with Retry.
+- The iPhone and Mac apps on GitHub's macos-26, fed the same server's recorded answers. Each of the 25 scenes passed on
+  both apps: round 2, then scene 20 on the Mac again in round 4, and the landing scenes in round 3. No app made a
+  request outside the recording, and no write differed from the recorded one. Round 1's failures came from the
+  recording, where the provider list was read only every 15 s, and the replay now accounts for that. Round 2's one
+  Mac exit did not recur.
+
+Left to later work, or not shown here:
+
+- The native apps did not reach the test server live; their run is a replay. Replay cannot show the live server's
+  timing: when an answer came is the recording's, sampled every 2 s, or every 15 s for the slower lists.
+- No model was used: fake-model.py stood in for the owner's DeepSeek key.
+- No runtime was signed in from Infrastructure to clear "Your managed runner needs a model". Removing and deleting a
+  runner exist in the fixture only, and the server has no deletion flow yet.
+- A Retry pressed on one client shows on another at that client's next settled read (30 s). The clients still poll,
+  because no server sends revision notices.

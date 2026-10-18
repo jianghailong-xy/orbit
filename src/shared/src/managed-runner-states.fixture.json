@@ -12,7 +12,8 @@
     "`available` whether its environment profile is valid, `eligible` the eligibility answer for an owner",
     "without a mapping, `ownerDisabled` whether an administrator disabled the account; `mapping` lists the managed_runner fields that differ from a blank row, with",
     "`lastErrorCode` naming the manager's stored reason and `capacityShort` a capacity refusal; `runner`",
-    "is the runner row's heartbeat), all at `now` with `heartbeatFreshMs`. `status` is the body",
+    "is the runner row's heartbeat, with `engines` when its heartbeat has reported them; `firstSessionKey`",
+    "is the owner's first own model key a managed runner runs), all at `now` with `heartbeatFreshMs`. `status` is the body",
     "`GET /api/managed-runner` answers for it, public ids and their twins included: the apiserver spec",
     "derives it from `server` with managedRunnerStatus and the public id mapping, and fails if it differs.",
     "",
@@ -21,9 +22,10 @@
     "carries one. `retry` offers Retry (POST /managed-runner/retry with the read revision), `ensure` offers",
     "Set up (POST /managed-runner/ensure), `signIn` points at the runner's runtimes in Infrastructure.",
     "`acceptsWork`: a message or turn sent now is accepted and waits for the runner, so a client does not",
-    "refuse it as offline. `startsNewSession`: a first session in the managed default workspace can start",
-    "(the runner was found ready with `initialProvider`); before that no client offers a default engine",
-    "there. `moving`: read the status again soon (MANAGED_RUNNER_STATUS_POLL_SECONDS).",
+    "refuse it as offline. `startsNewSession`: a first session in the managed default workspace can start:",
+    "the server names what it starts on (`firstSessionProvider`: `initialProvider` once the runner was READY,",
+    "before that the owner's key the session waits for the runner on); with none, no client offers a default",
+    "engine there. `moving`: read the status again soon (MANAGED_RUNNER_STATUS_POLL_SECONDS).",
     "",
     "A reason `code` is an open string: a server can add one (C6b adds ACCOUNT_DISABLED), so a client",
     "shows any reason's `message` and never needs to know its code. The two `failed`/`preparing` cases",
@@ -145,6 +147,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": true,
           "canWake": false,
@@ -194,6 +197,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -242,6 +246,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -293,6 +298,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -351,6 +357,7 @@
         },
         "retryAfter": "2026-10-09T08:00:30.000Z",
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -403,6 +410,127 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "preparing: starting, a first session waits on the owner's key",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 5,
+          "generation": 1
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        },
+        "firstSessionKey": {
+          "slug": "deepseek",
+          "engine": "claude"
+        }
+      },
+      "display": {
+        "kind": "preparing",
+        "title": "Preparing your managed runner",
+        "detail": "Orbit is setting up a runner for you. Sessions can start here once it is ready.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 5,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": null,
+        "retryAfter": null,
+        "initialProvider": null,
+        "firstSessionProvider": "deepseek",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "preparing: the cluster's resource quota has no room for its first Pod, a first session waits on the owner's key",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 5,
+          "generation": 1,
+          "lastErrorCode": "KUBERNETES_QUOTA_EXCEEDED",
+          "nextAttemptAt": "2026-10-09T08:00:30.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        },
+        "firstSessionKey": {
+          "slug": "deepseek",
+          "engine": "claude"
+        }
+      },
+      "display": {
+        "kind": "preparing",
+        "title": "Preparing your managed runner",
+        "detail": "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 5,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "KUBERNETES_QUOTA_EXCEEDED",
+          "message": "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+          "retryable": false
+        },
+        "retryAfter": "2026-10-09T08:00:30.000Z",
+        "initialProvider": null,
+        "firstSessionProvider": "deepseek",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -460,6 +588,81 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "model unavailable: none of the owner's keys runs on what it reported",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 6,
+          "generation": 1,
+          "lastErrorCode": "MODEL_UNAVAILABLE"
+        },
+        "runner": {
+          "status": "ONLINE",
+          "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
+          "engines": [
+            {
+              "engine": "claude",
+              "installed": false,
+              "auth": "unknown"
+            },
+            {
+              "engine": "codex",
+              "installed": true,
+              "auth": "no"
+            }
+          ]
+        },
+        "firstSessionKey": {
+          "slug": "deepseek",
+          "engine": "claude"
+        }
+      },
+      "display": {
+        "kind": "modelUnavailable",
+        "title": "Your managed runner needs a model",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "retry": false,
+        "ensure": false,
+        "signIn": true,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 6,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "ONLINE",
+        "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MODEL_UNAVAILABLE",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -520,6 +723,72 @@
         },
         "retryAfter": "2026-10-09T08:01:00.000Z",
         "initialProvider": null,
+        "firstSessionProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waiting for capacity before the first start, a first session waits on the owner's key",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "WAITING_CAPACITY",
+          "desiredState": "RUNNING",
+          "revision": 2,
+          "capacityShort": [
+            "cpu",
+            "memory"
+          ],
+          "nextAttemptAt": "2026-10-09T08:01:00.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": null
+        },
+        "firstSessionKey": {
+          "slug": "deepseek",
+          "engine": "claude"
+        }
+      },
+      "display": {
+        "kind": "waitingCapacity",
+        "title": "Waiting for capacity",
+        "detail": "The managed environment has no room for this runner right now (CPU, memory). It starts by itself when room frees up; nothing was removed or resized to make room.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 2,
+        "managementState": "WAITING_CAPACITY",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": null,
+        "usable": false,
+        "reason": {
+          "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+          "message": "The managed environment has no room for this runner right now (CPU, memory). It starts by itself when room frees up; nothing was removed or resized to make room.",
+          "retryable": true
+        },
+        "retryAfter": "2026-10-09T08:01:00.000Z",
+        "initialProvider": null,
+        "firstSessionProvider": "deepseek",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -573,6 +842,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -626,6 +896,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "deepseek",
+        "firstSessionProvider": "deepseek",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -679,6 +950,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -732,6 +1004,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": true,
@@ -785,6 +1058,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": true,
@@ -838,6 +1112,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": true,
@@ -891,6 +1166,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -951,6 +1227,7 @@
         },
         "retryAfter": "2026-10-09T08:00:08.000Z",
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1010,6 +1287,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1068,6 +1346,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1127,6 +1406,7 @@
         },
         "retryAfter": "2026-10-09T08:01:00.000Z",
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1186,6 +1466,7 @@
         },
         "retryAfter": "2026-10-09T08:01:00.000Z",
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1245,6 +1526,7 @@
         },
         "retryAfter": "2026-10-09T08:01:00.000Z",
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1303,6 +1585,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1360,6 +1643,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1417,6 +1701,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1473,6 +1758,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1532,6 +1818,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1591,6 +1878,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1649,6 +1937,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1709,6 +1998,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1769,6 +2059,7 @@
         },
         "retryAfter": null,
         "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1822,6 +2113,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1876,6 +2168,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1923,6 +2216,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -1980,6 +2274,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -2038,6 +2333,7 @@
         },
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -2067,6 +2363,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,
@@ -2095,6 +2392,7 @@
         "reason": null,
         "retryAfter": null,
         "initialProvider": "claude",
+        "firstSessionProvider": "claude",
         "actions": {
           "canEnsure": false,
           "canWake": false,

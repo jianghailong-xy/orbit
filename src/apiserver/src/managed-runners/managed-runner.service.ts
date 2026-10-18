@@ -40,6 +40,7 @@ import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-run
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
+import { ownerManagedKeys } from './managed-runner-supply';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
 
@@ -93,7 +94,10 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   async status(ownerId: string): Promise<ManagedRunnerStatus> {
     const mapping = await this.prisma.managedRunner.findUnique({ where: { ownerId } });
     const runner = mapping
-      ? await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: { status: true, lastHeartbeatAt: true } })
+      ? await this.prisma.runner.findUnique({
+          where: { id: mapping.runnerId },
+          select: { status: true, lastHeartbeatAt: true, engines: true, capabilities: true },
+        })
       : null;
     const available = !!this.runtime?.available;
     // Off, management is frozen and nothing more is read than the mapping and its runner.
@@ -106,6 +110,10 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       ownerDisabled,
       mapping,
       runner,
+      // What a first session would wait for the runner on, until READY records what it starts on.
+      firstSessionKey: this.gate.enabled && mapping && !mapping.initialProvider
+        ? ((await ownerManagedKeys(this.prisma, ownerId))[0] ?? null)
+        : null,
       now: new Date(),
       heartbeatFreshMs: this.runtime?.available ? this.runtime.profile.lifecycle.heartbeatFreshSeconds * 1000 : DEFAULT_HEARTBEAT_FRESH_MS,
     });

@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-18T06:03:18.028+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:03:18.028+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 2,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 2,
+        "management_state": "READY",
+        "pod": "e7c42c5d",
+        "reason": null,
+        "revision": 33
+      }
+    ]
+  ],
+  "owner": "wen",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

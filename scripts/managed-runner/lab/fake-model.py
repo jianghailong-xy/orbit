@@ -20,8 +20,8 @@ so a resumed engine visibly sends the history it reloaded from the persistent vo
     answered with Claude Code's own API-error sentence for an overloaded provider (529), which the
     control plane arms an automatic retry for; the request after them is answered as usual.
   - A request whose last message carries a tool result is answered with text that quotes it.
-  - Every "T06-<WORD>" marker in the last user message is quoted after "Answering:", so a driver
-    can tell which message an answer belongs to.
+  - Every "T06-<WORD>" (or T07's "T07-<WORD>") marker in the last user message is quoted after
+    "Answering:", so a driver can tell which message an answer belongs to.
 Usage: fake-model.py PORT LOG
 """
 
@@ -147,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             text = (f'FAKE MODEL reply #{number}: this conversation has {len(messages)} message(s); '
                     f'secrets seen: {", ".join(secrets) or "none"}.')
-            markers = re.findall(r'T06-[A-Z0-9-]+', last)
+            markers = re.findall(r'T0[67]-[A-Z0-9-]+', last)
             if markers:
                 text += f' Answering: {" ".join(markers)}'
         usage = {'input_tokens': 10, 'output_tokens': 20}

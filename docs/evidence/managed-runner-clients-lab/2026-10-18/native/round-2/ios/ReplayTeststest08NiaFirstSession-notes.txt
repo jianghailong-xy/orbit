@@ -1,0 +1,23 @@
+scene 08-nia-first-session: 184.388 s, actions (
+        {
+        body =         {
+            agentId = 34htzVqRcSiCwyhEIBpr6;
+            engine = "<null>";
+            model = "deepseek-v4-pro";
+            prompt = "T07-NIA-S1 a first session from the iPhone composer while the runner waits for capacity";
+            provider = "<null>";
+        };
+        m = POST;
+        path = "/api/sessions";
+        t = "57.946";
+    }
+)
+08-nia-first-session-00: "Waiting for capacity" shows
+08-nia-first-session-01: "DeepSeek" shows
+08-nia-first-session-02: typed into 52 label="" value="T07-NIA-S1 a first session from the iPhone composer while the runner waits for capacity" frame=(32.00000000000003, 409.0, 338.0, 66.0) hittable=true
+08-nia-first-session-02: send 9 label="Arrow Up Circle" value="" frame=(346.0, 489.0, 32.0, 32.0) hittable=true
+08-nia-first-session-03: "Waiting for capacity" shows
+08-nia-first-session-04: "Preparing your managed runner" shows
+08-nia-first-session-05: "Answering: T07-NIA-S1" shows
+08-nia-first-session: 196 requests, 0 violations, actions left [], notes (
+)

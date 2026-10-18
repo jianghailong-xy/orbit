@@ -1,0 +1,14 @@
+{
+  "answer": "persistentvolumeclaim \"mr-data-01a14da1-4096-72b1-acfd-5b094be3f16f\" deleted from orbit-mr-test namespace",
+  "at": "2026-10-18T06:25:21.205+00:00",
+  "owner": "nia",
+  "pv": "pvc-ad73e57d-788a-44c0-904a-babd6200ac67",
+  "pvAfter": {
+    "lastPhaseTransitionTime": "2026-10-18T06:25:21Z",
+    "phase": "Released"
+  },
+  "pvc": {
+    "name": "mr-data-01a14da1-4096-72b1-acfd-5b094be3f16f",
+    "uid": "ad73e57d-788a-44c0-904a-babd6200ac67"
+  }
+}
