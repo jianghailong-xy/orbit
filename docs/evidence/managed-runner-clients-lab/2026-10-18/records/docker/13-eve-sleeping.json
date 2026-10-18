@@ -1,0 +1,24 @@
+{
+  "changes": [
+    [
+      "2026-10-18T06:34:45Z",
+      {
+        "desiredState": "SLEEPING",
+        "managementState": "DRAINING",
+        "reason": null,
+        "revision": 23
+      }
+    ],
+    [
+      "2026-10-18T06:35:00Z",
+      {
+        "desiredState": "SLEEPING",
+        "managementState": "SLEEPING",
+        "reason": null,
+        "revision": 27
+      }
+    ]
+  ],
+  "owner": "eve",
+  "reached": "SLEEPING"
+}

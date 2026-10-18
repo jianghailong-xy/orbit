@@ -1,6 +1,6 @@
 import { withEnginePlanUsage, type LoginEngine, type RunnerEngineAccount } from '@orbit/shared';
 import { accountDir, accountNameOf, accountPlanUsage, runsOnEnvKey } from '../lib/engineAccounts';
-import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, cursorUsageLimit } from '../lib/planUsage';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 import { Select } from './ui/Select';
@@ -52,6 +52,11 @@ function accountStatus(
   // The window that stops it, not the first one: a 5-hour window at 6% says nothing of a spent week.
   // Antigravity's is the bucket with the least left, by agy's own name for it, in what is left.
   const quota = account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
+  // A Cursor CLI account is spent when a turn on it met Cursor's limit; its 0% is no reading (§11).
+  if (engine === 'cursor' && account.auth === 'yes') {
+    if (cursorUsageLimit(snapshot)) return `spent · ${signIn}`;
+    if (!quota) return `${snapshot?.planName ? `${snapshot.planName} plan · ` : ''}usage unavailable · ${signIn}`;
+  }
   if (!quota) return signIn;
   return quota.remaining
     ? `${quota.groupLabel ?? quota.label} ${quota.percent}% left · ${signIn}`
@@ -65,12 +70,15 @@ interface AccountOption {
 }
 
 /** What one engine's account field calls itself and the variable it replaces. */
-const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: string }> = {
+const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: string; staysPut?: boolean }> = {
   codex: { label: 'Codex account', envVar: 'CODEX_HOME', sessions: 'Codex' },
   claude: { label: 'Claude account', envVar: 'CLAUDE_CONFIG_DIR', sessions: 'Claude' },
   // agy takes no variable for it: the runner's own, which picks the sign-in a session runs on.
   antigravity: { label: 'Antigravity account', envVar: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR', sessions: 'Antigravity' },
   kimi: { label: 'Kimi account', envVar: 'KIMI_CODE_HOME', sessions: 'Kimi' },
+  // The runner's own dispatch variable: Cursor CLI reads no config-directory variable of its own here.
+  // A Cursor conversation that has started stays on its account (D5): Automatic only picks where one starts.
+  cursor: { label: 'Cursor CLI account', envVar: 'ORBIT_CURSOR_ACCOUNT_DIR', sessions: 'Cursor CLI', staysPut: true },
 };
 
 /**
@@ -163,8 +171,10 @@ export function AccountSelect({
       <div className="rd-path-hint rd-path-muted">
         {automatic
           ? `Only applies to sessions that run ${copy.sessions} on this machine. Automatic starts each new ` +
-            'session on the account whose quota resets soonest, so none of it goes unused, and moves it ' +
-            'when that account hits its limit.'
+            (copy.staysPut
+              ? 'session on the account whose quota resets soonest, so none of it goes unused.'
+              : 'session on the account whose quota resets soonest, so none of it goes unused, and moves it ' +
+                'when that account hits its limit.')
           : `Only applies to sessions that run ${copy.sessions} on this machine. Leave it on Default unless ` +
             'this repo needs the other account.'}
       </div>

@@ -105,6 +105,24 @@ would otherwise pick up the session's values.
 Until the wiki's jobs move to the server, the worker only probes the model and reports its state; wiki jobs still
 run on runners.
 
+### Managed runners
+
+Every account's own runner, a container on this host's Docker, given at sign-in: see
+[Managed runners](self-hosting.md#managed-runners) for what it is, who gets one and how far a container isolates
+it. A fresh install (`scripts/install-server.sh`) writes all three variables; an upgrade never writes any of them,
+so a deployment installed before them keeps managed runners off.
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_MANAGED_RUNNERS_ENABLED` | Optional; off. A fresh install writes `true` | The switch. `true` turns managed runners on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, no account is given a runner and none is started or woken; nothing is stopped or deleted. | No | Recreate API |
+| `ORBIT_MANAGED_RUNNERS_DIR` | Optional; unset mounts nothing. A fresh install writes `./data/managed-runners` | The managed runners' directory: the API's profile (`profile.json`), the Docker channel's configuration (`channel.json`), token, socket and state. Mounted read-only into the API and read-write into `docker-channel`. | Holds the channel's token | Recreate API and `docker-channel` |
+| `COMPOSE_PROFILES` | Optional; unset. A fresh install writes `managed-runners-docker` | Compose's own variable. `managed-runners-docker` runs `docker-channel`, the restricted Docker channel and the only service given the Docker socket. | No | `docker compose up -d docker-channel` |
+
+`profile.json` chooses the Docker backend (`"backend": "docker"`) and sets each runner's CPU, memory, process and
+volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
+the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
+run `docker compose up -d --force-recreate docker-channel apiserver`.
+
 ## PostgreSQL and backups
 
 These values are fixed inside Compose unless the table names a host substitution. Changing a

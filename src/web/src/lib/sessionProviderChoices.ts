@@ -9,11 +9,12 @@ import {
 } from '@orbit/shared';
 import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import type { CodexLogin } from './codexLogin';
+import { CURSOR_KEY_PRESET, CURSOR_STATE_LABEL, cursorRunnerState, type CursorRunnerFacts } from './cursorRuntime';
 import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
 import { accountNameOf, accountPlanUsage, runsOnEnvKey } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { webShowsEngine } from './runnerEngines';
-import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, cursorUsageLimit } from './planUsage';
 import type { SharedPool } from './sharedPools';
 import {
   defaultModelFor,
@@ -137,7 +138,9 @@ export const runtimeSummary = (runtime?: string | null): string =>
       ? 'Moonshot API'
       : runtime === AgentProvider.ANTIGRAVITY
         ? 'Gemini API'
-        : 'Anthropic-compatible';
+        : runtime === AgentProvider.CURSOR
+          ? 'Cursor API'
+          : 'Anthropic-compatible';
 
 // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
 // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
@@ -146,6 +149,8 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.CLAUDE]: 'anthropic',
   [AgentProvider.CODEX]: 'openai',
   [AgentProvider.KIMI]: 'moonshot',
+  // Cursor CLI wears the mark of a Cursor key, Cursor's cube (the owner's choice D3).
+  [AgentProvider.CURSOR]: CURSOR_KEY_PRESET,
 };
 
 // Antigravity, the engine, ships no preset to borrow a mark from. A Gemini key is Google Gemini's
@@ -219,6 +224,15 @@ function dshBlocker(runner: DshRunnerFacts | null | undefined): string | undefin
   return state === 'ready' ? undefined : DSH_STATE_LABEL[state];
 }
 
+/** Cursor CLI admission, read the way the server reads it (cursorRunnerState): the runner has to run
+ *  the pinned build before any credential can — a key as much as its own sign-in — and its own sign-in
+ *  has to be signed in on top. Not signed in is the CLI's own "no" for Default, as for every engine. */
+function cursorBlocker(runner: CursorRunnerFacts | null | undefined, health?: RunnerEngineHealth, login = false): string | undefined {
+  const state = cursorRunnerState(runner);
+  if (state !== 'ready') return CURSOR_STATE_LABEL[state];
+  return login && health?.auth === 'no' ? 'Not signed in' : undefined;
+}
+
 /** Antigravity admission uses the runner capability the server reads when dispatching. */
 function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth, login = false): string | undefined {
   if (state?.supported === false) return 'Update runner';
@@ -248,7 +262,12 @@ export interface ChoiceSources {
   antigravity?: RunnerAntigravityState;
   /** Whether Antigravity's sign-in runs on the machine's Gemini key for this workspace. */
   antigravityKeyAvailable?: boolean;
-  dshRunner?: DshRunnerFacts | null;
+  /** The runner's capabilities and engine report, as DeepSeek Harness's admission and Cursor CLI's
+   *  (cursorRunnerState) read them. */
+  dshRunner?: (DshRunnerFacts & CursorRunnerFacts) | null;
+  /** Every runner of the account, where the page has them: whether Cursor CLI is drawn at all
+   *  (webShowsEngine). Without them, the runner above decides. */
+  fleet?: readonly CursorRunnerFacts[] | null;
 }
 
 /** An engine and a provider of it — a draft's pick, or what a workspace last ran on. */
@@ -284,6 +303,10 @@ function accountChoices(
     // Antigravity's Default on the runner's Gemini key: it runs, on the key, with no quota.
     if (runsOnEnvKey(health, account)) return { id: account.id, label: accountNameOf(account), quota: 'env key' };
     const snapshot = accountPlanUsage(usage, engine, account.id);
+    // A Cursor CLI account is spent once a turn on it met Cursor's limit, which no reading says.
+    if (engine === AgentProvider.CURSOR && account.auth === 'yes' && cursorUsageLimit(snapshot)) {
+      return { id: account.id, label: accountNameOf(account), quota: 'Spent', nearLimit: true };
+    }
     // The window that stops it: a Claude login's 5-hour window can read 0% while its weekly one is
     // spent, and the first window alone would say it has room.
     const quota = account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
@@ -332,11 +355,13 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
       ? dshBlocker(dshRunner)
       : engine === AgentProvider.ANTIGRAVITY
         ? antigravityBlocker(antigravity, health)
-        : engine === AgentProvider.OPENCODE
-          ? openCodeMissing(engineHealth)
-            ? 'Not installed'
-            : undefined
-          : byokBlocker(health);
+        : engine === AgentProvider.CURSOR
+          ? cursorBlocker(dshRunner, health)
+          : engine === AgentProvider.OPENCODE
+            ? openCodeMissing(engineHealth)
+              ? 'Not installed'
+              : undefined
+            : byokBlocker(health);
 
   const own: ProviderChoice[] = [];
   if (isLoginProvider(engine) && (engine !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google')) {
@@ -345,7 +370,9 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
     const blocker =
       engine === AgentProvider.ANTIGRAVITY
         ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount)
-        : engineBlocker(health);
+        : engine === AgentProvider.CURSOR
+          ? cursorBlocker(dshRunner, health, true)
+          : engineBlocker(health);
     const accounts = blocker ? undefined : accountChoices(engine, health, withEnginePlanUsage(sources.planUsage, engineHealth));
     own.push({
       slug: engine,
@@ -435,6 +462,7 @@ const KEY_VENDORS: Readonly<Record<string, string>> = {
   deepseek: 'DeepSeek',
   [DSH_PRESET_SLUG]: 'DeepSeek',
   moonshot: 'Moonshot',
+  [CURSOR_KEY_PRESET]: 'Cursor',
   glm: 'Z.AI',
   minimax: 'MiniMax',
   qwen: 'Qwen',
@@ -590,14 +618,17 @@ function landingOf(engine: AgentProvider, providers: ProviderChoice[], preferred
 
 /**
  * The New Session hero's engines, in ALL_ENGINES order (Claude Code, Codex, Kimi Code, Antigravity CLI,
- * OpenCode, DeepSeek Harness), each with its credentials and the one a pick of it lands on. An engine
- * with nothing to run on here is left out — except DeepSeek Harness on a runner that could run it:
- * with no DeepSeek key yet it offers the connection instead (a turned-off key does not count, since
- * GET /providers lists none), so "where is DeepSeek Harness?" has an answer in the picker itself.
+ * OpenCode, DeepSeek Harness, Cursor CLI), each with its credentials and the one a pick of it lands on.
+ * An engine with nothing to run on here is left out — except DeepSeek Harness on a runner that could
+ * run it: with no DeepSeek key yet it offers the connection instead (a turned-off key does not count,
+ * since GET /providers lists none), so "where is DeepSeek Harness?" has an answer in the picker itself.
+ * Cursor CLI always has its own sign-in to list, so a runner that can't run it lists it greyed with why;
+ * and it is drawn at all only once a runner of the account knows it (webShowsEngine).
  */
 export function engineChoices(sources: ChoiceSources, preferred: readonly EnginePick[] = []): EngineChoice[] {
+  const fleet = sources.fleet ?? (sources.dshRunner ? [sources.dshRunner] : null);
   return ALL_ENGINES.flatMap((engine): EngineChoice[] => {
-    if (!webShowsEngine(engine)) return [];
+    if (!webShowsEngine(engine, fleet)) return [];
     const providers = engineProviders(engine, sources);
     if (providers.length > 0) return [engineLanding(engine, providers, landingOf(engine, providers, preferred))];
     if (engine === AgentProvider.DSH && sources.dshRunner && dshRunnerState(sources.dshRunner) !== 'updateRunner') {

@@ -1,0 +1,18 @@
+{
+  "created": true,
+  "owner": "dora",
+  "signIn": {
+    "at": "2026-10-17T23:12:24.285+00:00",
+    "ms": 54.8,
+    "port": 13710,
+    "status": 201
+  },
+  "user": {
+    "email": "t05-dora@lab.invalid",
+    "id": "34hjkjcqZwDV28qZAGWFw"
+  },
+  "usersMe": {
+    "id": "34hjkjcqZwDV28qZAGWFw",
+    "status": 200
+  }
+}

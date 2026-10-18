@@ -1,0 +1,5 @@
+limit: pids, in 07191c4093bd as 10001:10001 at 2026-10-17T13:24:42Z
+pids.max: 256, pids.current before: 20
+one process started 236 more threads, then: can't start new thread
+pids.current at the refusal: 256
+pids.events: max 1

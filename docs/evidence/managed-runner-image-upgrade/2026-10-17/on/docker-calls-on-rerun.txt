@@ -1,0 +1,11 @@
+14:32:46	compose version
+14:32:47	inspect --format {{.Image}} orbit-web
+14:32:47	tag sha256:105516e59cdeb5067fc38aac8315906e722d048021269fbaa8b9f55f069f220d orbit-web:previous-release
+14:32:47	compose config --services
+14:32:47	compose config docker-channel
+14:32:47	compose build --build-arg PREVIOUS_RELEASE_IMAGE=orbit-web:previous-release apiserver wiki-worker web docker-channel
+14:33:06	build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA=f899e5fe6d5c851778b11f912d4510cd9314d707 -t orbit-managed-runner:local .
+14:33:09	image inspect -f {{.Id}} orbit-managed-runner:local
+14:33:09	compose up -d --wait apiserver wiki-worker web gateway
+14:33:18	compose up -d --wait --no-deps docker-channel
+14:33:19	compose ps

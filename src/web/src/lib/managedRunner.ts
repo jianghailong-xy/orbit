@@ -5,8 +5,10 @@
 // reading OrbitKit mirrors, so Web, macOS and iOS say the same thing about the same state.
 
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import {
   MANAGED_RUNNER_STATUS_POLL_SECONDS,
+  firstSessionProvider,
   managedRunnerDisplay,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
@@ -83,6 +85,26 @@ export function useManagedRunner(ask = true): { managed: ManagedRunner | null; s
     managed: display && status.data ? { status: status.data, display } : null,
     settled: capabilities.isFetched && (!offered || status.isFetched),
   };
+}
+
+/**
+ * What a first session in the managed default workspace starts on moves while its runner comes up —
+ * the owner adds a key, READY records what it was found ready with — and the workspace list says
+ * it as the draft's default (`lastProvider`, which the server derives): the list is read again
+ * when it moves, so the draft offers what the server would start rather than what the list said
+ * before. Nothing is read on the first answer, or without managed runners.
+ */
+export function useFollowFirstSessionProvider(managed: ManagedRunner | null): void {
+  const qc = useQueryClient();
+  const startsOn = managed ? firstSessionProvider(managed.status) : undefined;
+  const seen = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (startsOn === undefined) return;
+    if (seen.current !== undefined && seen.current !== startsOn) {
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+    }
+    seen.current = startsOn;
+  }, [startsOn, qc]);
 }
 
 /**

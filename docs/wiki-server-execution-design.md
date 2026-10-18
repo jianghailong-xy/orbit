@@ -90,6 +90,7 @@
   - 去掉 Provider 项，改为只读的「Model: System model · <模型名>」，并显示状态：未配置、不可达、key 被拒、worker 未运行，或正常。
   - Workspace 项保留，含义改为"从哪个 workspace（也就是哪台 runner）读仓库"。
 - **Activity**：每次运行（维护、plan 起草/修订、文档构建、导入、核实）显示步骤进度和逐次调用日志（排队时长、耗时、token、错误）。正在排队的请求显示前面还有几个。不再链接到隐藏的任务和会话。
+- **Plan 页**：服务端执行时，在册版本的头部多一个「Update documents」。确认后生成没写完、仓库或条目变了而维护还没轮到，或者空间闲着不再触发维护，owner 都可以自己再要一次生成；运营侧也能在管理区代他再要一次（§5.6）。
 - **健康行**：新增几种原因：「等待 runner 上线」「System model 不可达」「System model 拒绝了 key」「System model 未配置」「wiki worker 未运行」。
 - **导入**：`orbit wiki import` 仍在 runner 上运行，但只负责读文件、注册 note。条目由服务端作业抽取，命令行等作业结束后打印结果。
 - **核实**：Automatic 空间里会话提议的 op，改由服务端作业核实，会话不用再跑 `orbit wiki verify`。这个命令保留，含义变为"请求服务端核实并等待结果"。
@@ -304,6 +305,29 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 | content：模型给不出可解析的结果、服务端拒绝 | 结束作业，计入连续失败；连续 3 次通知 owner（与现在一致） |
 | owner 关闭维护或删除空间 | 作业和它排队中的请求改为 cancelled |
 
+### 5.6 再要一次文档生成（owner 2026-10-17 定）
+
+- **起因**：生产上 cbai 空间确认 v1（34 篇）以后，唯一一次生成死在仓库故障上（`REPO_OP_FAILED`：维护 workspace 的目录不是 git checkout），
+  10 次尝试用完。仓库修好以后的维护都在追赶期，按设计跳过文档；追平以后空间闲着，不再触发维护。生成只能由确认来要，确认又只收草稿，
+  所以谁都没有入口再要一次，至今 0/34。
+- **做什么**：owner 在 Plan 页对在册版本按「Update documents」，服务端排一个和确认要的同一种生成：`docs_build` 作业，owner 发起的优先级，
+  不建任务、不建会话。生成照在册版本写：
+  - 没写过的节写出来；
+  - 材料指纹变了的节、被撤过句的节重写；
+  - 指纹没变的节不动，也不为它们调模型。
+- **运营侧代触发**（owner 选了"所有者 + 运营侧"）：管理员在管理区 Users 某个账号的菜单里选「Update wiki documents…」，挑一个空间、写明理由，
+  服务端为这个账号排同一个生成。
+  - 作业的 `trigger` 记 `support`（迁移 0429 放宽 CHECK），`requested_by_user_id` 记管理员；
+  - 和作业同一个事务写一行管理员的 Activity：`wiki.plan.build_requested`，记下账号、空间、版本、作业和理由。
+  - 只给登录的管理员：个人访问令牌不行，View as 的令牌也不行。不做 CLI：管理路由不收令牌，做 CLI 还要发 runner 版本。
+- **一次一个**：在册版本的生成在排队、等设置或在跑时，再按就答这个生成，不建第二个。查和建在 space 行锁下完成，两次同时按也只出一个。
+- **额度**：生成不是维护运行，不计入 `dailyRunLimit`，也不被它挡（与 §2.3、与确认要的生成相同：每日上限保护的是审阅队列，生成不提议 op）。
+  对 GPU 的压力仍然由全局并发上限和每作业的在途上限控制。
+- **失败**：照 §5.5。infra 退避重试，次数用完以失败结束；有节没写成是 content 失败。两种都不碰维护游标和连续失败，结束以后可以再按。
+- **只在服务端执行时有**：runner 路径（P11 之前）没有这个入口，两条路由都答 `WIKI_RUNNER_EXECUTES`，客户端不画按钮。
+- **客户端**：只做 web（Plan 页的按钮、管理区的对话框）；macOS/iOS 和 Android 不变，文案和共享夹具不动。
+- 合同见 `docs/wiki-contract.md` §21.11（`plan.jobs.rebuild`）。
+
 ## 6. 模型调用（Claude Code 现在隐式做的事，要显式实现）
 
 - **请求**：
@@ -402,6 +426,7 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
 - **`contracts/wiki.contract.json`**：
   - 新增 `systemModel`、`jobs`、`modelQueue`、`repoOps`；
   - 改写 `maintenance.run` / `session` / `list`、`plan.jobs.task` / `run`、`agentSurface.verify`、`articles.cleanClaudeCode`、`import.cli.model`；
+  - 新增 `plan.jobs.rebuild`（§5.6，2026-10-17）；
   - 删除 `space.settings.maintenance.provider`。
 - **文档**：`docs/wiki-contract.md`、`docs/wiki-design.md` 的 §0 和 §8、`docs/configuration.md`、`docs/self-hosting.md`、upgrade skill 的说明。
 

@@ -1,0 +1,25 @@
+== effective configuration 2-after-upgrade at 2026-10-17T12:21:35Z, checkout e7b149183869b2d67ab355016cfecf2ca8bc461e
+-- .env (mode 644; secrets redacted)
+DATABASE_URL="postgresql://orbit:orbit@localhost:5432/orbit?schema=public"
+JWT_SECRET=<redacted>
+PROVIDER_SECRET_KEY=<redacted>
+PORT=3000
+PUBLIC_ORIGIN="http://localhost:2086"
+-- data/managed-runners
+(absent)
+-- apiserver: managed runner environment
+ORBIT_MANAGED_RUNNERS_PROFILE=/var/lib/orbit-managed-runners/profile.json
+ORBIT_MANAGED_RUNNERS_ENABLED=false
+-- apiserver: mounts
+bind /dev/null -> /var/lib/orbit-managed-runners rw=false
+
+-- apiserver: what it said about managed runners at start
+-- docker-channel: (no container)
+-- network orbit-managed-runners: (absent)
+-- docker compose ps
+orbit-apiserver	orbit-apiserver:local	Up 25 seconds (healthy)
+orbit-gateway	nginx:alpine	Up 11 minutes (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 14 minutes
+orbit-postgres	postgres:16-alpine	Up 15 minutes (healthy)
+orbit-web	orbit-web	Up 14 seconds (healthy)
+orbit-wiki-worker	orbit-apiserver:local	Up 14 seconds

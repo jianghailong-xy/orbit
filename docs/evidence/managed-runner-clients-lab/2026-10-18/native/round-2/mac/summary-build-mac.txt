@@ -1,0 +1,60 @@
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetCompose]' passed (33.043 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetSession]' passed (28.739 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseCompose]' passed (29.001 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseSession]' passed (28.660 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingCompose]' passed (33.183 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingSession]' passed (30.600 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test04WenFirstSessionOffered]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test04WenFirstSessionOffered]' passed (53.274 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test05WenPreparingAnswered]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test05WenPreparingAnswered]' passed (119.177 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test06WenSleepWake]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test06WenSleepWake]' passed (103.699 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test07WenRestartsFailedRetried]' started.
+    t =   157.33s Added attachment named '07b-failed-stopped-too-often'
+    t =   257.37s Added attachment named 'verdict-07-wen-restarts-failed-retried.json'
+Test Case '-[T07MacProbeUITests.ReplayTests test07WenRestartsFailedRetried]' passed (258.548 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test08NiaFirstSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test08NiaFirstSession]' passed (167.170 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test09NiaSleepWake]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test09NiaSleepWake]' passed (116.239 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' started.
+    t =   164.59s Added attachment named '10b-failed-kept-running-out-of-memory'
+Test Case '-[T07MacProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' passed (188.760 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test11NiaQuotaWait]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test11NiaQuotaWait]' passed (116.132 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test12NiaVolumeInUse]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test12NiaVolumeInUse]' passed (93.523 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test13NiaVolumeDeleted]' started.
+    t =    42.86s Added attachment named '13b-failed-volume-gone-no-retry'
+Test Case '-[T07MacProbeUITests.ReplayTests test13NiaVolumeDeleted]' passed (46.478 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test14WenEnvironmentUnavailable]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test14WenEnvironmentUnavailable]' passed (28.378 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test15RootOnOwnWorkspace]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test15RootOnOwnWorkspace]' passed (31.136 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test16RootOnSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test16RootOnSession]' passed (28.750 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test17DockerFirstSessionThenAtTheCap]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test17DockerFirstSessionThenAtTheCap]' passed (177.784 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test18DockerWakeAtTheCap]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test18DockerWakeAtTheCap]' passed (102.459 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (115.750 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:25: error: -[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry] : failed - 20-docker-volume-restored-retry-00: "Managed runner asleep" never showed in 120.0 s
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:45: error: -[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry] : failed - 20-docker-volume-restored-retry-01: no composer to type into
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:56: error: -[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry] : Failed to get matching snapshot: Application io.orbitd.t07macprobe is not running
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' failed (188.836 seconds).
+Test Suite 'ReplayTests' failed at 2026-10-18 07:40:57.046.
+	 Executed 23 tests, with 3 failures (0 unexpected) in 2119.322 (2119.338) seconds
+Test Suite 'T07MacProbeUITests.xctest' failed at 2026-10-18 07:40:57.046.
+	 Executed 23 tests, with 3 failures (0 unexpected) in 2119.322 (2119.339) seconds
+Test Suite 'All tests' failed at 2026-10-18 07:40:57.047.
+	 Executed 23 tests, with 3 failures (0 unexpected) in 2119.322 (2119.340) seconds
+** TEST FAILED **

@@ -1,0 +1,80 @@
+{
+  "at": "2026-10-18T09:23:19.259+00:00",
+  "changes": [
+    [
+      "2026-10-18T09:22:53.718+00:00",
+      {
+        "attempt": 1,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 9,
+        "management_state": "DRAINING",
+        "pod": "8b95df69",
+        "reason": null,
+        "revision": 132
+      }
+    ],
+    [
+      "2026-10-18T09:23:10.008+00:00",
+      {
+        "attempt": 1,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 9,
+        "management_state": "DRAINING",
+        "pod": "8b95df69",
+        "reason": null,
+        "revision": 132
+      }
+    ],
+    [
+      "2026-10-18T09:23:13.820+00:00",
+      {
+        "attempt": 1,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 9,
+        "management_state": "DRAINING",
+        "pod": "8b95df69",
+        "reason": null,
+        "revision": 134
+      }
+    ],
+    [
+      "2026-10-18T09:23:14.367+00:00",
+      {
+        "attempt": 1,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 9,
+        "management_state": "DRAINING",
+        "pod": "8b95df69",
+        "reason": null,
+        "revision": 135
+      }
+    ],
+    [
+      "2026-10-18T09:23:19.258+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 10,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 136
+      }
+    ]
+  ],
+  "owner": "amy",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

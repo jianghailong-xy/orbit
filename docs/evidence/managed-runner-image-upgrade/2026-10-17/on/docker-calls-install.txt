@@ -1,0 +1,13 @@
+13:23:48	compose version
+13:23:48	build -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA=c16d115b38900ba4c20237d060ecb0c004ac7051 -t orbit-managed-runner:local .
+13:43:14	image inspect -f {{.Id}} orbit-managed-runner:local
+13:43:14	network inspect orbit-managed-runners
+13:43:14	network create --driver bridge --opt com.docker.network.bridge.enable_icc=false orbit-managed-runners
+13:43:14	network inspect -f {{index .Options "com.docker.network.bridge.enable_icc"}} orbit-managed-runners
+13:43:14	network inspect -f {{range .IPAM.Config}}{{.Gateway}} {{end}} orbit-managed-runners
+13:43:14	compose build
+13:55:11	compose up -d --wait --wait-timeout 300 postgres
+13:55:45	compose run --rm --no-deps apiserver sh -c cd src/apiserver && node "$(node -p 'require.resolve("prisma/build/index.js")')" migrate deploy
+13:59:32	compose up -d --wait --wait-timeout 900
+14:00:05	compose ps
+14:00:05	compose logs apiserver

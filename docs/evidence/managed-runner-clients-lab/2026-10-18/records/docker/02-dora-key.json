@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-18T06:30:14Z",
+  "baseUrl": "http://172.18.0.1:13742/anthropic",
+  "defaultModel": "deepseek-v4-pro",
+  "owner": "dora",
+  "slug": "deepseek"
+}

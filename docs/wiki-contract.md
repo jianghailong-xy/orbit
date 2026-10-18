@@ -1598,6 +1598,7 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   - `POST /api/wiki/spaces/:id/plan/edits`：`{ baseVersion, docSlug, doc }` 改一整篇（新 slug 即改名），或
     `{ baseVersion, docSlug, sectionKey, section }` 改其中一节，产生新草稿；
   - `POST /api/wiki/spaces/:id/plan/versions/:version/confirm`：确认草稿，原已确认的版本被取代；不是草稿的 `WIKI_PLAN_STALE`；
+  - `POST /api/wiki/spaces/:id/plan/versions/:version/build`：对在册版本再要一次生成，只在服务端执行时开放，见 21.11；
   - `POST /api/wiki/plan-proposals/:id/decide`：`{ action: accept | reject, note? }`；
   - `POST /api/wiki/spaces/:id/plan/redraft`：`{ instructions? }`，要一份草稿（带修改意见就是修订），见 21.7。
 - 每次存下版本、确认、提出或决定建议，事务提交后发一次 `wiki.changed`（只带 space id）。
@@ -1616,7 +1617,9 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 - **事实触发，不用时钟**（`triggers`）：`space_created`——新建 space（`POST /api/wiki/spaces`，或会话提议时隐式建的 space）；
   `owner`——owner 在 plan 页要求（`POST /api/wiki/spaces/:id/plan/redraft`，只认 JWT，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
   body 带 `instructions` 就是修订，最多 `rules.instructionsMaxChars` 4000 字，不带就是起草），或者确认一个版本
-  （`POST /api/wiki/spaces/:id/plan/versions/:version/confirm`，要的是按它生成文档：`build`）。
+  （`POST /api/wiki/spaces/:id/plan/versions/:version/confirm`，要的是按它生成文档：`build`），或者对在册版本再要一次生成
+  （`POST …/plan/versions/:version/build`，21.11，只在服务端执行时开放）。`support`——管理员为支持再要一次（`POST /api/admin/wiki/spaces/:id/plan/build`，
+  21.11，迁移 0429）。
 - **不重复**：一个 space 至多一个没结束的起草或修订（部分唯一索引）。再次要求时回答已有的那个（`{ created: false, job }`），并重新问它现在能不能建；
   已建出、但任务已结束或已删除而运行没报结果的，先记为失败，不挡后来的要求。生成作业（迁移 0340）：一个 space 至多一个**等着建**的生成
   （`queued` 或 `held`，另一个部分唯一索引）；再次确认时回答它，并把它指向更新的版本；已建出、正在跑的生成不挡——它写它被建时的版本，
@@ -1672,6 +1675,7 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 
 - **谁要的**：owner 确认一个版本（`POST …/plan/versions/:version/confirm`）是一个事实。确认提交之后，服务端据此要一个生成作业（`trigger:
   owner`，`version` 为刚确认的版本），失败了也不影响确认本身；作业照 21.7 建任务、排队、held、不计每日次数、维护关着也能跑。
+  确认以外，owner 和管理员还可以对在册版本再要一次（21.11），得到的是同一种生成作业。
 - **任务**：标题 `Wiki documents: <space 标题>`，描述是指令——跑一次 `orbit wiki docs build --space <id>`，再汇报写了、没变、失败的篇与节、
   token 与耗时（Bash 调用同样给 `timeout: 18000000`；被截断时不再跑，已写的节保留，下一次生成原样不动，16.5）；验收命令同样是 `orbit wiki plan check --space <id> --job <id>`：作业以 succeeded 结束、它写的版本是 owner 确认过的，才通过。
 - **怎么跑**：`orbit wiki docs build` 在这个任务的会话里先问 `GET …/plan/job`——本会话的作业是生成作业，就按已确认的 plan 写全部文档（22.11），
@@ -1735,6 +1739,136 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
 - **两边同一个答案**：`src/shared/src/wiki-plan.fixture.json` 由 `src/runner-go/wiki_plan_fixture_test.go` 从一个真实的 checkout 按 runner 的
   方式读出，`src/apiserver/src/wiki-worker/wiki-plan-golden.spec.ts` 按服务端的方式读——行格式读回、引用、材料、每一步的 prompt、每一轮
   的草稿、检查闸的错误和仓库检查，逐字节相同。
+
+### 21.11 再要一次生成：按在册版本补写文档（`plan.jobs.rebuild`，owner 2026-10-17 定）
+
+JSON 里是 `plan.jobs.rebuild`、`plan.routes.build` 和 `plan.jobs.triggers.support`；迁移 `0429_wiki_plan_job_support_trigger`；服务端在
+`wiki/wiki-plan.ts`（`WikiPlans.requestBuild`、`requestBuildForSupport`、`supportSpaces`）与 `wiki/wiki-plan-job.ts`（`requestWikiPlanRebuild`），
+user 门在 `wiki/wiki-plan.controller.ts`，管理区的两条在 `wiki/wiki-admin.controller.ts`；共享类型在 `src/shared/src/wikiPlan.ts`
+（`WIKI_PLAN_REBUILD`、`WikiPlanBuildResult`、`WikiSupportSpaces`）。pg spec 是 `wiki/wiki-plan-rebuild.pg.spec.ts`（两道门、拒绝、幂等、
+每日上限、审计）和 `wiki-worker/wiki-docs-build-job.pg.spec.ts` 第 13 例（失败的生成再要一次后，worker 用 System model 写出文档）。
+
+**起因**（P10，2026-10-16）
+
+服务端执行的 cbai 空间，owner 确认 v1（34 篇）后，唯一一次生成以 failed / infra 结束：`REPO_OP_FAILED`，维护 workspace 的目录不是
+git checkout，10 次尝试用完（§24.4）。仓库修好以后的三次维护都在追赶期，按 19.8 整步跳过文档；追平以后空间没有新事实，触发器不再建运行
+——0/34 篇。生成只由确认来要（21.9），确认只收草稿（再确认在册版本是 `WIKI_PLAN_STALE`）；控制器没有别的路由能要生成，客户端的失败
+卡片只说「Wiki maintenance writes what’s left on its next run」。任何人都没有入口再要一次。
+
+**两道门**
+
+| 门 | 路由 | 谁 |
+|---|---|---|
+| owner | `POST /api/wiki/spaces/:id/plan/versions/:version/build`，没有 body（给了也只能是 `{}`） | space 的 owner 本人：JWT、`WikiRolloutGuard`，个人访问令牌不行（`OWNER_INTERACTIVE`，plan 的每条路由都是）；带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`，在读任何东西之前拒；View as 的令牌是 `IMPERSONATION_READ_ONLY`；别的 owner 的 space 和版本是普通的 404 |
+| 运营侧 | `POST /api/admin/wiki/spaces/:id/plan/build`，body `{ reason }` | 登录的管理员（`AdminRoleGuard`）：个人访问令牌不行（`PatForbidden('ADMIN')`），View as 的令牌也不行（`IMPERSONATION_FORBIDDEN`）；member 是 403 |
+
+管理区另有一条读：`GET /api/admin/wiki/users/:id/spaces`，给管理员挑空间用（见下）。
+
+**只在服务端执行时开放**
+
+- 执行器开关没把这个账号交给服务端（`runner`，或 `canary` 名单外）时，两道门都回 409 `WIKI_RUNNER_EXECUTES`，什么都不写。
+- runner 路径在删除之前行为不变（P11）：那里的生成照旧只由确认来要（21.9），维护补写剩下的（19.6）。
+- 客户端只在 `serverExecutes` 为真时画 owner 的动作（§24.5 的「读」）。
+
+**要的是哪一版**
+
+- owner 门的 `:version` 必须是 space 在册（confirmed）的那一版：
+  - 没有这一版：404；
+  - space 没有在册的版本：`WIKI_PLAN_UNCONFIRMED`；
+  - 这一版是草稿或已被取代：`WIKI_PLAN_STALE`，消息说在册的是哪一版，或者说草稿要先确认。
+
+  所以停在旧版本页面上按，要不出别的版本的生成。
+- 运营侧不带版本，总是在册的那一版；没有就是 `WIKI_PLAN_UNCONFIRMED`。
+
+**建什么**
+
+和确认要的生成是同一种作业（21.7 的 `build`）：`trigger` 是 `owner` 或 `support`，`version` 为在册版本，`requested_by_user_id` 为提出的人。
+照 22.13 建成 `docs_build` wiki_job：
+
+- 优先级 1（`jobs.priority`），排在后台维护和文章之前；
+- 不建任务，不建会话，不占 runner 槽位；
+- space 的维护没有 workspace 时，照样 held `no_maintenance_workspace`；
+- 维护关着也能跑（`notAMaintenanceRun`）。
+
+构建照 22.13 写：写出没写过的节，重写材料指纹变了的节和被撤过句（`stale_at`）的节，指纹没变的节原样不动、不问模型（22.5）。
+所以全部写完以后再要一次，花的只是一次快照和原文缓存里的读取。
+
+**幂等**（`plan.jobs.rebuild.idempotent`）
+
+在 space 行的锁（`FOR NO KEY UPDATE`，确认和编辑取的同一把）下先查后建：
+
+- **先收尾**：made 的生成，它的任务或 wiki_job 已经结束而没有说怎么结束的，照 21.7 先记为失败，不挡这一次。
+- **有就答它**：在册版本有一个没结束的生成——`queued`、`held`，或 `made` 而它的 wiki_job 还在 queued / running / waiting（开关切换前
+  建出的任务，就看任务是否结束）——就答它（`created: false`）。held 的那个再问一次现在能不能建：owner 刚配好 workspace 的，这一下就建出来。
+- **还有等着的**：space 有一个等着建的生成（queued 或 held，一个 space 至多一个）、指向更早的版本时，把它指向在册版本、答它，和确认的请求一样。
+- **没有就建**：记下一个新的生成并立即推进（`created: true`）。
+
+两次同时到达，锁保证只建一个、两次答同一个。确认的请求不取这把锁：它在这期间记下等着的生成时，这边的插入撞上部分唯一索引（P2002），
+整个事务回滚，再问一次就答它。和确认的区别：确认碰上一个在跑的旧版本生成，会再排一个等着的（21.7「不重复」）；这里碰上的是在册版本
+自己在跑的生成，答的就是它。
+
+**限流与 `dailyRunLimit`**
+
+生成不是维护运行（`notAMaintenanceRun` 照旧）：不计入 `settings.maintenance.dailyRunLimit`，也不被它挡。依据：
+
+- owner 2026-09-29 定，owner 的起草和确认要的生成不计每日次数；
+- 每日上限保护的是审阅队列（设计 §2.3），生成不提议 op；
+- 服务端这条路上，`wikiMaintenanceRunsToday` 只数运行行，生成没有运行行。
+
+限住它的是：
+
+- 一个空间至多一个在路上的生成（上面的幂等）；
+- 同一空间同时只跑一个作业（§24.2）；
+- 部署的全局并发 `ORBIT_WIKI_MODEL_CONCURRENCY`，以及每作业 4 个在途请求（§25.2）。
+
+**失败**
+
+照 docs_build（§24.4、22.13）：
+
+- **平台的失败**（runner 不在或读不到仓库、请求等待超限、worker 崩溃）：infra 退避重试，第 10 次以 `failed` / `infra` 结束；
+- **worker 停机**：交还，不计次；
+- **有节没写成**：其余节照样写完，以 `failed` / `content` 结束。
+
+plan 作业都以 failed 结束、写明原因，在册版本页的卡片照 21.7 显示，两道门随之又能用。生成没有运行行，不碰维护游标和 `consecutive_failures`。
+
+**审计**（`plan.jobs.rebuild.audit`）
+
+- 谁、何时要的：记在 plan 作业行上（`trigger`、`requested_by_user_id`、`created_at`，读出来是 `requestedAt`）。
+- 做了什么：在它的 wiki_job、模型请求和仓库操作行上，Activity 的 Runs 卡读的就是这些（§24.8）。
+- owner 自己的动作不写 Activity 行，与确认、Redraft 一致。
+- 运营侧的每一次请求，只要答的是一个作业（新建的，或已在路上的），就在同一个事务里写一行管理员的 Activity：`type` 为
+  `wiki.plan.build_requested`，`actor_id` 是管理员，`credential_kind` 为 `LOGIN`，payload 是 `{ userId, spaceId, version, planJobId, created, reason }`。
+  被拒的请求不写。
+
+**运营侧的请求与读**（`plan.jobs.rebuild.support`、`supportSpaces`）
+
+- `reason`：去掉首尾空白后 1 到 `rules.reasonMaxChars`（500）个字符；没有、空白、过长或带了别的字段都是 `WIKI_SCHEMA`（400），什么都不写。
+- 不是谁的 space：404；wiki 对它的 owner 关着（`agentSurface.rollout`）：`WIKI_DISABLED`；`WIKI_RUNNER_EXECUTES`、`WIKI_PLAN_UNCONFIRMED` 同 owner 门。
+- 回答 `{ created, job, ownerId }`（`WikiPlanSupportBuildResult`）。
+- 不做 CLI：管理区从不对访问令牌开放，做 CLI 还要发 runner 版本。
+- `GET /api/admin/wiki/users/:id/spaces`：`{ userId, serverExecutes, spaces: [{ id, title, confirmedVersion, docs: { written, total } | null, building }] }`，
+  这个账号的空间按创建先后，只有挑一个来生成需要的：不含条目、文档、会话和 plan 的内容。账号不存在是 404。
+
+**回答**
+
+owner 门回 `{ created, job }`（`WikiPlanBuildResult`，和 redraft 的形状相同），`job` 是 plan 读里的形状（21.7）。事务提交后发一次
+`wiki.changed`（只带 space id）。
+
+**客户端**（只做 Web，owner 2026-10-17 定）
+
+- **Plan 页**：显示在册版本、服务端执行时，头部动作行在 `Redraft…` 后面多一个 `Update documents`；在册版本有排队、held 或在跑的生成时置灰
+  （卡片说它在做什么）。按下的提示：建出的是「Updating the documents of v<n>」，已有的是「The documents are already being written」，
+  失败是「Couldn’t update the documents」，带服务端的消息。
+- **管理区**：Users 每个账号的菜单在 `Access tokens` 后面多一个 `Update wiki documents…`：对话框列出这个账号的空间（在册版本、写了几篇），
+  没有在册版本或已有生成在路上的不能选，填了理由才能按 `Update documents`；账号由 runner 路径执行时说明并且一个也不能选。
+- **不变的**：失败卡片的文案。macOS/iOS 与 Android 本期不画这两个动作，文案和共享夹具（`wiki-docs.fixture.json`）都不动。
+
+**census**
+
+- `tenant-isolation-cases.ts` 有三条路由的用例：owner 门上别的账号的 space 404、什么都不写；管理区两条对 member 403；
+- PAT：owner 门由控制器的 `OWNER_INTERACTIVE` 声明（`pat-owner-channel-routes.ts` 列着它），管理区由 `ADMIN`；
+- 查建事务在 db-write inventory 里（`wiki/wiki-plan-job.ts#requestRebuild`）；
+- 迁移 0429 在迁移账本里。
 
 ## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
 
@@ -1979,6 +2113,7 @@ JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.serv
   所在的 runner 读仓库。不检查 provider，也不排在列表里未结束的任务后面——没有哪个会话的模型参与。迁移 0405 把 0338 的
   `wiki_plan_job_made_chk` 改写成「made / ended 的作业有一个制造者：任务或 wiki 作业」，否则这样的 plan 作业根本建不出来。
   开关改回 runner 时，还在排队、服务端没开始的这种作业，会在下一次要生成时被取消，plan 作业以失败结束并写明原因。
+  21.11 的再要一次也这样排：同一种 plan 作业，同一个 `docs_build` 作业。
 - **仓库**：先请求一次 `snapshot`（空间已有这个提交的快照时 runner 回 `skipped`），它给出的提交就是 origin/main——runner 的 fetch，和
   命令自己的 fetch 一样。各节来源点名的文件，在这个提交上**整个**读回（不带 section；owner 2026-10-08）：按快照里的大小打包，一次操作
   至多 `repoOps.read.operationBytes`（4 MiB），超过 `inlineBytes` 的回答走分片（§26.4）；服务端按 `(space, sha, path)` 缓存，同一份原文

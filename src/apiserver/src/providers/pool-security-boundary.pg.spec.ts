@@ -54,7 +54,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { BadRequestException, Module, RequestMethod, ValidationPipe } from '@nestjs/common';
+import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -572,13 +572,14 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     assert.equal(claimed.sessionId, sessionId);
     return claimed;
   }
+  /** One poll of the runner's inbox. */
+  const dequeue = (runnerApi as unknown as {
+    dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
+      { kind: string; env?: Record<string, string> } | null
+    >;
+  }).dequeueTurn.bind(runnerApi);
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(sessionId: string, runnerId: string) {
-    const dequeue = (runnerApi as unknown as {
-      dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
-        { kind: string; env?: Record<string, string> } | null
-      >;
-    }).dequeueTurn.bind(runnerApi);
     for (let polls = 0; polls < 4; polls += 1) {
       const turn = await dequeue(sessionId, runnerId, null);
       assert.ok(turn, 'the inbox handed out nothing');
@@ -812,14 +813,16 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
         status: 'PENDING',
       },
     });
-    // Nothing of his holds the slug, so the reload is refused rather than re-spawned on the Claude default:
-    // his runner is handed nothing, and the reload is not given out.
-    await assert.rejects(dequeueReload(onHers, at.runnerId), (e: unknown) => e instanceof BadRequestException);
+    // Nothing of his holds the slug, so the reload is not re-spawned on the Claude default: his runner is
+    // handed nothing — the reload is answered without being given out — and the session says why, in the
+    // words the claim holds it with.
+    assert.equal(await dequeue(onHers, at.runnerId, null), null, 'his runner was handed the reload');
     assert.deepEqual(
       await db.conversationTurn.findUniqueOrThrow({ where: { id: queuedReload.id }, select: { status: true, deliveredAt: true } }),
-      { status: 'PENDING', deliveredAt: null },
+      { status: 'ANSWERED', deliveredAt: null },
     );
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: onHers } })).error, PROVIDER_UNAVAILABLE_ERROR);
   });
 
   await t.test("(E) a person added to a pool of one's own ChatGPT accounts runs on its account too — a person's token, no login token of theirs, the gateway reaching the ChatGPT backend on that account; the owner's same three as the positive control", async () => {

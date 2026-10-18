@@ -13,10 +13,11 @@ import { spawnSync } from 'node:child_process';
 import { release, cpus } from 'node:os';
 import { ScenarioContext, realCursorState } from './lib/harness.mjs';
 import { writeProtocol } from './lib/record.mjs';
-import { VERSION, PINNED_VERSION, TARBALL_SHA256, AGENT, P0_ROOT, readApiKey, promptsSpent, PROMPT_CAP, LEDGER, LEDGER_NAME, LEDGERS } from './lib/env.mjs';
+import { VERSION, PINNED_VERSION, TARBALL_SHA256, ACTIVE_TARBALL_SHA256, AGENT, P0_ROOT, readApiKey, promptsSpent, PROMPT_CAP, LEDGER, LEDGER_NAME, LEDGERS } from './lib/env.mjs';
 import { zeroA } from './scenarios/zero-a.mjs';
 import { zeroB } from './scenarios/zero-b.mjs';
 import { real } from './scenarios/real.mjs';
+import { macos } from './scenarios/macos.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
@@ -33,7 +34,7 @@ const defaultFixtures = VERSION !== PINNED_VERSION ? join(P0_ROOT, 'fixtures', V
   : LEDGER_NAME === 'p0a' ? join(repoRoot, 'src', 'runner-go', 'testdata', 'cursor') : join(repoRoot, 'src', 'runner-go', 'testdata', 'cursor', LEDGER_NAME);
 const out = opt('--out') ?? (selftest ? join(P0_ROOT, 'selftest', 'evidence') : defaultOut);
 const fixturesDir = opt('--fixtures') ?? (selftest ? join(P0_ROOT, 'selftest', 'fixtures') : defaultFixtures);
-const all = [...zeroA, ...zeroB, ...real];
+const all = [...zeroA, ...zeroB, ...real, ...(process.platform === 'darwin' ? macos : [])];
 
 if (args.includes('--list')) {
   for (const s of all) console.log(`${s.name.padEnd(44)} real prompts: ${s.real}`);
@@ -45,12 +46,22 @@ const only = opt('--only')?.split(',').map(s => s.trim()).filter(Boolean);
 const summaryOnly = args.includes('--summary-only');
 const selected = summaryOnly ? [] : all.filter(s => (only ? only.includes(s.name) : args.includes('--zero') ? s.real === 0 : selftest ? s.real > 0 : true));
 if (only) for (const n of only) if (!all.some(s => s.name === n)) { console.error(`unknown scenario: ${n}`); process.exit(2); }
-if (process.platform !== 'linux' || process.arch !== 'x64') { console.error('P0a covers linux/x64 only'); process.exit(2); }
+const validPlatforms = [['linux', 'x64'], ['darwin', 'arm64']];
+if (!validPlatforms.some(([os, arch]) => process.platform === os && process.arch === arch)) { console.error('P0 covers linux/x64 and darwin/arm64 only'); process.exit(2); }
 
 const version = spawnSync(AGENT, ['--version'], { env: { PATH: '/usr/bin:/bin', HOME: join(P0_ROOT, 'version-home') }, encoding: 'utf8' });
 if (version.status !== 0 || version.stdout.trim() !== VERSION) { console.error(`not the pinned CLI: ${version.stdout || version.error}`); process.exit(2); }
-const key = readApiKey();
-if (!key) { console.error('no Cursor API key at the configured key file; ask the owner to place it'); process.exit(2); }
+const key = selftest ? null : readApiKey();
+// --no-key-ok: run only the scenarios that never need the key (needsKey === false). Selected scenarios
+// that need the key are skipped and reported, and the exit code stays non-zero for them.
+const noKeyOk = args.includes('--no-key-ok');
+const skippedNoKey = [];
+if (!key && !noKeyOk && !selftest) { console.error('no Cursor API key at the configured key file; ask the owner to place it'); process.exit(2); }
+const selectedToRun = !key && !selftest ? selected.filter(s => {
+  const needs = s.needsKey !== false;
+  if (needs) skippedNoKey.push(s.name);
+  return !needs;
+}) : selected;
 const needed = selected.reduce((a, s) => a + s.real, 0);
 const spent = promptsSpent().length;
 if (!selftest && spent + needed > PROMPT_CAP) { console.error(`this selection needs ${needed} real prompts but only ${PROMPT_CAP - spent} of ${PROMPT_CAP} remain in ledger ${LEDGER_NAME}`); process.exit(2); }
@@ -68,7 +79,7 @@ mkdirSync(fixturesDir, { recursive: true });
 const before = realCursorState();
 const shared = {};
 let failed = 0;
-for (const s of selected) {
+for (const s of selectedToRun) {
   const ctx = new ScenarioContext({ name: s.name, runId, runRoot, fixturesDir, key, shared });
   const startedAt = new Date().toISOString();
   process.stdout.write(`${s.name} … `);
@@ -99,13 +110,14 @@ const ledger = promptsSpent().map(e => ({ n: e.n, at: e.at, scenario: e.scenario
 // The ledger's copy goes with the results that spent from it; a directory of zero-prompt runs gets none.
 if (results.some(r => r.realPrompts.length > 0)) writeFileSync(ledgerFile, JSON.stringify({ ledger: LEDGER_NAME, task: LEDGERS[LEDGER_NAME].task, cap: PROMPT_CAP, spent: ledger.length, model: 'Auto (default[])', entries: ledger }, null, 1) + '\n');
 const summary = {
-  cli: { version: VERSION, pinned: VERSION === PINNED_VERSION, tarballSha256: TARBALL_SHA256, launcherSha256: sha(join(dirname(AGENT), 'cursor-agent')), indexJsSha256: sha(join(dirname(AGENT), 'index.js')) },
+  cli: { version: VERSION, pinned: VERSION === PINNED_VERSION, tarballSha256: ACTIVE_TARBALL_SHA256, launcherSha256: sha(join(dirname(AGENT), 'cursor-agent')), indexJsSha256: sha(join(dirname(AGENT), 'index.js')) },
   platform: { os: process.platform, arch: process.arch, kernel: release(), cpus: cpus().length, harnessNode: process.version },
   orbitCommit: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout.trim(),
   lastRunId: runId,
   ledger: LEDGER_NAME,
   realPromptsSpent: ledger.length,
   realPromptCap: PROMPT_CAP,
+  skippedNoKey,
   realPromptsInTheseResults: results.reduce((a, r) => a + r.realPrompts.length, 0),
   realCursorDirsBefore: before,
   realCursorDirsAfter: realCursorState(),
@@ -140,7 +152,7 @@ const manifest = {};
 const walk = d => { for (const n of readdirSync(d, { withFileTypes: true })) { const f = join(d, n.name); n.isDirectory() ? existsSync(join(f, 'summary.json')) || walk(f) : n.name !== 'manifest.json' && (manifest[relative(out, f)] = sha(f)); } };
 walk(out);
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1) + '\n');
-console.log(`\n${selected.length - failed}/${selected.length} selected scenarios passed on ${VERSION}; evidence in ${relative(repoRoot, out)}; real prompts spent so far ${ledger.length}/${PROMPT_CAP} (ledger ${LEDGER_NAME}: ${LEDGER})`);
-process.exit(failed ? 1 : 0);
+console.log(`\n${selectedToRun.length - failed}/${selectedToRun.length} selected scenarios passed on ${VERSION}${skippedNoKey.length ? `, ${skippedNoKey.length} skipped (no key): ${skippedNoKey.join(', ')}` : ''}; evidence in ${relative(repoRoot, out)}; real prompts spent so far ${ledger.length}/${PROMPT_CAP} (ledger ${LEDGER_NAME}: ${LEDGER})`);
+process.exit(failed || skippedNoKey.length ? 1 : 0);
 
 function sha(f) { return existsSync(f) ? createHash('sha256').update(readFileSync(f)).digest('hex') : null; }

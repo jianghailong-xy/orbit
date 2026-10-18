@@ -236,6 +236,12 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { jobId: of.runner.integrationJobId }, body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner, phase: 'CHECK' } }),
   },
+  // The claim given back, named as the result below names it. A's own release puts the job back in
+  // the queue, after which the result is A's claim that moved on: both reach the job.
+  'POST /runner/integration-jobs/:jobId/release': {
+    as: RUNNER,
+    request: (of) => ({ params: { jobId: of.runner.integrationJobId }, body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner } }),
+  },
   // With the claim's own lease owner and generation: a machine that learned them is still not A's.
   'POST /runner/integration-jobs/:jobId/result': {
     as: RUNNER,

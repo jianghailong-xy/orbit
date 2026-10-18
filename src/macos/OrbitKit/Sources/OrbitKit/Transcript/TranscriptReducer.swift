@@ -739,8 +739,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // that turn's durable `user` event. Never resurrect such a stale row below the transcript.
         for turn in turns where !deliveredTurnIDs.contains(turn.turnId) {
             // The receipt for a message written into the running turn that never made it: a steer
-            // that is over, which the queue never listed and this end has no line for. It stays out
-            // of the tail, as it always has.
+            // that is over, no turn of the queue's. Drawn after everything still waiting, below.
             if turn.delivery != nil { continue }
             let incomingAttachments = turn.attachments?.map {
                 TurnAttachment(id: $0.id, mime: $0.mimeType)
@@ -842,6 +841,41 @@ public struct TranscriptReducer: Sendable, Codable {
             } else {
                 reconciled.append(bubble)
             }
+        }
+        // The reader's own messages only the server's receipt says did not land — refused or
+        // stranded before any runner echoed them — at the end of the tail, after everything still
+        // waiting: nothing else will ever draw one, and it is the one record of what was typed (web
+        // parity: `queuedTurnsOutsideTranscript` and `QueuedTurnMeta`). Not one the conversation or
+        // the tray holds, read after the receipts above settled theirs: its echo says how it came
+        // out. Not one Orbit filed, which stays out of sight as it always has.
+        let echoed = Set(state.items.compactMap { item -> String? in
+            if case .user(let b) = item { return b.turnId }
+            return nil
+        }).union(state.unreadSteers.compactMap(\.turnId))
+        for turn in turns where turn.delivery != nil && !echoed.contains(turn.turnId) {
+            // The placeholder a runner's report already marked undelivered keeps its row.
+            var bubble = previous.first { $0.turnId == turn.turnId }
+                ?? UserBubble(id: "receipt-\(turn.turnId)", text: turn.content, pending: false)
+            bubble.text = turn.content
+            if let attachments = turn.attachments {
+                bubble.attachments = attachments.map { TurnAttachment(id: $0.id, mime: $0.mimeType) }
+            }
+            bubble.turnId = turn.turnId
+            bubble.ts = turn.createdAt ?? bubble.ts
+            bubble.pending = false
+            bubble.queued = false
+            bubble.steer = SteerDelivery.isSteerKind(turn.kind)
+            bubble.shell = turn.kind == "shell"
+            bubble.cards = turn.cards
+            bubble.authoredByOrbit = turn.authoredByOrbit == true
+            bubble.delivery = turn.delivery
+            bubble.undelivered = turn.delivery == "failed"
+            bubble.receipt = true
+            bubble.deliveryCode = turn.deliveryCode
+            bubble.deliveryReason = turn.deliveryReason
+            guard SteerDelivery.isReadersOwn(bubble) else { continue }
+            reconciled.removeAll { $0.turnId == turn.turnId }
+            reconciled.append(bubble)
         }
         state.accepted = accepted
         state.queued = reconciled

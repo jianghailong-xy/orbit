@@ -1,0 +1,250 @@
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c is ready to build and test
+==> building the test tree (rm -rf build first)
+==> provisioning pccspec-pg-904851-14216 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:34131, system_identifier=7697782010974892073
+==> prisma migrate deploy (template pccspec_tpl)
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> 428 migrations applied
+########## managed-runner-sign-in.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697782010974892073 version=16.15
+# Subtest: managed runners at sign-in: off changes nothing; on, sign-in records intent and the first session runs on a supplied runtime
+    # Subtest: (A) off — absent, then explicitly false: bootstrap and sign-ins answer as before, and nothing managed is written
+    ok 1 - (A) off — absent, then explicitly false: bootstrap and sign-ins answer as before, and nothing managed is written
+      ---
+      duration_ms: 2398.570498
+      type: 'test'
+      ...
+    # Subtest: (B) boot: enabled with a valid profile, over the fake cluster, in a scrubbed environment
+    ok 2 - (B) boot: enabled with a valid profile, over the fake cluster, in a scrubbed environment
+      ---
+      duration_ms: 489.74481
+      type: 'test'
+      ...
+    # Subtest: (B1) bootstrap and login are the sign-ins; opening an account, refresh, logout, a password change and the reads are not
+    ok 3 - (B1) bootstrap and login are the sign-ins; opening an account, refresh, logout, a password change and the reads are not
+      ---
+      duration_ms: 255.952637
+      type: 'test'
+      ...
+    # Subtest: (B2) end to end: sign-in → intent → provisioning → READY on the supplied runtime → the default workspace → a first session the runner claims
+    ok 4 - (B2) end to end: sign-in → intent → provisioning → READY on the supplied runtime → the default workspace → a first session the runner claims
+      ---
+      duration_ms: 1402.28753
+      type: 'test'
+      ...
+    # Subtest: (B3) concurrent and repeated sign-ins add nothing; a default the owner removed stays removed
+    ok 5 - (B3) concurrent and repeated sign-ins add nothing; a default the owner removed stays removed
+      ---
+      duration_ms: 3028.093676
+      type: 'test'
+      ...
+    # Subtest: (B4) an account with workspaces keeps its order, first workspace, deep links and own default; nothing is matched by name
+    ok 6 - (B4) an account with workspaces keeps its order, first workspace, deep links and own default; nothing is matched by name
+      ---
+      duration_ms: 1290.588704
+      type: 'test'
+      ...
+    # Subtest: (B5) provisioning that fails never breaks a sign-in, and an explicit ensure or retry provisions
+    ok 7 - (B5) provisioning that fails never breaks a sign-in, and an explicit ensure or retry provisions
+      ---
+      duration_ms: 4081.243149
+      type: 'test'
+      ...
+    # Subtest: (B6) nothing installed and signed in: MODEL_UNAVAILABLE, no first session on any engine, READY once one is signed in
+    ok 8 - (B6) nothing installed and signed in: MODEL_UNAVAILABLE, no first session on any engine, READY once one is signed in
+      ---
+      duration_ms: 2276.990688
+      type: 'test'
+      ...
+    # Subtest: (B7) the eligibility decision governs both sign-in and explicit ensure
+    ok 9 - (B7) the eligibility decision governs both sign-in and explicit ensure
+      ---
+      duration_ms: 87.43833
+      type: 'test'
+      ...
+    # Subtest: (B8) the owner's own model key is supply: READY on it, the first session starts on it; another's, a disabled or a shared key is not
+    not ok 10 - (B8) the owner's own model key is supply: READY on it, the first session starts on it; another's, a disabled or a shared key is not
+      ---
+      duration_ms: 33912.538199
+      type: 'test'
+      location: '/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/managed-runner-sign-in.pg.spec.js:630:13'
+      failureType: 'testCodeFailure'
+      error: 'timed out waiting for READY on the key'
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      operator: 'fail'
+      stack: |-
+        until (/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/managed-runner-sign-in.pg.spec.js:318:34)
+        process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        async TestContext.<anonymous> (/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/managed-runner-sign-in.pg.spec.js:659:23)
+        async Test.run (node:internal/test_runner/test:1409:7)
+        async TestContext.<anonymous> (/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/managed-runner-sign-in.pg.spec.js:630:5)
+        async Test.run (node:internal/test_runner/test:1409:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+      ...
+    # Subtest: (B) shutdown: the real Kubernetes client was never built
+    ok 11 - (B) shutdown: the real Kubernetes client was never built
+      ---
+      duration_ms: 7.268485
+      type: 'test'
+      ...
+    # Subtest: (C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY
+    ok 12 - (C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY
+      ---
+      duration_ms: 116.570238
+      type: 'test'
+      ...
+    1..12
+not ok 1 - managed runners at sign-in: off changes nothing; on, sign-in records intent and the first session runs on a supplied runtime
+  ---
+  duration_ms: 49403.693363
+  type: 'test'
+  location: '/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/managed-runner-sign-in.pg.spec.js:112:22'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 13
+# suites 0
+# pass 11
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 49725.564052
+SPEC_EXIT=1
+==== managed-runner-sign-in.pg.spec.ts tests=13 pass=11 fail=2 skipped=0 node exited rc=1; 2 failing
+########## docker-backend.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_2 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697782010974892073 version=16.15
+# Subtest: the manager drives a mapping on DockerBackend, through the restricted channel
+    # Subtest: (1) provisioning: a docker mapping, the channel's identities, the guard before the one container, a host-derived budget
+    ok 1 - (1) provisioning: a docker mapping, the channel's identities, the guard before the one container, a host-derived budget
+      ---
+      duration_ms: 127.95087
+      type: 'test'
+      ...
+    # Subtest: (2) sleep ends on Docker's report and the removal, compute is released only then, and a wake uses the same volume
+    ok 2 - (2) sleep ends on Docker's report and the removal, compute is released only then, and a wake uses the same volume
+      ---
+      duration_ms: 67.63834
+      type: 'test'
+      ...
+    # Subtest: (3) an accepted drain that overruns its drain time is stopped, and still ends only on the report and the removal
+    ok 3 - (3) an accepted drain that overruns its drain time is stopped, and still ends only on the report and the removal
+      ---
+      duration_ms: 44.336692
+      type: 'test'
+      ...
+    # Subtest: (4) an abnormal exit fails the runner on Docker's report, and a retry replaces it on the same volume
+    ok 4 - (4) an abnormal exit fails the runner on Docker's report, and a retry replaces it on the same volume
+      ---
+      duration_ms: 41.193982
+      type: 'test'
+      ...
+    # Subtest: (5) a container removed outside the channel fences, and only an operator's host check moves it on
+    ok 5 - (5) a container removed outside the channel fences, and only an operator's host check moves it on
+      ---
+      duration_ms: 38.14312
+      type: 'test'
+      ...
+    # Subtest: (6) a disabled owner's runner that does not stop by itself is stopped past the drain time
+    ok 6 - (6) a disabled owner's runner that does not stop by itself is stopped past the drain time
+      ---
+      duration_ms: 25.907824
+      type: 'test'
+      ...
+    # Subtest: (7) a budget with room for one runner admits one; the second waits, then starts once the first sleeps
+    ok 7 - (7) a budget with room for one runner admits one; the second waits, then starts once the first sleeps
+      ---
+      duration_ms: 50.207568
+      type: 'test'
+      ...
+    # Subtest: (8) a Kubernetes mapping in the same database is neither listed nor driven by the Docker manager
+    ok 8 - (8) a Kubernetes mapping in the same database is neither listed nor driven by the Docker manager
+      ---
+      duration_ms: 12.376615
+      type: 'test'
+      ...
+    # Subtest: (9) the channel unreachable is a backoff; a volume over its disk limit is FAILED with that reason
+    ok 9 - (9) the channel unreachable is a backoff; a volume over its disk limit is FAILED with that reason
+      ---
+      duration_ms: 31.171657
+      type: 'test'
+      ...
+    # Subtest: (10) a READY or DRAINING runner the channel does not answer for is left as it was: nothing spent
+    ok 10 - (10) a READY or DRAINING runner the channel does not answer for is left as it was: nothing spent
+      ---
+      duration_ms: 75.39828
+      type: 'test'
+      ...
+    # Subtest: (11) an upgrade's new image: the running container is left as it is, and the next generation after a sleep is made from it
+    ok 11 - (11) an upgrade's new image: the running container is left as it is, and the next generation after a sleep is made from it
+      ---
+      duration_ms: 52.100058
+      type: 'test'
+      ...
+    # Subtest: (12) why an upgrade recreates the apiserver first: a channel already on the new image refuses the previous apiserver
+    ok 12 - (12) why an upgrade recreates the apiserver first: a channel already on the new image refuses the previous apiserver
+      ---
+      duration_ms: 28.62582
+      type: 'test'
+      ...
+    # Subtest: (13) no runtime signed in: the owner's own enabled model key makes it READY on that key; another's, a disabled or a shared key does not
+    not ok 13 - (13) no runtime signed in: the owner's own enabled model key makes it READY on that key; another's, a disabled or a shared key does not
+      ---
+      duration_ms: 23.979931
+      type: 'test'
+      location: '/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/docker-backend.pg.spec.js:461:13'
+      failureType: 'testCodeFailure'
+      error: |-
+        Expected values to be strictly equal:
+        
+        'WAITING' !== 'READY'
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 'READY'
+      actual: 'WAITING'
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/docker-backend.pg.spec.js:505:26)
+        process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        async Test.run (node:internal/test_runner/test:1409:7)
+        async TestContext.<anonymous> (/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/docker-backend.pg.spec.js:461:5)
+        async Test.run (node:internal/test_runner/test:1409:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+      ...
+    1..13
+not ok 1 - the manager drives a mapping on DockerBackend, through the restricted channel
+  ---
+  duration_ms: 664.557872
+  type: 'test'
+  location: '/root/.orbit/worktrees/81f2311f-0c74-56b8-b768-795edee3c95c/src/apiserver/build/managed-runners/docker-backend.pg.spec.js:71:22'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 14
+# suites 0
+# pass 12
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 848.372344
+SPEC_EXIT=1
+==== docker-backend.pg.spec.ts tests=14 pass=12 fail=2 skipped=0 node exited rc=1; 2 failing
+RED: managed-runner-sign-in.pg.spec.ts: node exited rc=1; 2 failing
+RED: docker-backend.pg.spec.ts: node exited rc=1; 2 failing
+==> removing pccspec-pg-904851-14216
