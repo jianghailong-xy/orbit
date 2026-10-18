@@ -113,8 +113,12 @@ agent-management surface to the CLI. Only a human can switch orchestration.
 
 ## Providers
 
-`--provider` on `orbit session create`, `orbit task create` and `orbit task update` takes a built-in engine
-(`claude`, `codex`, `kimi`, `opencode`) or a provider configured on the account. List what is accepted, and
+`--provider` on `orbit session create`, `orbit task create` and `orbit task update` takes a built-in provider
+or a provider configured on the account. The built-in ones are each engine's own sign-in on the runner (`claude`,
+`codex`, `kimi`, `antigravity`, `cursor`), OpenCode's own configuration (`opencode`), and `dsh`, DeepSeek Harness
+on the account's first enabled DeepSeek key. `--engine` on the same commands names the CLI that runs the
+session, one of seven: `claude` (Claude Code), `codex` (Codex), `kimi` (Kimi Code), `antigravity` (Antigravity
+CLI), `opencode` (OpenCode), `dsh` (DeepSeek Harness) or `cursor` (Cursor CLI). List what is accepted, and
 configure the account's own providers, with:
 
 ```bash
@@ -123,9 +127,21 @@ printf %s "$ENDPOINT_KEY" | orbit provider create --label "Local vLLM" --runtime
   --base-url http://127.0.0.1:8000 --api-key-file - \
   --models '[{"value":"qwen3.8-27b-fp8","label":"Qwen3.8 27B FP8","contextWindow":131072,"reasoningLevels":["low","medium","xhigh"]}]' \
   --json
+printf %s "$CURSOR_KEY" | orbit provider create --label "Cursor" --runtime cursor --api-key-file - --json
 orbit provider update local-vllm --base-url http://127.0.0.1:8001 --json
 orbit provider delete local-vllm --json
 ```
+
+`--runtime` names the protocol the key's endpoint speaks, which decides the engines that can run the key:
+`claude` (the default: the Anthropic Messages API, e.g. vLLM's `/v1/messages`), `codex` (the OpenAI Responses
+API), `kimi` (Moonshot's API), `antigravity` (the Gemini API) or `cursor` (a Cursor User API Key).
+`orbit provider update --runtime` takes the same five values. `provider list` shows each key's engines.
+
+A Cursor key runs on Cursor CLI alone. It needs only `--label` and the key: `orbit provider create --runtime
+cursor` creates it under the `cursor-api` preset, on Cursor's own API (`https://api2.cursor.sh`) unless
+`--base-url` names another, with no `--models`, because its models are Cursor CLI's own catalogue on each runner.
+This is the same body the web's connect form sends, and the MCP tools `provider_create` and `provider_update`
+take `runtime: "cursor"` the same way.
 
 A configured provider's slug is derived from its label: read it from the `create` output or from
 `provider list`. The key is stored encrypted and never returned — every read, the write commands' own output

@@ -112,7 +112,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val latestOpen by rememberUpdatedState(open)
     val console = remember(handle, route.id) { SessionConsole(app, handle, route.id!!, composer, app.processScope, reloadDetail = { worktree.loadDetail() },
         openRunner = { runner, engine -> latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
-        openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) }) }
+        openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) },
+        openDraft = { latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = it)) }) }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }

@@ -37,7 +37,9 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
     suspend fun catalog(detail: JsonObject): ComposerCatalog {
         val runnerId = detail.text("assignedRunnerId") ?: detail.text("runnerId")
             ?: (detail["agent"] as? JsonObject)?.text("runnerId") ?: error("Runner is not assigned.")
-        val runner = runner(runnerId) ?: error("Runner is unavailable.")
+        // Every runner of the account, which says whether Cursor CLI is drawn at all (ComposerCatalog.fleet).
+        val runners = read(listOf("runners")).jsonArray.filterIsInstance<JsonObject>()
+        val runner = runners.firstOrNull { ObjectId.same(it.text("id"), runnerId) } ?: error("Runner is unavailable.")
         // Each key with the engines it runs on (`engines`, the server's answer: only it can tell a Claude subscription token).
         val providers = read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>()
         val pools = read(listOf("providers", "pools")).jsonArray.filterIsInstance<JsonObject>()
@@ -51,7 +53,7 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
             rows.any { it.text("slug") == provider }) null
             else try { read(listOf("providers", "mine")).jsonArray.filterIsInstance<JsonObject>() }
                 catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-        return ComposerCatalog(runner, rows, own)
+        return ComposerCatalog(runner, rows, own, runners)
     }
     suspend fun upload(attachment: StagedAttachment, bytes: ByteArray, progress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)

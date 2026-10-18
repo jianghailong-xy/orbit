@@ -3,10 +3,12 @@
 **状态**：T1 交付（2026-10-09），项目「Provider 与 Engine 解耦」（`34ccMg4EoSorpVooMC4kg`）T2–T9 共用。
 设计决定以项目作业指导为准，本文把它写成实现必须遵守的数据形状、判定规则和接口；两者冲突时以作业指导为准，在任务评论里交协调会话裁决。
 **代码基线**：main `caea4729b`，下文的文件与行号都指这一版。兼容表只在 [`src/shared/src/providerEngines.ts`](../src/shared/src/providerEngines.ts) 实现一次，服务端直接调用，Swift/Kotlin 镜像。
+**第七个 engine**：项目「Cursor CLI 原生接入」的 P1（迁移 `0426_cursor_engine`）加入 `cursor`（Cursor CLI）。文档收尾任务（`34hJAyWIuEl2rXy6q9HlL`，2026-10-19）把本文列举 engine 的表和句子改成七个，
+Cursor 一行的依据写在行里；§7 的回填和改写是 T2、T4 当时的迁移，不涉及 `cursor`，没有改。Cursor 运行时本身见 [`docs/cursor-runtime-contract.md`](cursor-runtime-contract.md)。
 
 ## 0. 一页结论
 
-- **engine** 是 runner 上实际执行、产生 `runtimeSessionId` 的 CLI，取值为 `AgentProvider` 的六个值。会话的 engine 写在 `Session.engine`，写入后不再改变；换 engine 就是开新会话。
+- **engine** 是 runner 上实际执行、产生 `runtimeSessionId` 的 CLI，取值为 `AgentProvider` 的七个值。会话的 engine 写在 `Session.engine`，写入后不再改变；换 engine 就是开新会话。
 - **provider** 只表示凭据来源，仍存 slug：runner 登录（slug 即 engine 名）、账号池、key（`ModelProvider` 行）、OpenCode 自身配置。凭据可以在会话 engine 兼容的 provider 之间切换。
 - `ModelProvider.runtime` 只表示 key 的协议方言，不再决定 engine。迁移后不再有 `dsh` 值；`deepseek-harness` 配置并入 DeepSeek key，旧 slug 成为别名，解析为对应 key + `dsh`。
 - 所有入口共用一个解析函数，把 (engine?, provider?, model?) 解析成确定的 (engine, provider, model)。只给 provider 的旧调用得到解耦前的 engine。
@@ -15,8 +17,8 @@
 
 | 词 | 本文的含义 |
 | --- | --- |
-| engine | 执行会话的 CLI；代码里是 `AgentProvider` 值：`claude`、`codex`、`kimi`、`antigravity`、`opencode`、`dsh` |
-| CLI 名称 | `ENGINE_CLI_NAMES`：Claude Code、Codex、Kimi Code、Antigravity CLI、OpenCode、DeepSeek Harness，与 Web 现有的 `ENGINE_CLI_NAME`（`src/web/src/lib/runnerEngines.ts`）相同 |
+| engine | 执行会话的 CLI；代码里是 `AgentProvider` 值：`claude`、`codex`、`kimi`、`antigravity`、`opencode`、`dsh`、`cursor` |
+| CLI 名称 | `ENGINE_CLI_NAMES`：Claude Code、Codex、Kimi Code、Antigravity CLI、OpenCode、DeepSeek Harness、Cursor CLI，与 Web 现有的 `ENGINE_CLI_NAME`（`src/web/src/lib/runnerEngines.ts`）相同 |
 | provider、凭据 | 会话花的凭据从哪来；`Session.provider`、`Task.provider` 里的 slug |
 | key | 一行 `ModelProvider`：一把厂商 API key 和它的 endpoint |
 | 方言 | key 的 endpoint 说的协议，即 `ModelProvider.runtime` 列（列名不改） |
@@ -28,7 +30,7 @@
 
 ### 1.1 `Session.engine`
 
-- 列：`session.engine TEXT NULL`，Prisma `engine String?`。约束 `session_engine_check`：`engine IS NULL OR engine IN ('claude','codex','kimi','antigravity','opencode','dsh')`。schema 里所有 provider/engine 列都是 TEXT，没有枚举类型，这一列也一样。
+- 列：`session.engine TEXT NULL`，Prisma `engine String?`。约束 `session_engine_check`：`engine IS NULL OR engine IN ('claude','codex','kimi','antigravity','opencode','dsh','cursor')`（0414 建，0426 加入 `cursor`）。schema 里所有 provider/engine 列都是 TEXT，没有枚举类型，这一列也一样。
 - 含义：产生（或即将产生）这个会话 `runtimeSessionId` 的 engine。新代码在 INSERT 时写入。
 - 不可改：`BEFORE UPDATE OF "engine"` 触发器 `session_engine_immutable` 在 `OLD.engine IS NOT NULL AND NEW.engine IS DISTINCT FROM OLD.engine` 时报 `check_violation`（约束名 `session_engine_immutable`）。从 NULL 写成某个值是允许的（回填、首次领取补写）。
 - 可空期间 NULL 只有两种来源：旧 API 副本写入的行（它不认识这一列），以及回填无法确定的行（§7.1 的 `UNRESOLVED`）。
@@ -61,7 +63,7 @@
 
 | 类别 | `provider` | `providerBuiltin` | 可用 engine | 补充 |
 | --- | --- | --- | --- | --- |
-| runner 登录 | `claude`、`codex`、`kimi`、`antigravity` | true | 同名 engine | 账号取 `Session.<engine>Account`（`claudeAccount`、`codexAccount`、`kimiAccount`、`antigravityAccount`），为空时取工作区同名列 |
+| runner 登录 | `claude`、`codex`、`kimi`、`antigravity`、`cursor` | true | 同名 engine | 账号取 `Session.<engine>Account`（`claudeAccount`、`codexAccount`、`kimiAccount`、`antigravityAccount`、`cursorAccount`，最后一个由 0427 加入），为空时取工作区同名列 |
 | 账号池 | `ProviderPool.slug` | false | 池的 engine | 自有池为 `claude` 或 `codex`，共享池为 `codex`（`provider_pool_engine_check`）；领取时选成员 |
 | key | `ModelProvider.slug` | false | 兼容表（§2） | 经别名解析到的 key，存 key 自己的 slug |
 | OpenCode 自身配置 | `opencode` | true | 仅 `opencode` | runner 上 OpenCode 自己的 provider 配置 |
@@ -72,6 +74,8 @@
 - `providerBuiltin` 保持现有含义：区分内置的 `kimi`、`dsh` 与同名的配置身份。
   - 0077 把旧的 `kimi` 配置行改了名，并禁止再用这个 slug；但旧副本的陈旧写入仍可能带着它。
   - 0377 保留了已经叫 `dsh` 的配置行和池。
+  - `cursor` 和 `opencode`（0080）、`antigravity`（0367）一样用不着它：0426 把已经叫 `cursor` 的配置行、池和退役名挪成 `cursor-N`，
+    再用一行保护行占住这个名字，所以 `cursor` 只能是内置的（`custom-provider.ts` 的 `isBuiltinProvider`）。
 - 池的成员列（`poolMemberProviderId`、`poolKeyId`、`poolCodexAccountId`）不变。
 
 ### 1.4 `ModelProvider.runtime` 只表示协议方言
@@ -82,6 +86,7 @@
 | `codex` | OpenAI Responses | `codex` |
 | `kimi` | Moonshot 原生 API | `kimi` |
 | `antigravity` | Gemini API | `antigravity` |
+| `cursor` | Cursor User API Key：不是模型 API，Cursor CLI 拿它到 Cursor 自己的 API 换 token（preset `cursor-api`，P2 加入） | `cursor` |
 | `dsh`（迁移前遗留） | Anthropic Messages | `dsh` |
 
 - 列名不改。`keyDialect()`（`src/shared/src/openCodeKeys.ts`）是方言的唯一映射。
@@ -146,6 +151,7 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 | OpenAI Responses key | `codex`、`opencode` |
 | Moonshot key | `kimi`、`opencode` |
 | Gemini key | `antigravity`、`opencode` |
+| Cursor key（`runtime='cursor'`） | 只有 `cursor`：它不是模型 API，OpenCode 用不了（`keyEngines`，`openCodeDialect` 不认它） |
 | 方言未知的行 | 无 |
 
 - DeepSeek key 的判定与 `isDeepSeekAccountRow`（`src/apiserver/src/providers/deepseek-balance.ts`）相同：
@@ -159,7 +165,7 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 共享模块 `src/shared/src/providerEngines.ts` 从包入口导出：
 
 ```ts
-export const ALL_ENGINES: readonly AgentProvider[];          // claude, codex, kimi, antigravity, opencode, dsh
+export const ALL_ENGINES: readonly AgentProvider[];          // claude, codex, kimi, antigravity, opencode, dsh, cursor
 export const ENGINE_CLI_NAMES: Readonly<Record<AgentProvider, string>>;
 export function isEngine(value: unknown): value is AgentProvider;
 export type EngineCredential =
@@ -194,6 +200,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | `opencode` | OpenCode 自身配置 | runner 上报的 OpenCode 目录（`provider/model`） | 空，由 OpenCode 自选 |
 | `opencode` | 任一可用 key | 该 key 在其原生 engine 上的模型表 | 那张表的默认 |
 | `dsh` | DeepSeek key | runner 上报的 DSH ACP 目录（不透明值），没有静态回退 | `runtimeDefaultModels.dsh` → 目录第一行；目录到达前为空 |
+| `cursor` | 登录（Default 或加进来的账号）、Cursor key | runner 上报的 Cursor CLI ACP 目录（带参数的变体串，不透明值），没有静态回退；Cursor key 行不带模型（preset `cursor-api` 的 `models: []`，`withPreset` 对它给空表和 `modelsFromRuntime`） | 空（`DEFAULT_MODEL_BY_PROVIDER.cursor`）：新会话用 Auto |
 
 - 存储一律是裸模型 id。OpenCode 用 key 时，派发才拼成 `orbit-<slug>/<model>`（§4.2）。
 - 退役判断（`retiredPin`）、`modelForProvider`、`runnerCatalogRow` 的 runtime 参数都传 engine。DeepSeek key 上的 `claude` 会话用 key 厂商的表；同一把 key 上的 `dsh` 会话用 ACP 目录。
@@ -203,7 +210,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 以下判断的参数一律传会话 engine，不传 provider slug：
 
 - 服务端：`normalizeEffortForProvider`、`normalizeBuiltinPermissionMode`（`src/apiserver/src/common/runtime-provider.ts`）、standing grant 的 `standingGrantCovers`。
-- `@orbit/shared`：`derivePermissionSemantics`、`runtimeApprovalSupport`、`autoAvailable`（`permissionSemantics.ts`），`fastModeAvailable`（`models.ts`），`supportsMidTurnSteer`（`providerTransport.ts`），`DSH_PERMISSION_MODES`（`enums.ts`）。
+- `@orbit/shared`：`derivePermissionSemantics`、`runtimeApprovalSupport`、`autoAvailable`（`permissionSemantics.ts`），`fastModeAvailable`（`models.ts`），`supportsMidTurnSteer`（`providerTransport.ts`），`DSH_PERMISSION_MODES`、`CURSOR_PERMISSION_MODES`（`enums.ts`）。
 - Web、Swift、Android 的同类函数也一样。
 
 只有两处要看凭据：
@@ -224,8 +231,8 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 给了 provider 时，按下面的顺序判定它是什么：
 
-1. `claude`、`codex`、`kimi`、`antigravity`：runner 登录。`opencode`：OpenCode 自身配置。都是 `providerBuiltin = true`。
-   - 与现在一致：明确传入的 `kimi` 不查同名配置行。
+1. `claude`、`codex`、`kimi`、`antigravity`、`cursor`：runner 登录。`opencode`：OpenCode 自身配置。都是 `providerBuiltin = true`。
+   - 与现在一致：明确传入的 `kimi` 不查同名配置行。`cursor` 也不查：0426 保留了这个名字（`engine-provider.ts` 的 `classifyProvider`）。
 2. 用户可用（`usableProviderScope`）的同 slug key 行：
    - 停用的行不能被选用，沿用该入口现在的文案：会话新建为 `provider not available: "<slug>"`，任务 pin 与切换目标为 `provider not available`。
    - 续聊或改配置时留在已停用的当前 provider 上，返回 `provider is disabled`。从它切到别的 provider 是允许的：key 停用或删除后，会话就靠这条路恢复（§3.6）。
@@ -244,7 +251,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | 只有 engine | 登录类 engine 用 runner 登录（provider = engine 名）；`opencode` 用自身配置；`dsh` 用默认 DeepSeek key（§3.3），没有则返回 `DEEPSEEK_KEY_REQUIRED` |
 | 都没有 | 工作区种子（§3.4） |
 
-- engine 不在六个值内时，由解析函数返回 `ENGINE_UNKNOWN`；DTO 只校验它是字符串（§6.2）。
+- engine 不在七个值内时，由解析函数返回 `ENGINE_UNKNOWN`；DTO 只校验它是字符串（§6.2）。
 - 「只有 provider」保证所有旧调用（API、CLI、MCP、旧版 App）得到解耦前的 engine。别名使旧 DSH slug 继续得到 `dsh`。
 
 ### 3.3 旧编码、内置 dsh 与别名
@@ -281,7 +288,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 - 按 §3.2 解析，写入 `engine`、`provider`、`providerBuiltin`、`model`。
 - 预生成会话 id、effort 规范化、权限模式校验、root 拒绝、DSH 能力与安装检查、登录预检（`ENGINE_SIGNED_OUT`），全部以解析出的 engine 为准。
-- 只有 engine 是 `claude`、`codex`、`kimi`、`antigravity` 且凭据是登录时，才用 `bringsOwnCredentials = false` 做登录预检。key 和池都自带凭据。
+- 只有 engine 是 `claude`、`codex`、`kimi`、`antigravity`、`cursor` 且凭据是登录时，才用 `bringsOwnCredentials = false` 做登录预检。key 和池都自带凭据。
 
 #### 会话 resume、PATCH config、retry-message
 
@@ -419,6 +426,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | `codex` | Responses key | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
 | `kimi` | Moonshot key | `KIMI_MODEL_*` |
 | `antigravity` | Gemini key | `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` |
+| `cursor` | Cursor key | 只有 `ORBIT_CURSOR_API_KEY`（`custom-provider.ts` 的 `CURSOR_KEY_VAR`），没有 endpoint：runner 读出后以 `CURSOR_API_KEY` 交给 CLI，memory 存储，这个变量本身到不了 CLI（`docs/cursor-runtime-contract.md` §16.3） |
 
 同一把 DeepSeek key 在三种 engine 上的 endpoint 都是它自己的 `baseUrl`。
 
@@ -466,8 +474,9 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 | Codex（0.162.0） | `OPENAI_API_KEY` | 有 | 实测：`codex exec`，以及照 runner 参数起的 `codex app-server`，后者测了 Auto（`on-request`，workspace-write 沙箱）和 `never`（Bypass、Don't Ask）两组设置，都看得到。Default、Accept Edits、Plan 用 `untrusted`，命令获批后跑在同样的环境里，未单独测。对照组加 `shell_environment_policy.ignore_default_excludes=false` 后看不到。源码：0.162 的 `ignore_default_excludes` 默认为 true，不过滤 KEY、SECRET、TOKEN |
 | Kimi Code（2.1.1） | `KIMI_MODEL_API_KEY` | 有 | 实测：print 模式的 `Bash` 工具。Orbit 用 ACP 驱动，initialize 不声明 terminal 能力，命令同样由 Kimi 自己的 `Bash` 工具在 kimi 进程下运行，按源码推断相同 |
 | Antigravity CLI（1.3.2） | `GEMINI_API_KEY` | 有 | 实测（`run_command`），与 1.2.16 的记录一致（`docs/antigravity-runtime-contract.md` §3.2） |
+| Cursor CLI（2026.10.14-941492e） | `CURSOR_API_KEY`（runner 从 `ORBIT_CURSOR_API_KEY` 读出后交给 CLI；借账号登录时是 `CURSOR_AUTH_TOKEN`） | 没有 | 实测：2026-10-17 P0c 的 `p0c/shell-wrapper-env`，真 CLI 加真 key，不是本表上面的 mock 测法。命令经会话自己的 orbit-bash（CLI 的 `SHELL`）执行，包装脚本 unset 了 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`CURSOR_CONFIG_DIR`、`CURSOR_DATA_DIR`，命令的环境里都没有。不经包装时命令继承 CLI 的全部环境（`docs/cursor-runtime-contract.md` §8.3、§8.4） |
 
-- **「没有」只指命令自己的环境，不是安全边界。** engine 进程自己的环境里有 key；runner、engine 和 agent 的命令是同一个系统用户，同用户的进程一般能读 `/proc/<pid>/environ`。这是 Linux 的规则（proc(5)），未实测。DSH 环境文档已有同样的说明。
+- **「没有」只指命令自己的环境，不是安全边界。** engine 进程自己的环境里有 key；runner、engine 和 agent 的命令是同一个系统用户，同用户的进程一般能读 `/proc/<pid>/environ`。这是 Linux 的规则（proc(5)），未实测。DSH 环境文档已有同样的说明。Cursor CLI 也一样：CLI 进程自己的环境里有 key 或 token。
 - 按 Claude Code 与 agy 的文档，MCP 服务器和 hook 也继承同样的环境，未逐一实测。
 - 账号池的会话 token 也经 `OPENAI_API_KEY` 交给 Codex，按源码同样可见。
 - 让命令看不到 key 的开关（Claude Code 的 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`、Codex 的 `ignore_default_excludes=false`）各有副作用，不在本项目范围：前者要求 runner 装 bubblewrap，并把权限模式强制为 Default；后者会去掉所有名字含 KEY、SECRET、TOKEN 的变量。
@@ -509,10 +518,10 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 
 服务端读到 NULL 行时用 TS `legacySessionEngine`。SQL 侧不另写函数：触发器和领取 SQL 对 NULL 行沿用它们现有的谓词，那些谓词就是旧规则。
 
-1. `provider` 为 `claude`、`codex`、`opencode`、`antigravity` → 该值。provider 为空 → `claude`（列默认值）。
+1. `provider` 为 `claude`、`codex`、`opencode`、`antigravity`、`cursor` → 该值。provider 为空 → `claude`（列默认值）。`cursor` 是 Cursor 项目 P1 加的（`custom-provider.ts` 的 `builtinSessionEngine`）。
 2. `provider` 为 `kimi`、`dsh`，且 `provider_builtin` 为真 → 该值。
 3. 同 slug 的 `model_provider` 行，属于该 owner 或为共享行，不论是否停用：
-   - runtime 是 `claude`、`codex`、`kimi`、`antigravity`、`dsh` 之一时 → runtime。
+   - runtime 是 `claude`、`codex`、`kimi`、`antigravity`、`dsh`、`cursor` 之一时 → runtime（`keyRowEngine`）。
    - 其它 runtime → 未知。
 4. 同 slug 的池：自有池取 `engine`，共享 Codex 池取 `codex`。
 5. 同 slug 的别名 → 别名的 engine。这一步由建别名表的 T3 加入。
@@ -530,15 +539,20 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 
 三个触发器都用 `CREATE OR REPLACE FUNCTION` 改写，触发器本身与 `UPDATE OF` 列不变。
 
+0426（Cursor 项目 P1）为 `cursor` 加了同类的第四个守卫 `guard_cursor_runner_acquisition`（触发器 `session_cursor_runner_acquisition_guard`）：
+`COALESCE(NEW.engine, NEW.provider) = 'cursor'` 的领取和续租，要求事务声明 `orbit.runner_supports_cursor = '1'`，而且 runner 持久化的心跳带 `provider:cursor`，否则 `RETURN NULL` 跳过。
+
 ### 5.6 领取 SQL 与辅助函数
 
 - `trySessionClaim` 的 runner 能力门禁：engine 非空的行按 `s.engine` 判定。NULL 行沿用现有的两组谓词：
   - dsh 的那组：`s.provider = 'dsh' AND s.provider_builtin`，或 runtime 为 `dsh` 的配置行，再要求持久化的 `provider:dsh` 能力。
   - opencode、antigravity 的那组：直接比较 slug 和 `mp.runtime`。
+  - cursor（0426 加入）：`COALESCE(s.engine, s.provider, 'claude') = 'cursor'` 的行，要求请求声明支持 Cursor（`orbit.runner_supports_cursor`），
+    runner 持久化的心跳带 `provider:cursor`。0426 之后，engine 为 NULL 而 provider 是 `cursor` 的只能是内置的。
 - 凭据可用性判定：
   - 登录：`provider` 为 engine 名且 `provider_builtin`。
   - OpenCode 自身配置：`provider = 'opencode'`。
-  - key：已启用、可用（`usableProviderSql`），而且方言属于该 engine 可能兼容的集合：`claude` 对应 `claude`/`dsh`；`dsh` 对应 `claude`/`dsh`；`opencode` 对应全部四种方言和 `dsh`；其余 engine 对应同名方言。
+  - key：已启用、可用（`usableProviderSql`），而且方言属于该 engine 可能兼容的集合：`claude` 对应 `claude`/`dsh`；`dsh` 对应 `claude`/`dsh`；`opencode` 对应 `claude`、`codex`、`kimi`、`antigravity` 四种方言和 `dsh`（不含 `cursor`：Cursor key 只跑 `cursor`）；其余 engine 对应同名方言（`cursor` 对 `cursor`）。
   - 池：池的 engine 等于会话 engine。
   - 别名：按目标 key 判定。
   - 遗留内置 `dsh`：可领取，凭据由 `buildSession` 补（§4.1）。
@@ -596,7 +610,7 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 
 - 任务的读出增加 `engine: string | null`（pin），保留 `provider`、`model`。
 - `POST /tasks`、`PATCH /tasks/:id`、批量创建、runner 门 `POST /runner/tasks/batch-pin` 增加 `engine`，三态语义见 §3.5。
-- DTO 只用 `@IsOptional() @IsString()`。全局 ValidationPipe 没有 exceptionFactory，`@IsIn` 只会给通用的 400，所以取值由解析函数检查，不在六个值内时给 `ENGINE_UNKNOWN`。
+- DTO 只用 `@IsOptional() @IsString()`。全局 ValidationPipe 没有 exceptionFactory，`@IsIn` 只会给通用的 400，所以取值由解析函数检查，不在七个值内时给 `ENGINE_UNKNOWN`。
 - 跨项目移交的摘要（`src/apiserver/src/projects/project-handoff.ts` 的 `handoffPayloadDigest`）在 provider pin 旁同时绑定 engine pin（§10 第 12 条）。
   - 绑定的是任务入口解析后的值（§3.5）：只给 provider 的计划带着它的默认 engine，与点名同一个 engine 的计划是同一个问题；同一把 key 换一个 engine 是另一个问题，所有者对一个 engine 的同意不能用在另一个 engine 上。
   - 带 engine pin 的计划用摘要 v8；没有 engine pin 的计划（继承工作区的）摘要不变。
@@ -809,7 +823,7 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 | `Session.engine`、`Task.engine` 与回填（§7.1）、所有写 Session 的路径写入 engine、§5 的触发器和事务内设置、领取与派发按 engine（§4.1–4.3）、meta | T2 |
 | 统一解析（§3）、错误码、各入口 DTO、别名表与 0265 守卫扩展（§1.5）、`/providers` 与 `/runner/providers` 的 `engines`、回执 v3、路由与额度闸门（§4.4–4.5）、key 新建与编辑规则（§3.6）、`isDeepSeekAccountRow` 改用共享模块 | T3 |
 | §7.2–7.6 的应用层迁移（随启动执行）、别名数据与报告 | T4 |
-| CLI `--engine`、MCP `engine` 参数与描述（列全六个 engine）、`orbit provider list` 显示 engines、`orbit resume` 读 meta engine 并补 `dsh` 分支 | T5 |
+| CLI `--engine`、MCP `engine` 参数与描述（列全六个 engine；Cursor 项目 P1 注册 `cursor`、P3 把它加进 `provider_cli.go` 的 `engineNames` 之后列全七个）、`orbit provider list` 显示 engines、`orbit resume` 读 meta engine 并补 `dsh` 分支 | T5 |
 | Infrastructure 页（原 Providers 页）按厂商列 key、每把 key 标 engines | T6 |
 | Web 会话、任务、工作区先选 engine 再选 provider；effort、slash 按 engine；偏好新键 | T7 |
 | Swift 镜像共享模块；`AgentDefaults.runtime(for:)` 不再把 `opencode` 当成 `claude`；effort、slash 按 engine | T8 |
