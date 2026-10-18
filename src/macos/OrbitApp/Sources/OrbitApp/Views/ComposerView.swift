@@ -2033,6 +2033,9 @@ private struct ContextWindowIndicator: View {
                     Text(headline).foregroundStyle(.secondary).fixedSize()
                 }
             }
+            // The ring is only a stroke — dashed when there is no reading — and a plain button takes
+            // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(helpText)
