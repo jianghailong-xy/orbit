@@ -989,7 +989,7 @@ struct ComposerView: View {
                     }
                     #else
                     // An iOS menu item ends at its third line: the note's two sentences are two items.
-                    ForEach(ComposerLogic.sentences(CursorRuntime.autoNote), id: \.self) { Text($0) }
+                    ForEach(ComposerLogic.clauses(CursorRuntime.autoNote), id: \.self) { Text($0) }
                     #endif
                 }
             } else {

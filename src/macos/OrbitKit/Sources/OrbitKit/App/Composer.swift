@@ -38,6 +38,17 @@ public enum ComposerLogic {
         return parts.enumerated().map { index, part in index < parts.count - 1 ? part + "." : part }
     }
 
+    /// As `sentences`, with a sentence too long for an item's three lines on a phone also broken at its
+    /// last comma: Cursor CLI's Auto note, whose "…no effort or context to set" ran into a fourth line.
+    public static func clauses(_ text: String, maxCharacters: Int = 72) -> [String] {
+        sentences(text).flatMap { sentence -> [String] in
+            guard sentence.count > maxCharacters, let comma = sentence.range(of: ", ", options: .backwards) else {
+                return [sentence]
+            }
+            return [String(sentence[..<comma.lowerBound]) + ",", String(sentence[comma.upperBound...])]
+        }
+    }
+
     /// A sentence as a Mac menu can show it — the lines of a paragraph, each its own item, since an
     /// NSMenu draws an item on one line however long. Breaks at spaces; a run with none (a long id,
     /// a CJK sentence, whose characters count double) breaks where it fills the line. Past

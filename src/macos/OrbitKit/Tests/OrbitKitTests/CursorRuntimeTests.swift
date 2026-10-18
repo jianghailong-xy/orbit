@@ -465,6 +465,14 @@ final class CursorRuntimeTests: XCTestCase {
         XCTAssertFalse(CursorRuntime.isAuto("default[]"))
     }
 
+    /// Auto's note in an iPhone menu: an item ends at its third line, so the long sentence is two items.
+    func testAutosNoteFitsAnIPhoneMenusItems() {
+        XCTAssertEqual(ComposerLogic.clauses(CursorRuntime.autoNote),
+                       ["Auto picks a model for each request.", "Cursor doesn’t report which one it used,",
+                        "and Auto has no effort or context to set."])
+        XCTAssertEqual(ComposerLogic.clauses(CursorRuntime.moveBlockedNote), ComposerLogic.sentences(CursorRuntime.moveBlockedNote))
+    }
+
     /// The rules above are shared `cursorModels.ts`'s: its Auto, its settings, and its order.
     func testTheVariantRulesAreTheSharedOnes() throws {
         let shared = try source("src/shared/src/cursorModels.ts")
