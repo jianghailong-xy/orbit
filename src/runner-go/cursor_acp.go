@@ -35,6 +35,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -519,13 +520,16 @@ func (a *cursorACPClient) enterMode(ctx context.Context, sessionID, mode string)
 	return nil
 }
 
-// configure puts the session on its model and effort with session/set_config_option, never --model
-// (§10, §16.3): the model is the whole process's, and an unknown one passed as a flag ends it. A
-// session that names no model stays on the one it runs on — Auto, for a new one — or goes back to Auto
-// from another. An effort the model does not take is left at the model's own, as on Kimi: a session is
-// not failed over a tuning knob.
+// configure puts the session on its model, the model's settings and its effort with
+// session/set_config_option, never --model (§10, §16.3): the model is the whole process's, and an
+// unknown one passed as a flag ends it. The session's model value names the model and the context and
+// fast lane it runs with, the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`,
+// decodeCursorModel): the bare model is selected first, then each of those settings. A session that
+// names no model stays on the one it runs on — Auto, for a new one — or goes back to Auto from another,
+// and Auto takes no settings. A setting or an effort the model does not take is left at the model's
+// own and logged, as on Kimi: a session is not failed over a tuning knob.
 func (a *cursorACPClient) configure(ctx context.Context, sessionID string, agent AgentExecConfig) error {
-	model := strings.TrimSpace(agent.Model)
+	model, settings := decodeCursorModel(agent.Model)
 	current := firstString(cursorSessionOption(a.configOptions, "model"), "currentValue")
 	if model == "" && current != "" && !cursorAutoModel(current) {
 		model = "default"
@@ -533,6 +537,26 @@ func (a *cursorACPClient) configure(ctx context.Context, sessionID string, agent
 	if model != "" && model != current {
 		if err := a.setOption(ctx, sessionID, "model", model); err != nil {
 			return err
+		}
+	}
+	if len(settings) > 0 && cursorAutoModel(firstString(cursorSessionOption(a.configOptions, "model"), "currentValue")) {
+		logln("cursor: Auto takes no model settings; ignoring", agent.Model)
+		settings = nil
+	}
+	for _, setting := range settings {
+		option := cursorSessionOption(a.configOptions, setting.id)
+		switch {
+		case !slices.Contains(cursorVariantParameters, setting.id):
+			logln("cursor: a model value sets only the context and fast lane; ignoring", setting.id+"="+setting.value)
+		case option == nil:
+			logln("cursor: the session's model takes no", setting.id+"; ignoring", setting.value)
+		case firstString(option, "currentValue") == setting.value:
+		case !cursorOffers(option, setting.value):
+			logln("cursor: the session's model does not offer", setting.id, setting.value+"; leaving it at", firstString(option, "currentValue"))
+		default:
+			if err := a.setOption(ctx, sessionID, setting.id, setting.value); err != nil {
+				return err
+			}
 		}
 	}
 	effort := strings.TrimSpace(agent.Effort)

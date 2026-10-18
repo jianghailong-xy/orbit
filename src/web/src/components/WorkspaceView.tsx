@@ -204,7 +204,10 @@ import {
   CURSOR_MOVE_BLOCKED_NOTE,
   CURSOR_QUEUE_NOTE,
   CURSOR_RUNNING_PLACEHOLDER,
+  cursorChipSettings,
   cursorConversationStarted,
+  cursorModelPick,
+  cursorSettingRows,
   type CursorRunnerFacts,
 } from '../lib/cursorRuntime';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
@@ -444,6 +447,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
   MAX_PROMPT_CHARS,
@@ -7939,6 +7943,10 @@ export function WorkspaceView({
   // only thing that can be inheriting here is nothing.
   const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
+  // A Cursor CLI model value names the model's context and fast lane beside it (shared cursorModels.ts):
+  // the model rows check the model, and its Context and Speed rows read the rest.
+  const shownCursorPick = shownEngine === AgentProvider.CURSOR ? cursorModelPick(shownModel, runner.modelCatalog) : null;
+  const shownModelName = shownCursorPick?.model ?? shownModel;
   // The models of the pair the composer is on: a key brings its own table to every engine that runs
   // it, OpenCode included, and DeepSeek Harness lists its runner's catalogue.
   const catalogModelOptions = shownProviderCapabilitiesResolved
@@ -7947,13 +7955,13 @@ export function WorkspaceView({
   // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
   // that effective default/selectable session value visible in the picker instead of rendering a
   // value the user cannot return to after trying another model.
-  const shownModelOptions = catalogModelOptions.some((option) => option.value === shownModel)
+  const shownModelOptions = catalogModelOptions.some((option) => option.value === shownModelName)
     ? catalogModelOptions
     : [
         {
-          value: shownModel,
+          value: shownModelName,
           label:
-            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModel,
+            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModelName,
         },
         ...catalogModelOptions,
       ];
@@ -8987,7 +8995,7 @@ export function WorkspaceView({
     // and otherwise take that one's default. Mode and effort follow the model, exactly as a model
     // switch makes them.
     const nextModel = modelOptionsFor(shownEngine, v, runner.modelCatalog, configuredProviders).some(
-      (option) => option.value === shownModel,
+      (option) => option.value === shownModelName,
     )
       ? shownModel
       : defaultModelFor(shownEngine, v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
@@ -9137,7 +9145,7 @@ export function WorkspaceView({
       } : prev,
     );
     modelPreferenceMut.mutate({ engine: shownEngine, provider: shownProvider, model: v });
-    if (v === shownModel) {
+    if (v === shownModelName) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
     }
@@ -9204,10 +9212,24 @@ export function WorkspaceView({
     if (live) configMut.mutate({ fastMode: next });
     else setFastMode(next);
   };
-  const shownModelLabel = shownModelOptions.find((o) => o.value === shownModel)?.label ?? shownModel;
+  const shownModelLabel = shownModelOptions.find((o) => o.value === shownModelName)?.label ?? shownModelName;
   const shownEffortLabel = shownEffortOptions.find((o) => o.value === shownEffort)?.label ?? shownEffort;
   // Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto.
-  const cursorAuto = shownEngine === AgentProvider.CURSOR && (!shownModel || shownModel === 'default');
+  const cursorAuto = shownEngine === AgentProvider.CURSOR && (!shownModelName || shownModelName === 'default');
+  // A Cursor model's context size and fast lane, where its row in the runner's catalogue lists them.
+  const cursorSettings = cursorAuto ? [] : cursorSettingRows(shownCursorPick);
+  // A setting picked is written into the model value, the model's own default included, so the runner
+  // sets exactly what is shown (contract §10). It moves the model value only, as a model pick does.
+  const pickCursorSetting = (id: string, value: string): void => {
+    if (!shownCursorPick || cursorSettings.find((row) => row.id === id)?.value === value) return;
+    const next = encodeCursorModel(shownCursorPick.model, { ...shownCursorPick.parameters, [id]: value });
+    if (live) {
+      configMut.mutate({ model: next });
+      return;
+    }
+    modelSeedState.current = dirtyContextSeed(modelContextKey);
+    setModel(next);
+  };
   const menuValue = (value: string): ReactNode => (
     <span className="scope-menu-value">
       <span className="scope-menu-value-text">{value}</span>
@@ -9532,7 +9554,7 @@ export function WorkspaceView({
       label: (
         <span className="scope-menu-row">
           {option.label}
-          {checkSlot(option.value === shownModel)}
+          {checkSlot(option.value === shownModelName)}
         </span>
       ),
       onSelect: () => pickModel(option.value),
@@ -9573,6 +9595,28 @@ export function WorkspaceView({
             })),
           },
         ]),
+    // A Cursor model's own settings (board Web 5 ① ③ ④): its context size, and Speed, its fast lane —
+    // a setting of the model, unlike the engine-level fast mode below, which Cursor CLI does not have.
+    // Each row offers the values the runner's catalogue lists for the model, under their own names.
+    ...cursorSettings.map((setting) => ({
+      key: `cursor-setting:${setting.id}`,
+      label: (
+        <span className="scope-menu-row">
+          {setting.title}
+          {menuValue(setting.label)}
+        </span>
+      ),
+      children: setting.values.map((option) => ({
+        key: `cursor-setting:${setting.id}:${option.value}`,
+        label: (
+          <span className="scope-menu-row">
+            {option.label}
+            {checkSlot(option.value === setting.value)}
+          </span>
+        ),
+        onSelect: () => pickCursorSetting(setting.id, option.value),
+      })),
+    })),
     // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
     // both exist on some models and not others. A row offered to a session that cannot have it
     // would be a control whose only outcome is being ignored — the server clamps it at dispatch
@@ -11993,10 +12037,13 @@ export function WorkspaceView({
                         </span>
                       )}
                       <span className="composer-model-name">{shownModelLabel}</span>
-                      {/* Auto on Cursor CLI has no effort to name. */}
+                      {/* Auto on Cursor CLI has no effort to name; a Cursor model names its context and fast
+                          lane after it ("Claude Opus 5.5 High · 1M · Fast", board Web 5 ⑤). */}
                       {!cursorAuto && (
                         <span className="composer-model-effort">
-                          {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
+                          {fastModeUsable && shownFastMode
+                            ? `${shownEffortLabel} · Fast`
+                            : [shownEffortLabel, ...cursorChipSettings(cursorSettings)].join(' · ')}
                         </span>
                       )}
                     </button>

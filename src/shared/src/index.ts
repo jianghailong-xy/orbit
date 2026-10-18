@@ -13,6 +13,7 @@ export * from './managedRunner';
 export * from './managedRunnerDisplay';
 export * from './realtime';
 export * from './models';
+export * from './cursorModels';
 export * from './mergeRecovery';
 export * from './owner-confirmation';
 export * from './owner-confirmation-review';

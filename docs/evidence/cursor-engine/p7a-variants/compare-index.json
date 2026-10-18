@@ -1,0 +1,10 @@
+{
+ "web-5-session-light": [
+  "w5-model-menu",
+  "w5-model-variant"
+ ],
+ "web-5-session-dark": [
+  "w5-model-menu",
+  "w5-model-variant"
+ ]
+}

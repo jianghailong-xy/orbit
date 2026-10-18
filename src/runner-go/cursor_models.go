@@ -28,9 +28,49 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 var errCursorSignedOut = errors.New("cursor catalogue: the Default account is signed out")
+
+// cursorVariantParameters are the settings a session's model value carries beside the model's name, by
+// Cursor's option ids (§10): the context size and the fast lane. The effort is the session's own field,
+// and the mode is its permission mode's, so a model value names neither.
+var cursorVariantParameters = []string{"context", "fast"}
+
+// cursorModelSetting is one `id=value` a session's model value names.
+type cursorModelSetting struct{ id, value string }
+
+// decodeCursorModel reads a session's model value as shared's decodeCursorModel does
+// (src/shared/src/cursorModels.ts): `name[id=value,…]` is the model `name` with those settings, written
+// the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`), and anything else is a
+// model's name as it stands — Auto's `default[]` is `default`, and a value not written as a variant
+// names no settings.
+func decodeCursorModel(value string) (string, []cursorModelSetting) {
+	text := strings.TrimSpace(value)
+	open := strings.Index(text, "[")
+	if open <= 0 || !strings.HasSuffix(text, "]") || strings.Index(text, "]") != len(text)-1 || strings.LastIndex(text, "[") != open {
+		return text, nil
+	}
+	var settings []cursorModelSetting
+	if inner := text[open+1 : len(text)-1]; inner != "" {
+		seen := map[string]bool{}
+		for _, pair := range strings.Split(inner, ",") {
+			id, setting, _ := strings.Cut(pair, "=")
+			if !cursorSettingToken(id) || !cursorSettingToken(setting) || seen[id] {
+				return text, nil
+			}
+			seen[id] = true
+			settings = append(settings, cursorModelSetting{id: id, value: setting})
+		}
+	}
+	return text[:open], settings
+}
+
+// cursorSettingToken is one side of an `id=value`: something, and nothing the syntax is made of.
+func cursorSettingToken(token string) bool {
+	return token != "" && !strings.ContainsAny(token, "=,[]") && !strings.ContainsFunc(token, unicode.IsSpace)
+}
 
 type cursorCatalogModel struct {
 	Value         string               `json:"value"`

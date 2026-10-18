@@ -727,6 +727,30 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   - 选了模型后多出该模型的参数选项，例如 Opus 5.5：`context`（`model_config`：300k/1m）、`effort`（`thought_level`：low/medium/high/xhigh/max）、`fast`（`model_config`：false/true）。
   - 值非法返回 `-32602 Invalid value for <id>: <值>`。
   - **P5a 建议用参数化选择器**，它和 Orbit「模型 + 变体」的界面对得上。
+- **会话里怎么写 context 和 fast**【约定，Context/Speed 跟进（`34iDjteT5qGcwXKjAUKj1`）实现】：
+  - 会话没有放 context 的字段；`fastMode` 是引擎级的快速模式开关，Cursor CLI 不声明它（P1）。所以这两个参数都写进会话的 model 值，用 Cursor 自己的变体写法：
+    `<模型>[<id>=<值>,…]`，例如 `claude-opus-5-5[context=1m,fast=true]`。
+    - id 和值都用目录里该模型 `parameters` 的原值，例如 `context`：`300k`/`1m`；`fast`：`false`/`true`。
+    - effort 照旧放在会话的 `effort` 字段。Auto 不带参数，就是 `default`。
+  - 编码和解码用 `src/shared/src/cursorModels.ts` 的 `encodeCursorModel` / `decodeCursorModel`。runner 在 `cursor_models.go` 里有同样读法的 `decodeCursorModel`。
+    - 参数按 id 排序写出。
+    - 客户端选了什么就写什么，选的是模型默认值也照写。
+    - 写不成变体的值当作原样的模型名，例如 Claude Code 的 `claude-opus-5[1m]`、空模型名、写坏或重复的参数。
+  - **runner**（`configure`）的顺序：
+    1. 用不带参数的模型名调 `session/set_config_option` 设 model。
+    2. 对值里写的 `context`、`fast` 各调一次；已经是当前值的跳过。
+    3. 设 effort。
+    - 模型没有这个参数，或不提供这个值，就留模型自己的值并记日志，做法同 effort。
+    - 其他 id（`effort`、`mode` 等）不从 model 值里设，只记日志。
+    - Auto 不设任何参数。
+    - 回放测试：`cursor_model_variants_test.go`，用 `parameterized-model-picker` 的录制。
+  - **服务端**：变体按它的模型判断是否下架，目录里有这个模型就不算下架；effort 档位也读这个模型那一行。
+    对应 `retiredPin`、`runtimeCatalogReasoningLevels` 和 shared 的 `runnerCatalogRow`。目录里原样列着的值仍按原样认。
+  - **客户端**：
+    - 目录里带 `context`、`fast` 参数的模型，模型菜单在 Effort 下面加 Context、Speed 两行，取值和名字都来自目录。
+    - chip 写「模型 Effort · Context · Speed」：context 只在不是模型默认值时写，`fast=true` 时写目录给的名字「Fast」，例如「Claude Opus 5.5 High · 1M · Fast」。
+    - 换模型时参数不跟过去，新模型从它自己的默认值开始。
+    - Web 已经实现；iOS（P7b）、Android（P7c）按同样的约定做。
 - **`cursor/list_available_models`**【实测】：返回 46 个 `{value, name, configOptions}`，每个模型带自己的参数定义，可以不建会话就拿到目录。
 - **`agent models` / `--list-models`**【实测】：输出另一套命名（如 `claude-opus-5-5-high-fast`），和 ACP 的值不同，**P3 的模型目录应以 ACP 为准**。
 - **Auto 实际用了哪个模型**：ACP 上看不到。会话库里 assistant 消息的 `providerOptions.cursor.modelName` 记着，实测一次是 `cursor-grok-4.5-high`。
