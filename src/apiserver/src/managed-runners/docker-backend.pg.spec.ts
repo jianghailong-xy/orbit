@@ -32,7 +32,10 @@
  *       drained for its image; after its next sleep (the same stop proof, compute back only once it is
  *       removed) the wake makes the next generation from the new image, on the same volume and runner;
  *  (12) why an upgrade recreates the apiserver before the channel: a channel already on the new image
- *       refuses the previous apiserver's creates, and the runner it was starting fails.
+ *       refuses the previous apiserver's creates, and the runner it was starting fails;
+ *  (13) model supply is the same rule on Docker: with no runtime signed in, the owner's own enabled
+ *       model key makes the runner READY on it; another account's key, a disabled one and a shared
+ *       one do not.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -497,5 +500,57 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
     assert.equal(outcomes.at(-1), 'FAILED', outcomes.join(' → '));
     assert.equal(((await w.mappingOf(ownerId)).lastError as { code: string }).code, 'CONTAINER_GUARD_UNVERIFIED');
     assert.equal(w.channel.count('createContainer'), 1, 'only the running apiserver\'s first runner was made');
+  });
+
+  await t.test("(13) no runtime signed in: the owner's own enabled model key makes it READY on that key; another's, a disabled or a shared key does not", async () => {
+    const w = world();
+    const tag = randomUUID().slice(0, 8);
+    const ownerId = await w.owner('key-only');
+    const other = await w.owner('key-other');
+    const key = (label: string, data: { ownerId: string | null; enabled?: boolean }) => db.modelProvider.create({
+      data: { slug: `${label}-${tag}`, label, runtime: 'claude', baseUrl: 'https://api.deepseek.com/anthropic', apiKeyEnc: 'not-read-here', presetSlug: 'deepseek', ...data },
+    });
+    await key('another-account', { ownerId: other });
+    await key('disabled', { ownerId, enabled: false });
+    await key('shared', { ownerId: null });
+    await w.service.ensure(ownerId, `ensure-${tag}`);
+    for (let i = 0; i < 40; i += 1) {
+      const m = await w.mappingOf(ownerId);
+      if (m.podUid && m.managementState === 'STARTING') break;
+      await w.manager.reconcile(m.id);
+      const after = await w.mappingOf(ownerId);
+      if (after.nextAttemptAt && after.nextAttemptAt > w.now()) w.advance(after.nextAttemptAt.getTime() - w.now().getTime() + 1);
+    }
+    // Claude Code and Codex installed in the container, neither signed in.
+    const beat = async () => {
+      w.advance(1_000);
+      await db.runner.update({
+        where: { id: (await w.mappingOf(ownerId)).runnerId },
+        data: {
+          status: 'ONLINE',
+          lastHeartbeatAt: w.now(),
+          engines: [{ engine: 'claude', installed: true, auth: 'no' }, { engine: 'codex', installed: true, auth: 'no' }],
+          capabilities: [MANAGED_RUNNER_INSTANCE_CAPABILITY, MANAGED_RUNNER_SLEEP_CAPABILITY],
+        },
+      });
+    };
+    await beat();
+    const starting = await w.mappingOf(ownerId);
+    assert.equal(starting.backend, 'docker');
+    assert.equal(await w.manager.reconcile(starting.id), 'WAITING');
+    const waiting = await w.mappingOf(ownerId);
+    assert.equal(waiting.managementState, 'STARTING', "another account's key, a disabled one and a shared one are no supply");
+    assert.equal((waiting.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    assert.equal(waiting.initialProvider, null);
+
+    const own = await key('own', { ownerId });
+    await beat();
+    assert.equal(await w.manager.reconcile(waiting.id), 'READY');
+    const ready = await w.mappingOf(ownerId);
+    assert.equal(ready.initialProvider, own.slug, 'READY on the owner\'s own key');
+    assert.equal(ready.lastError, null);
+    assert.equal(ready.podUid, waiting.podUid, 'the same container, waited on');
+    const status = await w.service.status(ownerId);
+    assert.deepEqual({ state: status.managementState, initialProvider: status.initialProvider }, { state: 'READY', initialProvider: own.slug });
   });
 });

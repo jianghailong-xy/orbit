@@ -1,21 +1,23 @@
 import { ConflictException } from '@nestjs/common';
-import { AgentProvider, ENGINE_CLI_NAMES, MODEL_UNAVAILABLE, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, MODEL_UNAVAILABLE, defaultEngineOf, type LoginEngine } from '@orbit/shared';
 
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import type { PrismaService } from '../prisma/prisma.service';
+import { isBuiltinProvider, keyCredential } from '../providers/custom-provider';
 import { ADVERTISED_RUNTIMES } from '../runner-api/runner-provider-support';
 import { bringsOwnEnvCredential } from '../sessions/engine-signin-preflight';
 
 /**
  * Model supply on a managed runner (docs/managed-runner-design.md, "Provisioning retry wake and
  * sleep" 3 and "Resource admission model supply and isolation"): the runtimes its last heartbeat
- * reported installed and signed in. A mounted volume and a heartbeat without one is not READY, and
- * the managed image installs nothing on demand, so an engine the runner does not report ready is one
- * a session cannot start on there.
+ * reported installed and signed in, or else one of its owner's own model keys that a runtime it
+ * reported installed can run (`managedKeySupply`). A mounted volume and a heartbeat without either
+ * is not READY, and the managed image installs nothing on demand, so an engine the runner does not
+ * report ready is one a session cannot start on there.
  *
- * Only the CLI's own `auth: yes` counts: `unknown` is a probe that could not answer, not a sign-in.
- * OpenCode (which is never signed in) and DeepSeek Harness (whose readiness is reported apart) are
- * not counted as supply in this version.
+ * Only the CLI's own `auth: yes` counts as a sign-in: `unknown` is a probe that could not answer, not
+ * a sign-in. OpenCode (which is never signed in) and DeepSeek Harness (whose readiness is reported
+ * apart) are not counted as supply in this version.
  */
 
 /** The runtimes that count, in the order a first session takes them: Orbit's own default first. */
@@ -61,6 +63,37 @@ export function managedRuntimeSupply(runner: ManagedSupplyRunner): LoginEngine[]
 }
 
 /**
+ * The model key a managed runner with no runtime signed in is ready with, by the slug a first session
+ * names it with, or null. It is the first of its owner's own enabled keys, in the order the owner
+ * arranged them (`position`, unset last, then age), whose engine this runner reported installed,
+ * without an installation error and advertised where the claim needs it. That engine is the one a
+ * session naming only the key starts on. A session on a key brings its own credential, so the engine
+ * needs no sign-in of its own.
+ *
+ * Only the owner's own keys count. Another account's key is not theirs to run, and a shared key (no
+ * owner) is an administrator's, dispatchable for administrators only. A disabled key counts for
+ * nothing. A key whose slug is also a built-in runtime's name (a configured `kimi` or `dsh`) is passed
+ * over: `initial_provider` holds the name alone, which would read as that runtime's own sign-in.
+ */
+export async function managedKeySupply(
+  prisma: Pick<PrismaService, 'modelProvider'>,
+  ownerId: string,
+  runner: ManagedSupplyRunner,
+): Promise<string | null> {
+  const keys = await prisma.modelProvider.findMany({
+    where: { ownerId, enabled: true },
+    orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: { slug: true, runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
+  });
+  for (const key of keys) {
+    if (isBuiltinProvider(key.slug)) continue;
+    const engine = defaultEngineOf(keyCredential(key));
+    if (engine && managedRuntimeReady(runner, engine, { bringsOwnCredentials: true })) return key.slug;
+  }
+  return null;
+}
+
+/**
  * The first session of a managed runner's default workspace runs on a runtime that runner has ready,
  * or is refused with MODEL_UNAVAILABLE before anything is created — never started on an engine it
  * does not have, which is what the provider floor (Claude) or a client echoing it would otherwise
@@ -101,6 +134,6 @@ export async function assertManagedFirstSessionRuntime(
       ? `${asked} is not installed and signed in on your managed runner, so this first session cannot start there. ` +
         `Start it on ${ready.join(' or ')}.`
       : 'No runtime is installed and signed in on your managed runner yet, so this first session cannot start. ' +
-        'Sign one in from Infrastructure, then start the session again.',
+        'Sign one in, or add a model key, from Infrastructure, then start the session again.',
   });
 }

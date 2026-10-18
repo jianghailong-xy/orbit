@@ -172,6 +172,7 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `test-server.sh start [--managed\|--managed-false]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`; `secrets` only makes the secrets and the lab CA. |
 | `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
 | `manager-lab.py` | The manager against real k3s ([below](#manager-reconciliation-t04)): the T04 server directory, a second apiserver replica, owners and their concurrent sign-ins and ensures, the database against k3s (`consistency`), a recorder of every change, a stand-in Claude login on a runner's volume, a killed runner process, an operator's delete or eviction, an API outage, a controller crash timed on a create, the switch checks and one owner against another. |
+| `login-lab.py` | Sign-in provisioning on real k3s ([below](#sign-in-provisioning-t05)), through manager-lab.py's gate, replica and views: accounts and timed (concurrent) sign-ins, an account with its own runner and arranged workspaces, its landing by the web's own rule and its deep links, the switch-off check for new and existing accounts, a model key on fake-model.py's endpoint or the owner's key file, sessions in the managed default workspace, a provisioning timeline, the manager's requests by size, and a database trigger that refuses the sign-in's intent. |
 | `api-gate.py` | A pass-through in front of the k3s API forward that only the test manager's kubeconfig names: it logs each connection's TLS record sizes, never decrypting them, and can lose one create's answer after k3s applied it (and the read-back's), or hold it while the controller is killed. |
 | `qmp.py SOCKET hostfwd-remove\|hostfwd-add` | Takes the 127.0.0.1 forward of the k3s API (or SSH) away and puts it back: an outage of the API server for everything on the host. |
 | `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
@@ -329,6 +330,39 @@ python3 scripts/managed-runner/lab/single-writer.py admission remove   # before 
 The manager's Pods now carry the finalizer `orbit.dev/managed-runner-stop-report`. A managed Pod deleted while no manager
 runs (the switch off, the test server stopped) stays Terminating until a manager records its stop, or until an operator
 removes the finalizer by hand.
+
+## Sign-in provisioning (T05)
+
+Recorded 2026-10-17 by task T05: new accounts signing in on real k3s, through provisioning, a heartbeat and the default workspace,
+to a first session. Also concurrent and repeated sign-ins, an existing account's landing and deep links, two provisioning failures
+and their retries, and the switch unset and `false`. The records are in
+[the evidence](evidence/managed-runner-login-lab/2026-10-18/README.md). The owner's DeepSeek key file did not exist, so every
+session ran on a DeepSeek-preset model key whose endpoint is fake-model.py. That is the real key's code path, but not a model.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t05
+L=scripts/managed-runner/lab/login-lab.py
+python3 $L prepare --image docker.io/library/orbit-managed-runner-lab@sha256:...   # T02a's CA and token, T04's identity
+python3 $L gate start && sudo scripts/managed-runner/lab/test-server.sh start      # switch unset; --managed-false; --managed
+python3 $L off-check admin --label unset          # the first user, then new and existing accounts: nothing managed
+python3 $L account vera && python3 $L veteran vera && python3 $L landing vera --save
+python3 scripts/managed-runner/lab/single-writer.py admission install            # with --managed, and replica start
+python3 $L account erin && python3 $L until erin STARTING --reason MODEL_UNAVAILABLE
+python3 $L key erin --fake && python3 $L until erin READY       # or --key-file the owner's DeepSeek key
+python3 $L session erin --prompt TEXT && python3 $L wait-session erin SESSION   # nothing named, as a client sends it
+python3 $L signin hank --parallel 16 --replica && python3 $L gate-summary --since TS
+python3 $L intent-fault on|off                    # a sign-in whose intent cannot be written
+python3 scripts/managed-runner/lab/single-writer.py admission remove             # before the test server stops
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset and `false` | The deployment's first user, new accounts and an existing one (with its own runner, workspaces and a session) sign in as before. No mapping, runner, workspace or namespace object is written or changed, and every managed write is 404 `MANAGED_RUNNER_DISABLED`. The gate's first connection came only once the switch was on. The same with six mappings present, on the fixed build. |
+| Model supply | A key-only account never became READY: Claude Code and Codex installed but signed out kept it `MODEL_UNAVAILABLE`, and the shared display offered no first session. Since `baea95083` the owner's own enabled model key counts, on both backends, and READY records its slug as `initialProvider` ([design record](managed-runner-design.md#implementation-record-sign-in-provisioning)). |
+| A new account | Sign-in 201 in 47 ms. PVC, Secret and Pod within 5.4 s, the first heartbeat 47 s after the sign-in, READY 10 s after its key was added. The first session, with nothing named, started on the key, was claimed by the managed runner and answered. The workspace is on `/dev/rbd*` ext4 with its `autoInitGit` baseline. A fresh deployment's first user (the bootstrap) went the same way. |
+| Concurrent and repeated | 16 concurrent first sign-ins over two replicas: one mapping, runner and workspace, and one PVC, Secret, admission probe and Pod create sent. Five later sign-ins left the mapping's revision as it was. |
+| An existing account | Its workspaces, their order, the web landing and every deep link were unchanged through sign-in, a capacity wait, start, READY and the switch `false`. The managed default was added last, matched by nothing. |
+| Failures | An intent the database refused, and a cluster without the admission guard (`FAILED`, `ADMISSION_GUARD_MISSING`): each sign-in still answered 201 with a working token. The next sign-in, or the owner's retry once the guard was back, made it READY, on the same PVC. A sign-in does not retry a FAILED mapping. |
 
 ## Known limits
 
