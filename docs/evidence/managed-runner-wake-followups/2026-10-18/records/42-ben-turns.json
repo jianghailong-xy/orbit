@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-18T04:11:47.469+00:00",
+  "owner": "ben",
+  "turns": [
+    {
+      "answered_at": "2026-10-18T04:11:37.954",
+      "client_turn": "initial-01a14d31-4b75-72",
+      "content": "T06-B-BEN-S1 the first session, nothing named, while the runner waits ",
+      "created_at": "2026-10-18T04:11:35.415",
+      "delivered_at": "2026-10-18T04:11:37.253",
+      "kind": "message",
+      "seq": 1,
+      "session": "01a14d31",
+      "status": "ANSWERED"
+    },
+    {
+      "answered_at": "2026-10-18T04:11:38.068",
+      "client_turn": "initial-01a14d31-4bc1-75",
+      "content": "T06-B-BEN-S2 a session naming the key, while the runner waits for capa",
+      "created_at": "2026-10-18T04:11:35.705",
+      "delivered_at": "2026-10-18T04:11:37.466",
+      "kind": "message",
+      "seq": 1,
+      "session": "01a14d31",
+      "status": "ANSWERED"
+    }
+  ]
+}

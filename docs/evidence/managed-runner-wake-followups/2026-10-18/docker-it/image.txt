@@ -1,0 +1,1 @@
+orbit-managed-runner:t06b-ebf54ab8d sha256:9844c08e26f18dddbdd3a19351aed44c4f827fb43c53dfa2994b0a85cc4658b8 org.opencontainers.image.revision=ebf54ab8ddcb35224a4d8f0c1feae0e480186b38
