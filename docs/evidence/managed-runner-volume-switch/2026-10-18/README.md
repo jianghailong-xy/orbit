@@ -132,7 +132,12 @@ after the VM booted.
 
 ## Tests
 
-TESTS-T08B
+The code's own tests are `managed-runner-volume-switch.pg.spec.ts` (each case listed in the design's record), the unit
+specs `managed-runner-volume-switch.spec.ts` and `managed-runner-disabled.spec.ts`, the route in
+`managed-runner-boot.pg.spec.ts`, the census's reading by hand, and `lab_test.py`'s check of the restored claim's
+manifest. The final tip's checks (the project's merge check, the managed-runner Python tests, all fourteen managed-runner
+pg specs and both tenant-isolation censuses) are recorded with the task's evidence rather than here, so that the tip they
+ran on is the one that carries this file.
 
 ## Left in the lab
 
