@@ -164,7 +164,7 @@ private val TRAY_MAX_HEIGHT = 248.dp
  */
 @Composable
 internal fun PendingTrayCard(rows: List<PendingTrayRow>, enabled: Boolean, steer: (PendingTrayRow) -> Unit, withdraw: (PendingTrayRow) -> Unit,
-    modifier: Modifier = Modifier) {
+    modifier: Modifier = Modifier, note: String? = null) {
     if (rows.isEmpty()) return
     val shape = RoundedCornerShape(14.dp)
     // Inset from the composer's own edges, the board's 12 dp each side on a phone.
@@ -177,6 +177,13 @@ internal fun PendingTrayCard(rows: List<PendingTrayRow>, enabled: Boolean, steer
                 if (index > 0) HorizontalDivider(Modifier.padding(start = 38.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 TrayRow(row, enabled, { steer(row) }, { withdraw(row) })
             }
+        }
+        // Why none of them can go into the turn running now — an engine that takes no message mid-turn — said only while one waits for
+        // the next turn (web `PendingTray`'s note).
+        if (note != null && rows.any { !it.intoTurn }) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(note, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).testTag("pending-tray-note"),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

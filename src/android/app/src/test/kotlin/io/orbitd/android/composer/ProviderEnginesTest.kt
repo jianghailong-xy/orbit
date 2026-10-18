@@ -8,8 +8,9 @@ import java.io.File
 
 /**
  * `ProviderEngines` is the Kotlin mirror of @orbit/shared `providerEngines.ts`, the compatibility table every client and the server
- * share (docs/provider-engine-contract.md §2.1). Its cases are `providerEngines.spec.ts`'s, one for one, in the same order; the
- * last two read the shared sources back, so an engine or a CLI name changed there reds here.
+ * share (docs/provider-engine-contract.md §2.1). Its cases are `providerEngines.spec.ts`'s, one for one, in the same order — then
+ * `cursor-api-key.spec.ts`'s for a Cursor User API Key (P2); the last ones read the shared sources back, so an engine, a CLI name, a
+ * key's dialect or Cursor CLI's modes changed there reds here.
  */
 class ProviderEnginesTest {
     private fun key(runtime: String?, presetSlug: String?, baseUrl: String, subscriptionToken: Boolean = false) =
@@ -109,6 +110,48 @@ class ProviderEnginesTest {
         assertFalse(ProviderEngines.isDeepSeekKey("moonshot", "https://api.deepseek.com/anthropic"))
     }
 
+    // @orbit/shared cursor-api-key.spec.ts (project P2): a Cursor User API Key in the same tables, case for case.
+
+    @Test fun p2CursorsDialectIsItsKeysOwnAndEveryOtherRuntimeKeepsItsDialect() {
+        assertEquals("cursor", ProviderEngines.keyDialect("cursor"))
+        for ((runtime, dialect) in listOf("claude" to "anthropic", "dsh" to "anthropic", "codex" to "openai", "kimi" to "openai-compatible",
+            "antigravity" to "gemini")) assertEquals(runtime, dialect, ProviderEngines.keyDialect(runtime))
+        assertNull(ProviderEngines.keyDialect("opencode"))
+        // The vendor a sentence names a Cursor key by: its preset's.
+        assertEquals("the Cursor key “Cursor 2”",
+            ProviderEngines.keyName(Json.parseToJsonElement("""{"slug":"cursor-api-2","label":"Cursor 2","presetSlug":"cursor-api"}""").jsonObject))
+    }
+
+    @Test fun p2ACursorKeyRunsOnCursorCliAloneAndEveryOtherKeyAndEngineKeepsItsOwn() {
+        val cursorKey = key("cursor", "cursor-api", "https://api2.cursor.sh")
+        assertEquals(listOf("cursor"), ProviderEngines.credentialEngines(cursorKey))
+        assertEquals("cursor", ProviderEngines.defaultEngineOf(cursorKey))
+        for (engine in ProviderEngines.ALL_ENGINES) assertEquals(engine, engine == "cursor", ProviderEngines.isEngineCompatible(engine, cursorKey))
+        // The dialect decides, not the preset: a Cursor key typed in by hand is the same key.
+        assertEquals(listOf("cursor"), ProviderEngines.credentialEngines(key("cursor", null, "https://api2.cursor.sh")))
+        // Cursor CLI runs a Cursor key and its own sign-in; no other key runs on it, and they keep their engines.
+        assertEquals(listOf("cursor"), ProviderEngines.credentialEngines(Credential.Login("cursor")))
+        for ((credential, engines) in listOf(
+            key("claude", "glm", "https://api.z.ai/api/anthropic") to listOf("claude", "opencode"),
+            key("claude", "deepseek", "https://api.deepseek.com/anthropic") to listOf("claude", "opencode", "dsh"),
+            key("dsh", "deepseek-harness", "https://api.deepseek.com/anthropic") to listOf("dsh", "claude", "opencode"),
+            key("claude", "anthropic", "https://api.anthropic.com", true) to listOf("claude"),
+            key("codex", "openai", "https://api.openai.com/v1") to listOf("codex", "opencode"),
+            key("kimi", "moonshot", "https://api.moonshot.ai/v1") to listOf("kimi", "opencode"),
+            key("antigravity", "gemini", "https://generativelanguage.googleapis.com") to listOf("antigravity", "opencode"),
+            key("claude", "cursor-api", "https://api2.cursor.sh") to listOf("claude", "opencode"),
+            key("opencode", null, "https://x.example") to emptyList(),
+        )) {
+            assertEquals("$credential", engines, ProviderEngines.credentialEngines(credential))
+            assertFalse("$credential", ProviderEngines.isEngineCompatible("cursor", credential))
+        }
+        // GET /providers says so of a Cursor key; a payload from before `engines` reads it as its protocol's engine all the same.
+        val rows = rows("""[{"slug":"cursor-api","runtime":"cursor","engines":["cursor"]},{"slug":"cursor-old","runtime":"cursor"}]""")
+        assertEquals(listOf("cursor"), ProviderEngines.providerEngines("cursor-api", rows))
+        assertEquals(listOf("cursor"), ProviderEngines.providerEngines("cursor-old", rows))
+        assertEquals("cursor", ProviderEngines.nativeEngine("cursor"))
+    }
+
     // What a client reads off the server's payloads (docs/provider-engine-contract.md §6.3).
 
     private fun rows(json: String) = Json.parseToJsonElement(json).jsonArray.map { it.jsonObject }
@@ -165,6 +208,30 @@ class ProviderEnginesTest {
         assertEquals(Regex("AgentProvider\\.(\\w+)").findAll(order).map { enums.getValue(it.groupValues[1]) }.toList(), ProviderEngines.ALL_ENGINES)
         val names = Regex("\\[AgentProvider\\.(\\w+)]: '([^']+)'").findAll(source).associate { enums.getValue(it.groupValues[1]) to it.groupValues[2] }
         assertEquals(names, ProviderEngines.ENGINE_CLI_NAMES)
+    }
+
+    /** Each runtime's dialect is @orbit/shared `keyDialect`'s, its cases read back: a runtime added or moved there reds here. */
+    @Test fun theKeyDialectsAreTheSharedModulesOwn() {
+        val body = Regex("export function keyDialect\\([^)]*\\)[^{]*\\{(.*?)\\n}", RegexOption.DOT_MATCHES_ALL).find(shared("openCodeKeys.ts"))!!.groupValues[1]
+        val dialects = mutableMapOf<String, String>()
+        val waiting = mutableListOf<String>()
+        Regex("case '([^']+)':|return '([^']+)';").findAll(body).forEach { match ->
+            val (case, dialect) = match.destructured
+            if (case.isNotEmpty()) waiting += case else { waiting.forEach { dialects[it] = dialect }; waiting.clear() }
+        }
+        assertEquals(setOf("claude", "dsh", "codex", "kimi", "antigravity", "cursor"), dialects.keys)
+        dialects.forEach { (runtime, dialect) -> assertEquals(runtime, dialect, ProviderEngines.keyDialect(runtime)) }
+    }
+
+    /** Cursor CLI's modes and the one a session nobody named a mode for starts in are @orbit/shared `enums.ts`'s. */
+    @Test fun cursorsPermissionModesAreTheSharedEnumsOwn() {
+        val source = shared("enums.ts")
+        val values = mapOf("DEFAULT" to "default", "AUTO" to "auto", "DONT_ASK" to "dontAsk", "ACCEPT_EDITS" to "acceptEdits", "PLAN" to "plan",
+            "BYPASS" to "bypassPermissions")
+        val modes = Regex("CURSOR_PERMISSION_MODES: readonly PermissionMode\\[] = \\[(.*?)];", RegexOption.DOT_MATCHES_ALL).find(source)!!.groupValues[1]
+        assertEquals(Regex("PermissionMode\\.(\\w+)").findAll(modes).map { values.getValue(it.groupValues[1]) }.toList(), CursorRuntime.PERMISSION_MODES)
+        val start = Regex("CURSOR_DEFAULT_PERMISSION_MODE = PermissionMode\\.(\\w+);").find(source)!!.groupValues[1]
+        assertEquals(values.getValue(start), CursorRuntime.DEFAULT_PERMISSION_MODE)
     }
 
     @Test fun harnessesPermissionModesAreTheSharedEnumsOwn() {
