@@ -103,14 +103,21 @@ class MergeRecoveryTest {
         assertEquals("Still unresolved", r.conflictsHeading)
     }
 
-    /** The sixth: the repair session failed — its error, and the recovery's own step, which a new repair session then takes. */
-    @Test fun aFailedRepairSaysWhyAndTheRecoveryStillHasItsStep() {
+    /** The sixth: the repair session failed — its error. S2 opens a new repair session for a failed one, so its step is Resolve, never Continue. */
+    @Test fun aFailedRepairSaysWhyAndANewRepairSessionResolvesIt() {
         val r = recovery()
         val failed = repair("FAILED", "error" to JsonPrimitive("The model provider rejected the request"))
         assertEquals(MergeRecovery.RepairRow(RepairState.FAILED, "Repair session failed", "The model provider rejected the request"), row(r, failed))
         assertEquals("a failure outranks the check its turn queued", RepairState.FAILED, row(r, failed, checking = true).state)
         assertNull(row(r, repair("FAILED")).line)
-        assertEquals(Button("Continue repair", "repair", preparePR = false), primary(r, RepairState.FAILED))
+        val resolve = Button("Resolve in repair session", "repair", preparePR = false)
+        val preparePR = Button("Prepare PR candidate", "repair", preparePR = true)
+        assertEquals(MergeRecovery.Buttons(resolve, listOf(preparePR), Button("Check again", "preview")), r.buttons(supported = true, repair = row(r, failed).state))
+        assertEquals("a repair left unfinished by a failed session: no PR candidate there, as on board ⑤",
+            MergeRecovery.Buttons(resolve, emptyList(), Button("Check again", "preview")), recovery(*unfinished).buttons(supported = true, repair = RepairState.FAILED))
+        // Only a session S2 carries on is continued.
+        for (state in listOf("AWAITING_INPUT", "SUCCEEDED", "ENDED", "INTERRUPTED"))
+            assertEquals(state, Button("Continue repair", "repair", preparePR = false), primary(r, row(r, repair(state)).state))
         assertEquals(Button("Checking…", "wait"), primary(r, RepairState.CHECKING))
     }
 

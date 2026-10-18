@@ -192,14 +192,16 @@ internal data class MergeRecovery(
         if (repair == RepairState.RUNNING) return Buttons(Button("Open repair session", "open"), emptyList(), null,
             "Orbit checks again when the repair stops.")
         val check = Button(if (previewId == null) "Check and repair" else "Check again", "preview")
-        // With a repair session in the loop, the same session carries on (S2).
-        val resolve = Button(if (repair == null) "Resolve in repair session" else "Continue repair", "repair", preparePR = false)
+        // With a repair session in the loop, the same session carries on (S2) — but a failed one is replaced by a new one.
+        val resolve = Button(if (repair == null || repair == RepairState.FAILED) "Resolve in repair session" else "Continue repair", "repair", preparePR = false)
         val preparePR = Button("Prepare PR candidate", "repair", preparePR = true)
         val repairs = if (repairWorktree == null) emptyList() else if (ready) listOf(preparePR) else listOf(resolve, preparePR)
         return when {
             ready -> Buttons(Button("Sync $targetBranch and merge", "apply"), repairs, check)
             code in setOf("PUSH_FAILED", "REMOTE_NOT_VERIFIED") -> Buttons(Button("Check result / retry reviewed candidate", "apply"), repairs, check)
-            code == "REPAIR_IN_PROGRESS" && repair != null -> Buttons(Button("Reply in repair session", "repair", preparePR = false), emptyList(), check)
+            // A repair left unfinished: the owner answers the session that stopped, or a new one takes over from the failed one.
+            code == "REPAIR_IN_PROGRESS" && repair != null ->
+                Buttons(if (repair == RepairState.FAILED) resolve else Button("Reply in repair session", "repair", preparePR = false), emptyList(), check)
             code == "CONFLICT" && repairWorktree != null -> Buttons(resolve, listOf(preparePR), check)
             else -> Buttons(check, repairs, null)
         }
