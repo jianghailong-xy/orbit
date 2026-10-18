@@ -522,6 +522,55 @@ $K/run-starting.sh OUT LABEL                   # sleep, wake, and a kill while t
 
 Left in the lab: `amy` SLEEPING, its PVC kept; the webhook removed; the test server and the gate stopped; the VM off.
 
+## End-to-end acceptance (T08)
+
+Recorded 2026-10-18 by task T08: two accounts (`ann`, `bob`) and a third (`cy`) through the whole flow on the lab's real
+k3s, in one run of `acceptance-lab.py` on the project line (`eb16b3b5e`: 48 steps, 261 checks, all passed, 36.4 minutes),
+with the switch unset, `false` and on. The records are in [the evidence](evidence/managed-runner-acceptance/2026-10-18/README.md),
+and the runbook written from it is [Managed runners on Kubernetes](managed-runner-kubernetes-operations.md). The owner's
+DeepSeek key file did not exist, so every session ran on fake-model.py as a DeepSeek-preset key (T05's way), which is not a
+model. The runner image was T06b's (`…@sha256:cdb09014…`; nothing under `src/runner-go` or `deploy/managed-runner/image`
+changed since its source); nothing was built into an image or pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08     # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08-run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t08-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/acceptance-lab.py run --out $OUT --quiet-seconds 90
+python3 scripts/managed-runner/lab/acceptance-lab.py report $OUT        # each step's time and checks, the intervals
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset, then `false`, no profile | No Kubernetes or Ceph setting in the apiserver's environment. Sign-ins; `GET /api/managed-runner` `enabled: false` and no display; every managed write `404 MANAGED_RUNNER_DISABLED`; this checkout's runner as a real self-managed runner (Claude Code 2.1.302 on the host) answered a session, a task run now and a task's run time. No managed row, no namespace object changed and no connection to the gate in 90 s each. |
+| Provisioning | 16 concurrent sign-ins of ann and bob over two replicas, the admission guard absent: one mapping, claim and Secret each, `FAILED ADMISSION_GUARD_MISSING` 5.7 s later, no Pod. Guard installed, the owners' retries: the Pod 6.3 s after, the first heartbeat 31 s after the Pod, `MODEL_UNAVAILABLE`, then READY 1.1 s after each key. The gate saw two claim creates, two Secret creates, two probes, then two Pod creates. |
+| Capacity | A budget of two runners: cy waited `WAITING_CAPACITY` with nothing created, and got its claim the moment the first runner slept. |
+| Sessions | An attachment, and a file written and committed in the session's worktree by Claude Code's own Bash tool (`FAKE-WRITE`), answered 2.3–2.4 s after each first session was made. |
+| Busy, then idle | A 240 s turn (ann) and a 240 s background job (bob): READY past the 90 s idle interval, the owner's sleep `409 MANAGED_RUNNER_BUSY` at 110 s; 96 s after the work ended the drain began, 40 s later both were SLEEPING, Pod gone, volume detached, no RBD watcher, compute released. |
+| Between the accounts | The other owner's token and runner credential refused (403/404) on the runner, workspace, instance, session, events, turn, attachment and a session in the other's workspace; the other's mapping unchanged. The guard refused Pods mixing the owners and volumes, an unlabelled Pod on a runner's claim and a copy of a runner's Pod under another name. In each runner: one RBD filesystem at `/var/lib/orbit`, no service account token, no credential variable, no RBD device node, UID 10001 with no capabilities, `401` from the Kubernetes API. |
+| Wakes | A message to sleeping ann: answered 10.4 s later on a new Pod. A task due at a time for sleeping bob: answered 5.1 s after it was due. |
+| Rebuilds | An operator's `kubectl delete pod` of ann's runner (held by the stop-report finalizer, then the next generation by itself): READY again 14.7 s after the delete. A SIGKILL of bob's `orbit run`: READY again 25.0 s after its Pod failed. Each on a new Pod of the next generation, the same claim. |
+| Controller restart | Both apiservers SIGKILLed 0.4 s into bob's wake, his Pod just created (STARTING); down for 5 s, then started again (6.9 s). The restarted manager adopted that Pod (no second Pod create), bob was READY 12.5 s after the kill, and ann's 200 s turn, running through it, was answered on the same Pod. |
+| Image rollback | The previous lab image (T02a's build) pinned and the apiservers restarted: the running Pod kept its image, the next generation ran the previous one; forward again the same way. |
+| Data through it all | The probe's random bytes, SQLite rows (WAL, `synchronous=FULL`) and Git commit, the uploads, the worktree and its commit, and the engine's transcript: the same after every sleep, wake, rebuild, restart and image change, `integrity_check` `ok`; each resumed session's next request carried the earlier conversation. One runner, claim, PV, handle and RBD image per account throughout (ann generations 1–7), never two Pods on a volume in any of the 207 timeline samples. |
+| Independent backup | ann disabled (asleep 33.8 s later), her 2 GiB image exported out of the VM to the host (7.8 s, 27.0 MB gzip, 0.3 s copy), checked there with no cluster (`debugfs`; 4.3 s), written into a new claim's image that read back byte for byte as the backup, and checked in a Pod (25.8 s). The original untouched; ann woke on it. |
+| Off again, every runner asleep | Unset, then `false`: a message, a task run now and a task's run time per account made no managed write, changed nothing in the namespace and reached nothing for 90 s each; every claim kept; the self-managed runner kept working. Switched on, all six waiting pieces of work were answered, ann's last, once a runner had slept and freed a slot. |
+
+Findings: Ceph-CSI v3.18.0 with `attachRequired: true` refuses to publish a static PV whose handle is a plain image
+name, and its unpublish then panics, which holds the VolumeAttachment and the PV on the attacher's finalizer: the runbook
+restores into a claim the driver provisions instead. A sleep already advances a mapping's generation, so a wake's new Pod
+keeps the generation the sleeping row names. Two volumes writing on this VM's one HDD fsync three times as slowly as one.
+
+Left in the lab: `test-server-t08` with ann, bob and cy SLEEPING, their claims kept; the restored claim
+`t08-restore-20261018t125553z` and its PV and image, as retained test data; the backup archive and its manifest in
+`/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z` (0700); the webhook removed; the test server, gate, replica,
+recorder and self-managed runner stopped; the VM off.
+
 ## Known limits
 
 - **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2

@@ -8,9 +8,10 @@ on kernel RBD), the claim's PersistentVolume (`Retain`) and an RBD image `csi-vo
 the account's checkouts, sessions, uploads, engine sign-ins and the runner's own identity; nothing else keeps a copy of
 it. A deployment whose managed runners run on Docker has [its own runbook](managed-runner-docker-operations.md).
 
-Every procedure here, and every number, comes from the single-machine lab ([docs/managed-runner-lab.md](managed-runner-lab.md))
-on 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md)): k3s v1.36.5, Ceph 20.2.4, Ceph-CSI
-v3.18.0, one node. What needs a second node is marked **Not verified here**. Read the [design contract](managed-runner-design.md)
+The procedures were run in the single-machine lab ([docs/managed-runner-lab.md](managed-runner-lab.md)): k3s v1.36.5,
+Ceph 20.2.4, Ceph-CSI v3.18.0, one node. The deployment steps are its scripts' (tasks L0, T02a and T04); everything else,
+and every number, is from task T08's end-to-end run of 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md)).
+What needs a second node, or was not run, is marked **Not verified here**. Read the [design contract](managed-runner-design.md)
 first: this page says how to operate it, not why it is built so.
 
 Conventions. Name the context and the namespace on every command, never a default:
@@ -92,13 +93,17 @@ supplied by its own owners does the same with that owner's tooling.
 7. **Switch it on**, on the authorized apiserver only: `ORBIT_MANAGED_RUNNERS_ENABLED=true` and
    `ORBIT_MANAGED_RUNNERS_PROFILE=/absolute/path/profile.json`, then restart it. No default entry point sets either
    variable ([the boundary test](../scripts/managed-runner/deployment_boundary_test.py) keeps it so).
-   - `GET /api/auth/capabilities` answers `managedRunners.enabled: true`.
+   - `GET /api/auth/capabilities` answers `managedRunners.enabled: true` (`false` while the switch is off, as the run
+     recorded).
    - An account's next sign-in provisions: the mapping, the claim and the bootstrap Secret within seconds, the Pod once
      admission and capacity allow, `READY` at the runner's first heartbeat once a model is available (a signed-in
-     runtime, or the owner's own enabled key). Measured: ⟪T08:provision⟫.
+     runtime, or the owner's own enabled key). Measured: with the guard in place, the Pod 6.3 s after the owner's retry, its
+     runner container 11 s later, its first heartbeat 20 s after that (the engine probe), and READY 1.1 s after the account
+     added its key. Without the guard, the sign-ins still answered at once, and 5.7 s later both mappings were `FAILED`
+     `ADMISSION_GUARD_MISSING`, with their claims and Secrets made and no Pod.
    - More than one apiserver may run the manager: a lease in the database gives each mapping one manager at a time.
      Sixteen concurrent sign-ins of two accounts over two replicas made one claim, one Secret and one Pod each
-     (⟪T08:concurrent⟫).
+     (the slowest answered in 236 ms; the manager sent two claim creates, two Secret creates and two admission probes).
 
 ## Find an account's runner
 
@@ -129,9 +134,9 @@ Every Pod the manager creates carries the finalizer `orbit.dev/managed-runner-st
 report of how the containers ended, until the manager has recorded that report as the proof that this generation
 stopped. The manager then takes the finalizer off (a JSON patch that tests the Pod's UID and the finalizer) and, if the
 runner is wanted, starts the next generation on the same volume. In the lab an operator's `kubectl delete pod` of a
-running runner left the object held by the finalizer, and the next generation started by itself
-(⟪T08:rebuild-delete⟫). Without the finalizer the kubelet's final delete would remove the report within a second, and
-a routine deletion would end in `FENCING`.
+running runner left the object held by the finalizer, and the next generation started by itself: READY again 14.7 s
+after the delete, a new Pod of the next generation on the same claim. Without the finalizer the kubelet's final delete
+would remove the report within a second, and a routine deletion would end in `FENCING` (T02a saw exactly that).
 
 **When a Pod stays `Terminating`.** `$K get pod mr-$R` shows `Terminating` for minutes, `metadata.finalizers` lists
 `orbit.dev/managed-runner-stop-report`, and deleting the namespace hangs. Find out why:
@@ -149,8 +154,9 @@ a routine deletion would end in `FENCING`.
 
 - the Pod's own kubelet has reported every container terminated (point 2), its node is `Ready`, and no manager will
   record it: the switch is to stay off, or the environment is being taken down. The object then goes. Turning the switch
-  on again later finds the generation gone without a recorded proof, so that runner waits in `FENCING`
-  (`PREDECESSOR_STOP_UNPROVEN`) for a fencing receipt: prefer bringing a manager back if the runner is to run again;
+  on again later finds the generation gone without a recorded proof, so by the manager's rule that runner waits in
+  `FENCING` (`PREDECESSOR_STOP_UNPROVEN`) for a fencing receipt (`managed-runner-manager.ts`; not run in the lab): prefer
+  bringing a manager back if the runner is to run again;
 - the Pod's node has been **fenced**: powered off through its BMC or hypervisor and kept out, or its Ceph clients
   blocklisted by a tested, persistent procedure, and the receipt below is (or is about to be) written. The manager reads
   the receipt once the object is gone.
@@ -181,8 +187,8 @@ An independent backup is a copy of the RBD image outside the Ceph cluster, taken
 snapshots and the pool's replicas are not backups.
 
 1. **Hold the runner asleep.** Disable the account (**Admin → Users → Disable**). A disabled account's runner drains and
-   sleeps, and no message, task or wakeup wakes it; this also signs the account out. Measured: asleep ⟪T08:disable⟫
-   after the disable.
+   sleeps, and no message, task or wakeup wakes it; this also signs the account out. Measured: asleep 33.8 s after the
+   disable.
 2. **Check that nothing has the image.** The query above says `SLEEPING`; `$K get pod mr-$R` finds nothing; no
    VolumeAttachment names the PV; `rbd status <pool>/<image>` lists no watchers. Do not start any Pod on the claim to
    back it up: the admission guard refuses it, and it would be a second writer if it did not.
@@ -198,7 +204,7 @@ snapshots and the pool's replicas are not backups.
    Move `volume.img.gz` to the backup destination outside the Ceph failure domain, check its SHA-256 there, encrypt it
    under the backup key, and write a manifest beside it: owner, runner, claim name and UID, PV name and UID, volume handle,
    pool, image name and ID, size, FSID, the generation at the backup, both SHA-256 values and the time. Measured: a 2 GiB
-   image exported and copied out of the VM in ⟪T08:export⟫; the archive was ⟪T08:archive⟫.
+   image exported, checked and compressed in 7.8 s and copied out of the VM in 0.3 s; the archive was 27.0 MB.
 4. **Enable the account again.** Its runner wakes on its own volume at its next message, task or wakeup.
 
 ## Check a backup without the cluster
@@ -217,7 +223,7 @@ Then, as root with `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFI
 runner's UID): `PRAGMA integrity_check` on every SQLite file under `tree/home`, `git fsck` on `tree/home/orbit-repos/*`,
 and the checksums of what matters to the account. Remove `tree` and `volume.img` afterwards: they hold the runner's
 credentials. In the lab the archive of ann's volume gave back the probe's random file, every committed SQLite row and its
-Git commit, every upload and engine transcript with its checksum, and `ok` for every SQLite file (⟪T08:verify⟫).
+Git commit, every upload and engine transcript with its checksum, and `ok` for every SQLite file, in 4.3 s.
 
 ## Restore to a new PVC
 
@@ -250,7 +256,7 @@ and to prove that a backup restores.
 4. **Afterwards** delete the check Pod. The restored claim, its PV and image stay until someone deletes them on purpose
    (`Retain`: delete the claim, then the PV, then `rbd rm` the image, or set the PV's reclaim policy to `Delete` first).
 
-Measured in the lab: the claim, the write and the read-back, and the check Pod took ⟪T08:restore⟫. The new image read back
+Measured in the lab: 25.8 s in all, 17.9 s of it for the claim, the write and the read-back. The new image read back
 byte for byte as the backup; the Pod found it as ext4, the probe's file, rows and commit as backed up, the uploads,
 worktrees and transcripts with their checksums, and `ok` everywhere. The original claim, PV, handle and RBD image were
 untouched, and ann's runner then woke on its original volume with the same identity.
@@ -267,15 +273,18 @@ Until then, a runner whose claim is gone stays `PVC_MISSING`, and nothing is cre
 **Switch managed runners off.** Set `ORBIT_MANAGED_RUNNERS_ENABLED=false` (or remove it) and restart the apiserver. The
 switch is read at start-up. Management freezes: nothing is created, woken, put to sleep or deleted; claims, PVs and RBD
 images stay; the managed API answers `404 MANAGED_RUNNER_DISABLED`; sign-in provisions nothing. A runner that was
-running keeps serving its sessions as a runner, but nothing drains it and nothing restarts it, and a Pod deleted meanwhile
-hangs `Terminating` ([above](#the-stop-report-finalizer)). So put the runners to sleep first: each owner's sleep, or
-disable the accounts, and wait for `SLEEPING`. Measured with every runner asleep, unset and then `false`: messages, a
-task run now and a task's run time made no managed write and no request to Kubernetes for ⟪T08:off⟫ each, every claim
+running keeps serving its sessions as a runner, but nothing drains it and nothing restarts it (T06), and a Pod deleted
+meanwhile hangs `Terminating` ([above](#the-stop-report-finalizer); T04). So put the runners to sleep first: each owner's
+sleep, or disable the accounts, and wait for `SLEEPING`. Measured with every runner asleep, unset and then `false`: messages, a
+task run now and a task's run time made no managed write and no request to Kubernetes for 90 s each, every claim
 was kept, and the waiting work woke the runners once the switch was on again.
 
 **Roll the runner image back.** Set `runner.image` in the profile to the previous digest and restart the apiservers. A
 running Pod keeps its image; each runner gets the pinned one at its next start, as its next generation. The admission
-guard admits only the pinned image, so pin the previous digest, not a tag.
+guard admits only the pinned image, so pin the previous digest, not a tag. Measured: with the previous lab image pinned
+and both apiservers restarted, the running Pod kept its image; the runner's next generation, after a sleep and a
+message, ran the previous image and resumed its session from the volume; rolling forward the same way gave the current
+image back.
 
 **Roll the apiserver back.** Migrations only go forward. An apiserver from before the managed-runner feature ignores the
 managed tables, but it also does not hold managed runners to their generation, so do not roll back past it with a managed

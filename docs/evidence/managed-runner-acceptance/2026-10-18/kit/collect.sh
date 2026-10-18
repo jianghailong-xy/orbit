@@ -10,7 +10,7 @@ set -euo pipefail
 run=${1:?RUN_OUT} server=${2:?SERVER_DIR} selfhost=${3:?SELFHOST_DIR} evidence=${4:?EVIDENCE_DIR}
 repo=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 [ -f "$run/steps.jsonl" ] && [ -d "$run/records" ] || { echo "no run in $run" >&2; exit 1; }
-mkdir -p "$evidence/records" "$evidence/logs"
+mkdir -p "$evidence/records" "$evidence/logs" "$evidence/checks"
 cp "$run/steps.jsonl" "$evidence/steps.jsonl"
 cp "$run"/records/*.json "$evidence/records/"
 cp "$run/run.log" "$evidence/logs/run.txt"
@@ -23,5 +23,5 @@ gzip -9 -c "$server/gate/api-gate.jsonl" > "$evidence/logs/api-gate.jsonl.gz"
 cp "$selfhost/runner.log" "$evidence/logs/selfhost-runner.txt"
 LAB_TEST_SERVER_DIR=$server python3 -I "$repo/scripts/managed-runner/lab/acceptance-lab.py" report "$run" > "$evidence/report.json"
 LAB_TEST_SERVER_DIR=$server python3 -I "$repo/scripts/managed-runner/lab/acceptance-lab.py" secret-scan \
-  "$evidence/records" "$evidence/logs" "$evidence/steps.jsonl" "$evidence/report.json" > "$evidence/secret-scan.json"
+  "$evidence/records" "$evidence/logs" "$evidence/checks" "$evidence/steps.jsonl" "$evidence/report.json" > "$evidence/secret-scan.json"
 echo "collected into $evidence: $(find "$evidence" -type f | wc -l) files, $(du -sh "$evidence" | cut -f1)"

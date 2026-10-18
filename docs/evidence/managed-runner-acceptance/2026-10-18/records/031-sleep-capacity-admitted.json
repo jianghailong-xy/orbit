@@ -1,0 +1,134 @@
+{
+ "checks": [
+  {
+   "check": "cy was admitted only after a runner slept",
+   "ok": true,
+   "value": {
+    "firstSleep": "2026-10-18T12:44:08.201+00:00",
+    "pvc": "2026-10-18T12:44:08Z"
+   }
+  },
+  {
+   "check": "cy: the owner's sleep is accepted and cy sleeps",
+   "ok": true,
+   "value": 202
+  }
+ ],
+ "endedAt": "2026-10-18T12:44:59.309+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sleep",
+ "result": {
+  "firstSleepAt": "2026-10-18T12:44:08.201+00:00",
+  "ready": {
+   "at": "2026-10-18T12:44:29.004+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T12:44:15.987+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "STARTING",
+      "pod": "60334e7e",
+      "reason": null,
+      "revision": 24
+     }
+    },
+    {
+     "at": "2026-10-18T12:44:29.004+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "READY",
+      "pod": "60334e7e",
+      "reason": null,
+      "revision": 25
+     }
+    }
+   ],
+   "reached": "READY",
+   "seconds": 13.1
+  },
+  "sleep": {
+   "status": 202
+  },
+  "slept": {
+   "at": "2026-10-18T12:44:59.309+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T12:44:29.433+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "asked",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "60334e7e",
+      "reason": null,
+      "revision": 27
+     }
+    },
+    {
+     "at": "2026-10-18T12:44:50.627+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "accepted",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "60334e7e",
+      "reason": null,
+      "revision": 27
+     }
+    },
+    {
+     "at": "2026-10-18T12:44:53.876+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "accepted",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "60334e7e",
+      "reason": null,
+      "revision": 30
+     }
+    },
+    {
+     "at": "2026-10-18T12:44:59.309+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 2,
+      "management_state": "SLEEPING",
+      "pod": null,
+      "reason": null,
+      "revision": 31
+     }
+    }
+   ],
+   "reached": "SLEEPING",
+   "seconds": 29.9
+  },
+  "times": {
+   "generation": 1,
+   "initialProvider": "deepseek-4",
+   "mappingCreatedAt": "2026-10-18T12:37:47.174+00:00",
+   "node": "orbit-mr-lab",
+   "podCreatedAt": "2026-10-18T12:44:13Z",
+   "pvcCreatedAt": "2026-10-18T12:44:08Z",
+   "readyAt": "2026-10-18T12:44:28.57+00:00",
+   "runner": {
+    "capabilities_reported_at": "2026-10-18T12:44:26.006+00:00",
+    "enrolled_at": "2026-10-18T12:37:47.172",
+    "last_heartbeat_at": "2026-10-18T12:44:26.004",
+    "status": "ONLINE",
+    "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+   },
+   "runnerContainerStartedAt": "2026-10-18T12:44:19Z",
+   "secretCreatedAt": "2026-10-18T12:44:13Z"
+  }
+ },
+ "seconds": 43.4,
+ "startedAt": "2026-10-18T12:44:15.946+00:00",
+ "step": "capacity-admitted"
+}

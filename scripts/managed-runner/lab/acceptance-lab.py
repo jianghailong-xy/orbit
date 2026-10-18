@@ -1902,15 +1902,25 @@ def cmd_report(args):
     measure('firstSessions', lambda: {n: seconds_between(r['createdAt'], r['event']['event']['ingested_at']) for n, r in get('sessions/first').items()})
     measure('busy', lambda: {n: {'secondsSinceBusyStart': r['secondsSinceBusyStart'], 'sleep': r['sleep']}
                              for n, r in get('sessions/busy-refuse-sleep').items()})
-    measure('idleSleep', lambda: {n: {'drainAskedToAsleep': seconds_between(r['stopRequestedAt'], r['sleptAt']),
+    # Asleep, the mapping no longer holds its drain request: its time comes from the changes the wait saw.
+    asked = lambda r: next(c['at'] for c in r['until']['changes'] if (c['line'].get('drain') or c['line'].get('management_state') == 'DRAINING'))
+    measure('idleSleep', lambda: {n: {'drainAskedToAsleep': seconds_between(asked(r), r['sleptAt']),
+                                      'busyEndToDrainAsked': seconds_between(records['sessions/busy-end']['endedAt'], asked(r)),
                                       'busyEndToAsleep': seconds_between(records['sessions/busy-end']['endedAt'], r['sleptAt'])}
                                   for n, r in get('sleep/idle').items()})
     measure('capacity', lambda: {'cyWaited': get('capacity/wait')['waited']['reached'], 'cyReadyAfter': get('sleep/capacity-admitted')['ready']['seconds'],
                                  'firstSleep': get('sleep/capacity-admitted')['firstSleepAt'], 'cyPvc': get('sleep/capacity-admitted')['times']['pvcCreatedAt']})
     measure('wakes', lambda: {'annMessage': get('wake/interactive')['answeredAfterSeconds'], 'bobTaskAfterDue': get('wake/background')['answeredAfterDueSeconds']})
     measure('rebuild', lambda: {n: get('rebuild/pods')['ready'][n]['seconds'] for n in USERS})
-    measure('controller', lambda: {'bobReadyAfterRestart': get('controller/restart')['bobReady']['seconds'], 'killedAt': get('controller/restart')['killedAt'],
-                                   'restartSeconds': get('controller/restart')['restarted']['seconds']})
+    controller = get('controller/restart')
+    measure('controller', lambda: {'killedAt': controller['killedAt'], 'bobAtKill': controller['atKill']['bob'],
+                                   'apiserversStartedIn': controller['restarted']['seconds'],
+                                   'killToBobReady': seconds_between(controller['killedAt'], controller['bobReady']['at']),
+                                   # The Pod bob was READY on, against the one recorded when the controller died (none: not created yet).
+                                   'bobReadyOnPod': controller['bobReady']['changes'][-1]['line']['pod'],
+                                   'bobPodAdopted': (controller['atKill']['bob']['pod_uid'] or '-')[:8] == controller['bobReady']['changes'][-1]['line']['pod'],
+                                   'podCreatesInTheWindow': controller['gate']['byKind'].get('Pod create', 0),
+                                   'annPodKept': controller['identity']['annBefore']['podUid'] == controller['identity']['annAfter']['podUid']})
     measure('image', lambda: {label: {'pinned': get(f'image/{label}')['pinned'], 'nextPod': get(f'image/{label}')['imagesAfter']}
                               for label in ('rollback', 'forward')})
     measure('backup', lambda: {'disableToAsleep': get('backup/prepare')['slept']['seconds'], 'exportSeconds': get('backup/export')['exportSeconds'],
@@ -1956,7 +1966,7 @@ def cmd_secret_scan(args):
         if data:
             add('lab-admin.client-key-data', data)
             add('lab-admin.client-key', base64.b64decode(data).decode(errors='replace').strip().splitlines()[1])
-    patterns = {'jwt': re.compile(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'), 'sk-key': re.compile(r'sk-[A-Za-z0-9_-]{16,}'),
+    patterns = {'jwt': re.compile(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'), 'sk-key': re.compile(r'(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}'),
                 'bearer': re.compile(r'Bearer [A-Za-z0-9._-]{16,}')}
     files = [p for arg in args.paths for p in ([Path(arg)] if Path(arg).is_file() else Path(arg).rglob('*')) if p.is_file()]
     hits, found_patterns, placeholder = {}, {}, 0
