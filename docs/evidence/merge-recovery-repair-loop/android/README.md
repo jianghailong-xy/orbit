@@ -4,7 +4,7 @@ Task 34hJZMKsulMrCDCAtPOIU, project 34hIv3wbdtsxpc5RzDlOk. Board: docs/mocks/mer
 (frames ①–⑥, and the repair row's six states).
 
 Drawn by `src/android/app/src/test/kotlin/io/orbitd/android/reader/MergeRecoveryShotsTest.kt` (Robolectric, native graphics,
-w393dp-h852dp-xxhdpi) over the production `MergeRecoveryReview` at cdd6e783a, light then dark (`OrbitTheme(darkTheme = …)`).
+w393dp-h852dp-xxhdpi) over the production `MergeRecoveryReview` at b10a43447, light then dark (`OrbitTheme(darkTheme = …)`).
 
 | File | Board | State | Primary step |
 |---|---|---|---|
@@ -16,5 +16,7 @@ w393dp-h852dp-xxhdpi) over the production `MergeRecoveryReview` at cdd6e783a, li
 | 6-already-landed-{light,dark}.png | ⑥ | Already on origin/main (real data: bba5d7b3, 99cd5459), no repair row | Done (confirm-landed) |
 | 7-failed-{light,dark}.png | row 6 | Repair session failed · The model provider rejected the request (conflicts) | Resolve in repair session · Prepare PR candidate |
 | 8-unfinished-failed-{light,dark}.png | row 6 + ⑤ | Repair session failed, repair left unfinished ("Still unresolved") | Resolve in repair session |
+| 9a-failed-checking-{light,dark}.png | row 6 + ② | Repair session failed (conflicts) while its check runs (pending preview): "Checking the repair…", snapshot faded | Checking… (disabled) |
+| 9b-unfinished-failed-checking-{light,dark}.png | row 6 + ⑤ + ② | Repair session failed, repair unfinished, check owed (mergeRepairTurnEndedAt) | Checking… (disabled) |
 
 The session title "解决 main 分支合并恢复" is the board's demo data (a session's title is the owner's data, not product copy).
