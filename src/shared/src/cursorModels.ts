@@ -20,6 +20,7 @@ import type { RunnerModelInfo } from './dto';
  * left at the model's own and logged. Web, iOS and Android write and read the value with these two
  * functions' rules.
  */
+
 /** Auto, Cursor CLI's own pick for each request: the model a session runs when it names none. It takes
  *  no settings (§10). */
 export const CURSOR_AUTO_MODEL = 'default';
