@@ -1,0 +1,39 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:13.578",
+    "ingested_at": "2026-10-18T02:28:13.790516+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 8,
+    "session_id": "bb5f37cf-33a7-5a82-a293-58ed48d279a1",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-OFF-FALSE-TASK",
+  "modelRequests": [],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:21:13.301",
+    "engine": "claude",
+    "id": "bb5f37cf-33a7-5a82-a293-58ed48d279a1",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14cd0-2aa1-764f-bee6-b4aeafa0c101",
+    "title": "Task: T06-OFF-FALSE-TASK a task run while the switch is false"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T02:28:13.822",
+      "client_turn_id": "initial-bb5f37cf-33a7-5a82-a293-58ed48d279a1",
+      "content": "Start the task \u201cT06-OFF-FALSE-TASK a task run while the switch is false\u201d.\n\nTask description:\nT06-OFF-FALSE-TASK a task run while the switch is false\n\nAcceptance",
+      "created_at": "2026-10-18T02:28:12.11",
+      "delivered_at": "2026-10-18T02:28:13.415",
+      "id": "01a14cd6-8ece-70de-af7a-af0c0af912cc",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

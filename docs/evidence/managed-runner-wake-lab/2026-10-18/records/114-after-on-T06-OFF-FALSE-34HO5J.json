@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:11.323",
+    "ingested_at": "2026-10-18T02:28:11.45214+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 21,
+    "session_id": "01a14cc4-e817-7398-8017-ae9243b0d3b7",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-OFF-FALSE-34HO5J",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T02:28:11Z",
+      "kind": "text",
+      "messages": 8,
+      "n": 41,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:08:55.319",
+    "engine": "claude",
+    "id": "01a14cc4-e817-7398-8017-ae9243b0d3b7",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-BEN-OFFF FAKE-WAKEUP 1040 OFFF a wakeup due while the sw"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T02:28:11.618",
+      "client_turn_id": "1cd4cf56-4e15-498f-95bc-b59cb6e38402",
+      "content": "T06-OFF-FALSE-34HO5J a message while the switch is false",
+      "created_at": "2026-10-18T02:21:13.206",
+      "delivered_at": "2026-10-18T02:28:11.188",
+      "id": "01a14cd0-2a76-72cf-bda5-a1d9dbaccb77",
+      "kind": "message",
+      "seq": 2,
+      "status": "ANSWERED"
+    }
+  ]
+}

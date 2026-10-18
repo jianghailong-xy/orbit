@@ -100,7 +100,11 @@ export function mergeRecoveryPrompt(r: MergeRecovery, preparePr = false): string
     (preparePr ? 'Preserve both sides’ content; organize commits on a separate PR candidate according to repository policy. Preserve the original source branch. '
       : 'Preserve both target histories and the original source branch. ') +
     'Finish the pending merge/rebase there, resolving every conflict, and run the repository checks. ' +
+    'Commit the resolution in the repair worktree: Orbit reads anything left uncommitted there as an unfinished repair. ' +
     'Do not reset or rebase the shared target checkout. Do not push the target. ' +
     (preparePr ? 'Respect required linear history and branch protection. Prepare a candidate branch and complete diff for review; do not claim it is merged. ' : '') +
-    'Report the repair branch and checks when finished. The owner will check the recovery again and review its complete diff before any target push.';
+    'Report the repair branch and checks when finished. ' +
+    'When this turn ends, Orbit checks the recovery again by itself, so there is no need to ask for a check. ' +
+    'If the repair needs a decision from the owner, ask the owner directly in this conversation. ' +
+    'The owner reviews the complete diff before any target push.';
 }

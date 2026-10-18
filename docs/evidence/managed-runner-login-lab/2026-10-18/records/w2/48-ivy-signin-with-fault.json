@@ -1,0 +1,18 @@
+{
+  "created": true,
+  "owner": "ivy",
+  "signIn": {
+    "at": "2026-10-17T23:41:11.885+00:00",
+    "ms": 35.5,
+    "port": 13710,
+    "status": 201
+  },
+  "user": {
+    "email": "t05-ivy@lab.invalid",
+    "id": "34hkSXsSMa8XP5vMTJFdR"
+  },
+  "usersMe": {
+    "id": "34hkSXsSMa8XP5vMTJFdR",
+    "status": 200
+  }
+}

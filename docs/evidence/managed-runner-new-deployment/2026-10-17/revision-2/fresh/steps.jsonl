@@ -1,0 +1,19 @@
+{"at": "2026-10-17T12:24:46Z", "body": {"needsSetup": true}, "status": 200, "step": "setup-status"}
+{"at": "2026-10-17T12:24:46Z", "managedRunners": null, "status": 401, "step": "capabilities"}
+{"at": "2026-10-17T12:24:46Z", "status": 201, "step": "bootstrap (first account, a sign-in)", "user": {"email": "admin@d3-fresh.test", "id": "34hTrKcjbW94XWRiRnB7m", "role": null}}
+{"at": "2026-10-17T12:25:22Z", "codexLoginStatus": "", "container": "mr-01a149d2-5f7d-766f-8dd3-39d60e731030", "exit": 0, "step": "operator signs Codex in with a placeholder key"}
+{"at": "2026-10-17T12:30:20Z", "desiredState": "RUNNING", "enabled": true, "heartbeatStatus": "ONLINE", "initialProvider": "codex", "managementState": "READY", "reason": null, "runnerId": "34hTrKeaRo0EgtZpZTigi", "step": "first account's managed runner", "usable": true, "workspaceId": "34hTrKemS6YW5PVcSKVnq"}
+{"at": "2026-10-17T12:30:20Z", "runners": [{"id": "34hTrKeaRo0EgtZpZTigi", "kind": null, "lastHeartbeatAt": "2026-10-17T12:30:17.454Z", "managed": null, "name": "orbit-managed", "status": "ONLINE"}], "status": 200, "step": "runners"}
+{"at": "2026-10-17T12:30:20Z", "status": 200, "step": "workspaces", "workspaces": [{"id": "34hTrKemS6YW5PVcSKVnq", "name": "Default", "path": null, "runnerId": "34hTrKeaRo0EgtZpZTigi"}]}
+{"at": "2026-10-17T12:30:20Z", "rows": ["01a149d2-5f6a-75ef-b9c2-844de8994076\t01a149d2-5f7d-766f-8dd3-39d60e731030\tdocker\tREADY\tRUNNING\t1\tmr-data-01a149d2-5f7d-766f-8dd3-39d60e731030\tmr-01a149d2-5f7d-766f-8dd3-39d60e731030"], "step": "managed_runner rows"}
+{"at": "2026-10-17T12:30:50Z", "container": ["ORBIT_MANAGED_RUNNERS_ENABLED=false", "ORBIT_MANAGED_RUNNERS_PROFILE=/var/lib/orbit-managed-runners/profile.json"], "env": ["ORBIT_MANAGED_RUNNERS_ENABLED=false", "ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners", "COMPOSE_PROFILES=managed-runners-docker"], "step": "ORBIT_MANAGED_RUNNERS_ENABLED=false, docker compose up -d --wait apiserver"}
+{"at": "2026-10-17T12:30:50Z", "managedRunners": null, "status": 401, "step": "capabilities after switching off"}
+{"account": "admin", "at": "2026-10-17T12:30:50Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:30:50Z", "status": 201, "step": "admin creates a second account"}
+{"account": "second", "at": "2026-10-17T12:30:50Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:30:50Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "second account's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T12:30:50Z", "reason": {"code": "MANAGED_RUNNER_DISABLED", "message": "Managed runners are not enabled on this Orbit server (ORBIT_MANAGED_RUNNERS_ENABLED), so nothing was written.", "retryable": false}, "status": 404, "step": "second account asks for one (ensure)"}
+{"at": "2026-10-17T12:30:50Z", "desiredState": "RUNNING", "enabled": false, "heartbeatStatus": "ONLINE", "initialProvider": "codex", "managementState": "READY", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": "34hTrKeaRo0EgtZpZTigi", "step": "first account's status", "usable": true, "workspaceId": "34hTrKemS6YW5PVcSKVnq"}
+{"at": "2026-10-17T12:31:35Z", "before": "1", "rows": ["01a149d2-5f6a-75ef-b9c2-844de8994076\t01a149d2-5f7d-766f-8dd3-39d60e731030\tREADY\tRUNNING\t1"], "step": "managed_runner rows after the switch is off"}
+{"account": "admin", "at": "2026-10-17T12:31:36Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:31:36Z", "managedRunners": {"contractVersion": 1, "enabled": false}, "status": 200, "step": "capabilities (authenticated) with the switch off"}

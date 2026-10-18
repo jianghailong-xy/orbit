@@ -1,0 +1,53 @@
+{
+  "at": "2026-10-18T05:51:14.142+00:00",
+  "capacity": {
+    "compute": {
+      "attachments": 1,
+      "cpu": "500m",
+      "ephemeralStorage": "1Gi",
+      "memory": "768Mi",
+      "pods": 1
+    },
+    "maxActiveUsers": 1,
+    "storage": {
+      "headroom": "2Gi",
+      "usable": "12Gi"
+    }
+  },
+  "lifecycle": {
+    "backoffBaseSeconds": 5,
+    "backoffMaxSeconds": 60,
+    "capacityRetrySeconds": 30,
+    "drainSeconds": 300,
+    "heartbeatFreshSeconds": 120,
+    "idleSeconds": 60,
+    "leaseSeconds": 60,
+    "maxAttempts": 5,
+    "pollIntervalSeconds": 5,
+    "requestTimeoutSeconds": 20,
+    "startupDeadlineSeconds": 900
+  },
+  "profile": "/mnt/data/managed-runner-lab/test-server-t07/managed-runner-profile.json",
+  "runner": {
+    "init": {
+      "limits": {
+        "cpu": "200m",
+        "memory": "128Mi"
+      },
+      "requests": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      }
+    },
+    "runner": {
+      "limits": {
+        "cpu": "2",
+        "memory": "1Gi"
+      },
+      "requests": {
+        "cpu": "500m",
+        "memory": "768Mi"
+      }
+    }
+  }
+}

@@ -40,8 +40,9 @@ export const MANAGED_RUNNER_NOT_ELIGIBLE = 'MANAGED_RUNNER_NOT_ELIGIBLE';
 export const ACCOUNT_DISABLED = 'ACCOUNT_DISABLED';
 
 /**
- * The managed runner is up, but none of its runtimes is installed and signed in, so it is not READY
- * and nothing chooses an engine for its first session. Signing a runtime in on the runner clears it.
+ * The managed runner is up, but none of its runtimes is installed and signed in and none of its
+ * owner's model keys runs on a runtime it has installed, so it is not READY and nothing chooses an
+ * engine for its first session. Signing a runtime in on the runner, or adding such a key, clears it.
  * Also the refusal of a first session asked for on a runtime the managed runner cannot run.
  */
 export const MODEL_UNAVAILABLE = 'MODEL_UNAVAILABLE';
@@ -183,9 +184,19 @@ export interface ManagedRunnerStatus {
   usable: boolean;
   reason: ManagedRunnerReason | null;
   retryAfter: string | null;
-  /** The runtime the runner was found installed and signed in with when it became READY: what a
-   *  default workspace with no history starts its first session on. Null until then. */
+  /** What the runner was found ready with when it became READY: a runtime installed and signed in
+   *  on it (its name), or else one of the owner's own model keys a runtime installed on it runs (the
+   *  key's slug). A default workspace with no history starts its first session on it. Null until then. */
   initialProvider: string | null;
+  /**
+   * What a first session in the default workspace, sent with nothing named, starts on now, by the
+   * rule the session's create applies: `initialProvider` once the runner has been READY; before
+   * that, the owner's own model key such a session is queued on until the runner is ready — while
+   * the runner has not reported its engines yet, or reported that key's engine installed. Null when
+   * there is none, and such a session would be refused MODEL_UNAVAILABLE. Absent from a server that
+   * predates it, which queued nothing before READY: read `initialProvider` then.
+   */
+  firstSessionProvider?: string | null;
   actions: ManagedRunnerActions;
 }
 

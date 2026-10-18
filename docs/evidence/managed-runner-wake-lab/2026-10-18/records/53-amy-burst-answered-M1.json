@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:37:30.226",
+    "ingested_at": "2026-10-18T01:37:30.428321+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 36,
+    "session_id": "01a14c90-861f-770c-bae2-15494f8cdb4c",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-BURST-M1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:37:30Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 5,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:11:42.367",
+    "engine": "claude",
+    "id": "01a14c90-861f-770c-bae2-15494f8cdb4c",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-BG2 FAKE-BG 180 start a background job"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:37:30.626",
+      "client_turn_id": "83fa95c6-543a-450e-a946-f1f32b533031",
+      "content": "T06-AMY-BURST-M1 a message",
+      "created_at": "2026-10-18T01:37:15.716",
+      "delivered_at": "2026-10-18T01:37:29.895",
+      "id": "01a14ca7-ebc4-77cb-b98c-32e54f6f0a43",
+      "kind": "message",
+      "seq": 3,
+      "status": "ANSWERED"
+    }
+  ]
+}

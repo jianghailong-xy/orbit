@@ -2722,6 +2722,22 @@ export interface IntegrationJobProgressRequest {
   upstreamMoved?: { from: string; to: string; commits?: number };
 }
 
+/** Runner → control plane: give a claimed job back to the queue (POST
+ *  /runner/integration-jobs/:jobId/release, contract §2.2 J-T11). Sent by a stopping runner for a job
+ *  it did not start, or one it stopped before its push: nothing was pushed under this claim. */
+export interface IntegrationJobReleaseRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+}
+
+/** Control plane → runner: `released` when the job went back to the queue, to be claimed by the next
+ *  heartbeat that asks for work. Otherwise `state` is what it ended as instead: CANCELLED when
+ *  somebody had asked it to stop, since a queued job with a stop request is never claimed (J-T12). */
+export interface IntegrationJobReleaseResponse {
+  released: boolean;
+  state: IntegrationJobState;
+}
+
 /** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */
 export interface IntegrationJobResultRequest {
   claimGeneration: string;

@@ -1,0 +1,39 @@
+{
+  "answer": {
+    "assignedRunnerId": "34hkLQCdaTRbQff2QouEQ",
+    "code": null,
+    "engine": "claude",
+    "id": "34hkNCwwRzhI4xZhtQ6QI",
+    "message": null,
+    "model": null,
+    "provider": "deepseek-2",
+    "status": "PENDING",
+    "workspaceId": "34hkLQCpbLRvNolEcg8Ym"
+  },
+  "at": "2026-10-17T23:37:41.389+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "managed": {
+    "initialProvider": "deepseek-2",
+    "managementState": "READY",
+    "runnerId": "34hkLQCdaTRbQff2QouEQ",
+    "usable": true,
+    "workspaceId": "34hkLQCpbLRvNolEcg8Ym"
+  },
+  "owner": "erin",
+  "request": {
+    "prompt": "T05-ERIN-FIRST hello from the first session",
+    "title": "t05 erin first session (nothing named)",
+    "workspaceId": "34hkLQCpbLRvNolEcg8Ym"
+  },
+  "status": 201
+}

@@ -1,0 +1,6 @@
+scene 22-nia-new-account-home: 54.388 s, actions (
+)
+22-nia-new-account-home: no window after launch; File > New Window
+22-nia-new-account-home-00: "Default" shows
+22-nia-new-account-home: 22 requests, 0 violations, actions left [], notes (
+)

@@ -1,0 +1,65 @@
+{
+  "at": "2026-10-18T04:22:21.605+00:00",
+  "pool": [
+    {
+      "active_users": 1,
+      "active_users_reserved": 1,
+      "attachments": 1,
+      "attachments_reserved": 1,
+      "cluster_key": "orbit-mr-lab",
+      "cpu_millis": 500,
+      "cpu_millis_reserved": 500,
+      "created_at": "2026-10-18T03:55:19.028+00:00",
+      "durable_bytes_reserved": 4294967296,
+      "ephemeral_bytes": 1073741824,
+      "ephemeral_bytes_reserved": 1073741824,
+      "id": "8bb69c69-79f8-42a6-91a8-96d365abe63c",
+      "memory_bytes": 805306368,
+      "memory_bytes_reserved": 805306368,
+      "namespace": "orbit-mr-test",
+      "pods": 1,
+      "pods_reserved": 1,
+      "revision": 14,
+      "storage_headroom_bytes": 2147483648,
+      "storage_usable_bytes": 12884901888,
+      "updated_at": "2026-10-18T04:21:08.75+00:00"
+    }
+  ],
+  "reservations": [
+    {
+      "owner": "amy",
+      "reservation": {
+        "compute": {
+          "activeUsers": 1,
+          "attachments": 1,
+          "cpuMillis": 500,
+          "ephemeralBytes": 1073741824,
+          "generation": 6,
+          "memoryBytes": 805306368,
+          "pods": 1,
+          "reservedAt": "2026-10-18T04:21:08.749Z"
+        },
+        "pool": "8bb69c69-79f8-42a6-91a8-96d365abe63c",
+        "storage": {
+          "durableBytes": 2147483648,
+          "reservedAt": "2026-10-18T03:55:43.529Z"
+        },
+        "version": 1
+      },
+      "state": "READY"
+    },
+    {
+      "owner": "ben",
+      "reservation": {
+        "compute": null,
+        "pool": "8bb69c69-79f8-42a6-91a8-96d365abe63c",
+        "storage": {
+          "durableBytes": 2147483648,
+          "reservedAt": "2026-10-18T04:11:15.851Z"
+        },
+        "version": 1
+      },
+      "state": "SLEEPING"
+    }
+  ]
+}

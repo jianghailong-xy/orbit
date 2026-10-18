@@ -683,6 +683,17 @@ func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgres
 	return t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, nil, 15*time.Second)
 }
 
+// integrationJobRelease hands a claimed job back (contract §2.2 J-T11): released, it is queued for the
+// next heartbeat that asks for work. A 409 is a claim that had already moved on or a job already
+// written down; a 200 that did not release says what the job ended as instead.
+func (t *Transport) integrationJobRelease(ctx context.Context, jobID string, b IntegrationJobReleaseRequest) (*IntegrationJobReleaseResponse, error) {
+	var out IntegrationJobReleaseResponse
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/release", b, &out, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // integrationJobResult reports what a claimed job came to. The answer says whether the control
 // plane took it; a 409 means this process's claim had already moved on and it must stop. It takes a
 // context because the report is retried until it is settled (integration_result_spool.go): a runner

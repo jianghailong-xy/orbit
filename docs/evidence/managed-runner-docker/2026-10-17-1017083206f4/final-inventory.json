@@ -1,0 +1,119 @@
+{
+  "mappings": [
+    {
+      "runner": "01a148ff-9266-76cf-bca2-740a4be859ce",
+      "state": "FAILED",
+      "generation": 11,
+      "pvcName": "mr-data-01a148ff-9266-76cf-bca2-740a4be859ce",
+      "podUid": null
+    },
+    {
+      "runner": "01a148ff-9275-71ab-a08e-91125366d737",
+      "state": "SLEEPING",
+      "generation": 3,
+      "pvcName": "mr-data-01a148ff-9275-71ab-a08e-91125366d737",
+      "podUid": null
+    },
+    {
+      "runner": "01a14908-81ce-70be-bd5a-186769789da3",
+      "state": "READY",
+      "generation": 1,
+      "pvcName": "mr-data-01a14908-81ce-70be-bd5a-186769789da3",
+      "podUid": "cd1ff383-7841-4d9a-b9c9-72f8720c9e27"
+    }
+  ],
+  "channel": {
+    "instanceId": "d2it-1017083206f4",
+    "volumes": [
+      {
+        "name": "mr-boot-01a14908-81ce-70be-bd5a-186769789da3-g1",
+        "kind": "bootstrap",
+        "uid": null,
+        "ownerId": "01a14908-81c7-768f-8457-8efc2ab61ec5",
+        "runnerId": "01a14908-81ce-70be-bd5a-186769789da3",
+        "limitBytes": null,
+        "createdAt": "2026-10-17T16:44:47+08:00",
+        "usageBytes": 168
+      },
+      {
+        "name": "mr-data-01a148ff-9266-76cf-bca2-740a4be859ce",
+        "kind": "data",
+        "uid": "30b94e1e-6f9e-484c-a98d-a2e68fd9529f",
+        "ownerId": "01a148ff-924a-7098-ac25-37b240220b97",
+        "runnerId": "01a148ff-9266-76cf-bca2-740a4be859ce",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-17T16:34:31+08:00",
+        "usageBytes": 346105301
+      },
+      {
+        "name": "mr-data-01a148ff-9275-71ab-a08e-91125366d737",
+        "kind": "data",
+        "uid": "545adfc8-8ec6-44c1-8af8-f95dcdcd7dab",
+        "ownerId": "01a148ff-9250-7689-9344-4ee5e704492e",
+        "runnerId": "01a148ff-9275-71ab-a08e-91125366d737",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-17T16:34:31+08:00",
+        "usageBytes": 9561943
+      },
+      {
+        "name": "mr-data-01a14908-81ce-70be-bd5a-186769789da3",
+        "kind": "data",
+        "uid": "86adca4d-4c5d-463c-bd53-ffd7458dde8f",
+        "ownerId": "01a14908-81c7-768f-8457-8efc2ab61ec5",
+        "runnerId": "01a14908-81ce-70be-bd5a-186769789da3",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-17T16:44:47+08:00",
+        "usageBytes": 7381494
+      }
+    ],
+    "containers": [
+      {
+        "name": "mr-01a14908-81ce-70be-bd5a-186769789da3",
+        "uid": "cd1ff383-7841-4d9a-b9c9-72f8720c9e27",
+        "ownerId": "01a14908-81c7-768f-8457-8efc2ab61ec5",
+        "runnerId": "01a14908-81ce-70be-bd5a-186769789da3",
+        "generation": 1,
+        "volumeUid": "86adca4d-4c5d-463c-bd53-ffd7458dde8f",
+        "volume": "mr-data-01a14908-81ce-70be-bd5a-186769789da3",
+        "node": "workstation",
+        "status": "running",
+        "running": true,
+        "neverStarted": false,
+        "exitCode": null,
+        "startedAt": "2026-10-17T08:44:47.924492692Z",
+        "finishedAt": null,
+        "oomKilled": false,
+        "stopping": false,
+        "evicted": null
+      }
+    ],
+    "credentials": [
+      {
+        "uid": "4155d4ce-1b1c-49b5-9fc4-e156f2050269",
+        "ownerId": "01a148ff-924a-7098-ac25-37b240220b97",
+        "runnerId": "01a148ff-9266-76cf-bca2-740a4be859ce",
+        "generation": 11,
+        "createdAt": "2026-10-17T08:51:17Z"
+      },
+      {
+        "uid": "bb51f30c-11bb-4348-ab0d-676e3a2cd368",
+        "ownerId": "01a148ff-9250-7689-9344-4ee5e704492e",
+        "runnerId": "01a148ff-9275-71ab-a08e-91125366d737",
+        "generation": 2,
+        "createdAt": "2026-10-17T08:43:45Z"
+      },
+      {
+        "uid": "fbea61cc-8a85-4c16-bfa5-2e3c3ab5ad23",
+        "ownerId": "01a14908-81c7-768f-8457-8efc2ab61ec5",
+        "runnerId": "01a14908-81ce-70be-bd5a-186769789da3",
+        "generation": 1,
+        "createdAt": "2026-10-17T08:44:47Z"
+      }
+    ]
+  },
+  "maxContainersPerVolume": {
+    "01a148ff-9266-76cf-bca2-740a4be859ce": 1,
+    "01a148ff-9275-71ab-a08e-91125366d737": 1,
+    "01a14908-81ce-70be-bd5a-186769789da3": 1
+  }
+}

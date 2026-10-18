@@ -1,0 +1,7 @@
+[Nest] 117  - 10/17/2026, 5:26:46 PM     LOG [ManagedRunners] managed runners are enabled in orbit-812f52a3 (Docker instance orbit-812f52a3)
+[Nest] 117  - 10/17/2026, 5:26:46 PM     LOG [InstanceLoader] ManagedRunnerGateModule dependencies initialized +0ms
+[Nest] 117  - 10/17/2026, 5:26:46 PM     LOG [InstanceLoader] ManagedRunnerModule dependencies initialized +0ms
+[Nest] 117  - 10/17/2026, 5:26:46 PM     LOG [RoutesResolver] ManagedRunnerController {/api/managed-runner}: +0ms
+[Nest] 117  - 10/17/2026, 5:26:46 PM     LOG [RoutesResolver] ManagedRunnerAdmissionController {/api/managed-runner/admission}: +0ms
+[Nest] 117  - 10/17/2026, 5:26:46 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-812f52a3 with image sha256:8973532c2a46837c18e001d8352e356a1ea6c98f485b31f1bc9111c7fd5ebccc; this profile names orbit-812f52a3 with sha256:26eefb8145b8dba29cc04ce78c65a87b2cdd16ef04e3d238ac8ac6d412e1ae32
+[Nest] 117  - 10/17/2026, 5:26:51 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-812f52a3 with image sha256:8973532c2a46837c18e001d8352e356a1ea6c98f485b31f1bc9111c7fd5ebccc; this profile names orbit-812f52a3 with sha256:26eefb8145b8dba29cc04ce78c65a87b2cdd16ef04e3d238ac8ac6d412e1ae32

@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:38:58.648",
+    "ingested_at": "2026-10-18T01:38:58.703701+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 46,
+    "session_id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-RACE",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:38:58Z",
+      "kind": "text",
+      "messages": 14,
+      "n": 14,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T00:42:26.614",
+    "engine": "claude",
+    "id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-S1 hello from amy's first session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:38:58.894",
+      "client_turn_id": "37dc6f4e-1c25-42e6-bfe2-a7164aad1faf",
+      "content": "T06-AMY-RACE a message while the runner drains to sleep",
+      "created_at": "2026-10-18T01:38:52.785",
+      "delivered_at": "2026-10-18T01:38:58.309",
+      "id": "01a14ca9-66f1-71e6-a2c2-574ff2bea5b3",
+      "kind": "message",
+      "seq": 5,
+      "status": "ANSWERED"
+    }
+  ]
+}

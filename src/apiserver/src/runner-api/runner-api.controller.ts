@@ -80,6 +80,8 @@ import {
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
   IntegrationJobProgressRequest,
+  IntegrationJobReleaseRequest,
+  IntegrationJobReleaseResponse,
   IntegrationJobResultRequest,
   IntegrationJobResultResponse,
   isUsageLimitErrorText,
@@ -477,6 +479,25 @@ function swallowedMessageError(reported: string | undefined): string {
     'It was left for a retry on the backoff ladder rather than handed over again at once.';
   const said = reported?.trim();
   return said ? `${sentence}\n\n${said}` : sentence;
+}
+/** Which merge recovery a session's ended turn may owe a check (SessionsService.checkAfterRepairTurn). */
+interface RepairCheckAfter {
+  /** The parent whose recovery a repair session's turn is checked against; null for any other session. */
+  parentSessionId: string | null;
+  /** This session's own recovery: a repair turn's check has been waiting for this session's turn to end. */
+  owesCheck: boolean;
+}
+// Read off the session row the settle locked. Only a repair session (startMergeRepair's server-owned
+// source) triggers one — an ordinary child of the same parent, a task's run or anything else does not —
+// and only for a turn that ended, which a finalize says only of a session it found running one.
+function repairCheckAfter(
+  session: { source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null },
+  turnEnded = true,
+): RepairCheckAfter {
+  return {
+    parentSessionId: turnEnded && session.source === 'merge-repair' ? session.parentSessionId : null,
+    owesCheck: session.mergeRepairTurnEndedAt != null,
+  };
 }
 // Tool-permission approvals: the orbit MCP permission tool blocks on this long-poll
 // until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
@@ -1735,6 +1756,38 @@ export class RunnerApiController {
   }
 
   /**
+   * A claimed integration job given back by the process that holds it (§2.2 J-T11): a stopping runner,
+   * for a job it never started or one it stopped before its push. Fenced like a result, so a claim
+   * that has moved on gets 409 STALE_CLAIM and a job already written down 409 ALREADY_FINAL.
+   *
+   * Released, the job is QUEUED for the next heartbeat that asks for work, and this runner — the one
+   * its workspace routes it to — is woken for it: a wake nobody is parked for is held for the next
+   * poll, so a process that comes straight back claims it at once rather than at its first 30 s tick.
+   * A job somebody asked to stop ends CANCELLED instead, with the result route's aftermath.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('integration-jobs/:jobId/release')
+  @HttpCode(200)
+  async integrationJobRelease(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() body: IntegrationJobReleaseRequest,
+  ): Promise<IntegrationJobReleaseResponse> {
+    let applied: Awaited<ReturnType<IntegrationJobRelay['release']>>;
+    try {
+      applied = await this.integrationQueue().release(jobId, runner.id, body, runner.ownerId);
+    } catch (error) {
+      throw integrationJobHttpError(error);
+    }
+    if (applied.answer.released) {
+      this.realtime.notifyRunnerWake(runner.id);
+    } else {
+      await this.afterIntegrationResult(applied.after, null);
+    }
+    return applied.answer;
+  }
+
+  /**
    * What one claimed integration job came to (§2.2 J-T5 to J-T7).
    *
    * Everything the result implies is written in the transaction that writes the state: the receipt
@@ -1756,7 +1809,15 @@ export class RunnerApiController {
     } catch (error) {
       throw integrationJobHttpError(error);
     }
-    const after = applied.after;
+    await this.afterIntegrationResult(applied.after, applied.answer.openItemId);
+    return applied.answer;
+  }
+
+  /** What follows a committed job result: the result route's, and a release that ended a job (J-T12). */
+  private async afterIntegrationResult(
+    after: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>['after'],
+    openItemId: string | null,
+  ): Promise<void> {
     if (after) {
       if (after.considerPromotionProjectId) {
         // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
@@ -1784,11 +1845,10 @@ export class RunnerApiController {
       // things only the account owner can answer, so their devices are told. Handed the item id
       // rather than a decision: which items reach a phone is `notifyOwnerItem`'s to decide, and the
       // exception items opened above — still the coordinator's — answer null there and send nothing.
-      if (applied.answer.openItemId) {
-        void this.push.notifyOwnerItem(applied.answer.openItemId);
+      if (openItemId) {
+        void this.push.notifyOwnerItem(openItemId);
       }
     }
-    return applied.answer;
   }
 
   /** The repository-operation queue, or the reason a request about one cannot be answered without it. */
@@ -3731,6 +3791,9 @@ export class RunnerApiController {
     declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
+    // A reload answered without being handed out, its environment one nothing can build any more: the
+    // poll goes on to what was queued behind it.
+    let reloadRefused = false;
     // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
     // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
     // so a re-run claims from the state that actually exists rather than reporting a turn it does
@@ -3738,6 +3801,7 @@ export class RunnerApiController {
     // runner until this returns.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       pauseRequeued = false;
+      reloadRefused = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -4224,6 +4288,23 @@ export class RunnerApiController {
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
       }
+      const reload = t.kind === 'reload' ? await this.reloadProviderEnv(tx, sessionId, t.content) : undefined;
+      if (reload?.refusal) {
+        // The provider this reload re-spawns the engine on is one nothing can run any more — a pool
+        // deleted, a key disabled or gone between the switch and this poll. Refused here, it would take
+        // the ack above down with the rest of the transaction, and the reload would be first in line
+        // again at every poll after: a 400 each time, and nothing queued behind it ever handed out.
+        // So it is answered and handed to nobody, as the reclaim leaves out what it cannot rebuild,
+        // and the session says why in the words the claim holds it with (reloadProviderEnv) — the next
+        // claim that finds the provider running again clears them. The engine keeps the process it has.
+        await tx.conversationTurn.updateMany({
+          where: { id: t.id },
+          data: { deliveredAt: null, leaseDeadlineAt: null, leaseGeneration: null },
+        });
+        await tx.session.update({ where: { id: sessionId }, data: { error: reload.refusal } });
+        reloadRefused = true;
+        return null;
+      }
       return {
         turnId: t.id,
         targetTurnId: t.targetTurnId ?? undefined,
@@ -4231,7 +4312,7 @@ export class RunnerApiController {
         kind: t.kind as ConversationTurnKind,
         content,
         attachments,
-        env: t.kind === 'reload' ? await this.reloadProviderEnv(tx, sessionId, t.content) : undefined,
+        env: reload?.env,
         // Said on the delivery itself, because it is only ever true of THIS control plane and
         // is only needed while this one message is being answered for: a steer that provably
         // never reached the engine can come back here as an ordinary message (see turnComplete)
@@ -4265,6 +4346,11 @@ export class RunnerApiController {
       // Outside the transaction: throwing before commit would roll back the pause and its fence.
       throw new ConflictException('account is paused; inbox lease ownership was released');
     }
+    if (reloadRefused) {
+      this.realtime.publishSessionUpdated(sessionId);
+      // What was queued behind it is this poll's to hand out.
+      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities);
+    }
     return outcome ?? null;
   }
 
@@ -4284,19 +4370,24 @@ export class RunnerApiController {
    * shared pool re-spawns on its gateway with a token minted for the new process
    * (QueueService.resolveSharedPool), and one onto a Codex pool of the owner's own login the same way, on
    * its account (QueueService.resolveLoginPool).
+   *
+   * A switch onto a provider nothing can run by the time the reload is handed out — the pool deleted, the
+   * key disabled or gone, a credential the session's engine cannot run — builds no environment. `refusal`
+   * is then the sentence the claim holds a session on it with (QueueService.pausedPendingSessions), chosen
+   * as the reclaim chooses it, and the inbox answers the reload without handing it out (dequeueTurn).
    */
   private async reloadProviderEnv(
     tx: Prisma.TransactionClient,
     sessionId: string,
     content: string | null,
-  ): Promise<Record<string, string> | undefined> {
+  ): Promise<{ env?: Record<string, string>; refusal?: string }> {
     let declared: unknown;
     try {
       declared = (JSON.parse(content ?? '{}') as { provider?: unknown }).provider;
     } catch {
-      return undefined;
+      return {};
     }
-    if (typeof declared !== 'string' || !declared) return undefined;
+    if (typeof declared !== 'string' || !declared) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
@@ -4324,12 +4415,23 @@ export class RunnerApiController {
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
-    if (!session) return undefined;
+    if (!session) return {};
+    // The claim's words for a credential nothing holds: a member's session on a shared provider is told
+    // only an admin can run it, any other to check the configuration — asked of the slug the credential
+    // names, which on OpenCode is the key its model names.
+    const unavailable = async (customRow: unknown): Promise<string> => {
+      const slug = !isBuiltinProvider(session.provider, session.providerBuiltin)
+        ? session.provider
+        : session.provider === AgentProvider.OPENCODE ? openCodeKeyOf(session.model)?.slug : undefined;
+      return !customRow && slug && (await adminOnlyProviderRefusal(tx, session.ownerId, slug))
+        ? ADMIN_ONLY_PROVIDER_ERROR
+        : PROVIDER_UNAVAILABLE_ERROR;
+    };
     // The environment is built for the engine the session runs on — the one it was spawned with and
     // is re-spawned with now — from wherever its credential now comes from: a switch moves the
     // credential, never the engine.
     const engine = await sessionEngine(tx, session);
-    if (!engine) throw new BadRequestException(`provider not available: "${session.provider}"`);
+    if (!engine) return { refusal: await unavailable(null) };
     // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
     // session's default DeepSeek key when its workspace holds no key itself.
     const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
@@ -4343,31 +4445,44 @@ export class RunnerApiController {
     // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
     const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
       && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
-    const exec = resolveProviderExec({
-      engine,
-      declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
-      declaredProviderBuiltin: poolFallback || session.providerBuiltin,
-      customRow,
-      openCodeKeys:
-        session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
-          ? await openCodeKeyRows(tx, session.ownerId)
-          : undefined,
-      sessionModel: session.model,
-      usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
-      runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-      workspaceModel: session.workspace?.model,
-      modelCatalog: session.assignedRunner?.modelCatalog,
-      workspaceEnv: session.workspace?.env as Record<string, string> | null,
-      codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-      claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
-      antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
-      kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
-      cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
-      runnerEngines: session.assignedRunner?.engines,
-    });
+    let exec: ReturnType<typeof resolveProviderExec>;
+    try {
+      exec = resolveProviderExec({
+        engine,
+        declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
+        declaredProviderBuiltin: poolFallback || session.providerBuiltin,
+        customRow,
+        openCodeKeys:
+          session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
+            ? await openCodeKeyRows(tx, session.ownerId)
+            : undefined,
+        sessionModel: session.model,
+        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
+        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
+        workspaceModel: session.workspace?.model,
+        modelCatalog: session.assignedRunner?.modelCatalog,
+        workspaceEnv: session.workspace?.env as Record<string, string> | null,
+        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
+        antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+        kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
+        cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
+        runnerEngines: session.assignedRunner?.engines,
+      });
+    } catch (error) {
+      // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
+      // one this session's engine cannot run — which last the claim and the reclaim say in its own words.
+      if (!(error instanceof BadRequestException)) throw error;
+      const refusal = error.getResponse() as { code?: string; message?: string };
+      return {
+        refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
+          ? refusal.message
+          : await unavailable(customRow),
+      };
+    }
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
-    return exec.env ?? {};
+    return { env: exec.env ?? {} };
   }
 
   /**
@@ -4827,6 +4942,11 @@ export class RunnerApiController {
           // What a request this turn leaves unanswered is closed with (NO_REPLY, below): the last
           // thing the session said, which the events flushed before this completion have written.
           lastAssistantText: true,
+          // Whose merge recovery is checked again once this turn has settled: the parent's, when this
+          // is a repair session, and this session's own when a repair turn's check waits for this turn.
+          source: true,
+          parentSessionId: true,
+          mergeRepairTurnEndedAt: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -5903,6 +6023,7 @@ export class RunnerApiController {
         requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
+        repairCheck: repairCheckAfter(current),
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -6004,6 +6125,11 @@ export class RunnerApiController {
       // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
       // a session's LAST settle does not come through here at all (RealtimeService.publish).
       void this.recapAfterTurn(sessionId);
+      // And a merge recovery may be owed a check now that this turn has ended — off the response
+      // path as well, for the same reason (SessionsService.checkAfterRepairTurn).
+      if ('repairCheck' in finalized && finalized.repairCheck) {
+        void this.checkRecoveryAfterTurn(sessionId, finalized.repairCheck, new Date());
+      }
     }
     if (
       'taskReclaimed' in finalized
@@ -6079,6 +6205,27 @@ export class RunnerApiController {
       await enqueueRecap({ db: this.prisma, sessionId });
     } catch {
       // The generator already swallows every failure of its own; this covers the reads around it.
+    }
+  }
+
+  /**
+   * After a settled turn (or a finalize that ended one): a repair session's turn ended, so its
+   * parent's merge recovery is checked again; and this session's own turn ended, so a check a repair
+   * turn left waiting for it is taken up. `endedAt` is when the turn ended. NEVER rejects and is never
+   * awaited, like recapAfterTurn: the runner has already been answered, and a check that could not be
+   * queued is logged — the owner's Check again is still there.
+   */
+  private async checkRecoveryAfterTurn(sessionId: string, check: RepairCheckAfter, endedAt: Date): Promise<void> {
+    const checks: Array<[string, Date | null]> = [];
+    if (check.parentSessionId) checks.push([check.parentSessionId, endedAt]);
+    if (check.owesCheck) checks.push([sessionId, null]);
+    for (const [id, turnEndedAt] of checks) {
+      try {
+        await this.sessions?.checkAfterRepairTurn(id, turnEndedAt);
+      } catch (error) {
+        this.logger.warn(`merge recovery check of ${id} after a turn of ${sessionId} was not queued: `
+          + `${error instanceof Error ? error.message : error}`);
+      }
     }
   }
 
@@ -7064,6 +7211,9 @@ export class RunnerApiController {
         dispatchRefused,
         taskId: current.taskId,
         currentWorkTerminalized,
+        // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
+        // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
+        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
@@ -7086,6 +7236,10 @@ export class RunnerApiController {
     }
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
+    }
+    // As after a settled turn: a merge recovery may be owed a check, off the response path.
+    if ('repairCheck' in outcome && outcome.repairCheck) {
+      void this.checkRecoveryAfterTurn(sessionId, outcome.repairCheck, new Date());
     }
 
     this.realtime.publish(sessionId, {
