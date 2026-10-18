@@ -1366,3 +1366,48 @@ Left to later work, or not shown here:
   runner exist in the fixture only, and the server has no deletion flow yet.
 - A Retry pressed on one client shows on another at that client's next settled read (30 s). The clients still poll,
   because no server sends revision notices.
+
+## Implementation record: a restart's reason through the waits on its way
+
+Recorded 2026-10-18 for task T07b, which fixes the finding T07 left to it (the row "Not changed: the restart reason after a
+held volume" in the record above). The rule is the shared state machine's (`managed-runner-manager.ts`), so it is the same
+on both backends; on Docker it shows only after the waits Docker has, since nothing there detaches. For the cases it
+covers, this record supersedes the failure recovery record's "kept until it is READY unless a later wait says more".
+
+| Area | As implemented, and why |
+| --- | --- |
+| What the owner reads | While a runner restarts by itself (D7), its reason is `POD_RESTARTING`, or `POD_RESTARTING_OUT_OF_MEMORY`, until it is READY. A wait on the way says what it waits for while it lasts, as before: the stopped instance's volume still attached (`VOLUME_STILL_ATTACHED`), the volume held by something else (`VOLUME_IN_USE`), the environment's cap on what it holds (`CONTAINER_LIMIT`, `KUBERNETES_QUOTA_EXCEEDED`) or a transient error (`TRANSIENT`). Once the wait is over, the restart's reason is back, with its detail: when the gate advances to the next generation, at admission, at the move to STARTING, when a held volume is free and when a create that a cap held back goes through. Before, `restartReason` kept a restart's reason only while it was still the stored one, so the end of any wait cleared it. For the rest of the restart the clients said the generic "It is starting again", and the out-of-memory notice was gone. |
+| How it is kept | The wait's reason carries the restart's own reason (`lastError.restart`: its code, sentence, retryable flag and detail). `waitReason` writes it, and `restartReason` reads either. Neither the status read nor the demand hook's answer shows it: both give clients only `code`, `message` and `retryable`, as before, so every client shows the wait while it lasts. The task also offered a marker on the mapping. That would need a migration, and every way a restart ends would have to clear it, or a later start would read as a restart: READY, a failure, a fence, a sleep, a disabled owner, an owner's retry. Kept in the reason, it goes wherever the reason goes, because each of those writes a reason of its own, or none. |
+| What stays as it was | Attempts: a wait spends none, a transient error the backend answered still spends one, and one that never reached the backend spends none (D7, T04). Startup deadlines: none runs during a wait, and one runs from admission, from a held volume freed or from a create a cap held back (D7, T06b). The single-writer gate, its stop proofs and compute held through a restart are unchanged. A fence's reason carries nothing, so a start after an operator's receipt is not said to be a restart: its fresh attempt budget already says it is not one. A start nobody restarted carries no restart reason through the same waits: a wake, an owner's retry, a new account. A restart never waits for capacity (WAITING_CAPACITY), since its compute stays reserved. `MODEL_UNAVAILABLE` carries nothing: it lasts until READY or until the start fails, so no later step gives a reason back. A transient error while the next instance starts (STARTING) is said until READY, as on any start, because STARTING writes no reason between the try and READY. |
+| Clients | No change. The three clients show the server's sentence for any reason (C7, D7). The shared state fixture already holds a restart's states (waking after a stop, and after running out of memory) and each wait's own. |
+| Data | No migration. `managed_runner.last_error` is JSONB and nothing constrains its members. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-restart-reason/2026-10-18/README.md), [the lab page](managed-runner-lab.md#the-restart-reason-through-the-detach-wait-t07b)):
+
+- `managed-runner-recovery.pg.spec.ts`, cases (11) to (15):
+  - (11), on the fake cluster: a restart after a stop, and one after running out of memory, whose stopped Pod's volume
+    stays attached. Each says `VOLUME_STILL_ATTACHED` while it waits, with nothing spent, no next generation and no
+    startup deadline. Once the volume detaches, it is restarting again through admission, provisioning and the start,
+    and READY clears it. An owner's retry through the same wait says nothing of a restart.
+  - (12) to (15), on both backends unless marked: a transient error when the restart is due; a backup's helper container
+    holding the volume when the gate looks (Docker); the environment's cap on instances; a volume held when the next
+    instance is to be made. A wake through that last wait says nothing of a restart.
+  - Nine of the ten new cases fail on the previous manager, each because the reason after the wait is none. The tenth,
+    the owner's retry, passes on both. All 17 earlier cases still pass.
+- The lab's real k3s, with the runner killed while READY (`orbit run` SIGKILLed, and the container run out of memory):
+  - The stopped Pod's attachment kept for a while (below). The status read, every 0.5 s, gave REQUESTED `POD_RESTARTING`
+    (4.5 s), then REQUESTED `VOLUME_STILL_ATTACHED` (15 s), then STARTING `POD_RESTARTING` on the next generation, then
+    READY with no reason. Out of memory gave the same, with `POD_RESTARTING_OUT_OF_MEMORY` before and after the wait.
+  - The previous manager, with the same lab, image, profile and hold: STARTING had no reason after the wait, and the
+    clients said "It is starting again", which is T07's finding.
+  - Without the hold, in three runs and a kill while starting, the volume detached 3.3–6.1 s after the Pod failed. That
+    was before the gate looked, and the restart's reason stood until READY, as before the change.
+
+Left to later work, or not shown here:
+
+- On the lab's idle VM, a stopped Pod's volume detached 3 to 6 s after the kubelet's report, before the gate looked (its
+  first look comes one poll and one backoff after the stop). So the lab showed the wait only with the attachment kept by
+  a test finalizer, as a slow detach keeps it; the detach itself had finished. T07 saw the natural wait in a crash loop
+  of a runner that was still starting.
+- The host's real Docker was not run: the Docker backend's waits were checked against the fake channel only.
+- No model was used: fake-model.py stood in for the owner's DeepSeek key. Nothing crossed nodes.
