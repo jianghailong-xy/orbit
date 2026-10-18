@@ -1,0 +1,208 @@
+# TEMPORARY (probe branch, never merged). The probe branch's .github/workflows/client.yml: photographs the
+# Cursor CLI boards iOS 1-6 (docs/mocks/cursor-engine/) on the iPhone client against .p7b-probe/stub.py
+# (task 34h05g5qDzqxO4Cg6dHtP), and runs the client gates on the same commit. A push runs the six boards'
+# tests split over two macOS 26 runners (.p7b-probe/run.sh with ONLY), OrbitKit `swift test` + OrbitApp
+# `swift build` on macOS, the iOS app's own Simulator build, and the two text audits; the report job pushes
+# the pictures, notes, request logs and build summaries to probe/p7b-cursor-shots-results.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["probe/p7b-cursor-shots"]
+  workflow_dispatch:
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  font-tokens:
+    name: Font tokens (bare system(size:) audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Audit bare system(size:) outside Typography.swift
+        run: |
+          hits=$(grep -rn "system(size" src/macos/OrbitApp/Sources src/ios/Sources --include='*.swift' \
+                 | grep -v "Views/Typography.swift" || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            exit 1
+          fi
+          echo "No bare system(size:) call sites outside Typography.swift."
+
+  nav-push:
+    name: Navigation (one push mechanism per stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Gate a second push mechanism
+        run: bash scripts/ci/nav-push-gate.sh
+
+  shots:
+    name: Cursor CLI probe (iPhone, ${{ matrix.part }})
+    runs-on: macos-26
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: a
+            only: "test1NewSession test2Infrastructure test3Accounts"
+          - part: b
+            only: "test4Keys test5Session test6ModesAndSwitch"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        env:
+          ONLY: ${{ matrix.only }}
+        run: |
+          bash .p7b-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .p7b-probe/shots
+          cp run-output.log .p7b-probe/shots/run-output.log 2>/dev/null || true
+          for log in .p7b-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".p7b-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".p7b-probe/shots/tail-$base.txt" || true
+          done
+          find .p7b-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          rm -rf .p7b-probe/shots/ios/attachments
+          { echo "capture=${{ steps.capture.outcome }}"; echo "only=${{ matrix.only }}"; } > .p7b-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cursor-shots-${{ matrix.part }}
+          path: .p7b-probe/shots
+
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test OrbitKit (macOS)
+        id: test
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          swift test 2>&1 | tee "$GITHUB_WORKSPACE/orbitkit-test.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Build OrbitApp
+        id: build
+        if: always()
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/orbitapp-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/macos
+          grep -E "Executed [0-9]+ tests|error: |: error:" orbitkit-test.log | head -300 > out/macos/swift-test-summary.txt || true
+          grep -E "Test Case '-\[OrbitKitTests\.(CursorRuntimeTests|CursorEngineTests)" orbitkit-test.log > out/macos/swift-test-cursor-suites.txt || true
+          grep -E "error:" orbitapp-build.log | head -300 > out/macos/orbitapp-build-errors.txt || true
+          tail -80 orbitapp-build.log > out/macos/orbitapp-build-tail.txt || true
+          { echo "test=${{ steps.test.outcome }}"; echo "build=${{ steps.build.outcome }}"; } > out/macos/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.test.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        id: build
+        continue-on-error: true
+        working-directory: src/ios
+        run: |
+          xcodebuild -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build 2>&1 | tee "$GITHUB_WORKSPACE/ios-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/ios
+          grep -E "error:|\*\* BUILD" ios-build.log | head -300 > out/ios/ios-build-summary.txt || true
+          echo "build=${{ steps.build.outcome }}" > out/ios/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.build.outcome != 'success'
+        run: exit 1
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [shots, macos, ios, font-tokens, nav-push]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/p7b-cursor-shots-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "font-tokens: ${{ needs.font-tokens.result }}"
+            echo "nav-push: ${{ needs.nav-push.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/p7b-cursor-shots-results
