@@ -103,6 +103,7 @@ GUEST_RESTORE = '/var/tmp/t08-restore'
 CSI_SECRET = {'name': ENV['LAB_CSI_SECRET'], 'namespace': ENV['LAB_CSI_NAMESPACE']}
 API_UNITS = ('orbit-mr-lab-api', ml.REPLICA_UNIT)
 CONTEXT = SERVER / 't08-context.json'
+PRIMARY_API = sw.API  # manager-lab.py's http(port=…) swaps this module-wide: never from threads (call_at instead)
 FAKE_KEY = 'sk-lab-fake-model-not-a-key'
 now = sw.now
 
@@ -164,6 +165,25 @@ def run(command, check=True, env=None, cwd=None, input=None, timeout=None):
     if check and result.returncode:
         raise Failed(f'{command[0]} {" ".join(command[1:3])} exited {result.returncode}: {(result.stderr or result.stdout).strip()[-800:]}')
     return result
+
+
+def call_at(port, method, path, body=None, token=None, timeout=60):
+    """single-writer.py's call() against the apiserver on PORT, without touching its module-wide address."""
+    headers = {'Content-Type': 'application/json'} if body is not None else {}
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    request = urllib.request.Request(f'http://127.0.0.1:{port}/api{path}', data=json.dumps(body).encode() if body is not None else None,
+                                     method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            text = response.read().decode()
+            return response.status, json.loads(text) if text else None
+    except urllib.error.HTTPError as error:
+        text = error.read().decode()
+        try:
+            return error.code, json.loads(text)
+        except ValueError:
+            return error.code, text
 
 
 def git(*args):
@@ -727,10 +747,10 @@ def provision_concurrent(ctx, step):
 
     def sign_in(i):
         name = USERS[i % 2]
-        port = ml.REPLICA_PORT if (i // 2) % 2 else None
+        port = ml.REPLICA_PORT if (i // 2) % 2 else int(ENV['LAB_TEST_API_PORT'])
         started = time.monotonic()
-        status, answer = ml.http('POST', '/auth/login', {'email': found[name]['email'], 'password': found[name]['password']}, port=port)
-        return {'owner': name, 'port': port or int(ENV['LAB_TEST_API_PORT']), 'status': status, 'ms': round((time.monotonic() - started) * 1000, 1),
+        status, answer = call_at(port, 'POST', '/auth/login', {'email': found[name]['email'], 'password': found[name]['password']})
+        return {'owner': name, 'port': port, 'status': status, 'ms': round((time.monotonic() - started) * 1000, 1),
                 'accessToken': answer.get('accessToken') if isinstance(answer, dict) else None,
                 'refreshToken': answer.get('refreshToken') if isinstance(answer, dict) else None}
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
@@ -1830,6 +1850,8 @@ def cmd_run(args):
             started_at, started = now(), time.monotonic()
             error = None
             try:
+                if sw.API != PRIMARY_API:
+                    raise Failed(f'the client points at {sw.API}, not the primary apiserver {PRIMARY_API}')
                 result = function(ctx, step)
             except (Exception, SystemExit) as failure:  # recorded, then the run stops
                 result, error = None, f'{type(failure).__name__}: {failure}'
