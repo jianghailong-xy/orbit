@@ -251,6 +251,7 @@ export class MemoryRunBackend implements ManagedRunnerBackend {
       terminated: found.state === 'exited',
       stopConfirmed: found.state === 'exited' && !found.unvouched,
       removing: false,
+      exit: found.state === 'exited' ? { code: found.exitCode, outOfMemory: false } : null,
     };
   }
 

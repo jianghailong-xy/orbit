@@ -1,0 +1,15 @@
+{
+  "everyTokenWorks": true,
+  "owner": "ivy",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:41:25.635+00:00",
+      "ms": 48.3,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 48.3
+}

@@ -1,0 +1,17 @@
+scene 10-nia-out-of-memory-retry: 227 s, actions (
+        {
+        body =         {
+            revision = 86;
+        };
+        m = POST;
+        path = "/api/managed-runner/retry";
+        t = "185.601";
+    }
+)
+10-nia-out-of-memory-retry-00: "ran out of memory and stopped" shows
+10-nia-out-of-memory-retry-01: "Managed runner failed" shows
+10-nia-out-of-memory-retry-02: "kept running out of memory" shows
+10-nia-out-of-memory-retry-03: pressing 9 label="Retry" value="" frame=(26.0, 686.6666666666666, 64.66666666666667, 34.33333333333337) hittable=true
+10-nia-out-of-memory-retry-04: "Waking your managed runner" shows
+10-nia-out-of-memory-retry: 204 requests, 0 violations, actions left [], notes (
+)

@@ -1,0 +1,100 @@
+== effective configuration after-install at 2026-10-17T10:55:12Z, checkout 6f51ce21d8a8fe404d04035749ff6203446e963a
+-- .env (mode 600; secrets redacted)
+DATABASE_URL="postgresql://orbit:orbit@localhost:5432/orbit?schema=public"
+JWT_SECRET=<redacted>
+PROVIDER_SECRET_KEY=<redacted>
+PORT=3000
+PUBLIC_ORIGIN="http://localhost:2086"
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+COMPOSE_PROFILES=managed-runners-docker
+-- data/managed-runners
+drwx------ root data/managed-runners
+-rw------- root data/managed-runners/channel.json
+srw------- root data/managed-runners/channel.sock
+-rw------- root data/managed-runners/profile.json
+drwx------ root data/managed-runners/state
+-rw------- root data/managed-runners/token
+drwx------ root data/managed-runners/state
+-- channel.json
+{
+  "schemaVersion": 1,
+  "instanceId": "orbit-14b77689",
+  "listen": { "unixSocket": "/var/lib/orbit-managed-runners/channel.sock" },
+  "tokenFile": "/var/lib/orbit-managed-runners/token",
+  "dockerSocket": "/var/run/docker.sock",
+  "stateDir": "/var/lib/orbit-managed-runners/state",
+  "image": "sha256:7d6bd8f205e93e31591df5f03e84074a58b325787b62ad1a9f7de41074c48b08",
+  "network": "orbit-managed-runners",
+  "limits": {
+    "maxCpuMillis": 4000,
+    "maxMemoryBytes": 8589934592,
+    "maxPids": 4096,
+    "maxTmpBytes": 2147483648,
+    "maxVolumeBytes": 107374182400,
+    "maxConcurrent": 8
+  },
+  "stopGraceSeconds": 240,
+  "diskCheckSeconds": 120
+}
+-- profile.json
+{
+  "schemaVersion": 1,
+  "valueKind": "actual",
+  "backend": "docker",
+  "environmentId": "orbit-14b77689",
+  "clusterKey": "orbit-14b77689",
+  "resourceProfileId": "docker-default",
+  "docker": {
+    "instanceId": "orbit-14b77689",
+    "channel": { "socketPath": "/var/lib/orbit-managed-runners/channel.sock" },
+    "tokenFile": "/var/lib/orbit-managed-runners/token"
+  },
+  "storage": { "capacity": "20Gi" },
+  "runner": {
+    "image": "sha256:7d6bd8f205e93e31591df5f03e84074a58b325787b62ad1a9f7de41074c48b08",
+    "serverUrl": "http://172.19.0.1:2086",
+    "maxConcurrent": 2,
+    "tmpSizeLimit": "1Gi",
+    "resources": { "cpu": "2", "memory": "4Gi", "pids": 4096 }
+  },
+  "lifecycle": {
+    "maxAttempts": 5,
+    "backoffBaseSeconds": 10,
+    "backoffMaxSeconds": 300,
+    "startupDeadlineSeconds": 1800,
+    "requestTimeoutSeconds": 60,
+    "leaseSeconds": 60,
+    "pollIntervalSeconds": 5,
+    "heartbeatFreshSeconds": 120,
+    "idleSeconds": 3600,
+    "capacityRetrySeconds": 60,
+    "drainSeconds": 600
+  }
+}
+-- apiserver: managed runner environment
+ORBIT_MANAGED_RUNNERS_PROFILE=/var/lib/orbit-managed-runners/profile.json
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+-- apiserver: mounts
+bind /work/orbit/data/managed-runners -> /var/lib/orbit-managed-runners rw=false
+
+-- apiserver: what it said about managed runners at start
+[32m[Nest] 117  - [39m10/17/2026, 10:54:51 AM [32m    LOG[39m [38;5;3m[ManagedRunners] [39m[32mmanaged runners are enabled in orbit-14b77689 (Docker instance orbit-14b77689)[39m
+-- docker-channel: network mode, mounts, user
+network=none user= image=sha256:2f59e24952f539d2c1115cfd07400c962acabbe4a276a17783d15c690c38e636
+bind /work/orbit/data/managed-runners -> /var/lib/orbit-managed-runners rw=true
+bind /var/run/docker.sock -> /var/run/docker.sock rw=true
+
+-- docker-channel: its log
+2026-10-17T10:54:49Z orbit-docker-channel: instance orbit-14b77689 serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:7d6bd8f205e93e31591df5f03e84074a58b325787b62ad1a9f7de41074c48b08, network orbit-managed-runners
+2026-10-17T10:54:51Z orbit-docker-channel: GET /v1/info -> 200
+-- network orbit-managed-runners
+driver=bridge internal=false options={"com.docker.network.bridge.enable_icc":"false"} ipam=[{"Subnet":"172.19.0.0/16","Gateway":"172.19.0.1"}]
+-- docker compose ps
+orbit-apiserver	orbit-apiserver:local	Up 23 seconds (healthy)
+orbit-docker-channel	orbit-docker-channel:local	Up 24 seconds (healthy)
+orbit-gateway	nginx:alpine	Up 10 seconds (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 23 seconds
+orbit-postgres	postgres:16-alpine	Up About a minute (healthy)
+orbit-web	orbit-web	Up 16 seconds (healthy)
+orbit-wiki-worker	orbit-apiserver:local	Up 16 seconds

@@ -1,0 +1,6 @@
+17:59:32	compose version
+17:59:32	compose config --services
+17:59:32	compose build apiserver wiki-worker web
+17:59:48	compose run --rm --no-deps apiserver /bin/sh -c cd src/apiserver && node "$(node -p 'require.resolve("prisma/build/index.js")')" migrate deploy
+17:59:52	compose up -d --wait --no-deps apiserver wiki-worker web gateway
+18:00:00	compose ps

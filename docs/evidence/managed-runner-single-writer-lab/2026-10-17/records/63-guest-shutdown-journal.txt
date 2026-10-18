@@ -1,0 +1,18 @@
+ -2 f71ac78983a947cca3ca50d92575f4d9 Sat 2026-10-17 06:57:30 UTC Sat 2026-10-17 08:12:18 UTC
+ -1 1e881b7f16794b718b5e6b31ef87312e Sat 2026-10-17 19:45:42 UTC Sat 2026-10-17 20:00:40 UTC
+  0 42c90f5090604b20a3edf9cd06c00247 Sat 2026-10-17 20:01:05 UTC Sat 2026-10-17 20:19:40 UTC
+==
+2026-10-17T19:46:14+00:00 orbit-mr-lab systemd[1]: Starting orbit-lab-rbd-release.service - Release kernel RBD devices before Ceph stops (Orbit managed-runner lab)...
+2026-10-17T19:46:14+00:00 orbit-mr-lab systemd[1]: Finished orbit-lab-rbd-release.service - Release kernel RBD devices before Ceph stops (Orbit managed-runner lab).
+2026-10-17T19:51:18+00:00 orbit-mr-lab systemd[1]: Stopping k3s.service - Lightweight Kubernetes...
+2026-10-17T19:51:20+00:00 orbit-mr-lab systemd[1]: Stopped k3s.service - Lightweight Kubernetes.
+2026-10-17T20:00:27+00:00 orbit-mr-lab systemd[1]: Stopping k3s.service - Lightweight Kubernetes...
+2026-10-17T20:00:29+00:00 orbit-mr-lab systemd[1]: Stopped k3s.service - Lightweight Kubernetes.
+2026-10-17T20:00:29+00:00 orbit-mr-lab systemd[1]: Stopping orbit-lab-rbd-release.service - Release kernel RBD devices before Ceph stops (Orbit managed-runner lab)...
+2026-10-17T20:00:29+00:00 orbit-mr-lab orbit-lab-release-rbd[24363]: stopping the containers of 2 containerd shims
+2026-10-17T20:00:30+00:00 orbit-mr-lab orbit-lab-release-rbd[24502]: unmounted /var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/a58831d827951719efbddea2b07ff834312fb022eb617f3d1d6794b70d8f4701/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27
+2026-10-17T20:00:30+00:00 orbit-mr-lab orbit-lab-release-rbd[24502]: unmounted /var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd
+2026-10-17T20:00:30+00:00 orbit-mr-lab orbit-lab-release-rbd[24363]: unmapped rbd0
+2026-10-17T20:00:30+00:00 orbit-mr-lab orbit-lab-release-rbd[24363]: unmapped rbd1
+2026-10-17T20:00:30+00:00 orbit-mr-lab systemd[1]: orbit-lab-rbd-release.service: Deactivated successfully.
+2026-10-17T20:00:30+00:00 orbit-mr-lab systemd[1]: Stopped orbit-lab-rbd-release.service - Release kernel RBD devices before Ceph stops (Orbit managed-runner lab).

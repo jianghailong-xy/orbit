@@ -40,6 +40,7 @@ import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-run
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
+import { ownerManagedKeys } from './managed-runner-supply';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
 
@@ -93,7 +94,10 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   async status(ownerId: string): Promise<ManagedRunnerStatus> {
     const mapping = await this.prisma.managedRunner.findUnique({ where: { ownerId } });
     const runner = mapping
-      ? await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: { status: true, lastHeartbeatAt: true } })
+      ? await this.prisma.runner.findUnique({
+          where: { id: mapping.runnerId },
+          select: { status: true, lastHeartbeatAt: true, engines: true, capabilities: true },
+        })
       : null;
     const available = !!this.runtime?.available;
     // Off, management is frozen and nothing more is read than the mapping and its runner.
@@ -106,6 +110,10 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       ownerDisabled,
       mapping,
       runner,
+      // What a first session would wait for the runner on, until READY records what it starts on.
+      firstSessionKey: this.gate.enabled && mapping && !mapping.initialProvider
+        ? ((await ownerManagedKeys(this.prisma, ownerId))[0] ?? null)
+        : null,
       now: new Date(),
       heartbeatFreshMs: this.runtime?.available ? this.runtime.profile.lifecycle.heartbeatFreshSeconds * 1000 : DEFAULT_HEARTBEAT_FRESH_MS,
     });
@@ -313,8 +321,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   /**
    * The mapping, the runner row and the default workspace, in one retriable transaction. The runner
    * row starts OFFLINE with a credential nobody holds: the manager issues the real one with the
-   * bootstrap credential. The data volume's location and name are the run backend's. A concurrent
-   * request that loses the owner's unique key reads the winner.
+   * bootstrap credential. The data volume's location and name are the run backend's, and so is the
+   * mapping: only that backend's manager drives it. A concurrent request that loses the owner's
+   * unique key reads the winner.
    */
   private async createMapping(ownerId: string, idempotencyKey: string, { profile, manager: { backend } }: AvailableRuntime): Promise<ManagedRunner> {
     try {
@@ -346,6 +355,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               ownerId,
               runnerId: runner.id,
               defaultWorkspaceId: workspace.id,
+              backend: backend.name,
               clusterKey: backend.location.clusterKey,
               namespace: backend.location.namespace,
               pvcName: backend.names(runner.id).volume,

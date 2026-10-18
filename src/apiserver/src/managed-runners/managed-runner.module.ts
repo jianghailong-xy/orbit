@@ -6,9 +6,11 @@ import { kubeClientFromProfile } from './kube-http-client';
 import { MANAGED_RUNNER_GATE, ManagedRunnerEnabledGuard, type ManagedRunnerGate } from './managed-runner-gate';
 import { MANAGED_RUNNERS_PROFILE_ENV } from './managed-runner-profile';
 import {
+  MANAGED_RUNNER_DOCKER_CHANNEL_FACTORY,
   MANAGED_RUNNER_KUBE_CLIENT_FACTORY,
   MANAGED_RUNNER_RUNTIME,
   createManagedRunnerRuntime,
+  type DockerChannelFactory,
   type KubeClientFactory,
 } from './managed-runner-runtime';
 import { MANAGED_RUNNER_DEMAND, ManagedRunnerDemandService } from './managed-runner-demand';
@@ -19,9 +21,10 @@ import { ManagedRunnerService } from './managed-runner.service';
 
 /**
  * Managed runners (docs/managed-runner-design.md). The runtime — profile, run backend (the Kubernetes
- * client under KubernetesBackend), manager and reconcile loop — is built only when the gate is on;
- * off, the factory returns null without reading a profile or a kubeconfig, and the status facade and
- * the refusing guard are all there is.
+ * client under KubernetesBackend, or the restricted Docker channel's client under DockerBackend),
+ * manager and reconcile loop — is built only when the gate is on; off, the factory returns null
+ * without reading a profile, a kubeconfig or a channel token, and the status facade and the refusing
+ * guard are all there is.
  * The gate itself comes from the global ManagedRunnerGateModule.
  *
  * Global for two exports, so their callers' modules need no import of this one: the sign-in step
@@ -36,13 +39,20 @@ import { ManagedRunnerService } from './managed-runner.service';
     ManagedRunnerAdmissionGuard,
     {
       provide: MANAGED_RUNNER_RUNTIME,
-      inject: [MANAGED_RUNNER_GATE, ConfigService, PrismaService, { token: MANAGED_RUNNER_KUBE_CLIENT_FACTORY, optional: true }],
-      useFactory: (gate: ManagedRunnerGate, config: ConfigService, prisma: PrismaService, kubeClient?: KubeClientFactory) =>
+      inject: [
+        MANAGED_RUNNER_GATE,
+        ConfigService,
+        PrismaService,
+        { token: MANAGED_RUNNER_KUBE_CLIENT_FACTORY, optional: true },
+        { token: MANAGED_RUNNER_DOCKER_CHANNEL_FACTORY, optional: true },
+      ],
+      useFactory: (gate: ManagedRunnerGate, config: ConfigService, prisma: PrismaService, kubeClient?: KubeClientFactory, dockerChannel?: DockerChannelFactory) =>
         gate.enabled
           ? createManagedRunnerRuntime({
             profilePath: config.get<string>(MANAGED_RUNNERS_PROFILE_ENV),
             prisma,
             kubeClient: kubeClient ?? ((profile) => kubeClientFromProfile(profile)),
+            dockerChannel,
           })
           : null,
     },

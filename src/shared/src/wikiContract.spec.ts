@@ -171,6 +171,7 @@ import {
   WIKI_PLAN_ORIGINS,
   WIKI_PLAN_PROPOSAL_ACTIONS,
   WIKI_PLAN_PROPOSAL_STATUSES,
+  WIKI_PLAN_REBUILD,
   WIKI_PLAN_REPO_REF_KINDS,
   WIKI_PLAN_RULES,
   WIKI_PLAN_SCHEMA,
@@ -1306,7 +1307,10 @@ describe('wiki contract', () => {
     const sql = readFileSync(path.join(ROOT, jobs.migration), 'utf8');
     const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
     expect(sql).toContain(`"kind" IN (${quoted(WIKI_PLAN_JOB_KINDS)})`);
-    expect(sql).toContain(`"trigger" IN (${quoted(WIKI_PLAN_JOB_TRIGGERS)})`);
+    // 0338 wrote the first two facts; 0429 restated the CHECK with the third, an administrator's (rebuild).
+    expect(sql).toContain(`"trigger" IN (${quoted(WIKI_PLAN_JOB_TRIGGERS.filter((trigger) => trigger !== 'support'))})`);
+    const triggers = readFileSync(path.join(ROOT, jobs.rebuild.migration), 'utf8');
+    expect(triggers).toContain(`CHECK ("trigger" IN (${quoted(WIKI_PLAN_JOB_TRIGGERS)}))`);
     expect(sql).toContain(`"state" IN (${quoted(WIKI_PLAN_JOB_STORED_STATES)})`);
     expect(sql).toContain(`"held_reason" IN (${quoted(WIKI_PLAN_JOB_HELD_REASONS)})`);
     expect(sql).toContain(`"outcome" IN (${quoted(WIKI_PLAN_JOB_OUTCOMES)})`);
@@ -1334,6 +1338,54 @@ describe('wiki contract', () => {
     expect(jobs.cli.draft).toMatch(/^orbit wiki plan draft --space <id>/u);
     expect(jobs.cli.revise).toMatch(/^orbit wiki plan revise --space <id> \[--instructions <file>\]/u);
     expect(jobs.cli.check).toBe('orbit wiki plan check --space <id> --job <id> [--json]');
+  });
+
+  it('ships the documents of the version in force asked for again: the owner\'s route, the support route, and their rules', () => {
+    // Owner's call 2026-10-17 (plan.jobs.rebuild): the owner, and an administrator for support, may ask for the build
+    // of the version in force again — the server's path alone.
+    const jobs = CONTRACT.plan.jobs;
+    const rebuild = jobs.rebuild;
+    expect(rebuild.migration).toMatch(/0429_wiki_plan_job_support_trigger/u);
+    expect(existsSync(path.join(ROOT, rebuild.migration))).toBe(true);
+    expect(rebuild.rules).toEqual({ reasonMaxChars: WIKI_PLAN_REBUILD.reasonMaxChars });
+    expect(rebuild.activity).toBe(WIKI_PLAN_REBUILD.activity);
+    // The routes: the owner's on the user door beside confirm, the administrator's two in the admin area.
+    expect(rebuild.routes.owner).toBe('POST /api/wiki/spaces/:id/plan/versions/:version/build');
+    expect(CONTRACT.plan.routes.build).toBe(rebuild.routes.owner);
+    expect(jobs.routes.build).toBe(rebuild.routes.owner);
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(rebuild.routes.owner);
+    expect(rebuild.routes.support).toBe('POST /api/admin/wiki/spaces/:id/plan/build');
+    expect(jobs.routes.supportBuild).toBe(rebuild.routes.support);
+    expect(rebuild.routes.supportSpaces).toBe('GET /api/admin/wiki/users/:id/spaces');
+    expect(jobs.routes.supportSpaces).toBe(rebuild.routes.supportSpaces);
+    // An administrator's request is the third fact that asks for a job.
+    expect(WIKI_PLAN_JOB_TRIGGERS).toContain('support');
+    expect(jobs.triggers.support).toMatch(/POST \/api\/admin\/wiki\/spaces\/:id\/plan\/build/u);
+    expect(jobs.triggers.owner).toMatch(/plan\/versions\/:version\/build/u);
+    // Who: the owner channel, never a token; an administrator, never a token nor while viewing another account.
+    expect(rebuild.who).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
+    expect(rebuild.who).toMatch(/OWNER_INTERACTIVE/u);
+    expect(jobs.who.support).toMatch(/PatForbidden ADMIN/u);
+    expect(jobs.who.support).toMatch(/IMPERSONATION_FORBIDDEN/u);
+    // Only while the server executes the account: the runner's path is unchanged until P11.
+    expect(rebuild.when).toMatch(/WIKI_RUNNER_EXECUTES \(409\)/u);
+    expect(rebuild.runnerPath).toMatch(/Unchanged until P11/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_RUNNER_EXECUTES')).toBe(409);
+    // The version in force alone, one build of it on its way, and neither counted nor held back by the day's limit.
+    expect(rebuild.version).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
+    expect(rebuild.version).toMatch(/WIKI_PLAN_STALE/u);
+    expect(rebuild.idempotent).toMatch(/FOR NO KEY UPDATE/u);
+    expect(rebuild.idempotent).toMatch(/created false/u);
+    expect(rebuild.limits).toMatch(/dailyRunLimit, nor held back by it/u);
+    expect(jobs.notAMaintenanceRun).toMatch(/A build asked for again \(rebuild\)/u);
+    expect(rebuild.makes).toMatch(/docs_build wiki_job/u);
+    expect(rebuild.makes).toMatch(/no task, no session/u);
+    // The audit: the job's row for everybody, an Activity row in the same transaction for an administrator.
+    expect(rebuild.audit).toMatch(/requested_by_user_id/u);
+    expect(rebuild.support).toMatch(/In the same transaction as the job, one Activity row/u);
+    expect(rebuild.support).toMatch(/\{ userId, spaceId, version, planJobId, created, reason \}/u);
+    expect(rebuild.support).toMatch(/No CLI/u);
   });
 
   it('ships the documents the contract states: their closed sets, rules and schema, their tables, the withdrawal and their doors', () => {

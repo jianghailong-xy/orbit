@@ -1,0 +1,21 @@
+scene 20-docker-volume-restored-retry: 112.785 s, actions (
+        {
+        body =         {
+            content = "T07-EVE-R1 wake after the volume was removed";
+            kind = message;
+        };
+        m = POST;
+        path = "/api/sessions/34huXsoh2eZnT7logfclT/turns";
+        t = "21.229";
+    },
+        {
+        body =         {
+            revision = 69;
+        };
+        m = POST;
+        path = "/api/managed-runner/retry";
+        t = "77.48099999999999";
+    }
+)
+20-docker-volume-restored-retry: no window after launch; File > New Window
+20-docker-volume-restored-retry-01: send (missing)

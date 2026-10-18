@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-17T23:39:43.943+00:00",
+  "byKind": {
+    "other (reads, patches, deletes)": 18
+  },
+  "connections": 18,
+  "largestRecordSizes": {
+    "1136": 6,
+    "1147": 6,
+    "1170": 6
+  },
+  "lost": [],
+  "since": "2026-10-17T23:39:43.447",
+  "until": null
+}

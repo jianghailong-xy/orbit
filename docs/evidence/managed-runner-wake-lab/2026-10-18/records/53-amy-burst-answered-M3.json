@@ -1,0 +1,50 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:37:31.843",
+    "ingested_at": "2026-10-18T01:37:32.005159+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 38,
+    "session_id": "01a14c9e-80a2-768d-b2f1-d41e9341b277",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-BURST-M3",
+  "modelRequests": [
+    {
+      "apiErrors": {
+        "AMYRT": 2
+      },
+      "at": "2026-10-18T01:37:31Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 7,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:26:58.466",
+    "engine": "claude",
+    "id": "01a14c9e-80a2-768d-b2f1-d41e9341b277",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-RT FAKE-APIERR 2 AMYRT a message whose provider is o"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:37:32.117",
+      "client_turn_id": "5f3a90f0-7efb-4a48-9e98-d319e042cb5c",
+      "content": "T06-AMY-BURST-M3 a message",
+      "created_at": "2026-10-18T01:37:15.725",
+      "delivered_at": "2026-10-18T01:37:31.553",
+      "id": "01a14ca7-ebcd-77de-81c0-9822c44d1519",
+      "kind": "message",
+      "seq": 4,
+      "status": "ANSWERED"
+    }
+  ]
+}

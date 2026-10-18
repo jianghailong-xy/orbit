@@ -1,0 +1,28 @@
+scene 20-docker-volume-restored-retry: 112.785 s, actions (
+        {
+        body =         {
+            content = "T07-EVE-R1 wake after the volume was removed";
+            kind = message;
+        };
+        m = POST;
+        path = "/api/sessions/34huXsoh2eZnT7logfclT/turns";
+        t = "21.229";
+    },
+        {
+        body =         {
+            revision = 69;
+        };
+        m = POST;
+        path = "/api/managed-runner/retry";
+        t = "77.48099999999999";
+    }
+)
+20-docker-volume-restored-retry-00: "Managed runner asleep" shows
+20-docker-volume-restored-retry-01: typed into 52 label="" value="T07-EVE-R1 wake after the volume was removed" frame=(32.00000000000003, 431.0, 338.0, 44.0) hittable=true
+20-docker-volume-restored-retry-01: send 9 label="Arrow Up Circle" value="" frame=(346.0, 489.0, 32.0, 32.0) hittable=true
+20-docker-volume-restored-retry-02: "recorded data volume is gone" shows
+20-docker-volume-restored-retry-04: "back as it was recorded" shows
+20-docker-volume-restored-retry-05: pressing 9 label="Retry" value="" frame=(26.0, 385.6666666666667, 64.66666666666667, 34.33333333333326) hittable=true
+20-docker-volume-restored-retry-07: "Answering: T07-EVE-R1" shows
+20-docker-volume-restored-retry: 117 requests, 0 violations, actions left [], notes (
+)

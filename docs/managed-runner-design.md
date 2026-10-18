@@ -28,7 +28,7 @@ Self-managed runners remain supported alongside the optional managed runner.
 | [Queue service](../src/apiserver/src/queue/queue.service.ts) | Claims use a transaction advisory lock, owner predicates, provider capabilities, and active-turn caps. These are session execution limits, not infrastructure admission or storage fencing. |
 | [Reaper service](../src/apiserver/src/realtime/reaper.service.ts) | Sweeps every 30 seconds; runner silence exceeds its offline threshold at 90 seconds. Active turns can be finalized after losing a runner; idle `AWAITING_INPUT` sessions can survive. Silence does not prove a node stopped writing. |
 | [Runner config](../src/runner-go/config.go) | `config.json` persists runner ID and credential under `ORBIT_HOME`; private directory/file modes are 0700/0600. `runs` and `codex-state` also live there. |
-| [Run loop](../src/runner-go/runloop.go) and [session shutdown](../src/runner-go/session.go) | Heartbeats run every 30 seconds and continue during drain. The current supervisor shutdown envelope is 170 seconds, including the 100-second turn drain and release/flush backstops. Kubernetes termination must leave time beyond that envelope. |
+| [Run loop](../src/runner-go/runloop.go) and [session shutdown](../src/runner-go/session.go) | Heartbeats run every 30 seconds and continue during drain, including while work the heartbeat started (a landing's checks, repository operations) finishes; one last beat is sent at exit. The current supervisor shutdown envelope is 170 seconds, including the 100-second turn drain and release/flush backstops. Heartbeat work gets the same 100 seconds; a landing still checking then is stopped with its process tree, its scratch worktree removed and its claim handed back for immediate re-dispatch ([stop sequence](../src/runner-go/shutdown_drain.go), contract §2.2 J-T11), inside the same envelope. Kubernetes termination must leave time beyond that envelope. |
 | [Worktrees](../src/runner-go/worktree.go) | Per-session checkouts and upload scratch live under `ORBIT_HOME`; Git metadata contains absolute paths. Preserve both the primary checkout and worktree root. Existing GC is distinct from PVC lifecycle. |
 | [Codex state](../src/runner-go/codex_state.go) | Shared partitions are keyed by the cleaned absolute `CODEX_HOME`; persisted layout/home/partition markers govern resume. Legacy and credential-isolated state can live under session scratch. Preserve all layouts. |
 | [Runner API](../src/apiserver/src/runner-api/runner-api.controller.ts) | Enrollment derives owner from an enrollment token and reuses a name match; deregistration hard-deletes the runner. Neither is a safe managed provisioning identity or managed delete path. |
@@ -72,6 +72,12 @@ Keep `.env.example`, root Compose, `/upgrade`, release workflows, installation s
 `dev`/`start` entry points disabled. A later configuration reference may document a commented
 `ORBIT_MANAGED_RUNNERS_ENABLED=false`; no default entry point forwards an inherited session variable
 as an opt-in or installs Kubernetes, Rook, Ceph, CSI, or managed workloads.
+
+Revised by the account owner on 2026-10-17 for new deployments ("Implementation record: new
+deployments"): the code's default stays off, and so does every deployment whose `.env` does not say
+`true`, but a fresh install writes the switch on with the Docker backend and its Compose profile.
+`/upgrade` never writes it. The default entry points may reference the Docker backend, and still
+reference or install nothing of Kubernetes, Rook, Ceph or CSI.
 
 ## Identity and durable mapping
 
@@ -213,6 +219,10 @@ crash/recovery correctness of the selected stack still requires the tests below.
    facts available here. Startup budgets must accommodate the existing Codex shared-state startup
    allowance. Permanent conflicts pause immediately. An explicit safe retry resets the attempt
    budget for the same mapping and preserves the PVC; it does not discard partially created state.
+   An instance that stops unasked, with its host's report of the stop, is replaced the same way —
+   through the single-writer gate, within the same attempt count and backoff — so a host restart
+   needs no retry; a crash loop still ends FAILED ("Implementation record: failure recovery and
+   visibility").
 5. A new message/queued executable turn, a runnable task, or due scheduled/background work records
    demand and requests `RUNNING`, even when the managed runner is asleep. Use existing dispatch
    permission, dependency, cancellation, and provider checks before declaring a task runnable.
@@ -447,6 +457,13 @@ sandbox/VM runtime and its Ceph attach path. Confirm whether separate tenant nam
 at rest, egress mediation, and backup key isolation are required; do not claim the invited-test
 profile satisfies unspecified public isolation requirements.
 
+For the Docker backend of a new deployment, the account owner decided on 2026-10-17 that every
+account is eligible by default, those created by open sign-up included, except a disabled one. The
+owner is aware that the containers share the host's kernel, which is no strong isolation from a
+malicious public user, and the deployer bears that risk; the deployment documentation
+([self-hosting](self-hosting.md#isolation-and-its-limits)) says so. The rule is `EVERY_ACCOUNT` in
+`managed-runner-eligibility.ts`, asked only about accounts that are not disabled.
+
 ## Retention explicit deletion and backup
 
 Sleeping, stopping, moving nodes, replacing images, login retry, disabling the feature, and deleting
@@ -511,9 +528,15 @@ Shared status fields, defined in `@orbit/shared` and mirrored in OrbitKit, are:
 ```text
 contractVersion, revision, managementState, desiredState,
 runnerId?, workspaceId?, heartbeatStatus?, lastHeartbeatAt?, usable,
-reason? { code, message, retryable }, retryAfter?, initialProvider?,
+reason? { code, message, retryable }, retryAfter?, initialProvider?, firstSessionProvider?,
 actions { canEnsure, canWake, canSleep, canRetry, canDelete }
 ```
+
+`firstSessionProvider` (since 2026-10-18, task T07) is what a first session in the default workspace, sent with
+nothing named, starts on now: `initialProvider` once the runner has been READY, before that the owner's own model key
+such a session is queued on while the runner has not reported its engines or reported that key's engine installed, and
+null when the session would be refused `MODEL_UNAVAILABLE`. A client offers that session exactly when it is set; a
+server that predates the field is read by `initialProvider`.
 
 IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the
 mapping exists. Do not expose Ceph endpoints/keys, kubeconfig, node control credentials, Secret
@@ -548,7 +571,9 @@ Subsequent implementation places optional templates under `deploy/managed-runner
 operations under a separate managed-runner test entry point. These paths are proposed, not installed
 by this design. They must not be imported by root Compose, `/upgrade`, default start/release scripts,
 or normal installation. Application templates refer to an already approved StorageClass/CSI and
-never install a backend as a side effect. Infrastructure variants have separate entry points.
+never install a backend as a side effect. Infrastructure variants have separate entry points. (Since
+2026-10-17 the Docker backend's channel and image are the exception, in a Compose profile a fresh
+install switches on: "Implementation record: new deployments".)
 
 Before any mutating test command, the operator supplies an authorized environment manifest naming
 the exact kubeconfig context/API server identity, namespace allowlist, node allowlist, test Ceph
@@ -658,8 +683,8 @@ cluster, a real runner heartbeat or a real model session.
 | On | An eligible owner without a mapping gets one (mapping, runner row and default workspace in the manager-core transaction), and the reconcile worker is kicked. The sign-in waits for no instance and makes no Kubernetes call. An existing mapping is left as it is in every state: a sign-in does not retry FAILED, recreate a removed workspace or a tombstone, or wake anything. Every failure is logged and swallowed, so the issued session stands; an explicit `ensure`, or the next sign-in, records the intent. |
 | Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
 | Default workspace | Created once with the mapping, bound by `runnerId` and `targetRunnerId`, with `position` NULL, so it sorts after every workspace the owner already has. Existing order, the first workspace a client lands on, selections and deep links are unchanged. Nothing is matched by name. An owner who removes it does not get it, or another, back at the next sign-in. |
-| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code and Antigravity count, preferred in that order, and the first is stored as `initialProvider`. Without one the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode, DeepSeek Harness and Cursor CLI are not counted as supply in this version (`MANAGED_SUPPLY_RUNTIMES` in `src/apiserver/src/managed-runners/managed-runner-supply.ts`). |
-| First session | The derived provider seed (`lastProviderByWorkspace`) answers a managed default workspace with no interactive history with its `initialProvider`. Its `lastProvider` in workspace payloads, and a session created there without a provider, start on that runtime; every other workspace keeps the Claude floor. `SessionsService.create` refuses a first session there with 409 `MODEL_UNAVAILABLE`, before anything is created, on a runtime the managed runner did not report installed and signed in, whether the provider was named or derived. A session bringing its own credential needs only the CLI installed. After the first interactive session the workspace's history decides, as for every workspace. The deprecated workspace `provider` alias is neither read nor written. |
+| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code and Antigravity count, preferred in that order, and the first is stored as `initialProvider`. With none signed in, one of the owner's own enabled model keys counts (since 2026-10-18, task T05: an account whose only model is an API key, such as a DeepSeek key, never became READY before). The key counts when the runner reported the engine that key runs on installed, without an installation error and advertised where the claim requires it. That engine needs no sign-in, because a session on a key brings its own credential. The first such key in the owner's order (`position`, unset last, then age) is stored as `initialProvider`, by its slug. Another account's key, a shared key (an administrator's), a disabled key and a key whose slug is a built-in runtime's name do not count. Without either the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in or a key added meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode, DeepSeek Harness and Cursor CLI are not counted as supply in this version, and neither is a key whose engine is one of them (`MANAGED_SUPPLY_RUNTIMES` and `ownerManagedKeys` in `src/apiserver/src/managed-runners/managed-runner-supply.ts`). |
+| First session | The derived provider seed (`lastProviderByWorkspace`) answers a managed default workspace with no interactive history with its `initialProvider`: a runtime's name as that built-in provider, or a key's slug as that configured provider on the engine its row names. Its `lastProvider` in workspace payloads, and a session created there without a provider, start on it; every other workspace keeps the Claude floor. `SessionsService.create` refuses a first session there with 409 `MODEL_UNAVAILABLE`, before anything is created, on a runtime the managed runner did not report installed and signed in, whether the provider was named or derived. A session bringing its own credential needs only the CLI installed. After the first interactive session the workspace's history decides, as for every workspace. The deprecated workspace `provider` alias is neither read nor written. |
 
 Left for the authorized test environment: a real sign-in provisioning a real PVC and Pod; the managed
 image consuming the bootstrap credential and heartbeating with real engine health (its entrypoint
@@ -670,6 +695,20 @@ rendering of these states, capacity admission and wake/sleep belong to the clien
 
 The local evidence is `managed-runner-sign-in.spec.ts` and `managed-runner-supply.spec.ts` in the
 unit suite, and `managed-runner-sign-in.pg.spec.ts`, run with `scripts/run-pg-spec.sh <spec>`.
+
+In the single-machine lab (T05, 2026-10-17), real sign-ins provisioned real RBD-backed PVCs and Pods.
+The managed image registered with its bootstrap credential, and its engine probe reported Claude Code and Codex installed and signed out.
+A key-only account then became READY only with the model-key rule above.
+A first session with nothing named ran on the managed runner, through to an answer.
+These also held there:
+- concurrent sign-ins on two replicas;
+- repeated sign-ins;
+- an existing account's landing and deep links;
+- a refused intent and a missing admission guard, each followed by its retry;
+- the switch unset and `false`, for new and existing accounts.
+
+The model there was a stand-in endpoint behind a DeepSeek-preset key, so a session on a real model is still open
+([lab record](managed-runner-lab.md#sign-in-provisioning-t05)).
 
 ## Implementation record: single-writer protection
 
@@ -737,6 +776,20 @@ LimitRange, and the pool's headroom against the test pool's actual safe usable c
 budget values the test owner supplies; drain timing with real long landings; and managers on several
 replicas sharing one pool.
 
+Verified in the single-machine lab by T06 on 2026-10-18 ([evidence](evidence/managed-runner-wake-lab/2026-10-18/README.md),
+[the lab page](managed-runner-lab.md#wake-sleep-and-capacity-t06)), with two replicas sharing a pool budgeted for one runner and
+fake-model.py as the model: 22 real scales to zero (the runner's exit 0 and the kubelet's report, the Pod removed, the detach; 35–41 s from
+the drain request to SLEEPING) and the starts after them on the same PVC and runner row; wakes by a message, a task's Run Now, a held
+wakeup and a task's run time; no sleep through a long turn or a runner-hosted background job; eight demands making one start; a drain
+called off by a message; a crash while starting restarted by itself and a quota refusal retried by the owner; capacity waits for a new
+account and for a wake; disabled accounts; and the switch unset and `false` with all of this pending. Real capacity exhaustion at the
+scheduler or a LimitRange and a long landing during a drain were not reached.
+
+One finding was fixed there. A woken instance claims at once, while its first heartbeat waits for its 30-second ticker, so the runner
+row's `lastHeartbeatAt` was still from before the sleep and the reaper finalized the instance's first run as `runner offline` within a
+second of its claim. The reaper now takes the run's claim (`run_claimed_at`) inside its 90-second window as presence, in its sweep and in
+the finalizing write's WHERE (`reaper.service.ts`, `reaper-claim-presence.spec.ts`).
+
 The local evidence is `managed-runner-capacity.pg.spec.ts`, `managed-runner-sleep.pg.spec.ts`,
 `managed-runner-wake.pg.spec.ts` and `managed-runner-existing.pg.spec.ts`, each run with
 `scripts/run-pg-spec.sh <spec>`; the profile and status specs in the unit suite; and
@@ -759,7 +812,7 @@ the managed runner follow the account. The disable itself and that refusal are u
 | Area | As implemented |
 | --- | --- |
 | Manager | Each step reads the owner's `disabledAt` (one key read). A disabled owner's mapping is driven to sleep and never towards READY: no PVC, Secret or Pod is created, and no admission dry run or capacity admission is made. A mapping with an instance — a recorded Pod, or one found under its fixed name — goes DRAINING at once, without the idle interval or an instance report, and that drain is never called off. It ends as an idle sleep ends: the kubelet's report of the stop is recorded as the stop proof, the Pod object is deleted by UID, and once it is gone and the volume detached one transaction retires the generation (credential replaced) and releases compute: SLEEPING, desired SLEEPING. A mapping with no instance (REQUESTED, WAITING_CAPACITY, PROVISIONING, or STARTING before its Pod) goes straight to SLEEPING and gives back the compute it held, in the transaction a FAILED with no Pod uses. A Pod create whose answer was lost keeps the share and the mapping where it is and is not tried again; a Pod it committed late is recorded and drained. A sleeping mapping stays asleep, and a wake desired before the disable is dropped. A disabled owner's FENCING mapping is looked at for its proof whatever it desires, and once proven is put to sleep. FAILED, DELETING and DELETED are left as they are. `dueMappings` lists a disabled owner's mappings first, whatever their retry time. A disable that lands while a step is creating an object is seen by the next step, which drains or releases what was made. The PVC with its storage share, the runner row and the default workspace stay. |
-| Runner's exit | Nothing stops the instance. The runner treats the claim's 403 as a permanent failure: it stops claiming, drains its sessions (whose event posts are refused too) and exits 0, so its Pod ends `Succeeded` with the kubelet's report. An instance that stopped before the manager looked sleeps the same way; an enabled owner's unrequested stop is still FAILED `POD_TERMINATED`. A Pod gone or made terminal without the kubelet's report fences, as anywhere. No runner code changed; a runner test pins the two answers this relies on. |
+| Runner's exit | Nothing stops the instance. The runner treats the claim's 403 as a permanent failure: it stops claiming, drains its sessions (whose event posts are refused too) and exits 0, so its Pod ends `Succeeded` with the kubelet's report. An instance that stopped before the manager looked sleeps the same way; an enabled owner's unrequested stop is still FAILED `POD_TERMINATED` (since D7 it is started again: "Implementation record: failure recovery and visibility"). A Pod gone or made terminal without the kubelet's report fences, as anywhere. No runner code changed; a runner test pins the two answers this relies on. |
 | Demand | `recordManagedDemand` matches no row for a disabled owner, so the hook every session path calls (messages, task runs, scheduled wakeups, watch deliveries, revives, auto retry) records nothing and answers `managed: false`. The caller goes on as for a runner that is not coming back: a revive of an offline runner is refused as offline, and an auto retry takes the ordinary offline path with its 30-minute give-up. The sweep passes over disabled owners. |
 | Owner writes | Ensure, retry, wake, sleep and delete answer 403 `ACCOUNT_DISABLED` after the switch check, before the mapping is read or anything written. The owner's row is read afresh: JwtAuthGuard's view of disabled accounts can be 30 seconds old on another replica. |
 | Eligibility | The service asks its rule (`EVERY_ACCOUNT`, unless another is provided under the token) through `enabledAccountsOnly`: a disabled account is not eligible, at sign-in or on ensure, whatever the rule says. |
@@ -776,6 +829,13 @@ worker's poll interval bounds it); a re-enabled account's wake on a real cluster
 PVC; and a disabled account's Pod that never started (Pending: unschedulable or image pull), which
 nothing stops — it stays DRAINING with its compute reserved until an operator acts, as a Pod that hit
 `STARTUP_TIMEOUT` stays FAILED.
+
+Verified in the lab by T06 on 2026-10-18 ([evidence](evidence/managed-runner-wake-lab/2026-10-18/README.md), section 8): a mapping waiting
+for capacity went to sleep 1.7 s after its owner was disabled, nothing having been made; a running instance (twice, once still STARTING)
+went DRAINING 1.8 and 3.2 s after the disable, exited on its own with its claims refused, and slept 37–39 s after it with its PVC kept;
+a held wakeup and a task's run time that came due while disabled were recorded and woke nothing, with no connection to the cluster; and
+enabled again, the waiting work had the runner's next Pod 4.4 s later, on the same PVC, PV and runner row, and was answered 28 s after. Not reached
+there: a runner whose session slots were all busy, and a disabled account's Pod that never started.
 
 The local evidence is `managed-runner-account-disabled.pg.spec.ts`, case (8) of
 `managed-runner-wake.pg.spec.ts` and the disabled accounts seeded in
@@ -842,3 +902,533 @@ the manager only for the states.
 The local evidence is `managed-runner-backend.spec.ts` in the unit suite and
 `managed-runner-backend.pg.spec.ts`, run with `scripts/run-pg-spec.sh <spec>`, beside every existing
 managed runner unit and pg spec.
+
+## Implementation record: single-machine lab
+
+Recorded 2026-10-17 for the lab task. The owner authorized one KVM virtual machine on the shared
+HPC host as the authorized isolated test environment: one physical machine, one node, one failure
+domain. [The lab page](managed-runner-lab.md) records its versions, names, memory measurements,
+operation and smoke results; the scripts are in `scripts/managed-runner/lab/`.
+
+| Area | As built |
+| --- | --- |
+| Stack | Ubuntu 26.04.1 LTS with kernel 7.0.0-34-generic (kernel RBD), k3s v1.36.5+k3s1, Ceph 20.2.4 under cephadm, Ceph-CSI v3.18.0 deployed by Ceph-CSI Operator v1.1.0, every download and image pinned by checksum or digest. |
+| Topology | Ceph runs beside k3s in the same VM, outside Kubernetes, so k3s consumes it as an external backend. Three OSDs on three virtual disks; pool `orbit-mr-rbd` size 3, `min_size` 2, CRUSH failure domain `osd`. |
+| Profile | StorageClass `runner-data` rendered from `deploy/managed-runner/storage/storageclass.template.json` by `ceph_rbd.render`, with the storage profile fields required above; `clusterID` is the FSID, which also names the operator's ClientProfile. The CSI identity has exactly the documented pool-scoped caps; its key is `aes256k`, the only cipher a fresh 20.2.4 cluster allows, which the 7.0 kernel maps without a downgraded key. |
+| Observed | Pod recreation and a VM stop/start kept file, Git and SQLite data (`integrity_check` ok, row hashes equal). A second, differently named Pod on the same node ran on the RWO claim and wrote to it, so RWO is not single-Pod protection here either; a ReadWriteOncePod claim's second Pod stayed Pending. |
+| Not covered | The multi-node parts of criteria 2 and 8; no fencing procedure, Rook or CSI snapshots are installed, and the admission guard only for a test window ([T02a](managed-runner-lab.md#single-writer-protection-t02a)). `ceph-rbd-verify.py`'s live phases need two nodes and were not run. |
+
+## Implementation record: Docker backend
+
+Recorded 2026-10-17 for the second phase's Docker backend task (D2). It was verified with the
+channel's own tests (an in-memory Docker Engine behind its real HTTP server), DockerBackend over an
+in-memory channel that keeps the real one's rules, the manager on DockerBackend over disposable
+PostgreSQL databases, and on the HPC host's real Docker (29.8.2): the whole apiserver in one process
+with the switch on and a Docker profile, the real channel, the managed runner image built locally
+from T03's branch (08375121e) with the entrypoint change below, its real runner in every container,
+and a disposable PostgreSQL
+(`scripts/managed-runner/docker-backend-it.py`). No model credential was used: Codex was signed in
+with a placeholder key on an internal network with no route to any model, so nothing here is evidence
+of a real engine session (D4) or of a new deployment's wiring (D3).
+
+| Area | As implemented |
+| --- | --- |
+| Channel | `deploy/managed-runner/docker-channel/channel.py`, Python 3 standard library, a process of its own and the only one holding `docker.sock`. JSON over HTTP on a unix socket (or loopback), bearer token from a file only its owner reads. It creates, reads and removes data volumes; keeps the runner credential of a generation; creates one container from its own template and starts it, reads its state and exit, stops it and removes it once stopped; reports what holds a volume, the host's size and this instance's resources. Everything it creates carries `orbit.managed-runner.instance=<instanceId>`; nothing without that label is read, returned, adopted or removed. A request names identities and amounts only: `privileged`, capabilities, binds and mounts, host network/PID/IPC/UTS, devices, security options, a user, an environment or labels are refused by name, a volume that is not `mr-data-<runner uuid>` (a host path, the Docker socket) is refused, another image is refused, amounts above its ceilings are refused. The spec is checked against its rules before it is sent and the created container is inspected and checked again before it starts. Its README gives the API, the rules and the reasons. |
+| Template | Image by local ID (built here, never pushed), user 10001:10001, every capability dropped, `no-new-privileges`, read-only root, private IPC and cgroup namespaces, `NanoCpus`, memory with no swap beyond it, PID limit, `/tmp` a sized tmpfs (counted in memory), restart policy `no`, bounded json-file logs, the one configured network, and three mounts: the data volume at `/var/lib/orbit` (Docker copies the image's 10001-owned `/var/lib/orbit` into an empty volume, so no root init step is needed), the bootstrap volume at `/run/orbit-bootstrap`, `/tmp`. |
+| Credential and identity | The runner credential of the container's generation is written, before it starts, into its bootstrap volume as root-owned mode-0444 files beside `generation` and `instance.json` (runner, generation, instance UID). The container's environment names the files (`ORBIT_RUNNER_CREDENTIAL_FILE`, `ORBIT_MANAGED_RUNNER_INSTANCE_FILE`), never the credential or the generation. The image's entrypoint reads both from the files and, as on Kubernetes, hands the generation and UID to `orbit run`, which no longer prints them in its log. That entrypoint change is commit 198f6d6cc (branch `d2/entrypoint-instance-file`), handed to the image task (T03): this task changes nothing under `deploy/managed-runner/image`. The instance UID is a canonical UUID the channel gives each container: the runner door authorizes it as it authorizes a Pod UID. |
+| Network | One dedicated bridge network the deployment creates, inter-container traffic off; the runner reaches the apiserver at an address of the host's container network. For a Docker container (identity from its instance file) the Docker profile, and the entrypoint in 198f6d6cc, accept plain HTTP to a private, loopback or link-local address or a single-label host; anything else must be HTTPS, and a Pod's rule is unchanged. |
+| Backend | `DockerBackend` implements the run backend interface over the channel: fixed names from the runner UUID, create once with read-back after a lost answer, identity checks (owner, runner, generation, volume UID), the volume as its own storage (handle `docker:<instance>/<volume>/<uid>`), holders of every label, the guard probe (a dry run under another name must come back `SINGLE_CONTAINER_GUARD`), removal by instance UID, Docker's exit report as the stop proof. A channel that cannot be reached, or answers 5xx/429, is transient; its refusals are `DOCKER_CHANNEL_FORBIDDEN`, `DOCKER_CHANNEL_MISMATCH`, `DOCKER_CHANNEL_REFUSED`, `VOLUME_OVER_LIMIT`, `CONTAINER_GUARD_MISSING` or `CONTAINER_GUARD_UNVERIFIED`, each with a sentence in the manager's table. |
+| Stop proof and stopping | Docker's state — `exited` with exit code and `FinishedAt`, `dead`, or never started — is the host's report, recorded as `OBSERVED_STOP` with the exit code and time; the container is then removed by UID, and only once it is gone and nothing refers to the volume does the generation advance or compute go back. The interface gains `stopInstance`, for a backend whose host reports every stop it makes: the manager asks it only when an accepted sleep overruns `drainSeconds` (`SLEEP_STOP_FORCED`) or a disabled owner's runner has not stopped by then; asking is never the proof. Kubernetes has no `stopInstance` and is unchanged. A container gone without Docker's report fences, and only an operator's `HOST_PROCESS_CHECK` receipt (in the channel's state directory) moves it on. |
+| Disk | Measured, not quota'd: a local volume has no size limit without host filesystem quotas, which this backend may not require. The volume carries its limit (`storage.capacity`, also its storage share); every `diskCheckSeconds` the channel reads Docker's own volume sizes and stops the container of a volume over its limit, keeping the reason; no container is created for a volume over its limit (`VOLUME_OVER_LIMIT`) until an operator frees space or raises it. Data is never deleted to enforce it; overshoot is bounded by the check interval. |
+| Capacity | `capacityBudget` may now be asynchronous. The Docker profile states each runner's limits (its compute share) and may state any dimension of the pool; the rest is derived from the host the channel reports: CPU and memory less a reserve (a quarter each by default), `/tmp` within the memory budget, as many runners as CPU and memory both fit, and storage from the free space of the disk Docker's volumes live on plus what this instance's volumes already hold, keeping a tenth of that disk free. The pool, admission, waiting and release are the existing ones. |
+| Mapping | Migration 0430 adds `managed_runner.backend` (`kubernetes` by default for every existing row, or `docker`, held by a CHECK). The service records the runtime's backend on a new mapping; a manager lists, leases and drives only its own backend's mappings and leaves another's as they are. On Docker the mapping's namespace is the channel's instance. |
+| Admission webhook | On a Docker server `POST /api/managed-runner/admission` answers 404 `MANAGED_RUNNER_ADMISSION_NOT_APPLICABLE` before any token is read: there is no Kubernetes profile and no Pod to admit. |
+| Recovery | A pass in READY, DRAINING or FENCING that the backend does not answer spends no attempt of the provisioning budget and fails nothing: it is logged, and the next pass looks again (a channel restart, or a Kubernetes API blip, used to count towards `maxAttempts` and could turn an up runner FAILED). This is the shared state machine's, so it holds for Kubernetes too. The channel finishes, at start-up, any container create a previous run left unstarted. An abnormal exit fails the runner retryable with Docker's report as the proof; the owner's retry replaces it on the same volume (since D7 the manager replaces it itself, within `maxAttempts`). |
+
+Measured on the real Docker run of 2026-10-17, 14 of 14
+(`docs/evidence/managed-runner-docker/2026-10-17-1017083206f4/`, with Docker's own events of every
+container and volume):
+
+- The channel refused 24 requests outside its rules (no or a wrong token, each forbidden parameter by
+  name, a host path or the Docker socket as the volume, another image, another runner's volume, a
+  second container for a volume, amounts above its ceilings, resources without its label), and Docker
+  was left unchanged. The apiserver process never connected to a Docker socket.
+- The container Docker made matched the template field by field, and neither the credential nor the
+  generation was in its environment or its log.
+- A message, a task's Run Now and a due session wakeup each woke the sleeping runner: a new generation
+  on the same volume, which claimed the work. After the idle sleep and the wakes, the file checksums,
+  `PRAGMA integrity_check` and the rows matched what was written before.
+- Compute stayed reserved while the exited container still existed: the drained container exited at
+  08:37:03.33, Docker removed it at 08:37:03.68, and the mapping slept at 08:37:03.69, releasing its
+  compute in the same commit.
+- Eight concurrent wakes, raced by a second manager, made one container. Sampled every 250 ms, no
+  volume ever had two.
+- Each of these recovered to one container on the same volume, with the database intact and its
+  committed rows kept: a container killed with SIGKILL (exit 137); the manager, the channel and the
+  container killed together while a SQLite writer ran; the manager stopped mid-wake; the channel down
+  mid-wake.
+- With room for two runners, a third waited with nothing made for it, and its container was created
+  once one of the two slept.
+- A volume written past its 256 MiB limit (346105301 bytes) was stopped within one disk check, and no
+  container was started on it again.
+- On this host (24 CPUs, 15 GiB, Docker's disk 914.8 GiB with 12.4 GiB free) the default budget for
+  1-CPU, 2-GiB runners is 18000m of CPU, 11.25 GiB and five runners. Storage stays closed (12.4 GiB
+  usable against 91.5 GiB headroom) until the profile states it.
+
+Left to later work, or not shown here:
+
+- A real engine session, and its continuation across a sleep and a wake, in a Docker container (D4).
+  The owner's DeepSeek key file was not there, and the test network reaches no model; the turns the
+  woken runners claimed could not be answered. A deployment's network must also let the runner reach
+  its model's endpoint; this run's network reached only the apiserver.
+- The deployment's wiring (D3): the channel as a service, its network and token, the Docker profile.
+  No default deployment entry changed here.
+- Backup, restore and the failure handbook for local volumes (D5).
+- The entrypoint change lands with T03. An image without it stops at start in a Docker container: it
+  asks for a generation and Pod UID from the Downward API.
+- No real host reboot or Docker daemon restart on this shared host. After one, Docker marks each
+  container whose process is gone as exited with code 255 and `FinishedAt` at its restart (moby
+  docker-v29.8.2, `daemon/daemon.go` line 517 and `daemon/container/state.go` lines 284–285). That is
+  the same kind of report as the SIGKILL above, and it is handled the same way.
+- The disk limit is a measurement, so a volume can overshoot it by what is written in one check
+  interval (`diskCheckSeconds`, at least 10 s).
+- The Recovery row's change is in the shared state machine, so it holds for Kubernetes too. Only the
+  Docker pg spec tests it (its case 10); no Kubernetes spec or lab (L0) run does yet.
+
+## Implementation record: new deployments
+
+Recorded 2026-10-17 for the second phase's task D3. The account owner decided that a new deployment runs managed
+runners with the Docker backend, while an existing deployment, orbitd.io included, keeps them as its `.env` has
+them: the code's default stays off. The operator's side is [self-hosting](self-hosting.md#managed-runners).
+
+The two paths, as the repository had them:
+
+| Path | Before D3 | Now |
+| --- | --- | --- |
+| Fresh install | No server install script (`src/web/public/install.sh` installs a runner). README's Quick Start, [self-hosting](self-hosting.md) and the [first-run checklist](first-run.md) had the operator clone, `cp .env.example .env`, write `JWT_SECRET` and `PROVIDER_SECRET_KEY` with `openssl rand` and `sed`, and `docker compose up -d --build` root Compose; the first visitor creates the administrator at `/setup` (`POST /api/auth/bootstrap`, which signs in through `completeLogin` like a password sign-in). | `scripts/install-server.sh` does those steps for a checkout with neither `.env` nor `data/postgres`. It builds the managed runner image from `deploy/managed-runner/image` (or takes `--managed-runner-image`), creates the network `orbit-managed-runners` (bridge, inter-container traffic off, not internal), writes `data/managed-runners` (the channel's token, `channel.json`, and `profile.json` with `"backend": "docker"`), appends `ORBIT_MANAGED_RUNNERS_ENABLED=true`, `ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners` and `COMPOSE_PROFILES=managed-runners-docker` to `.env`, applies the migrations, then starts the stack. `--no-managed-runners` writes the switch `false` instead. The manual path stays documented and leaves the switch off. |
+| Upgrade | `/upgrade`: `.claude/skills/upgrade/upgrade.sh` and `.agents/skills/upgrade/scripts/upgrade.sh` rebuild apiserver, wiki worker and web from the checkout and recreate them with the gateway; self-hosting's "Upgrading" checks out a release and runs `docker compose up -d --build`. Neither writes `.env`. | Still never writes `.env`, so the switch stays as it was: off wherever `.env` does not say `true`. Where `.env` turns on the `managed-runners-docker` profile, both copies also rebuild and recreate `docker-channel`. Switching managed runners on for a deployment installed without them is an administrator's explicit `scripts/install-server.sh --enable-managed-runners`, which edits only those lines of `.env`. |
+
+| Area | As implemented |
+| --- | --- |
+| Root Compose | `docker-channel`, the restricted channel, built from `deploy/managed-runner/docker-channel/Dockerfile` (Python's standard library and `channel.py`), under the `managed-runners-docker` profile: no network, the only Docker socket mount, the managed runners' directory at `/var/lib/orbit-managed-runners`, and a health check on its socket. The apiserver reads `ORBIT_MANAGED_RUNNERS_ENABLED` (default `false`) and its profile at a fixed path in that directory, mounted read-only; where `.env` names no directory, `/dev/null` stands in and nothing is created on the host. Without the profile, Compose runs the same six services as before. |
+| Network | A runner reaches the apiserver as a runner on another machine does, through the gateway's published port 2086, at the gateway address of `orbit-managed-runners` (Docker 29.8.2 lets a container on an ICC-off bridge reach the host's published port there, and nothing else on the host's container networks). |
+| Eligibility | Every account, open sign-up included, except a disabled one: `EVERY_ACCOUNT`, asked only about accounts that are not disabled (C6b). Self-hosting states that a container shares the host's kernel, is not a strong boundary against a malicious user, and that the deployer bears that risk. |
+| Boundary tests | `test/compose-topology.test.mjs` pins the channel's whole definition and the apiserver's four new lines, allows its one profile, and gives the Docker socket to no other service; its counterexamples cover each. `scripts/managed-runner/deployment_boundary_test.py` lets the default entry points name the Docker channel and the image, and still nothing else of `deploy/managed-runner` and nothing of Kubernetes, Rook, Ceph or CSI; neither `/upgrade` copy names the switch or writes `.env`. `scripts/managed-runner/new_deployment_test.py` runs the install script and both `/upgrade` copies against a fake `docker`. |
+
+Verified on 2026-10-17 in two isolated Docker hosts on the HPC machine (`docker:29.8.2-dind`, capped, outside the
+runner's cgroup; nothing of an existing deployment touched). The branch carries T03's image fix: its tip d856cde9b
+(198f6d6cc, d856cde9b, Claude Code), merged as e7b149183 with none of T03's files changed, so the install builds a
+working image from the branch's own `deploy/managed-runner/image`
+([evidence](evidence/managed-runner-new-deployment/2026-10-17/README.md)):
+
+- At e7b149183, a fresh install with no flags built the managed runner image itself (`sha256:b89d6f3f9c44…`, source
+  e7b149183, with Codex and Claude Code) and came up healthy with the switch, the directory and the profile in
+  `.env`. The first account's sign-in made its runner at once (STARTING 3 s later, the runner online 30 s later),
+  READY after an operator's placeholder Codex sign-in. Switched off, a new account's sign-in made nothing
+  (`MANAGED_RUNNER_DISABLED`, ensure 404), and the first account's volume stayed, its container still running.
+- The previous version (c291f9af6), upgraded to e7b149183 with `/upgrade`, kept `.env` byte for byte and managed
+  runners off: three accounts' sign-ins made nothing, only the apiserver, wiki worker and web were built and
+  recreated, and no channel, network, image, container or volume of managed runners appeared.
+- Earlier runs at 6f51ce21d, with T03's image named by `--managed-runner-image`, showed the same and also that
+  `/upgrade` of a new deployment rebuilds `docker-channel` and keeps `.env`, and that `--enable-managed-runners`
+  switches an upgraded deployment on, its administrator's next sign-in getting a READY runner. The first of them, at
+  af6047e9c, failed: a new database's 428 migrations outlasted the apiserver's health check at its first boot on
+  that disk, which is why the install now applies them first.
+
+Left to later work, or not shown here:
+
+- A real engine session on a managed runner (D4); the channel's refusals, the containers' limits, backups and
+  failure handling (D5).
+- An upgrade does not rebuild the managed runner image, whose runner does not update itself: a deployment's
+  runners keep the image `channel.json` and `profile.json` name until an administrator builds another and names
+  its ID in both. (Since D6 it does: "Implementation record: image upgrades".)
+- The manual path's `docker compose up -d --build --wait` still applies a new database's migrations at the
+  apiserver's first boot, and on a slow disk the pinned health check can give up first; the install script avoids
+  it, the checklist does not. This predates D3.
+
+## Implementation record: Docker backend security and operations
+
+Recorded 2026-10-17 for the second phase's task D5: an independent check of the boundary every account's runner
+sits behind, and the runbook for its data. Everything ran in two isolated places on the HPC machine, and nothing of
+an existing deployment was touched ([evidence](evidence/managed-runner-docker-security/2026-10-17/README.md)):
+
+- `d5-dind`, a capped `docker:29.8.2-dind` test host whose own dockerd and data root (under /mnt/data) belonged to
+  this task alone. It ran a default deployment from `scripts/install-server.sh` with no flags; `/upgrade` later
+  moved it to the channel fix below.
+- The HPC host's own Docker, which a Docker-in-Docker host cannot stand in for: AppArmor and the host's network.
+  A separately labelled channel instance ran there, as Compose runs it (no network, the Docker socket), with the
+  same runner image and its own ICC-off network. It was removed afterwards.
+
+| Area | What was checked | Result |
+| --- | --- | --- |
+| Channel refusals | 267 requests the channel must refuse, sent to the default deployment's own channel: Docker parameters by name and smuggled into nested objects (privileged, capabilities, binds and mounts, the Docker socket as mount, volume, URL or `DOCKER_HOST`, host network, PID, IPC, UTS, user and cgroup namespaces, devices and GPUs, security options, a user, an environment, labels, sysctls, restart policies, ports and more); other images (by tag, by ID, the configured image's own tag); amounts over the ceilings; another runner's volume, name or owner; resources without this instance's label (unlabelled, another instance's, the wrong kind), and the stack's own containers and volumes; route, query and body tricks; 41 requests without the token or with a wrong, partial, case-changed or second one. Docker's whole inventory and the channel's state directory were compared before and after each one, and a positive control showed that the comparison sees a change. | All refused, each with its code, and nothing changed. Two were accepted at c16d115b3 and are fixed: a runner id or owner id with a trailing newline (`$` matched before it). |
+| The channel's surface | The deployment's `docker-channel` and its directory | No network at all (only `lo`, no TCP or UDP socket); one unix socket, root 0600, in a 0700 root directory; the token 0600. No other container has the Docker socket. The apiserver mounts the directory read-only. |
+| The container | Inside a real runner container, as its user, on the host's Docker and in the default deployment | User 10001; every capability set empty; `NoNewPrivs` 1; seccomp in filter mode; AppArmor `docker-default (enforce)` on the host (unconfined only inside the dind test host, which cannot load profiles); read-only root. It can write only to its volume, `/tmp` and `/dev/shm`. The bootstrap files are root-owned 0444 in a root-owned 0755 directory, and the runner can neither change, rename nor delete them (T03's point), nor add a file there. Setuid binaries do nothing (`mount`: "must be superuser"). `unshare`, `mount`, `setuid`, `chroot`, `keyctl`, `bpf`, `perf_event_open` and `open_by_handle_at` get EPERM. No Docker socket or binary, no host path, no block device; the environment holds the runner's six keys and the image's own. |
+| Limits | Measured inside the containers | CPU 1.01 of 1.0 and 1.99 of 2.0 CPUs; PIDs refused at `pids.max` (256, 4096); `/tmp` full at its size (64 MiB, 1 GiB), counted in memory; memory: the allocating process OOM-killed at the 512 MiB limit while the runner went on; disk: a 64 MiB volume with checks every 10 s stopped at 192,940,181 bytes, a new generation refused (`VOLUME_OVER_LIMIT`) until `volumeLimitOverrides` raised it. |
+| Network | TCP from inside, on both | Unreachable: another runner, the stack's containers (their names do not resolve), other networks, Docker's API, the host's loopback, the metadata address. Reachable: the internet, the gateway's published port (the designed path), and every service the host listens to on another address: sshd and rpcbind on the HPC host, through the network's gateway, docker0 and the LAN address. |
+| `serverUrl` | The default deployment's `profile.json` against its network | `http://172.19.0.1:2086`, the gateway of `orbit-managed-runners`: this host's own address on the runners' network. Self-hosting and the runbook now state that plain HTTP goes nowhere else. |
+| Backup and restore | `scripts/managed-runner/volume-backup.sh`, as [the runbook](managed-runner-docker-operations.md) gives it, on a sleeping runner's volume | Backed up with its labels (163 files) and checked in a scratch volume: every checksum matched, and the six SQLite files and two repositories were `ok`. The volume was then deleted and restored with its labels while the account was disabled. The runner woke on it as its next generation: every file had its checksum, `integrity_check` was `ok`, and the rows, the dump digest, the repository and the runner identity were the same. |
+| Host restarts | `d5-dind` restarted gracefully (`docker restart`) and power-cut (`docker kill`, then `docker start`), each with one runner ready and a SQLite writer in it, and one runner just put to sleep | Docker reported the running container exited (0 on the graceful stop; 255 after the power cut, `FinishedAt` at the daemon's restore). The manager recorded that report as the stop proof and failed the runner `POD_TERMINATED`, its compute held until its owner's Retry started the next generation on the same volume. The sleeping runner woke normally. No committed row of the writer was lost, and every file kept its checksum. |
+| Outages | The channel stopped for 62 s during a wake; the apiserver stopped for 60 s | The ready runner stayed ready throughout. The wake backed off (`TRANSIENT`, four attempts) and finished once the channel was back. The runner's container ran on through the apiserver's absence, and the runner was ready 6 s after the apiserver came back. |
+
+Fixed here (commit d44626483, channel and tests):
+
+- the channel's anchored patterns end in `\Z`, so `<uuid>\n` is no runner id or owner id;
+- the disk check stops a container over its volume limit even when it cannot write down why, as on a full disk.
+
+Added: `scripts/managed-runner/volume-backup.sh` (`backup`, `check`, `restore`, and `verify` for a volume after a power loss) and its test, and the operations runbook. Self-hosting links to it
+and states the `serverUrl` rule and what a runner can reach.
+
+Left to later work (in the task's comment for the coordinator):
+
+- **Host restarts.** After a host or Docker restart every runner that was running needs its owner's Retry. No
+  automatic recovery and no operator route exist. (Since D7 the manager starts them again itself.)
+- **Silent failures.** The apiserver does not log a runner that failed, and the `detail` (such as `OOM-killed`)
+  reaches no client. (Since D7 every stop is logged with its exit code and whether it ran out of memory, and running
+  out of memory has reasons of its own; the `detail` still reaches no client.)
+- **A held volume fails the wake.** A wake that finds another container referring to the volume (a backup's)
+  fails the runner (`DOCKER_CHANNEL_REFUSED`, `VOLUME_IN_USE`) instead of waiting. (Since D7 it waits.)
+- **`PVC_MISSING` has no way back.** A runner woken while its volume was missing stays `PVC_MISSING` even after
+  the volume is restored. (Since D7 it can be retried once the volume is back as recorded.)
+- **The storage budget measures the wrong disk.** In Compose it is measured on the disk under
+  `data/managed-runners`, not on Docker's data root. Taken up by D8 (Implementation record: channel and template
+  hardening).
+- **The host's own services are reachable.** Runners reach every service the host listens to on another address,
+  and the LAN; the default deployment adds no firewall rule.
+- **Two defence-in-depth gaps in the channel.** It caps each container but not their number, and it offers volume
+  deletion to the token's holder although the manager never asks for it. Taken up by D8 (same record).
+
+## Implementation record: image upgrades
+
+Recorded 2026-10-17 for the second phase's task D6. The managed runner image carries the runner, and the runner in
+it never updates itself (`ORBIT_NO_SELFUPDATE=1`), so until now a new deployment's managed runners kept the runner
+of the image they were installed with. The operator's side is [self-hosting](self-hosting.md#what-an-upgrade-does).
+
+| Area | As implemented |
+| --- | --- |
+| `/upgrade`, profile on | Both copies of the script share one section, byte for byte (`new_deployment_test.py` compares them). Where `docker compose config --services` lists `docker-channel`, the script finds the managed runners' directory as Compose binds it into the channel (the bind's source at `/var/lib/orbit-managed-runners`, so the script names no variable of `.env`), and stops before building if `channel.json` or `profile.json` is missing or names the image other than once. It builds `docker-channel` with the other images, then the managed runner image from this checkout as `orbit-managed-runner:local` (`--build-arg ORBIT_SOURCE_SHA` the deployed commit, `--provenance=false`, never pushed). When the ID is new in either file it writes it into both, each through a copy with the original's mode and owner, then a rename. It recreates the other services as before, then the apiserver if that did not recreate it, then `docker-channel`, last (`--no-deps --force-recreate` for both, since each reads its file only as it starts). |
+| `/upgrade`, profile off | Unchanged: each copy makes the Docker calls it made at c16d115b3, in the same order (pinned in `new_deployment_test.py`), and writes nothing under `data/`. |
+| Order | The apiserver goes first. A manager whose profile names an image the channel does not serve stops each pass at the mismatch (`capacityBudget`, `DOCKER_CHANNEL_MISMATCH`) before it reads any mapping, so it changes nothing and waits; the channel then restarts on the new image and the next pass goes on. The other order would let the previous apiserver, its capacity pool already established, ask a channel already on the new image for a container: refused (`IMAGE_REFUSED`, or the guard probe refused for that) and the runner it was starting `FAILED` (the Docker backend pg spec, case 12). |
+| Running containers | Left as they are. A container keeps the image it was made from: the upgrade stops, drains and restarts no managed container, and the channel still reads, stops and removes containers of a previous image by UID. Each runner moves to the new image with its next container, the next generation the wake after its next sleep (or a retry) makes, on the same volume and runner. A runner is stopped for nothing but the reasons it already was: draining for an image would cost a busy user a wake for nothing they asked for, while the sleep already decides when a runner can stop without interrupting anything. A runner that never sleeps keeps the previous image; its owner can ask it to sleep (`POST /api/managed-runner/sleep`). One container per volume, the stop proof and the compute reservation are exactly those of any sleep and wake. |
+| Channel | Only the configured image is made or started. A container of a previous image that was made and never started is removed and made again from the current image, at start-up (as before) and now also on a create (`create_container` started it if its credential was there again). |
+| Unfinished switch | `data/managed-runners/.image-switch` names the image from before the files are written until both services have started on them; a run that finds it starts both again, whatever it built. |
+| Image ID | BuildKit's provenance attestation is made anew for every build, and in Docker's containerd image store the image's ID is the digest of the index carrying it: a fully cached rebuild of the same commit got a new ID (`sha256:efa7b75f9ac0…`, then `sha256:1eb5a013755c…`, config and layers identical). Built with `--provenance=false` (the install too, now), it keeps one ID, so a re-run finds the files already naming it. |
+| Previous images | Nothing deletes one. In the containerd image store the previous image loses its name when the new one takes the tag (no dangling record) while its containers keep running on it; their removal frees its storage. In the classic store it stays untagged, kept by Docker while a container was made from it and removed by `docker image prune -f` (`/upgrade --prune`) afterwards. Both shown in throwaway Docker 29.8.2 hosts. |
+| Cost | The image is stamped with its commit, so every new commit rebuilds it. `ARG ORBIT_SOURCE_SHA` comes before the package and `chown` steps of its last stage, so both run again: 10 minutes on the test host's spinning disk, which needs the network for the package snapshot. The install's cold build there took 19.5 minutes. |
+
+Verified on 2026-10-17 in isolated Docker hosts on the HPC machine (`docker:29.8.2-dind`, containerd image store,
+capped, outside the runner's cgroup; [evidence](evidence/managed-runner-image-upgrade/2026-10-17/README.md)):
+
+- A fresh install at the project line's tip c16d115b3 (`scripts/install-server.sh`, no flags) built
+  `sha256:efa7b75f9ac0…`; the first account's runner was READY, generation 1, after a placeholder Codex sign-in.
+- With data written to its volume (a file, a SQLite database) and a process in its container writing a timestamp
+  every second, `/upgrade` deployed d051db3d8 plus a one-line runner source change: it rebuilt the image
+  (`sha256:09a872d9ce72…`, source f899e5fe6), rewrote only the `image` line of each file, recreated the apiserver
+  (its own image had not changed) and then the channel. The new apiserver's two passes before the channel came back
+  stopped at the mismatch; the channel served the new image eight seconds after the apiserver started on it. The
+  runner's container was the same container, started at the same time, through the whole upgrade, its writer without
+  a gap over two seconds, its mapping READY at the same revision.
+- Its owner's sleep: the runner exited by itself (exit 0), the channel removed the container, and only then did the
+  mapping sleep, compute released. The wake made generation 2 from the new image: the same runner ID and volume, the
+  file and the database intact, the runner reporting `managed-f899e5fe6…`. A sampler every 250 ms saw at most one
+  container referring to the volume (5223 samples).
+- A deployment installed by hand at c16d115b3, with no managed runner line in `.env` (orbitd.io's kind), upgraded
+  first with c16d115b3's own `/upgrade` and then with D6's: the same Docker calls in the same order, the same
+  containers recreated, `.env` byte for byte as installed, no file added under `data/`, and no channel, network,
+  managed runner image, container or volume.
+- Both repeated at 6fcdaa8d6 and again at d431d1021, after D5's merge: each time the new deployment switched the
+  same way (`sha256:8a3c127f2568…`, then `sha256:8284db3f7c45…`) and after the next sleep its runner woke on the new
+  image as the next generation, the same runner and volume, never two containers on the volume; the deployment
+  without managed runners made the baseline's calls again, and nothing under `.env` or `data/` was written but by
+  Postgres. (Between the two, a restart of the test host left the runner `FAILED` until its owner's retry, as D5
+  recorded for any host restart.)
+
+Left to later work, or not shown here:
+
+- No model was used: the owner's DeepSeek key file was not there, so READY came from a placeholder Codex sign-in
+  and the work the upgrade did not interrupt was a process in the container, not an engine session.
+- A runner that never sleeps keeps the previous image; there is no administrator command to move every runner at
+  once.
+- Every commit rebuilds the image's last stage. Moving `ARG ORBIT_SOURCE_SHA` and the label below the package and
+  `chown` steps in `deploy/managed-runner/image/Dockerfile` (T03's) would keep those cached.
+- The by-hand upgrade steps (self-hosting's "Upgrading") rebuild no managed runner image; they now list the commands
+  that do.
+
+## Implementation record: failure recovery and visibility
+
+Recorded 2026-10-17 for the second phase's task D7, which fixes the four manager findings that D5 left to later work
+(above: host restarts, silent failures, a held volume, `PVC_MISSING`). Every rule below is the shared state machine's
+(`managed-runner-manager.ts`), so it is the same on Kubernetes and on Docker, and `managed-runner-recovery.pg.spec.ts`
+runs each case on both. The single-writer gate is unchanged: at most one instance refers to a volume, a new
+generation is started only on a stop proof, and compute goes back to the pool only after one. The operator's side is
+[the runbook](managed-runner-docker-operations.md).
+
+| Area | As implemented |
+| --- | --- |
+| Restart after a stop | A STARTING or READY instance that stops with its host's report of the stop — the kubelet's terminal container states on Kubernetes, the exit Docker recorded on Docker — is started again by itself: a crash, its memory limit, its host or Docker restarting. The report is recorded as the stop proof, and the mapping goes back to `REQUESTED` with the stopped instance still recorded, which is what an owner's retry writes. After the backoff of its attempt, the gate removes that instance by UID, waits until nothing holds the volume, retires the generation (its credential replaced) and starts the next one on the same volume, runner row and workspace. Compute stays reserved throughout, as for a retry: neither given back nor taken twice. A stop nobody reported (an instance gone, or made terminal by the control plane) is no proof and fences, as before. A runner whose owner had asked it to sleep goes to sleep instead: the stop is the end of its drain. |
+| Crash loops | Each stop spends one attempt of `lifecycle.maxAttempts` and waits the backoff of a failed try (`backoffBaseSeconds`, doubling up to `backoffMaxSeconds`), from the same count: READY no longer resets it. A runner that had stayed READY for twice `backoffMaxSeconds` starts the count again at its next stop, as the kubelet starts a crash loop's backoff again after twice its ceiling, so a host restart months later is attempt 1. The stop that spends the last attempt leaves the mapping FAILED `POD_TERMINATED` (or `POD_OUT_OF_MEMORY`), retryable, the stopped instance and its compute kept until the owner's retry, which starts a fresh count. With `maxAttempts` 1 nothing is restarted. |
+| Visibility | Every such stop is one warn line: `managed runner <id>: POD_TERMINATED: <instance> <uid> of generation <n> stopped in <state> with exit code <code>, out of memory` (or `not out of memory`), then `; starting generation <n+1> on the same volume in <s> s (attempt <k> of <max>)`, `; FAILED: attempt <k> of <max> in a row`, or `; its owner asked it to sleep, so it goes to sleep`. Out of memory is the host's OOM report on a runner that ended killed (exit 137): Docker marks a container OOM-killed whenever any process in it was, and the kubelet's `OOMKilled` reason is given the same way, so the mark alone says nothing about the runner. While it restarts, the owner's reason is `POD_RESTARTING` or `POD_RESTARTING_OUT_OF_MEMORY`, kept until it is READY unless a later wait says more (capacity, a transient error, its volume still detaching or held, a runtime to sign in); once the attempts are spent, `POD_TERMINATED` or `POD_OUT_OF_MEMORY`. The operator's `detail` still reaches no client. |
+| A held volume | No instance is created on a volume something else holds. Before every create the manager asks what holds the volume (Docker: any container, labelled or not; Kubernetes: any VolumeAttachment of its PV), and the channel's own `VOLUME_IN_USE` refusal of the create — a holder that came between the look and the create, read back as `ManagedVolumeHeld` — is the same answer. STARTING then waits with `VOLUME_IN_USE`, as the gate waits for a predecessor's volume with `VOLUME_STILL_ATTACHED`: no attempt is spent and no startup deadline runs. Once the volume is free the deadline is set from that moment and the instance is created. One warn line when the wait begins. On Kubernetes this is new as well: a create used to go ahead while another node's attachment of the PV was there. |
+| The container cap (Docker) | D8's channel refuses a create past `limits.maxContainers` (`429 CONTAINER_LIMIT`), counting every container of its instance in any state. The pool's budget holds its pods to that cap, so the refusal comes only from a cap lowered under running runners before the apiserver measured its pool again, or from a container of the instance that no runner records. The Docker backend reads the refusal as `ManagedInstanceLimit`, and STARTING waits for room with `CONTAINER_LIMIT`, as for a held volume: no attempt spent, no startup deadline running, one warn line, a look again every `capacityRetrySeconds`, and the deadline set afresh once the instance is made. Before, the 429 was a transient failure, and each one spent an attempt from the count a restart spends too: a runner restarting after a crash met the cap twice and was FAILED `RETRY_EXHAUSTED` (the control in the evidence). Other 429s are still transient. |
+| A restored volume | A FAILED `PVC_MISSING` mapping is looked at on each pass, after every other kind of work. Once a volume is under its name with the recorded identity (its UID, owner and runner, bound to the recorded storage — what `scripts/managed-runner/volume-backup.sh restore` leaves on Docker, or a restore of the cluster's etcd on Kubernetes) and nothing holds it any more, the reason becomes `PVC_RESTORED`, retryable, and the owner's retry starts the runner on it through the usual checks. While the restore's own containers still hold it (the script makes the volume, labels and all, before it unpacks into it), it stays `PVC_MISSING` and the detail says it is back and held; between the script's unpacking and its inspection nothing holds it for a moment, by which time the data is complete and checked, and a retry then waits for the inspection like any create (`VOLUME_IN_USE`). A volume under the name that is not the recorded one changes only the operator's detail; nothing is created in place of a recorded volume. |
+| Clients | The three clients show the server's sentence for any reason, so none of their copy changed. The shared state fixture gains seven states, 33 in all: waking after a stop, after running out of memory, while the volume is held and at the host's cap on containers; failed after too many stops, after running out of memory, and with the volume restored (Retry offered). |
+| Data | No migration. `attempt` now counts restarts after a stop as well as failed tries; its schema comment says so. |
+
+Verified on 2026-10-17 ([evidence](evidence/managed-runner-recovery/2026-10-17/README.md)):
+
+- `managed-runner-recovery.pg.spec.ts`, every case on the fake Kubernetes cluster and on Docker's fake channel: a
+  restart after a stop with its host's report (one instance per volume after every pass, one compute share reserved
+  throughout, a stop nobody reported still fencing); a crash loop in READY and STARTING ending FAILED, the owner's
+  retry starting afresh, and the count starting over after twice `backoffMaxSeconds`; out of memory said while
+  restarting and once spent; a runner asked to sleep going to sleep; a wake on a held volume waiting and finishing by
+  itself; a lost volume failing the wake and, once restored as recorded and free, retryable. All 12 cases fail on the
+  previous manager. A 13th, on Docker alone, has a restart meet the channel's container cap after it was lowered
+  under two running runners: the restart waits, past the attempt budget and the startup deadline, and starts once the
+  other runner sleeps. With the Docker backend's reading of the refusal switched off it ends FAILED.
+- On the HPC host's real Docker, D2's integration test with this build's image: 14 of 14, the kill, the "host
+  restart" and the disk-limit cases now recovering, or failing `VOLUME_OVER_LIMIT`, with no retry. Run again on the
+  merge with D8, whose channel refuses volume removal and gives runners an executable `/tmp`.
+- In an isolated Docker host (`docker:29.8.2-dind`) with a default deployment upgraded to this branch (fb93b9403,
+  then e51574350 for the restore; both before D8's merge, and not repeated after it): a graceful restart and a power
+  cut of that host each brought its READY runner back by itself in 69–75 s, the same runner and volume UID, the next
+  generation, every committed SQLite row and every file kept; a backup's helper container holding the volume made a
+  wake wait and the runner start 2 s after the helper left; a volume lost while asleep failed the wake and was
+  retryable once the runbook's restore had finished; a real OOM kill of a runner was logged and said to its owner
+  while the runner restarted. No data volume ever had two containers.
+
+Left to later work, or not shown here: Kubernetes only on the fake cluster (a real node's reboot, its kubelet's report
+and its detach timing are for T04 and T06); no model was used; the power cut was the test host's, with the HPC host's
+kernel up; the OOM kill came from lowering a running container's limit, and Docker's OOM mark cannot tell a runner
+killed for memory from one SIGKILLed after a child was; no administrator's retry for another account; the wait at the
+container cap only against the fake channel (no runner met the real channel's cap in the integration test or the
+isolated host); on Kubernetes a namespace quota on Pods below the budget still fails the runner
+(`KUBERNETES_FORBIDDEN`), as before.
+
+## Implementation record: channel and template hardening
+
+Recorded 2026-10-17 for the second phase's task D8, which takes up three of D5's findings (record above): the storage
+budget measured the wrong disk, the channel bounded each container but not their number and served volume removal
+to the token's holder, and a runner's `/tmp` was `noexec`. The fourth that D5 left to the owner, what a runner may
+reach on the host and its LAN, is not part of it. The operator's side is in
+[the operations runbook](managed-runner-docker-operations.md) and [self-hosting](self-hosting.md#managed-runners).
+
+| Area | As implemented, and why |
+| --- | --- |
+| The disk the budget measures | Root Compose mounts an empty, anonymous volume into `docker-channel`, read-only, at `/var/lib/orbit-docker-volumes`, and names it with `--disk-probe-path` in the service's `command`. Docker keeps that volume beside every data volume, so `statvfs` on it is their filesystem, wherever `data-root` points and whatever filesystem the checkout is on. The two ways the task suggested were weighed and not taken. Binding Docker's data root into the channel, even read-only, would show it every container's files and every account's volume, which it needs none of. Its path also differs by host, so Compose would need a variable in `.env` that `/upgrade` may not write, and a recursive bind would copy running containers' overlay mounts into the channel's namespace. An install-time `capacity.storage` would be a number that goes stale as the disk fills with anything else, and that `/upgrade` would have to add to an operator's `profile.json` on existing deployments. The channel gains no write access, and no file in `data/managed-runners` changes. A fresh install, `/upgrade` (which recreates `docker-channel` from the new Compose file) and the by-hand `docker compose up -d --build` all get the fix. The order of precedence is `diskProbePath` in `channel.json`, then `--disk-probe-path`, then Docker's data root where the channel can see it, then the state directory. The last comes with a warning at start-up, and a probe path that is not a directory stops the channel before it serves. |
+| A cap on containers | `limits.maxContainers` in `channel.json`, optional. The channel counts every container of its instance, in any state (each one holds its volume until it is removed), and refuses a create past the cap with `429 CONTAINER_LIMIT` before anything is made. The count and the create are one step under one lock, and the containers already there are not touched. The default is one container per CPU and per GiB of the host's memory, whichever is fewer (Docker's `NCPU` and `MemTotal` at start-up). That holds every runner of any profile giving each at least one CPU and 1 GiB, which is more than the budget (the host less a quarter) can start. `/v1/info` reports the cap it applies, and `dockerCapacityBudget` holds the pool's pods, and the slots derived with them, to it. So the manager never admits a runner the channel would refuse, and a cap set below what the host fits makes runners wait for capacity rather than fail. Should anything else fill the cap, a runner being started waits for room (`CONTAINER_LIMIT`, in the record of D7 above) rather than failing. |
+| Volume removal | `allowVolumeRemoval` in `channel.json`, `false` unless set. Off, `DELETE /v1/volumes/…` is refused (`403 REMOVAL_REFUSED`) before anything is looked up. The manager never asked for it. The runbook's deletion procedure turns it on for one removal, by UID, and off again. |
+| An executable `/tmp` | The template's `/tmp` tmpfs asks for `exec` (`TmpfsOptions.Options [["exec"]]`). The task offered a second way, `TMPDIR` and `GOTMPDIR` on the data volume. It would leave a program in `/tmp` itself unable to run, and put scratch files on the account's volume, where they count against its disk limit and outlive the container. Docker keeps every tmpfs `nosuid` and `nodev` and accepts only `exec` and `noexec` as options there: in the probe of 2026-10-17 it refused `suid`, `dev`, `size` and `nr_inodes`. The size limit (`runner.tmpSizeLimit`) and its place in the memory limit are unchanged. Nothing is gained that the runner lacked: the data volume was writable and executable already. The template's rules accept that option or none, and nothing else. `TmpfsOptions.Options` came with Docker Engine 27 (API 1.46). An older engine ignores it, so `/tmp` stays `noexec` there, and the channel says so in its log at start-up. Nothing under `deploy/managed-runner/image` changed. |
+
+Verified on 2026-10-17 in an isolated Docker host on the HPC machine (`docker:29.8.2-dind`, capped, outside the
+runner's cgroup), whose Docker data root was on `/mnt/data` and whose deployment's checkout was on a 3 GiB tmpfs of
+its own ([evidence](evidence/managed-runner-docker-hardening/2026-10-17/README.md)):
+
+- **Before** (the project line at 1f5bc9cec, a fresh install): `/v1/info` measured the tmpfs (3,221,225,472 bytes),
+  and the first account's runner waited `short of storage`. Docker's disk had 15.3 TB free.
+- **`/upgrade` to this change**: the channel came back on the probe, and `/v1/info` and the pool measured the
+  15.87 TB disk. The waiting runner was admitted and its container made, with no file under `data/managed-runners`
+  changed.
+- **A fresh install**: the same.
+- **`/tmp` in a runner container**: `rw,nosuid,nodev,size=1048576k`. A script, a program and a Go binary ran from it,
+  `go test` and `go run` passed with the default temporary directory, and a write stopped at the 1 GiB limit
+  (`No space left on device`).
+- **The cap at 1, with two containers there**: neither was touched. A token holder's create was refused (429) with
+  nothing made. A third account's runner waited, and went on waiting, short of runner slots alone, after another
+  runner slept. With the cap removed it started at once.
+- **The runbook's deletion procedure**: off, refused (403); on, a wrong UID refused (409) and the volume's own
+  removed (204); off again, refused.
+- **A deployment without the profile**: both copies of `/upgrade` made the same Docker calls as before. `.env`,
+  `data/`, the services, volumes and networks were as installed, and nothing of managed runners appeared.
+
+Left to later work, or not shown here:
+
+- Docker older than 27 keeps `/tmp` `noexec` (logged); only 29.8.2 was run.
+- After the channel has been recreated, `docker compose down -v` leaves the empty probe volume behind; the runbook
+  says so.
+- What a runner may reach on the host and its LAN (D5's finding 6) waits for the owner.
+
+## Implementation record: Kubernetes reconciliation in the lab
+
+Recorded 2026-10-17 for the real-environment task T04: the manager against the single-machine lab's real k3s
+([the evidence](evidence/managed-runner-manager-lab/2026-10-17/README.md), [the lab page](managed-runner-lab.md#manager-reconciliation-t04)),
+and the two Kubernetes findings T02a left to it. The Kubernetes changes are in `kubernetes-backend.ts` and its helpers,
+and one rule is in the shared state machine. Kubernetes behaviour is otherwise unchanged.
+
+| Area | As implemented |
+| --- | --- |
+| A deleted Pod's stop report | Every Pod the manager creates carries its finalizer `orbit.dev/managed-runner-stop-report`. Before, an operator's `kubectl delete`, an eviction or `kubectl drain` fenced a runner whose kubelet had reported it stopped: the kubelet's terminal report stayed in the API for under a second after its final delete, and the manager looks every `pollIntervalSeconds` (T02a). Now the object stays, ended, with that report until the manager has recorded it. A terminal Pod the finalizer holds is not reported as being removed, so the gate goes on to `removeInstance`. That deletes the Pod by UID and then takes the finalizer off with a JSON Patch (`test` of the UID and of the finalizer, then `remove`), and the next generation starts by itself, as for a crash. A patch whose test fails (409 or 422) is read again on the next pass. A Pod whose finalizer was stripped and that vanished is still gone without a proof, and fences. So is one its node cannot report on, once the control plane marks it terminal. Its object stays until an operator taking over removes the finalizer (deploy README, "Fencing receipt"), and the receipt is then read as before. The manager's Role gains `patch` on Pods, and nothing else: not `update`, not `pods/status`, not `pods/ephemeralcontainers`. The admission guard allows the patch, which changes no identity field. `runner-pod.yaml.example` carries the finalizer, and its spec still matches the built Pod. |
+| An unreachable backend | A backend that could not be reached at all spends no attempt, in any state, on both backends: the budget counts tries that failed, not an outage. Before, a two-minute VM restart spent four attempts of a STARTING runner, and one of about 15 minutes would have ended it `FAILED RETRY_EXHAUSTED` (T02a). "Not reached" means no request got there. The failure is `{ retryable: true, unreachable: true }`, from `KubeUnreachableError` (the HTTPS transport tracks `secureConnect`: refused, reset, timed out or unresolved before the TLS session was up) and from `DockerChannelUnreachable` with `connected: false` (no socket connection). The pass is said as `TRANSIENT` and tried again after the backoff of the attempt it is on, pass after pass. A backend that was reached and answered 5xx or 429, or gave no answer after the request went out, still spends an attempt while provisioning. The observing states (READY, DRAINING, FENCING, FAILED) spent nothing already (D2). The startup deadline still runs through an outage. |
+| What clients show | Nothing changed. During an outage a READY runner stays "Managed runner ready" (it keeps heartbeating to Orbit), and a STARTING one says the transient sentence. A FENCING one shows "Waiting for an operator" and its fence reason, unchanged, because a pass that only looks writes no lastError. The outage itself is only in the server log, one warn line per pass. |
+
+Verified on 2026-10-17:
+
+- `managed-runner-recovery.pg.spec.ts` (8) on both backends and (9) on Kubernetes (above in the evidence). With the
+  manager's rule undone, (8) fails on both backends. With the finalizer undone, (9) fails FENCING instead of a restart.
+  All 12 managed-runner pg specs and the unit suite pass on the change, and `kube-http-transport.spec.ts` runs the real
+  transport on loopback.
+- In the lab, all of the following, with the database and k3s agreeing after every step and never two Pods on a volume:
+  - two replicas and 32 concurrent sign-ins and ensures;
+  - a wait for capacity;
+  - a PVC create and a Pod create whose answers were lost after k3s applied them;
+  - a Secret create committed while both controllers were SIGKILLed;
+  - a stopped instance left behind while no controller ran;
+  - 150 s outages while READY and while STARTING;
+  - a killed runner process and a VM restart, after which the kubelet itself reported both Pods stopped;
+  - a delete, an eviction and a force delete;
+  - a Pod gone with no report;
+  - one owner against another;
+  - the switch unset and `false` with live resources.
+
+Left to later work, or not shown here: everything across nodes; the operator's path out of FENCING (an accepted receipt,
+or the finalizer removal on a node that cannot report), since on one node a power-off stops the cluster; PodGC on a real
+unreachable node; READY with a real runtime (a stand-in login was used); a real API server answering 5xx while
+provisioning; and what an operator sees of an outage while FENCING (the log only).
+
+## Implementation record: wake and capacity follow-ups
+
+Recorded 2026-10-18 for task T06b, which fixes three of T06's findings on the lab's real k3s (above, "capacity, wake and
+sleep"). Two rules are the shared state machine's and hold on both backends. The third, the quota, is Kubernetes' own, and
+it now waits as the Docker channel's cap on containers already did. This record supersedes three earlier statements for
+the cases it covers: the run backends record's "401 and 403 are `KUBERNETES_FORBIDDEN`", the failure recovery record's
+note that a namespace quota on Pods "still fails the runner", and the sign-in record's 409 for a first session on a runner
+that has never reported its engines.
+
+| Area | As implemented, and why |
+| --- | --- |
+| A managed instance's first heartbeat | A managed instance now beats once before it claims anything (runner-go `managed_startup_beat.go`, `runloop.go`). The beat waits for the engine probe's first answer, for at most 20 s, so that it carries what READY reads. If the beat is refused or unanswered (a control plane restarting, an instance not recorded yet), it is sent again every 2 s, until one is taken or the first tick is due. The claim loop waits for it; the ticker keeps its cadence from the process's start. Before, the first beat came at the first tick, 30 s after the start. A woken instance served turns all that time while its mapping read STARTING, and an auto retry, which waits for READY, waited as long. Carrying the online information on the claim instead would not have done: READY needs the engine report, which only the heartbeat carries. A self-managed runner is unchanged: no startup beat, its claims not held back, its first beat at the first tick. The cost: a woken instance's first claim now waits for its probe, about 8 s after `orbit run` starts, in the lab. Nothing under `deploy/managed-runner/image` changed, and an image built from source carries it. |
+| A namespace quota | On Kubernetes, a 403 whose message says `exceeded quota` is now `KUBERNETES_QUOTA_EXCEEDED`, not `KUBERNETES_FORBIDDEN` ("check its permissions"). That 403 is the ResourceQuota admission's refusal (`kubernetes-backend.ts`, `failure`), and the quota's own words (`exceeded quota: <name>, requested: …, used: …, limited: …`) become the operator's detail. The runner waits for room rather than fails (`managed-runner-manager.ts`, `waitForRoom`, now one method for this and `CONTAINER_LIMIT`). Nothing was made, so no attempt is spent and no startup deadline runs; the create is asked again every `capacityRetrySeconds`, and the deadline runs from when it goes through (`roomMade`). This holds for every create the manager makes: the claim, the bootstrap Secret and the Pod. A quota on claims or Secrets is lifted only by an operator. Why wait rather than fail retryable: "Management and execution states" names a quota among the causes of a wait for capacity. A quota on compute below the budget is lifted by itself when another runner's Pod goes at its sleep; a failure would leave the owner to press Retry at the right moment while their work waits. And the cap on Docker already waited. The owner reads "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.", not retryable since there is nothing to retry. The shared state fixture gains the state (35 in all), which every client shows by its sentence; no client changed. |
+| A new account's first session | Before, `SessionsService.create` refused a first session in a managed default workspace (409 `MODEL_UNAVAILABLE`) unless the runner had reported its runtime ready. A runner waiting for capacity, being provisioned, or not yet heard from never has, so even a session naming the owner's own key was refused (T06). Now, while the runner row has stored no engine report at all, a session that brings its own credential is queued, and the runner runs it once it is READY (`assertManagedFirstSessionRuntime`). The credential can be one of the owner's model keys, an account pool or a workspace credential, on a runtime counted as supply. A session on a runtime's own sign-in is still refused, since nobody could have signed it in on a runner that has never come up. Once the runner has reported, what it reported decides, as before. With nothing named, a managed default workspace whose runner was never ready (no `initialProvider`) now derives the owner's own key that READY would record (`managedFirstSessionKey` in `lastProviderByWorkspace`): the first of the owner's enabled keys, in their order, on a runtime counted as supply. Without such a key it still derives the Claude floor. While the session waits, its reason is the owner's status reason (for capacity, "The managed environment has no room for this runner right now (…)"), which `GET /api/managed-runner` answers and the clients show above the composer; the session itself is PENDING like any queued session. The rule reads only the runner row and the owner's keys, so it is the same on both backends. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-wake-followups/2026-10-18/README.md), [the lab page](managed-runner-lab.md#wake-and-capacity-follow-ups-t06b)):
+
+- runner-go: `managed_startup_beat_test.go` covers the probe wait, its bound, the retry, the limit and a stopping runner, the probe's first answer, and runLoop's wiring for a managed instance alone.
+- `managed-runner-recovery.pg.spec.ts` case (10), on Kubernetes: a Pod refused by a quota waits and starts once another runner sleeps, and a claim refused by a quota on claims waits until the quota is raised. With the previous product code it ends FAILED.
+- `managed-runner-first-session.pg.spec.ts`, on both backends, with the whole application in process: a new account waiting for capacity queues its first session, with nothing named and then naming its key, while a sign-in session is still refused. Once the other runner sleeps, the new one is READY on the key and claims both. With the previous product code those sessions are refused.
+- The lab's real k3s, with a one-runner budget and the image rebuilt from the task's commit:
+  - In five wakes and a new account's first start, the first heartbeat came before the first claim (by 0.03–0.21 s), and READY 1.1–5.0 s after it (the manager's poll). T06 measured about 30 s.
+  - With a quota of zero Pods, a wake waited for 2 minutes with nothing spent, and the Pod was made by itself about 4 s after the quota was lifted.
+  - A new account's first sessions were queued while it waited for capacity, and answered once it was READY.
+  - The same runner build as a self-managed runner claimed at once and beat at its first tick.
+- The host's real Docker, in D2's integration test with this commit's image, 14 of 14: a new account's first session was queued
+  (201, on her key) while her runner waited for capacity, and her runner claimed it 2.3 s after a slot was released.
+
+Left to later work, or not shown here:
+
+- The clients still offer no draft in a managed default workspace before `initialProvider` is known (C7's `startsNewSession`). A new account can therefore queue its first session through the API, the CLI or a task, but not from a composer. Opening that gate needs the status to say what a first session would start on before READY.
+- A queued first session on a key whose engine the runner turns out not to have waits, while the runner ends `MODEL_UNAVAILABLE`.
+- No model was used: fake-model.py stood in for the owner's DeepSeek key.
+
+## Implementation record: the three clients against the lab
+
+Recorded 2026-10-18 for task T07. Web, macOS and iOS were run against the lab's test server, and this record covers the
+changes that needed ([lab page](managed-runner-lab.md#the-three-clients-t07),
+[evidence](evidence/managed-runner-clients-lab/2026-10-18/README.md)). It builds on the client status record above
+(C7), which proved the three clients against the shared fixture only. It closes the first item that T06b's record left
+to later work.
+
+| Area | As implemented, and why |
+| --- | --- |
+| What a first session starts on, before READY | T06b queued a new account's first session on the owner's key while the runner waits for capacity or starts. The clients still offered no draft until `initialProvider` existed (C7's `startsNewSession`). The status now names it in `firstSessionProvider`: `initialProvider` once the runner has been READY. Before that, it is the owner's own model key such a session is queued on (`managedFirstSessionKey`), while the runner has not reported its engines or has reported that key's engine installed. It is null when the create would refuse the session `MODEL_UNAVAILABLE`. The status read computes it with the create's own rule (`managedFirstSessionProvider`, beside `assertManagedFirstSessionRuntime`). It asks for the owner's keys only while the switch is on and nothing was recorded. The shared display offers the first session when the field is set (`startsNewSession`) and reads a server that predates it by `initialProvider`; OrbitKit mirrors this. The field is additive, so the contract version stays 1. |
+| The draft follows the key | The draft's default provider and model come from the workspace list (`lastProvider`, which the server derives). The list went stale when the key arrived, so a draft opened by the status would have offered Claude Code's floor and its model. The web reads the workspace list again when the first-session provider changes (`useFollowFirstSessionProvider`). The native apps reload their workspaces, and with them the provider list (`ManagedRunnerModel.onFirstSessionProviderChanged`). On the lab, the web draft opened on the key and its model 3.4 s after the key was added. |
+| Waking, shown at once | Found on the lab: a message to a runner asleep for 15 s woke it and was answered 4.4 s later. Meanwhile the web said "Managed runner asleep" until its next 30 s read. Web and native read the managed status again right after a send only when the runner row read offline, and a just-slept managed runner's row still reads online until its last beat goes stale. Both now read it whenever the managed status is anything but available. On the lab after the fix, "Waking your managed runner" showed 0.7 s after the send. |
+| Not changed: the restart reason after a held volume | On Kubernetes a restart waits a few seconds for the old Pod's volume to detach (`VOLUME_STILL_ATTACHED`, "…still detaching"). When that wait ends, the reason is cleared rather than going back to `POD_RESTARTING`, so for the rest of the restart the clients show the generic "It is starting again". `restartReason` keeps a restart reason only while it is still the stored one. Reported to the coordinator. |
+
+Verified on 2026-10-18:
+
+- Unit tests:
+  - `managed-runner-status.spec.ts` and `managed-runner-supply.spec.ts`: a table test that the status's rule agrees
+    with the create's;
+  - `managedRunnerDisplay.spec.ts`;
+  - the shared fixture's four new states (39 in all), held by the apiserver, shared, web and Swift tests;
+  - `WorkspaceView.managedRunner.test.tsx`: the draft offered on the key, the workspaces read again, and waking shown
+    for a just-slept runner whose row still reads online. The last two were mutation-checked.
+  - OrbitKit's `ManagedRunnerLogicTests` and `ManagedRunnerWiringTests`.
+- `managed-runner-first-session.pg.spec.ts`, on both backends: with no key the status names nothing, the display offers
+  nothing, and a session with nothing named is refused 409 `MODEL_UNAVAILABLE`. With the key, the status names it and
+  the display offers the first session. After READY, `firstSessionProvider` is the key's slug.
+- The lab's real k3s, a budget of one runner, the web live. Covered: new accounts, first sessions, sleep and wake, a
+  crash loop and an out-of-memory loop each with Retry, a quota, a held and a deleted volume, and an environment the
+  server cannot use. The switch was also tested unset, `false`, missing and on, for an account with its own runner.
+- The host's real Docker, the web live: `CONTAINER_LIMIT` while preparing and waking, `VOLUME_IN_USE`, and
+  `PVC_MISSING` then `PVC_RESTORED` with Retry.
+- The iPhone and Mac apps on GitHub's macos-26, fed the same server's recorded answers. Each of the 25 scenes passed on
+  both apps: round 2, then scene 20 on the Mac again in round 4, and the landing scenes in round 3. No app made a
+  request outside the recording, and no write differed from the recorded one. Round 1's failures came from the
+  recording, where the provider list was read only every 15 s, and the replay now accounts for that. Round 2's one
+  Mac exit did not recur.
+
+Left to later work, or not shown here:
+
+- The native apps did not reach the test server live; their run is a replay. Replay cannot show the live server's
+  timing: when an answer came is the recording's, sampled every 2 s, or every 15 s for the slower lists.
+- No model was used: fake-model.py stood in for the owner's DeepSeek key.
+- No runtime was signed in from Infrastructure to clear "Your managed runner needs a model". Removing and deleting a
+  runner exist in the fixture only, and the server has no deletion flow yet.
+- A Retry pressed on one client shows on another at that client's next settled read (30 s). The clients still poll,
+  because no server sends revision notices.
+
+## Implementation record: a restart's reason through the waits on its way
+
+Recorded 2026-10-18 for task T07b, which fixes the finding T07 left to it (the row "Not changed: the restart reason after a
+held volume" in the record above). The rule is the shared state machine's (`managed-runner-manager.ts`), so it is the same
+on both backends; on Docker it shows only after the waits Docker has, since nothing there detaches. For the cases it
+covers, this record supersedes the failure recovery record's "kept until it is READY unless a later wait says more".
+
+| Area | As implemented, and why |
+| --- | --- |
+| What the owner reads | While a runner restarts by itself (D7), its reason is `POD_RESTARTING`, or `POD_RESTARTING_OUT_OF_MEMORY`, until it is READY. A wait on the way says what it waits for while it lasts, as before: the stopped instance's volume still attached (`VOLUME_STILL_ATTACHED`), the volume held by something else (`VOLUME_IN_USE`), the environment's cap on what it holds (`CONTAINER_LIMIT`, `KUBERNETES_QUOTA_EXCEEDED`) or a transient error (`TRANSIENT`). Once the wait is over, the restart's reason is back, with its detail: when the gate advances to the next generation, at admission, at the move to STARTING, when a held volume is free and when a create that a cap held back goes through. Before, `restartReason` kept a restart's reason only while it was still the stored one, so the end of any wait cleared it. For the rest of the restart the clients said the generic "It is starting again", and the out-of-memory notice was gone. |
+| How it is kept | The wait's reason carries the restart's own reason (`lastError.restart`: its code, sentence, retryable flag and detail). `waitReason` writes it, and `restartReason` reads either. Neither the status read nor the demand hook's answer shows it: both give clients only `code`, `message` and `retryable`, as before, so every client shows the wait while it lasts. The task also offered a marker on the mapping. That would need a migration, and every way a restart ends would have to clear it, or a later start would read as a restart: READY, a failure, a fence, a sleep, a disabled owner, an owner's retry. Kept in the reason, it goes wherever the reason goes, because each of those writes a reason of its own, or none. |
+| What stays as it was | Attempts: a wait spends none, a transient error the backend answered still spends one, and one that never reached the backend spends none (D7, T04). Startup deadlines: none runs during a wait, and one runs from admission, from a held volume freed or from a create a cap held back (D7, T06b). The single-writer gate, its stop proofs and compute held through a restart are unchanged. A fence's reason carries nothing, so a start after an operator's receipt is not said to be a restart: its fresh attempt budget already says it is not one. A start nobody restarted carries no restart reason through the same waits: a wake, an owner's retry, a new account. A restart never waits for capacity (WAITING_CAPACITY), since its compute stays reserved. `MODEL_UNAVAILABLE` carries nothing: it lasts until READY or until the start fails, so no later step gives a reason back. A transient error while the next instance starts (STARTING) is said until READY, as on any start, because STARTING writes no reason between the try and READY. |
+| Clients | No change. The three clients show the server's sentence for any reason (C7, D7). The shared state fixture already holds a restart's states (waking after a stop, and after running out of memory) and each wait's own. |
+| Data | No migration. `managed_runner.last_error` is JSONB and nothing constrains its members. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-restart-reason/2026-10-18/README.md), [the lab page](managed-runner-lab.md#the-restart-reason-through-the-detach-wait-t07b)):
+
+- `managed-runner-recovery.pg.spec.ts`, cases (11) to (15):
+  - (11), on the fake cluster: a restart after a stop, and one after running out of memory, whose stopped Pod's volume
+    stays attached. Each says `VOLUME_STILL_ATTACHED` while it waits, with nothing spent, no next generation and no
+    startup deadline. Once the volume detaches, it is restarting again through admission, provisioning and the start,
+    and READY clears it. An owner's retry through the same wait says nothing of a restart.
+  - (12) to (15), on both backends unless marked: a transient error when the restart is due; a backup's helper container
+    holding the volume when the gate looks (Docker); the environment's cap on instances; a volume held when the next
+    instance is to be made. A wake through that last wait says nothing of a restart.
+  - Nine of the ten new cases fail on the previous manager, each because the reason after the wait is none. The tenth,
+    the owner's retry, passes on both. All 17 earlier cases still pass.
+- The lab's real k3s, with the runner killed while READY (`orbit run` SIGKILLed, and the container run out of memory):
+  - The stopped Pod's attachment kept for a while (below). The status read, every 0.5 s, gave REQUESTED `POD_RESTARTING`
+    (4.5 s), then REQUESTED `VOLUME_STILL_ATTACHED` (15 s), then STARTING `POD_RESTARTING` on the next generation, then
+    READY with no reason. Out of memory gave the same, with `POD_RESTARTING_OUT_OF_MEMORY` before and after the wait.
+  - The previous manager, with the same lab, image, profile and hold: STARTING had no reason after the wait, and the
+    clients said "It is starting again", which is T07's finding.
+  - Without the hold, in three runs and a kill while starting, the volume detached 3.3–6.1 s after the Pod failed. That
+    was before the gate looked, and the restart's reason stood until READY, as before the change.
+
+Left to later work, or not shown here:
+
+- On the lab's idle VM, a stopped Pod's volume detached 3 to 6 s after the kubelet's report, before the gate looked (its
+  first look comes one poll and one backoff after the stop). So the lab showed the wait only with the attachment kept by
+  a test finalizer, as a slow detach keeps it; the detach itself had finished. T07 saw the natural wait in a crash loop
+  of a runner that was still starting.
+- The host's real Docker was not run: the Docker backend's waits were checked against the fake channel only.
+- No model was used: fake-model.py stood in for the owner's DeepSeek key. Nothing crossed nodes.
+
+## Implementation record: two accounts end to end, an independent restore, and the Kubernetes runbook
+
+Recorded 2026-10-18 for task T08 on the single-machine lab, the "two-user end-to-end, independent backup restore and
+operator runbook" step of the order above. No product code changed; the record is of what the delivered system did, run
+by `scripts/managed-runner/lab/acceptance-lab.py` in one pass on the project line, and of the runbook written from it,
+[managed-runner-kubernetes-operations.md](managed-runner-kubernetes-operations.md).
+
+| Area | What the run established, and what it did not |
+| --- | --- |
+| The switch unset and `false` | Both groups ran with no profile, so with no Kubernetes or Ceph setting in the apiserver's environment. Sign-ins, the managed status (`enabled: false`, the shared display shows nothing), every managed write `404 MANAGED_RUNNER_DISABLED`, and a real self-managed runner (this checkout's build, Claude Code on the host) answering a session, a task run now and a task's run time. Nothing managed was written, no object in the namespace changed and no request reached Kubernetes for 90 s each. With every runner asleep, the same held for messages, a task run now and a task's run time; claims stayed, and the waiting work woke the runners once the switch was on again. |
+| Provisioning | Two accounts, sixteen concurrent sign-ins over two replicas, with no admission guard: one mapping, claim, Secret and probe each, `FAILED ADMISSION_GUARD_MISSING`, no Pod. With the guard installed, the owners' retries started them on the same claims; `MODEL_UNAVAILABLE` until each added a key, then READY. |
+| Capacity | A budget of two runners: a third account waited (`WAITING_CAPACITY`) with nothing created, and was admitted, with its claim made, only after a runner slept. |
+| Work and data | Sessions with an attachment, a file written and committed in the session's Git worktree by Claude Code's own Bash tool, and a probe of random bytes, SQLite rows in WAL mode and a Git commit. They kept their checksums, `integrity_check` and the engine's transcripts through idle sleep, a wake by a message and by a scheduled task, an operator's Pod delete, a killed runner, an image rollback and roll-forward, and a controller restart; each resumed session's next request carried the earlier conversation from the volume. The runner, claim, PV, volume handle and RBD image never changed, and no volume had more than one Pod in any sample of the run's timeline. |
+| Between the accounts | The other owner's token and runner credential could not read or act on a runner, workspace, instance, session or attachment, and the admission guard refused Pods mixing the two owners and volumes, and a second Pod on the same node and claim. A runner has no service account token and the Kubernetes API refuses it. |
+| Busy and idle | A long turn and a background job each kept their runner READY past the idle interval, and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; once the work ended each slept by itself. |
+| The controller | Both apiservers SIGKILLed while one runner was being woken and the other ran a turn: the turn finished, the waking runner came up without a second Pod create, and the database and Kubernetes agreed. |
+| Backup and restore | The RBD image of a disabled, asleep account exported out of the VM to the host, checked there with no cluster (`debugfs`, SQLite, Git, checksums), and written into a new claim's image, which read back byte for byte as the backup; a Pod found the data there. The original was untouched and its runner woke on it. A static PV naming an imported image cannot be used with this Ceph-CSI (its ControllerPublish refuses the handle and its ControllerUnpublish panics), so the runbook restores into a claim the driver provisions. |
+| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node. A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented. Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md), [the lab page](managed-runner-lab.md#end-to-end-acceptance-t08)).

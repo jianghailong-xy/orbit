@@ -15,7 +15,9 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
 import {
+  ManagedInstanceLimit,
   ManagedRunnerConflict,
+  ManagedVolumeHeld,
   type ManagedCredential,
   type ManagedInstance,
   type ManagedRunnerBackend,
@@ -41,7 +43,7 @@ import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
-import { managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
+import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
 
 /**
@@ -53,19 +55,22 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  * resumes from what is recorded and what is observed, never from memory.
  *
  * Every infrastructure call goes through the run backend (managed-runner-backend.ts):
- * KubernetesBackend (a Ceph RBD PVC, a bootstrap Secret, a bare Pod) is the one implemented. What
- * is decided here — the states, admission, the single-writer gate, wake, sleep and a disabled
- * owner's runner — is the same for every backend.
+ * KubernetesBackend (a Ceph RBD PVC, a bootstrap Secret, a bare Pod) or DockerBackend (a local
+ * volume, a credential file and a container, through the restricted Docker channel). What is decided
+ * here — the states, admission, the single-writer gate, wake, sleep and a disabled owner's runner —
+ * is the same for every backend, and a manager drives only the mappings its own backend made
+ * (`managed_runner.backend`): another backend's are left as they are, as the switch off leaves them.
  *
  * This version provisions: REQUESTED → PROVISIONING (data volume, the storage it is bound to and its
  * handle, the bootstrap credential of the generation and the runner credential it carries) →
  * STARTING (the one instance of the current generation, until the runner row has a fresh heartbeat
- * reporting a runtime installed and signed in — the one READY records as `initialProvider`; without
- * one it reports MODEL_UNAVAILABLE) → READY; and FAILED, with a structured cause, when the attempt
+ * reporting a runtime installed and signed in, or one installed that a model key of the owner's own
+ * runs on — the runtime, or the key's slug, is what READY records as `initialProvider`; without either
+ * it reports MODEL_UNAVAILABLE) → READY; and FAILED, with a structured cause, when the attempt
  * budget is spent or what the backend holds is not what the mapping recorded. It never deletes a
  * data volume, a runner row or a workspace. The only objects it removes, always by UID, are an
- * instance whose host reported it stopped, when an explicit retry asked for a fresh start, and the
- * bootstrap credential of a generation the gate has retired.
+ * instance whose host reported it stopped, when it is replaced or put to sleep, and the bootstrap
+ * credential of a generation the gate has retired.
  *
  * The single-writer gate (docs/managed-runner-design.md, "Single Pod and single writer protection")
  * is `replacePredecessor`: generation N+1 — a new credential, a new instance — is issued only after
@@ -101,6 +106,27 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  * A mapping whose owner an administrator disabled is driven to sleep and never towards READY
  * (`whileDisabled`): nothing is created for it, its instance drains and stops through the same gate a
  * sleep goes through, and demand does not wake it until the account is enabled again.
+ *
+ * Recovery (docs/managed-runner-design.md, "Implementation record: failure recovery and visibility"):
+ *
+ *   - An instance that stops unasked with its host's report of the stop — a crash, its memory limit,
+ *     its host or Docker restarting — is started again by itself: the next generation on the same
+ *     volume and runner, through the same gate, within `maxAttempts` and the backoff (`terminated`).
+ *     A crash loop still ends FAILED. Every such stop is logged; running out of memory has reasons
+ *     of its own for the owner.
+ *   - The owner is told it is restarting (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY) until it is
+ *     READY. A wait on the way — its predecessor's volume detaching, a volume held, the environment's
+ *     cap, a transient error — is said while it lasts and carries that reason, which comes back once
+ *     the wait is over (`waitReason`).
+ *   - No instance is created on a volume something else holds, a backup's helper container say: it
+ *     waits until the volume is free (VOLUME_IN_USE), as for a predecessor's volume still detaching.
+ *     A host at its cap on instances makes it wait for room the same way (CONTAINER_LIMIT).
+ *   - A FAILED mapping whose recorded volume was missing is looked at again, and becomes retryable
+ *     once that very volume is back (`volumeBack`).
+ *   - A backend that cannot be reached at all — no request got to it: the Kubernetes API server or
+ *     the Docker channel down, restarting or cut off — spends no attempt in any state (`unreachable`),
+ *     any more than a held volume does: the budget counts tries that failed, and an outage lasts as
+ *     long as it lasts. One that answers with a transient failure still spends one while provisioning.
  *
  * Left to the work that follows: deletion.
  */
@@ -149,14 +175,31 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
   [MODEL_UNAVAILABLE]: {
-    message: 'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+    message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.',
     retryable: true,
   },
-  POD_TERMINATED: { message: 'The runner instance stopped. A retry releases it and keeps the data volume.', retryable: true },
+  POD_RESTARTING: {
+    message: 'The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.',
+    retryable: true,
+  },
+  POD_RESTARTING_OUT_OF_MEMORY: {
+    message: 'The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.',
+    retryable: true,
+  },
+  POD_TERMINATED: { message: 'The runner instance stopped too often to be started again automatically. A retry starts it again and keeps the data volume.', retryable: true },
+  POD_OUT_OF_MEMORY: {
+    message: 'The runner kept running out of memory, so it is not started again automatically. A retry starts it again and keeps the data volume; if it keeps happening, an operator can give runners more memory.',
+    retryable: true,
+  },
   KUBERNETES_FORBIDDEN: { message: 'The cluster refused the manager. An operator has to check its permissions; then it can be retried.', retryable: true },
   KUBERNETES_REJECTED: { message: 'The cluster rejected a managed runner object. An operator has to check the environment; then it can be retried.', retryable: true },
+  KUBERNETES_QUOTA_EXCEEDED: {
+    message: "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+    retryable: false,
+  },
   PVC_CONFLICT: { message: "A data volume under this runner's name is not the recorded one, so nothing was replaced. An operator has to review it.", retryable: false },
   PVC_MISSING: { message: "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.", retryable: false },
+  PVC_RESTORED: { message: "This runner's data volume is back as it was recorded. A retry starts the runner on it.", retryable: true },
   PV_CONFLICT: { message: "The storage behind this runner's data volume is not the recorded one. An operator has to review it.", retryable: false },
   SECRET_CONFLICT: { message: "The runner's bootstrap credential object is not the expected one. An operator has to review it.", retryable: false },
   SECRET_MISSING: { message: "The runner's bootstrap credential is gone while an instance exists. No new credential is issued under it; an operator has to review it.", retryable: false },
@@ -177,6 +220,10 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     message: 'The previous instance has stopped and its data volume is still detaching. The next instance starts once it is detached.',
     retryable: false,
   },
+  VOLUME_IN_USE: {
+    message: "Something else is using this runner's data volume, such as a backup, so the runner is not started on it yet. It starts once the volume is free.",
+    retryable: false,
+  },
   ADMISSION_GUARD_MISSING: {
     message: 'The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.',
     retryable: true,
@@ -189,7 +236,42 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     message: 'The runner accepted going to sleep but has not stopped yet. It is not forced: it stops once its own drain finishes, and new work wakes it again afterwards.',
     retryable: false,
   },
+  SLEEP_STOP_FORCED: {
+    message: 'The runner accepted going to sleep but did not stop within its drain time, so it is being stopped. New work wakes it again afterwards.',
+    retryable: false,
+  },
+  DOCKER_CHANNEL_FORBIDDEN: { message: 'The Docker channel refused the manager. An operator has to check its token; then it can be retried.', retryable: true },
+  DOCKER_CHANNEL_REFUSED: { message: 'The Docker channel refused a managed runner request. An operator has to check the environment; then it can be retried.', retryable: true },
+  DOCKER_CHANNEL_MISMATCH: {
+    message: 'The Docker channel serves another deployment, image or limits than this server expects. An operator has to align them; then it can be retried.',
+    retryable: true,
+  },
+  CONTAINER_GUARD_MISSING: {
+    message: "The Docker channel admitted a second container for a runner's volume, so no instance is started. An operator has to check the channel; then it can be retried.",
+    retryable: true,
+  },
+  CONTAINER_GUARD_UNVERIFIED: {
+    message: "Whether the Docker channel's single-container guard is in force could not be established, so no instance is started. An operator has to check it; then it can be retried.",
+    retryable: true,
+  },
+  VOLUME_OVER_LIMIT: {
+    message: "This runner's data volume is over its disk limit, so no instance is started on it. An operator has to free space on it or raise its limit; then it can be retried.",
+    retryable: true,
+  },
+  CONTAINER_LIMIT: {
+    message: 'The Docker host has as many runner containers as it allows, so this runner is not started yet. It starts by itself once one of them is removed, as when another runner goes to sleep.',
+    retryable: false,
+  },
 };
+
+/** The waits for room (`waitForRoom`): a create the environment's cap refused, made again once there is room. */
+const ROOM_WAITS: ReadonlySet<string> = new Set(['CONTAINER_LIMIT', 'KUBERNETES_QUOTA_EXCEEDED']);
+
+/** A reason an automatic restart stands under (`terminated`). */
+function restartingReason(reason: unknown): boolean {
+  const code = (reason as { code?: unknown } | null | undefined)?.code;
+  return code === 'POD_RESTARTING' || code === 'POD_RESTARTING_OUT_OF_MEMORY';
+}
 
 export function managedRunnerReason(code: string): ManagedRunnerReason {
   const known = REASONS[code];
@@ -205,6 +287,14 @@ const ACTIVE_STATES = ['REQUESTED', 'PROVISIONING', 'STARTING', 'READY', 'FENCIN
 const DRIVEN_WHILE_DISABLED: ReadonlySet<ManagedRunner['managementState']> = new Set([
   'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY', 'DRAINING', 'SLEEPING', 'FENCING',
 ]);
+/**
+ * The states in which a pass only looks at what runs (and, draining, asks the host to stop or remove
+ * what has stopped; failed, looks for a missing volume). A backend that does not answer there says
+ * nothing about the runner: no attempt of the provisioning budget is spent and nothing is failed —
+ * the next pass looks again. A restart of the Docker channel, or a Kubernetes API blip, leaves an up
+ * or draining runner as it was.
+ */
+const OBSERVING_STATES: ReadonlySet<ManagedRunner['managementState']> = new Set(['READY', 'DRAINING', 'FENCING', 'FAILED']);
 /** A pass takes at most this many steps; the worker's next pass continues. */
 const MAX_STEPS_PER_PASS = 12;
 /** Sleeping mappings the demand sweep wakes per pass. */
@@ -246,14 +336,17 @@ export class ManagedRunnerManager {
    * compute given back. Then work — every state that moves by itself, an intent waiting for capacity
    * once its retry time comes or the pool has moved since it was refused (oldest waiter first, so a
    * release is offered in the order the waits began), a drain, a wake — then the READY runners whose
-   * instance and idleness each pass looks at.
+   * instance and idleness each pass looks at, and last the FAILED ones whose recorded volume is
+   * missing, to see whether it is back (`volumeBack`).
    */
   async dueMappings(limit: number): Promise<string[]> {
     const now = this.now();
     const due = { OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] };
     const pool = await this.capacityPool();
+    const backend = this.backend.name;
     const disabled = await this.prisma.managedRunner.findMany({
       where: {
+        backend,
         owner: { disabledAt: { not: null } },
         desiredState: { not: 'DELETED' },
         OR: [
@@ -267,6 +360,7 @@ export class ManagedRunnerManager {
     });
     const waiting = await this.prisma.managedRunner.findMany({
       where: {
+        backend,
         managementState: 'WAITING_CAPACITY',
         desiredState: 'RUNNING',
         OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }, { capacityRevision: null }, { capacityRevision: { lt: pool.revision } }],
@@ -277,6 +371,7 @@ export class ManagedRunnerManager {
     });
     const moving = await this.prisma.managedRunner.findMany({
       where: {
+        backend,
         OR: [
           { desiredState: 'RUNNING', managementState: { in: ['REQUESTED', 'PROVISIONING', 'STARTING', 'FENCING'] }, ...due },
           // Demand cannot come for a disabled owner's fenced mapping: its proof is looked for anyway.
@@ -291,12 +386,18 @@ export class ManagedRunnerManager {
       select: { id: true },
     });
     const watched = await this.prisma.managedRunner.findMany({
-      where: { desiredState: 'RUNNING', managementState: 'READY', ...due },
+      where: { backend, desiredState: 'RUNNING', managementState: 'READY', ...due },
       orderBy: { updatedAt: 'asc' },
       take: limit,
       select: { id: true },
     });
-    return [...new Set([...disabled, ...waiting, ...moving, ...watched].map((row) => row.id))].slice(0, limit);
+    const missing = await this.prisma.managedRunner.findMany({
+      where: { backend, managementState: 'FAILED', lastError: { path: ['code'], equals: 'PVC_MISSING' } },
+      orderBy: { updatedAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+    return [...new Set([...disabled, ...waiting, ...moving, ...watched, ...missing].map((row) => row.id))].slice(0, limit);
   }
 
   /**
@@ -314,12 +415,13 @@ export class ManagedRunnerManager {
     return runners.length;
   }
 
-  /** One pass over one mapping, under this replica's lease. */
+  /** One pass over one mapping, under this replica's lease. Another backend's mapping is not driven, nor leased. */
   async reconcile(mappingId: string): Promise<ReconcileOutcome> {
     const leased = await this.acquireLease(mappingId);
     if (!leased) {
-      const exists = await this.prisma.managedRunner.count({ where: { id: mappingId } });
-      return exists ? 'LEASED_ELSEWHERE' : 'NOT_FOUND';
+      const found = await this.prisma.managedRunner.findUnique({ where: { id: mappingId }, select: { backend: true } });
+      if (!found) return 'NOT_FOUND';
+      return found.backend === this.backend.name ? 'LEASED_ELSEWHERE' : 'IDLE';
     }
     try {
       let mapping = leased;
@@ -355,11 +457,13 @@ export class ManagedRunnerManager {
           if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
           if (!this.capacityDue(mapping, await this.capacityPool())) return { done: 'WAITING_CAPACITY' };
           break;
+        // A failure waits for a retry; only a missing volume is looked for again meanwhile.
+        case 'FAILED':
+          if ((mapping.lastError as { code?: unknown } | null)?.code !== 'PVC_MISSING') return { done: mapping.desiredState === 'RUNNING' ? 'FAILED' : 'IDLE' };
+          break;
         default:
           if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
-          if (!(ACTIVE_STATES as readonly string[]).includes(mapping.managementState)) {
-            return { done: mapping.managementState === 'FAILED' ? 'FAILED' : 'IDLE' };
-          }
+          if (!(ACTIVE_STATES as readonly string[]).includes(mapping.managementState)) return { done: 'IDLE' };
           if (mapping.nextAttemptAt && mapping.nextAttemptAt > this.now()) return { done: 'BACKOFF' };
       }
     }
@@ -389,6 +493,8 @@ export class ManagedRunnerManager {
           return await this.draining(mapping);
         case 'SLEEPING':
           return await this.sleeping(mapping);
+        case 'FAILED':
+          return await this.volumeBack(mapping);
         default:
           return await this.ready(mapping);
       }
@@ -402,7 +508,11 @@ export class ManagedRunnerManager {
         return this.fail(current, error.code, error.detail);
       }
       const failure = this.backend.failure(error);
-      if (failure?.retryable) return this.backoff(current, error);
+      if (failure?.retryable) {
+        if (OBSERVING_STATES.has(current.managementState)) return this.unanswered(current, error);
+        return failure.unreachable ? this.unreachable(current, error) : this.backoff(current, error);
+      }
+      if (failure?.waitForRoom) return this.waitForRoom(current, failure.code, failure.detail);
       if (failure) {
         this.log.warn(`managed runner ${mapping.id}: ${failure.log}`);
         return this.fail(current, failure.code, failure.detail);
@@ -428,15 +538,19 @@ export class ManagedRunnerManager {
 
   /**
    * The pool as it stands now: the backend's, keyed by its location. Its row is created, or brought
-   * to the backend's totals, on this process's first use; after that only its id is kept, and its
-   * figures and revision are read afresh each time — they move with every admission and release, by
-   * any replica.
+   * to the backend's totals (which a backend may have to ask its host for), on this process's first
+   * use; after that only its id is kept, and its figures and revision are read afresh each time —
+   * they move with every admission and release, by any replica.
    */
   private async capacityPool(): Promise<CapacityPool> {
-    this.pool ??= syncCapacityPool(this.prisma, this.backend.location, this.backend.capacityBudget()).then((pool) => pool.id).catch((error: Error) => {
-      this.pool = undefined;
-      throw error;
-    });
+    this.pool ??= Promise.resolve()
+      .then(() => this.backend.capacityBudget())
+      .then((budget) => syncCapacityPool(this.prisma, this.backend.location, budget))
+      .then((pool) => pool.id)
+      .catch((error: Error) => {
+        this.pool = undefined;
+        throw error;
+      });
     const pool = await readCapacityPool(this.prisma, await this.pool);
     if (!pool) {
       this.pool = undefined;
@@ -476,7 +590,7 @@ export class ManagedRunnerManager {
       startupDeadlineAt: new Date(now.getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
       nextAttemptAt: null,
       capacityRevision: null,
-      lastError: Prisma.DbNull,
+      lastError: this.restartReason(mapping),
     };
     if (!needStorage && !needCompute) return { next: await this.commit(mapping, onward) };
     const taken = await withTransactionRetry(
@@ -535,7 +649,7 @@ export class ManagedRunnerManager {
 
   private async provisioning(start: ManagedRunner): Promise<Step> {
     const { mapping, volume } = await this.ensureVolume(start);
-    if (!mapping.pvcUid) return { next: await this.commit(mapping, { pvcUid: volume.uid, ...this.settled(mapping) }) };
+    if (!mapping.pvcUid) return { next: await this.commit(mapping, { pvcUid: volume.uid, ...this.settled(mapping), ...this.roomMade(mapping) }) };
     if (!volume.boundTo) return this.waitWithin(mapping);
 
     const backing = await this.backend.readBacking(volume);
@@ -557,26 +671,45 @@ export class ManagedRunnerManager {
       next: await this.commit(issued.mapping, {
         managementState: 'STARTING',
         stateEnteredAt: this.now(),
-        lastError: Prisma.DbNull,
+        lastError: this.restartReason(issued.mapping),
         ...this.settled(issued.mapping),
+        ...this.roomMade(issued.mapping),
       }),
     };
   }
 
-  private async starting(mapping: ManagedRunner): Promise<Step> {
-    await this.verifyStorage(mapping);
+  private async starting(start: ManagedRunner): Promise<Step> {
+    const storage = await this.verifyStorage(start);
+    let mapping = start;
     let instance = await this.backend.readInstance(mapping);
     if (!instance && mapping.podUid) {
       // The recorded instance is gone, and nothing proves it stopped writing.
       return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.goneUnproven(mapping));
     }
     if (!instance) {
-      // The one instance of this generation, created only where the backend's single-instance guard
-      // is known to refuse any other.
+      // The one instance of this generation, created only on a volume nothing else holds (a backup's
+      // helper container, an attachment left behind), and only where the backend's single-instance
+      // guard is known to refuse any other.
+      const holders = await this.backend.volumeHolders(storage);
+      if (holders.length > 0) return this.volumeInUse(mapping, holders.join(', '));
+      if ((mapping.lastError as { code?: unknown } | null)?.code === 'VOLUME_IN_USE') {
+        // Free again: the startup deadline runs from now, and a restart's own reason is back.
+        mapping = await this.commit(mapping, {
+          lastError: this.restartReason(mapping),
+          startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
+        });
+      }
       await this.backend.requireInstanceGuard(mapping);
       const begun = await this.beginOperation(mapping, 'CREATE_POD');
-      instance = await this.backend.createInstance(begun);
-      return { next: await this.recordInstance(begun, instance) };
+      try {
+        instance = await this.backend.createInstance(begun);
+      } catch (error) {
+        // Refused for a holder that came after the look above, with nothing made: the same wait.
+        if (error instanceof ManagedVolumeHeld) return this.volumeInUse(begun, error.detail, { resourceOperationState: 'COMPLETED' });
+        if (error instanceof ManagedInstanceLimit) return this.waitForRoom(begun, 'CONTAINER_LIMIT', error.detail);
+        throw error;
+      }
+      return { next: await this.recordInstance(begun, instance, this.roomMade(begun)) };
     }
     if (mapping.podUid && instance.uid !== mapping.podUid) {
       return this.fence(mapping, 'POD_REPLACED', this.replacedUnproven(mapping, instance));
@@ -590,14 +723,18 @@ export class ManagedRunnerManager {
     if (instance.removing) return this.waitWithin(mapping);
     const report = instance.running ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
     if (!report) return this.waitWithin(mapping);
-    // READY needs model supply as well as a live instance: the runtime it is found ready with is the
-    // one a default workspace with no history starts on, recorded, never guessed later.
-    const [initialProvider] = managedRuntimeSupply(report);
+    // READY needs model supply as well as a live instance: a runtime signed in on the runner, or else
+    // one of the owner's own model keys a runtime it has installed runs. What it is found ready with —
+    // the runtime's name, or the key's slug — is what a default workspace with no history starts on,
+    // recorded, never guessed later.
+    const [runtime] = managedRuntimeSupply(report);
+    const initialProvider = runtime ?? (await managedKeySupply(this.prisma, mapping.ownerId, report));
     if (!initialProvider) return this.withoutSupply(mapping);
+    // The attempts it took stay counted until it has stayed up (`stoodUp`): a crash loop that
+    // reaches READY each time still ends.
     await this.commit(mapping, {
       managementState: 'READY',
       stateEnteredAt: this.now(),
-      attempt: 0,
       nextAttemptAt: null,
       startupDeadlineAt: null,
       lastError: Prisma.DbNull,
@@ -691,7 +828,8 @@ export class ManagedRunnerManager {
    * DRAINING. Until the instance accepts, the drain is called off — back to READY, claims open
    * again — by demand, by work in the records, by the instance reporting work or no longer reporting,
    * or by the drain budget running out unaccepted; never while the owner's account is disabled. Once
-   * it accepts it exits on its own; nothing here stops it. Its stop then goes through the
+   * it accepts it exits on its own; nothing here stops it, unless it overruns the drain time on a
+   * backend whose host reports every stop it makes (`stopOverdue`). Its stop then goes through the
    * single-writer gate's own rules: its host's report of every process stopped is recorded as the
    * stop proof, the instance object is released by UID, and the mapping sleeps only once the object
    * is gone and the volume released. An instance that vanished or was replaced unobserved, or was
@@ -729,16 +867,35 @@ export class ManagedRunnerManager {
     const now = this.now();
     if (!mapping.stopAcknowledgedAt) {
       // A disabled owner's drain is never called off: its runner, refused at every door, can neither
-      // accept nor be kept, and stops on its own.
-      const abort = ownerDisabled ? null : await this.drainAbort(mapping, now);
+      // accept nor be kept, and stops on its own — or, past the drain time, is stopped (`stopOverdue`).
+      if (ownerDisabled) {
+        await this.stopOverdue(mapping, mapping.stopRequestedAt ?? mapping.stateEnteredAt, now);
+        return { done: 'DRAINING' };
+      }
+      const abort = await this.drainAbort(mapping, now);
       return abort ? this.abortDrain(mapping, abort) : { done: 'DRAINING' };
     }
-    // Accepted: it stops by itself. Overdue is said, never forced.
+    // Accepted: it stops by itself. Overdue is said, and forced only where the backend can (`stopOverdue`).
     const overdue = now.getTime() - mapping.stopAcknowledgedAt.getTime() > this.profile.lifecycle.drainSeconds * 1000;
-    if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== 'SLEEP_STOP_OVERDUE') {
-      await this.commit(mapping, { lastError: { ...managedRunnerReason('SLEEP_STOP_OVERDUE'), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
+    const said = this.backend.stopInstance ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
+    if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== said) {
+      await this.commit(mapping, { lastError: { ...managedRunnerReason(said), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
     }
+    await this.stopOverdue(mapping, mapping.stopAcknowledgedAt, now);
     return { done: 'DRAINING' };
+  }
+
+  /**
+   * A drain that is past its drain time since `since` — accepted and not yet stopped, or a disabled
+   * owner's runner that has not stopped by itself — is stopped, where the backend's host reports
+   * every stop it makes (`stopInstance`: Docker; Kubernetes has none and nothing is forced). Asking
+   * is never the proof: the gate still waits for the host's report of the exit, then removes the
+   * instance by UID, as for a runner that stopped on its own.
+   */
+  private async stopOverdue(mapping: ManagedRunner, since: Date, now: Date): Promise<void> {
+    if (!this.backend.stopInstance || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
+    this.log.warn(`managed runner ${mapping.id}: draining past its drain time; asking ${this.backend.terms.instance} ${mapping.podUid} to stop`);
+    await this.backend.stopInstance(mapping);
   }
 
   /** Why an unaccepted drain is called off now, or null to keep waiting for the instance. */
@@ -936,18 +1093,95 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The recorded instance is terminal. With its host's report of it, that report is recorded as the
-   * stop proof and the mapping fails retryable: an explicit retry replaces the instance. One declared
-   * terminal by anything but its host proves nothing about the host: FENCING.
+   * The recorded instance of a STARTING or READY mapping is terminal, unasked: a crash, the memory
+   * limit, its host or Docker restarting. One declared terminal by anything but its host proves
+   * nothing about the host: FENCING. With its host's report of the stop, that report is recorded as
+   * the stop proof and:
+   *
+   *   - wanted running, it is started again by itself. The mapping goes back to REQUESTED with the
+   *     stopped instance recorded — what an owner's retry writes — and after the backoff of its
+   *     attempt the single-writer gate removes that instance by UID, waits for its volume to be
+   *     released and starts the next generation on the same volume and runner. Each stop spends an
+   *     attempt, as a failed try on the way up does, unless the runner had stayed READY for twice the
+   *     longest backoff (`stoodUp`); the stop that spends the last one leaves it FAILED, retryable,
+   *     so a crash loop ends there. Compute stays reserved throughout, as for a retry.
+   *   - asked to sleep by its owner, it goes to sleep: the drain's end (`draining`) releases it.
+   *
+   * Every such stop is logged with its exit code and whether it ran out of memory, and the owner's
+   * reason says which, while it restarts and once it has failed.
    */
   private async terminated(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
     if (!instance.stopConfirmed) {
       return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', this.stopUnconfirmed(instance));
     }
-    const proof = stopProofFor(mapping.fencingReceipt, this.predecessorOf(mapping)) ?? this.backend.observedStop(this.predecessorOf(mapping), instance, this.now());
-    return this.fail(mapping, 'POD_TERMINATED', `${this.backend.terms.instance} ${instance.uid} is ${instance.phase}`, {
-      fencingReceipt: proof as unknown as Prisma.InputJsonValue,
+    const now = this.now();
+    const proof = stopProofFor(mapping.fencingReceipt, this.predecessorOf(mapping)) ?? this.backend.observedStop(this.predecessorOf(mapping), instance, now);
+    const recorded = { fencingReceipt: proof as unknown as Prisma.InputJsonValue };
+    const detail = `${this.backend.terms.instance} ${instance.uid} is ${instance.phase}`;
+    const outOfMemory = instance.exit?.outOfMemory === true;
+    const stopped = `managed runner ${mapping.id}: POD_TERMINATED: ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation} `
+      + `stopped in ${mapping.managementState} with exit code ${instance.exit?.code ?? 'unknown'}, ${outOfMemory ? 'out of memory' : 'not out of memory'}`;
+    if (mapping.desiredState !== 'RUNNING') {
+      this.log.warn(`${stopped}; its owner asked it to sleep, so it goes to sleep`);
+      return {
+        next: await this.commit(mapping, { ...recorded, managementState: 'DRAINING', stateEnteredAt: now, drainDemandRevision: mapping.demandRevision, lastError: Prisma.DbNull }),
+      };
+    }
+    const { maxAttempts } = this.profile.lifecycle;
+    const attempt = (this.stoodUp(mapping) ? 0 : mapping.attempt) + 1;
+    if (attempt >= maxAttempts) {
+      this.log.warn(`${stopped}; FAILED: attempt ${attempt} of ${maxAttempts} in a row`);
+      return this.fail(mapping, outOfMemory ? 'POD_OUT_OF_MEMORY' : 'POD_TERMINATED', detail, { ...recorded, attempt });
+    }
+    const delayMs = this.backoffDelay(attempt);
+    this.log.warn(`${stopped}; starting generation ${mapping.generation + 1} on the same volume in ${Math.ceil(delayMs / 1000)} s (attempt ${attempt} of ${maxAttempts})`);
+    await this.commit(mapping, {
+      ...recorded,
+      managementState: 'REQUESTED',
+      stateEnteredAt: now,
+      attempt,
+      nextAttemptAt: new Date(now.getTime() + delayMs),
+      startupDeadlineAt: null,
+      lastError: { ...managedRunnerReason(outOfMemory ? 'POD_RESTARTING_OUT_OF_MEMORY' : 'POD_RESTARTING'), detail },
     });
+    return { done: 'BACKOFF' };
+  }
+
+  /**
+   * READY for at least twice the longest backoff: what it took to get there no longer counts against
+   * its next stop, as the kubelet starts a crash loop's backoff again after twice its ceiling.
+   */
+  private stoodUp(mapping: ManagedRunner): boolean {
+    return mapping.managementState === 'READY'
+      && this.now().getTime() - mapping.stateEnteredAt.getTime() >= 2 * this.profile.lifecycle.backoffMaxSeconds * 1000;
+  }
+
+  /**
+   * The reason an automatic restart stands under until the runner is READY: the stored reason itself,
+   * or the one a wait on the restart's way carries (`waitReason`), so that the restart's reason comes
+   * back when the wait ends. A start nobody restarted — a wake, an owner's retry — has none.
+   */
+  private restartReason(mapping: ManagedRunner): Prisma.InputJsonValue | typeof Prisma.DbNull {
+    const stored = mapping.lastError as { restart?: unknown } | null;
+    if (restartingReason(stored)) return stored as Prisma.InputJsonValue;
+    return restartingReason(stored?.restart) ? (stored!.restart as Prisma.InputJsonValue) : Prisma.DbNull;
+  }
+
+  /**
+   * The reason for a wait that ends by itself while the runner is being started: its volume still
+   * detaching or held by something else, the environment's cap on what it holds, a transient error.
+   * The owner reads it while it lasts. On an automatic restart's way it also carries the restart's own
+   * reason (`restart`, which no client is shown), and `restartReason` gives that back once the wait is
+   * over. Kept in the reason itself, it goes wherever the reason goes: READY, a failure, a fence or a
+   * sleep replaces it, restart and all.
+   */
+  private waitReason(mapping: ManagedRunner, code: string, detail?: string): Prisma.InputJsonValue {
+    const restart = this.restartReason(mapping);
+    return {
+      ...managedRunnerReason(code),
+      ...(detail === undefined ? {} : { detail }),
+      ...(restart === Prisma.DbNull ? {} : { restart: restart as Prisma.InputJsonValue }),
+    };
   }
 
   /**
@@ -992,7 +1226,7 @@ export class ManagedRunnerManager {
     const holders = await this.backend.volumeHolders(storage);
     if (holders.length > 0) {
       if ((mapping.lastError as { code?: unknown } | null)?.code !== 'VOLUME_STILL_ATTACHED') {
-        await this.commit(mapping, { lastError: { ...managedRunnerReason('VOLUME_STILL_ATTACHED'), detail: holders.join(', ') } });
+        await this.commit(mapping, { lastError: this.waitReason(mapping, 'VOLUME_STILL_ATTACHED', holders.join(', ')) });
       }
       return { done: mapping.managementState === 'FENCING' ? 'FENCING' : 'WAITING' };
     }
@@ -1066,12 +1300,14 @@ export class ManagedRunnerManager {
 
   /**
    * The gate opens: generation N is retired on `proof`, and N+1 is reserved in the same
-   * compare-and-set — no instance recorded, a fresh attempt budget, REQUESTED. The retired credential
-   * is replaced by one nobody holds; N+1's is issued with its own bootstrap credential once N's is
-   * removed.
+   * compare-and-set — no instance recorded, REQUESTED. A retry, an owner's or the manager's own
+   * after a stop (`terminated`), carries its attempts and reason over; a fencing receipt starts a
+   * fresh budget. The retired credential is replaced by one nobody holds; N+1's is issued with its
+   * own bootstrap credential once N's is removed.
    */
   private async advance(mapping: ManagedRunner, proof: ManagedRunnerStopProof): Promise<ManagedRunner> {
     const now = this.now();
+    const retried = mapping.managementState === 'REQUESTED';
     await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -1086,10 +1322,10 @@ export class ManagedRunnerManager {
             fencingReceipt: { ...proof, retiredAt: now.toISOString() } as unknown as Prisma.InputJsonValue,
             managementState: 'REQUESTED',
             stateEnteredAt: now,
-            attempt: 0,
+            attempt: retried ? mapping.attempt : 0,
             nextAttemptAt: null,
             startupDeadlineAt: null,
-            lastError: Prisma.DbNull,
+            lastError: this.restartReason(mapping),
             ...this.settled(mapping),
             revision: { increment: 1 },
             leaseExpiresAt: this.leaseUntil(now),
@@ -1152,6 +1388,37 @@ export class ManagedRunnerManager {
   }
 
   /**
+   * FAILED with PVC_MISSING: the recorded volume is looked for again, by name. Once it is there as
+   * recorded — its UID, owner and runner, bound to the recorded storage, as a restore by the runbook
+   * leaves it — and nothing holds it any more (the restore's own containers have gone), the failure
+   * becomes retryable (PVC_RESTORED), and a retry starts the runner on it through the usual checks.
+   * Anything else under the name changes nothing but the operator's detail. Nothing is created,
+   * adopted or removed here.
+   */
+  private async volumeBack(mapping: ManagedRunner): Promise<Step> {
+    const { terms } = this.backend;
+    const recorded = `${terms.volume} ${mapping.pvcName} (${mapping.pvcUid})`;
+    let detail: string;
+    try {
+      const holders = await this.backend.volumeHolders(await this.verifyStorage(mapping));
+      if (holders.length === 0) {
+        this.log.warn(`managed runner ${mapping.id}: PVC_RESTORED: its recorded ${recorded} is back; it can be retried`);
+        await this.commit(mapping, { lastError: { ...managedRunnerReason('PVC_RESTORED'), detail: `${recorded} is back as recorded` } });
+        return { done: 'FAILED' };
+      }
+      detail = `${recorded} is back as recorded, and still held by ${holders.join(', ')}`;
+    } catch (error) {
+      if (!(error instanceof ManagedRunnerConflict)) throw error;
+      detail = error.code === 'PVC_MISSING' ? error.detail : `a ${terms.volume} under its name is not the recorded one: ${error.code}: ${error.detail}`;
+    }
+    if ((mapping.lastError as { detail?: unknown } | null)?.detail !== detail) {
+      this.log.warn(`managed runner ${mapping.id}: PVC_MISSING: ${detail}`);
+      await this.commit(mapping, { lastError: { ...managedRunnerReason('PVC_MISSING'), detail } });
+    }
+    return { done: 'FAILED' };
+  }
+
+  /**
    * The bootstrap credential of the mapping's generation. A new one carries a fresh credential; once
    * an instance has been started no new credential is ever issued under it here.
    */
@@ -1181,9 +1448,10 @@ export class ManagedRunnerManager {
     if (problem) throw new ManagedRunnerConflict('POD_CONFLICT', problem);
   }
 
-  private async recordInstance(mapping: ManagedRunner, instance: ManagedInstance): Promise<ManagedRunner> {
+  private async recordInstance(mapping: ManagedRunner, instance: ManagedInstance, also: Prisma.ManagedRunnerUpdateManyMutationInput = {}): Promise<ManagedRunner> {
     this.checkInstance(mapping, instance);
     return this.commit(mapping, {
+      ...also,
       podName: instance.name,
       podUid: instance.uid,
       nodeName: instance.node,
@@ -1202,7 +1470,7 @@ export class ManagedRunnerManager {
       async (tx) => {
         const { count } = await tx.managedRunner.updateMany({
           where: { id: mapping.id, revision: mapping.revision, leaseHolder: this.holder },
-          data: { revision: { increment: 1 }, leaseExpiresAt: this.leaseUntil(now), ...this.settled(mapping) },
+          data: { revision: { increment: 1 }, leaseExpiresAt: this.leaseUntil(now), ...this.settled(mapping), ...this.roomMade(mapping) },
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash } });
@@ -1232,11 +1500,11 @@ export class ManagedRunnerManager {
     return new Date(now.getTime() + this.profile.lifecycle.leaseSeconds * 1000);
   }
 
-  /** Take (or keep) the lease: free, expired, or already this replica's. */
+  /** Take (or keep) the lease of one of this backend's mappings: free, expired, or already this replica's. */
   private async acquireLease(id: string): Promise<ManagedRunner | null> {
     const now = this.now();
     const { count } = await this.prisma.managedRunner.updateMany({
-      where: { id, OR: [{ leaseHolder: null }, { leaseHolder: this.holder }, { leaseExpiresAt: { lte: now } }] },
+      where: { id, backend: this.backend.name, OR: [{ leaseHolder: null }, { leaseHolder: this.holder }, { leaseExpiresAt: { lte: now } }] },
       data: { leaseHolder: this.holder, leaseExpiresAt: this.leaseUntil(now) },
     });
     return count === 0 ? null : this.reread(id);
@@ -1283,6 +1551,59 @@ export class ManagedRunnerManager {
     return mapping.resourceOperationState === 'PENDING' ? { resourceOperationState: 'COMPLETED' } : {};
   }
 
+  /**
+   * Something other than the mapping's own instance holds its volume, so no instance is created on
+   * it: the wait the gate makes for a predecessor's volume (VOLUME_STILL_ATTACHED). Nothing is spent
+   * and no startup deadline runs; `starting` sets the deadline afresh once the volume is free.
+   */
+  private async volumeInUse(mapping: ManagedRunner, holders: string, also: Prisma.ManagedRunnerUpdateManyMutationInput = {}): Promise<Step> {
+    const waiting = (mapping.lastError as { code?: unknown } | null)?.code === 'VOLUME_IN_USE';
+    if (!waiting) {
+      this.log.warn(`managed runner ${mapping.id}: VOLUME_IN_USE: ${this.backend.terms.volume} ${mapping.pvcName} is held by ${holders}; nothing is started on it until it is free`);
+    }
+    if (!waiting || Object.keys(also).length > 0) {
+      await this.commit(mapping, { ...also, lastError: this.waitReason(mapping, 'VOLUME_IN_USE', holders), startupDeadlineAt: null });
+    }
+    return { done: 'WAITING' };
+  }
+
+  /**
+   * The backend made nothing because the environment is at a cap on what it holds: the Docker
+   * channel's `maxContainers` (CONTAINER_LIMIT), or a namespace ResourceQuota on Kubernetes
+   * (KUBERNETES_QUOTA_EXCEEDED), which can refuse the volume, the credential or the instance. The
+   * budget is meant to stay below such a cap, so this is something the pool does not count or a cap set
+   * below the budget: room comes back by itself when another runner's instance is removed, or when an
+   * operator raises the cap. So it waits as it does for a held volume — no attempt spent, no startup
+   * deadline running — and asks again after `capacityRetrySeconds`. Once the create goes through, the
+   * wait ends (`roomMade`) and the deadline runs from then.
+   */
+  private async waitForRoom(mapping: ManagedRunner, code: string, detail: string): Promise<Step> {
+    if ((mapping.lastError as { code?: unknown } | null)?.code !== code) {
+      this.log.warn(`managed runner ${mapping.id}: ${code}: ${detail}; it is started once there is room`);
+    }
+    await this.commit(mapping, {
+      resourceOperationState: 'COMPLETED',
+      lastError: this.waitReason(mapping, code, detail),
+      startupDeadlineAt: null,
+      nextAttemptAt: new Date(this.now().getTime() + this.profile.lifecycle.capacityRetrySeconds * 1000),
+    });
+    return { done: 'WAITING' };
+  }
+
+  /**
+   * A create a wait for room held back has gone through: the wait's reason goes, an automatic
+   * restart's own coming back (`restartReason`), and the startup deadline runs from now.
+   */
+  private roomMade(mapping: ManagedRunner): Prisma.ManagedRunnerUpdateManyMutationInput {
+    const code = (mapping.lastError as { code?: unknown } | null)?.code;
+    if (typeof code !== 'string' || !ROOM_WAITS.has(code)) return {};
+    return {
+      lastError: this.restartReason(mapping),
+      nextAttemptAt: null,
+      startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
+    };
+  }
+
   /** Keep waiting, unless the startup deadline has passed. */
   private async waitWithin(mapping: ManagedRunner): Promise<Step> {
     if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= this.now()) {
@@ -1292,13 +1613,14 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The instance is up and reporting, with no runtime installed and signed in: not READY. Said as
-   * MODEL_UNAVAILABLE while the startup deadline lasts — a runtime signed in meanwhile makes the next
-   * pass READY — and then FAILED with that cause, retryable, so the owner can retry once one is.
+   * The instance is up and reporting, with no runtime installed and signed in and no model key of the
+   * owner's own it can run: not READY. Said as MODEL_UNAVAILABLE while the startup deadline lasts — a
+   * runtime signed in or a key added meanwhile makes the next pass READY — and then FAILED with that
+   * cause, retryable, so the owner can retry once one is.
    */
   private async withoutSupply(mapping: ManagedRunner): Promise<Step> {
     if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= this.now()) {
-      return this.fail(mapping, MODEL_UNAVAILABLE, `no runtime installed and signed in by ${mapping.startupDeadlineAt.toISOString()}`);
+      return this.fail(mapping, MODEL_UNAVAILABLE, `no runtime signed in and no model key of the owner's it runs by ${mapping.startupDeadlineAt.toISOString()}`);
     }
     if ((mapping.lastError as { code?: unknown } | null)?.code !== MODEL_UNAVAILABLE) {
       await this.commit(mapping, { lastError: { ...managedRunnerReason(MODEL_UNAVAILABLE) } });
@@ -1352,6 +1674,30 @@ export class ManagedRunnerManager {
     );
   }
 
+  /** A transient failure while only looking (OBSERVING_STATES): said in the log, nothing spent or written. */
+  private unanswered(mapping: ManagedRunner, error: unknown): Step {
+    this.log.warn(`managed runner ${mapping.id}: ${mapping.managementState}, and the ${this.backend.name} backend did not answer: ${(error as Error).message}; looking again next pass`);
+    return { done: 'BACKOFF' };
+  }
+
+  /**
+   * The backend could not be reached at all while the mapping was being provisioned or started:
+   * nothing was tried, so nothing is spent. Said as the transient error it is, and tried again after
+   * the backoff of the attempt it is on — pass after pass, however long the outage lasts.
+   */
+  private async unreachable(mapping: ManagedRunner, error: unknown): Promise<Step> {
+    const delayMs = this.backoffDelay(Math.max(1, mapping.attempt));
+    this.log.warn(
+      `managed runner ${mapping.id}: ${mapping.managementState}, and the ${this.backend.name} backend cannot be reached: ${(error as Error).message}; `
+        + `nothing spent (attempt ${mapping.attempt} of ${this.profile.lifecycle.maxAttempts}), trying again in ${Math.ceil(delayMs / 1000)} s`,
+    );
+    await this.commit(mapping, {
+      nextAttemptAt: new Date(this.now().getTime() + delayMs),
+      lastError: this.waitReason(mapping, 'TRANSIENT'),
+    });
+    return { done: 'BACKOFF' };
+  }
+
   /** A transient failure spends one attempt; the last one leaves the mapping FAILED, retryable. */
   private async backoff(mapping: ManagedRunner, error: unknown): Promise<Step> {
     const attempt = mapping.attempt + 1;
@@ -1366,15 +1712,19 @@ export class ManagedRunnerManager {
       });
       return { done: 'FAILED' };
     }
+    await this.commit(mapping, {
+      attempt,
+      nextAttemptAt: new Date(this.now().getTime() + this.backoffDelay(attempt)),
+      lastError: this.waitReason(mapping, 'TRANSIENT'),
+    });
+    return { done: 'BACKOFF' };
+  }
+
+  /** The wait before attempt `attempt`: doubling from the base up to the ceiling. */
+  private backoffDelay(attempt: number): number {
     const { backoffBaseSeconds, backoffMaxSeconds } = this.profile.lifecycle;
     const ceiling = Math.min(backoffMaxSeconds, backoffBaseSeconds * 2 ** (attempt - 1)) * 1000;
     // Subtractive jitter, at most half: never longer than the ceiling, never in lockstep.
-    const delayMs = Math.round(ceiling - ceiling * 0.5 * this.random());
-    await this.commit(mapping, {
-      attempt,
-      nextAttemptAt: new Date(this.now().getTime() + delayMs),
-      lastError: { ...managedRunnerReason('TRANSIENT') },
-    });
-    return { done: 'BACKOFF' };
+    return Math.round(ceiling - ceiling * 0.5 * this.random());
   }
 }

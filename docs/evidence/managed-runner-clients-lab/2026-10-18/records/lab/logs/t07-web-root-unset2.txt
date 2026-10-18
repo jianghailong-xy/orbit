@@ -1,0 +1,11 @@
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+
+page.waitForTimeout: Target page, context or browser has been closed
+    at run (/mnt/data/tmp/t07-34ZtjU1Q/kit/t07web.mjs:119:16)
+    at async file:///mnt/data/tmp/t07-34ZtjU1Q/kit/t07web.mjs:178:24 {
+  log: []
+}
+
+Node.js v26.10.0

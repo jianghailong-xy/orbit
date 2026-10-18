@@ -1,0 +1,69 @@
+[orbit-runner 2026-10-18T12:31:51.257Z] runner "t08-selfhost" online -> http://127.0.0.1:13710 (max 2 concurrent)
+[orbit-runner 2026-10-18T12:32:06.262Z] claude plan-usage unavailable: open /mnt/data/tmp/t08sh/home/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-18T12:32:22.106Z] session 01a14eff-aff0-72c7-9047-d80edc1b7117 — created missing workDir "/mnt/data/tmp/t08sh/work/repo"
+[orbit-runner 2026-10-18T12:32:22.116Z] > interactive run 01a14eff-aff0-72c7-9047-d80edc1b7117 — t08 self-managed unset
+[orbit-runner 2026-10-18T12:32:22.214Z] > interactive run 52825052-f40f-5dc5-ab48-1408076f1d1d — Task: T08 self-managed task unset NOW
+[orbit-runner 2026-10-18T12:32:48.256Z] > interactive run 3ca7af23-f6c3-5132-86ee-72678670ed34 — Task: T08 self-managed task unset AT
+[orbit-runner 2026-10-18T12:32:48.287Z] ○ interactive engine 52825052-f40f-5dc5-ab48-1408076f1d1d recycled (session remains resumable)
+[orbit-runner 2026-10-18T12:32:48.290Z] ○ interactive engine 01a14eff-aff0-72c7-9047-d80edc1b7117 recycled (session remains resumable)
+[orbit-runner 2026-10-18T12:34:18.960Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:34:18.960Z] inbox poll failed for 3ca7af23-f6c3-5132-86ee-72678670ed34: Get "http://127.0.0.1:13710/api/runner/sessions/3ca7af23-f6c3-5132-86ee-72678670ed34/inbox?acceptsSteer=1&leaseGeneration=21c10747-98a6-4816-ac57-cee620b2926e": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:34:19.961Z] inbox poll failed for 3ca7af23-f6c3-5132-86ee-72678670ed34: Get "http://127.0.0.1:13710/api/runner/sessions/3ca7af23-f6c3-5132-86ee-72678670ed34/inbox?acceptsSteer=1&leaseGeneration=21c10747-98a6-4816-ac57-cee620b2926e": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:34:23.237Z] > interactive run 01a14f01-890a-7727-b0cd-6e1bdc04c303 — t08 self-managed false
+[orbit-runner 2026-10-18T12:34:23.324Z] > interactive run aaffcbf2-4186-53a3-8eb0-19073c9c1c14 — Task: T08 self-managed task false NOW
+[orbit-runner 2026-10-18T12:34:23.343Z] ○ interactive engine 3ca7af23-f6c3-5132-86ee-72678670ed34 recycled (session remains resumable)
+[orbit-runner 2026-10-18T12:35:20.416Z] > interactive run 0e2d19e1-1bd1-5dd6-a845-f99020c19286 — Task: T08 self-managed task false AT
+[orbit-runner 2026-10-18T12:35:20.450Z] ○ interactive engine 01a14f01-890a-7727-b0cd-6e1bdc04c303 recycled (session remains resumable)
+[orbit-runner 2026-10-18T12:35:20.465Z] ○ interactive engine aaffcbf2-4186-53a3-8eb0-19073c9c1c14 recycled (session remains resumable)
+[orbit-runner 2026-10-18T12:36:52.538Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:36:52.538Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:36:53.540Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:13.950Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:13.950Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:14.958Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:15.959Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:16.960Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:17.961Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:18.962Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:19.963Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:47:20.963Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:49:59.902Z] [orbit-runner 2026-10-18T12:49:59.902Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:50:00.903Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:51:49.507Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:51:49.507Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:51:50.508Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:58:53.537Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:58:53.537Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T12:58:54.538Z] inbox poll failed for 0e2d19e1-1bd1-5dd6-a845-f99020c19286: Get "http://127.0.0.1:13710/api/runner/sessions/0e2d19e1-1bd1-5dd6-a845-f99020c19286/inbox?acceptsSteer=1&leaseGeneration=7ee447d9-120e-4409-9634-2ba873cfbb1a": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T13:00:28.387Z] > interactive run 01a14f19-6adb-716c-ae75-5664cecff3c1 — t08 self-managed again-unset
+[orbit-runner 2026-10-18T13:00:28.584Z] > interactive run 2a1b7b67-c659-565c-af33-ee97dc067a43 — Task: T08 self-managed task again-unset NOW
+[orbit-runner 2026-10-18T13:00:28.634Z] ○ interactive engine 0e2d19e1-1bd1-5dd6-a845-f99020c19286 recycled (session remains resumable)
+[orbit-runner 2026-10-18T13:00:55.138Z] > interactive run 69d7c06c-0c96-51dc-9d7c-8ab8e4487a54 — Task: T08 self-managed task again-unset AT
+[orbit-runner 2026-10-18T13:00:55.169Z] ○ interactive engine 2a1b7b67-c659-565c-af33-ee97dc067a43 recycled (session remains resumable)
+[orbit-runner 2026-10-18T13:00:55.192Z] ○ interactive engine 01a14f19-6adb-716c-ae75-5664cecff3c1 recycled (session remains resumable)
+[orbit-runner 2026-10-18T13:00:55.873Z] [orbit-runner 2026-10-18T13:00:55.873Z] inbox poll failed for 69d7c06c-0c96-51dc-9d7c-8ab8e4487a54: Get "http://127.0.0.1:13710/api/runner/sessions/69d7c06c-0c96-51dc-9d7c-8ab8e4487a54/inbox?acceptsSteer=1&leaseGeneration=557c8691-9f73-4c41-ad81-ca30b853d742": dial tcp 127.0.0.1:13710: connect: connection refused
+claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T13:00:56.874Z] inbox poll failed for 69d7c06c-0c96-51dc-9d7c-8ab8e4487a54: Get "http://127.0.0.1:13710/api/runner/sessions/69d7c06c-0c96-51dc-9d7c-8ab8e4487a54/inbox?acceptsSteer=1&leaseGeneration=557c8691-9f73-4c41-ad81-ca30b853d742": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T13:02:30.579Z] > interactive run 01a14f1b-4848-74bf-b5de-c4b205a58d8d — t08 self-managed again-false
+[orbit-runner 2026-10-18T13:02:30.664Z] > interactive run d6706803-c391-5b97-bb3e-2afe25c26880 — Task: T08 self-managed task again-false NOW
+[orbit-runner 2026-10-18T13:02:30.696Z] ○ interactive engine 69d7c06c-0c96-51dc-9d7c-8ab8e4487a54 recycled (session remains resumable)
+[orbit-runner 2026-10-18T13:02:57.299Z] > interactive run c82193e2-7764-5114-9f28-d733c33bd4cd — Task: T08 self-managed task again-false AT
+[orbit-runner 2026-10-18T13:02:57.334Z] ○ interactive engine 01a14f1b-4848-74bf-b5de-c4b205a58d8d recycled (session remains resumable)
+[orbit-runner 2026-10-18T13:02:57.357Z] ○ interactive engine d6706803-c391-5b97-bb3e-2afe25c26880 recycled (session remains resumable)
+[orbit-runner 2026-10-18T13:02:58.067Z] [orbit-runner 2026-10-18T13:02:58.067Z] claim failed: Get "http://127.0.0.1:13710/api/runner/sessions/claim": dial tcp 127.0.0.1:13710: connect: connection refused
+inbox poll failed for c82193e2-7764-5114-9f28-d733c33bd4cd: Get "http://127.0.0.1:13710/api/runner/sessions/c82193e2-7764-5114-9f28-d733c33bd4cd/inbox?acceptsSteer=1&leaseGeneration=54268eb0-0a42-40f6-95a8-724fa6949862": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T13:02:59.067Z] inbox poll failed for c82193e2-7764-5114-9f28-d733c33bd4cd: Get "http://127.0.0.1:13710/api/runner/sessions/c82193e2-7764-5114-9f28-d733c33bd4cd/inbox?acceptsSteer=1&leaseGeneration=54268eb0-0a42-40f6-95a8-724fa6949862": dial tcp 127.0.0.1:13710: connect: connection refused
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 52825052-f40f-5dc5-ab48-1408076f1d1d — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] runner stopping; draining session supervisors...
+[orbit-runner 2026-10-18T13:06:22.546Z] [orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run aaffcbf2-4186-53a3-8eb0-19073c9c1c14 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 69d7c06c-0c96-51dc-9d7c-8ab8e4487a54 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 01a14f1b-4848-74bf-b5de-c4b205a58d8d — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 01a14eff-aff0-72c7-9047-d80edc1b7117 — detached for shutdown (resumable)
+⏸ interactive run d6706803-c391-5b97-bb3e-2afe25c26880 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 01a14f01-890a-7727-b0cd-6e1bdc04c303 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 2a1b7b67-c659-565c-af33-ee97dc067a43 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 3ca7af23-f6c3-5132-86ee-72678670ed34 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 01a14f19-6adb-716c-ae75-5664cecff3c1 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.546Z] ⏸ interactive run 0e2d19e1-1bd1-5dd6-a845-f99020c19286 — detached for shutdown (resumable)
+[orbit-runner 2026-10-18T13:06:22.579Z] ⏸ interactive run c82193e2-7764-5114-9f28-d733c33bd4cd — detached for shutdown (resumable)

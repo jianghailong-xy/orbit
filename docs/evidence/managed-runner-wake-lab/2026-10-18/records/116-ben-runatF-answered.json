@@ -1,0 +1,39 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:59.603",
+    "ingested_at": "2026-10-18T02:28:59.796084+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 8,
+    "session_id": "2886b5da-6729-590c-a769-878b75eada8c",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-BEN-OFFF-RUNAT",
+  "modelRequests": [],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:28:57.751",
+    "engine": "claude",
+    "id": "2886b5da-6729-590c-a769-878b75eada8c",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14cc4-e862-72bf-826a-eef3d5297937",
+    "title": "Task: T06-BEN-OFFF-RUNAT a task run time while the switch is false"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T02:28:59.811",
+      "client_turn_id": "initial-2886b5da-6729-590c-a769-878b75eada8c",
+      "content": "Start the task \u201cT06-BEN-OFFF-RUNAT a task run time while the switch is false\u201d.\n\nTask description:\nT06-BEN-OFFF-RUNAT a task run time while the switch is false\n\n",
+      "created_at": "2026-10-18T02:28:58.357",
+      "delivered_at": "2026-10-18T02:28:59.448",
+      "id": "01a14cd7-4375-763b-aed9-f113225ce495",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

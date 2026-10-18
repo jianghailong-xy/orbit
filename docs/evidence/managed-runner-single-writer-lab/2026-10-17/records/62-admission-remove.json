@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-17T20:19:30.005+00:00",
+  "note": "the k3s AdmissionConfiguration (/etc/rancher/k3s/orbit-admission) stays: it only holds the token for 10.0.2.2:13711",
+  "removed": "orbit-managed-runner-pods",
+  "webhook": null
+}
