@@ -1,0 +1,137 @@
+Application, 0x82c657840, pid: 81659, title: 'T07MacProbe', Disabled <App element pid: 81659>
+  MenuBar, 0x82c655b80, {{0.0, 0.0}, {1024.0, 30.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAA=>
+    MenuBarItem, 0x82c6548c0, {{10.0, 0.0}, {34.0, 30.0}}, title: 'Apple' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAAAAAAAAAAAAA==>
+      Menu, 0x82c654000, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAA=>
+        MenuItem, 0x82c655e00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_aboutThisMacRequested:', title: 'About This Mac' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0x82c656580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemInformationRequested:', title: 'System Information' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0x82c657980, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0x82c657d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemSettingsRequested:', title: 'System Settings…, 1 update' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0x82c654780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_appStoreRequested:', title: 'App Store' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0x82c654140, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0x82c656440, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentsRequested:', title: 'Recent Items' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAGAAAAAAAAAA==>
+          Menu, 0x82c655cc0, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAA=>
+            MenuItem, 0x82c655a40, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Applications', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0x82c655400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Installer' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0x82c655680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “Installer” in Finder' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAACAAAAAAAAAA==>
+            MenuItem, 0x82c654280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'System Settings' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAADAAAAAAAAAA==>
+            MenuItem, 0x82c657480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “System Settings” in Finder' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAEAAAAAAAAAA==>
+            MenuItem, 0x82c657200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'T07MacProbe' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAFAAAAAAAAAA==>
+            MenuItem, 0x82c654f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “T07MacProbe” in Finder' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAGAAAAAAAAAA==>
+            MenuItem, 0x82c656d00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAHAAAAAAAAAA==>
+            MenuItem, 0x82c655900, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Documents', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAIAAAAAAAAAA==>
+            MenuItem, 0x82c654500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'AnkaGuestAddons.pkg' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAJAAAAAAAAAA==>
+            MenuItem, 0x82c656bc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “AnkaGuestAddons.pkg” in Finder' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAKAAAAAAAAAA==>
+            MenuItem, 0x82c656f80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAALAAAAAAAAAA==>
+            MenuItem, 0x82c6543c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Servers', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAMAAAAAAAAAA==>
+            MenuItem, 0x82c656a80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Macintosh HD' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAANAAAAAAAAAA==>
+            MenuItem, 0x82c657340, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAOAAAAAAAAAA==>
+            MenuItem, 0x82c657700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_clearRecentItemsRequested:', title: 'Clear Menu' <AX element pid: 81659, token: +z4BAAAAAABvY29jMwAAAAAAAAAPAAAAAAAAAA==>
+        MenuItem, 0x82c654a00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAHAAAAAAAAAA==>
+        MenuItem, 0x82c65ae40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitPanelRequested:', title: 'Force Quit…' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0x82c65b5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitRequested:', title: 'Force Quit T07MacProbe' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAJAAAAAAAAAA==>
+        MenuItem, 0x82c65aa80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAKAAAAAAAAAA==>
+        MenuItem, 0x82c65a580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_sleepRequested:', title: 'Sleep' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAALAAAAAAAAAA==>
+        MenuItem, 0x82c65b840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartRequested:', title: 'Restart…' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAMAAAAAAAAAA==>
+        MenuItem, 0x82c65ad00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartNowRequested:', title: 'Restart' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAANAAAAAAAAAA==>
+        MenuItem, 0x82c65a6c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownRequested:', title: 'Shut Down…' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAOAAAAAAAAAA==>
+        MenuItem, 0x82c65bac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownNowRequested:', title: 'Shut Down' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAPAAAAAAAAAA==>
+        MenuItem, 0x82c65a080, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAQAAAAAAAAAA==>
+        MenuItem, 0x82c659900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_lockScreenRequested:', title: 'Lock Screen' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAARAAAAAAAAAA==>
+        MenuItem, 0x82c659f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutRequested:', title: 'Log Out Anka…' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAASAAAAAAAAAA==>
+        MenuItem, 0x82c65b980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutNowRequested:', title: 'Log Out Anka' <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAATAAAAAAAAAA==>
+        MenuItem, 0x82c6592c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLAAAAAAAAAAUAAAAAAAAAA==>
+    MenuBarItem, 0x82c658dc0, {{44.0, 0.0}, {110.0, 30.0}}, title: 'T07MacProbe' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAABAAAAAAAAAA==>
+      Menu, 0x82c65a800, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAA=>
+        MenuItem, 0x82c659680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontStandardAboutPanel:', title: 'About T07MacProbe' <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0x82c659a40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0x82c65b340, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Services' <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAACAAAAAAAAAA==>
+          Menu, 0x82c65abc0, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAA=>
+            MenuItem, 0x82c658140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Activity Monitor' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0x82c65b200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Allocations & Leaks' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0x82c659180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'File Activity' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAACAAAAAAAAAA==>
+            MenuItem, 0x82c658780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'System Trace' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAADAAAAAAAAAA==>
+            MenuItem, 0x82c65b0c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Active Application' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAAEAAAAAAAAAA==>
+            MenuItem, 0x82c658f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile App Under Mouse' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAAFAAAAAAAAAA==>
+            MenuItem, 0x82c658500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Entire System' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAAGAAAAAAAAAA==>
+            MenuItem, 0x82c6583c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Toggle Instruments Recording' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAAHAAAAAAAAAA==>
+            MenuItem, 0x82c658640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_configureServicesMenu:', title: 'Services Settings…' <AX element pid: 81659, token: +z4BAAAAAABvY29jNAAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0x82c659b80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0x82c658a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hide:', title: 'Hide T07MacProbe' <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0x82c6588c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hideOtherApplications:', title: 'Hide Others' <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0x82c6597c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'unhideAllApplications:', title: 'Show All', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAGAAAAAAAAAA==>
+        MenuItem, 0x82c65b480, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAHAAAAAAAAAA==>
+        MenuItem, 0x82c659cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'terminate:', title: 'Quit T07MacProbe' <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0x82c65a1c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'NSAlternateQuitMenuItem', title: 'Quit and Keep Windows' <AX element pid: 81659, token: +z4BAAAAAABvY29jLQAAAAAAAAAJAAAAAAAAAA==>
+    MenuBarItem, 0x82c658280, {{154.0, 0.0}, {42.0, 30.0}}, title: 'File' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAACAAAAAAAAAA==>
+      Menu, 0x82c659400, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jLgAAAAAAAAA=>
+        MenuItem, 0x82c658c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'menuAction:', title: 'New Window' <AX element pid: 81659, token: +z4BAAAAAABvY29jLgAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0x82c659e00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLgAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0x82c659540, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLgAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0x82c65a300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performClose:', title: 'Close', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLgAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0x82c65be80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'closeAll:', title: 'Close All', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLgAAAAAAAAAEAAAAAAAAAA==>
+    MenuBarItem, 0x82c65bd40, {{196.0, 0.0}, {44.0, 30.0}}, title: 'Edit' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAADAAAAAAAAAA==>
+      Menu, 0x82c662940, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAA=>
+        MenuItem, 0x82c6621c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'undo:', title: 'Undo', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0x82c662e40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'redo:', title: 'Redo', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0x82c6612c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0x82c660c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'cut:', title: 'Cut', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0x82c663980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'copy:', title: 'Copy', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0x82c660780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'paste:', title: 'Paste', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0x82c6603c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'delete:', title: 'Delete', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAGAAAAAAAAAA==>
+        MenuItem, 0x82c663ac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectAll:', title: 'Select All', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAHAAAAAAAAAA==>
+        MenuItem, 0x82c661e00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0x82c660640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_NSMenuItemAutoFillIdentifier', title: 'AutoFill' <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAJAAAAAAAAAA==>
+          Menu, 0x82c662580, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jNQAAAAAAAAA=>
+            MenuItem, 0x82c662d00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromContactsCommand:', title: 'Contact…', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNQAAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0x82c6608c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromPasswordsCommand:', title: 'Passwords…', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNQAAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0x82c662bc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromCreditCardsCommand:', title: 'Credit Card…', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNQAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0x82c660b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'startDictation:', title: 'Start Dictation…' <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAAKAAAAAAAAAA==>
+        MenuItem, 0x82c662800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontCharacterPalette:', title: 'Emoji & Symbols' <AX element pid: 81659, token: +z4BAAAAAABvY29jLwAAAAAAAAALAAAAAAAAAA==>
+    MenuBarItem, 0x82c661680, {{240.0, 0.0}, {50.0, 30.0}}, title: 'View' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAAEAAAAAAAAAA==>
+      Menu, 0x82c660280, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jMAAAAAAAAAA=>
+        MenuItem, 0x82c663e80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleFullScreen:', title: 'Enter Full Screen', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMAAAAAAAAAAAAAAAAAAAAA==>
+    MenuBarItem, 0x82c661180, {{290.0, 0.0}, {69.0, 30.0}}, title: 'Window' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAAFAAAAAAAAAA==>
+      Menu, 0x82c663200, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAA=>
+        MenuItem, 0x82c6626c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performMiniaturize:', title: 'Minimize', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0x82c661900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'miniaturizeAll:', title: 'Minimize All', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0x82c660000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performZoom:', title: 'Zoom', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0x82c661a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'zoomAll:', title: 'Zoom All', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0x82c662a80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomFill:', title: 'Fill', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0x82c660a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomCenter:', title: 'Center', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0x82c661cc0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAGAAAAAAAAAA==>
+        MenuItem, 0x82c6635c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Move & Resize' <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAHAAAAAAAAAA==>
+          Menu, 0x82c662300, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAA=>
+            MenuItem, 0x82c662f80, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Halves', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0x82c660140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeft:', title: 'Left', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0x82c663700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRight:', title: 'Right', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAACAAAAAAAAAA==>
+            MenuItem, 0x82c663c00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTop:', title: 'Top', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAADAAAAAAAAAA==>
+            MenuItem, 0x82c663480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottom:', title: 'Bottom', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAEAAAAAAAAAA==>
+            MenuItem, 0x82c663340, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAFAAAAAAAAAA==>
+            MenuItem, 0x82c661540, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Quarters', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAGAAAAAAAAAA==>
+            MenuItem, 0x82c662080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopLeft:', title: 'Top Left', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAHAAAAAAAAAA==>
+            MenuItem, 0x82c660dc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopRight:', title: 'Top Right', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAIAAAAAAAAAA==>
+            MenuItem, 0x82c660f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomLeft:', title: 'Bottom Left', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAJAAAAAAAAAA==>
+            MenuItem, 0x82c661400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomRight:', title: 'Bottom Right', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAKAAAAAAAAAA==>
+            MenuItem, 0x82c6617c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAALAAAAAAAAAA==>
+            MenuItem, 0x82c663840, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Arrange', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAMAAAAAAAAAA==>
+            MenuItem, 0x82c661040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftAndRight:', title: 'Left & Right', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAANAAAAAAAAAA==>
+            MenuItem, 0x82c660500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftThreeUp:', title: 'Left & Quarters', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAOAAAAAAAAAA==>
+            MenuItem, 0x82c663d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightAndLeft:', title: 'Right & Left', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAPAAAAAAAAAA==>
+            MenuItem, 0x82c661b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightThreeUp:', title: 'Right & Quarters', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAQAAAAAAAAAA==>
+            MenuItem, 0x82c789b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopAndBottom:', title: 'Top & Bottom', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAARAAAAAAAAAA==>
+            MenuItem, 0x82c78a580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopThreeUp:', title: 'Top & Quarters', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAASAAAAAAAAAA==>
+            MenuItem, 0x82c788b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomAndTop:', title: 'Bottom & Top', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAATAAAAAAAAAA==>
+            MenuItem, 0x82c78b840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomThreeUp:', title: 'Bottom & Quarters', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAUAAAAAAAAAA==>
+            MenuItem, 0x82c789cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomQuarters:', title: 'Quarters', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAVAAAAAAAAAA==>
+            MenuItem, 0x82c78a940, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAWAAAAAAAAAA==>
+            MenuItem, 0x82c788780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomUntile:', title: 'Return to Previous Size', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jNgAAAAAAAAAXAAAAAAAAAA==>
+        MenuItem, 0x82c7888c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Full Screen Tile', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0x82c78ae40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAJAAAAAAAAAA==>
+        MenuItem, 0x82c78b5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_removeWindowFromStageManagerSet:', title: 'Remove Window from Set', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAKAAAAAAAAAA==>
+        MenuItem, 0x82c78b200, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAALAAAAAAAAAA==>
+        MenuItem, 0x82c78af80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'arrangeInFront:', title: 'Bring All to Front', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAAMAAAAAAAAAA==>
+        MenuItem, 0x82c789e00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'alternateArrangeInFront:', title: 'Arrange in Front', Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jMQAAAAAAAAANAAAAAAAAAA==>
+    MenuBarItem, 0x82c78b340, {{359.0, 0.0}, {48.0, 30.0}}, title: 'Help' <AX element pid: 81659, token: +z4BAAAAAABvY29jAgAAAAAAAAAGAAAAAAAAAA==>
+      Menu, 0x82c78a300, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 81659, token: +z4BAAAAAABvY29jMgAAAAAAAAA=>
+        MenuItem, 0x82c788000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'showHelp:', title: 'T07MacProbe Help' <AX element pid: 81659, token: +z4BAAAAAABvY29jMgAAAAAAAAAAAAAAAAAAAA==>
+  TouchBar, 0x82c789040, {{80.0, 0.0}, {685.0, 30.0}}, Disabled <AX element pid: 81659, token: +z4BAAAAAABvY29jKwAAAAAAAAA=>

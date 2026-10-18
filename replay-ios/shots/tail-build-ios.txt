@@ -1,0 +1,300 @@
+2026-10-18 07:43:58.601 xcodebuild[4223:18972] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.52s         Setting up automation session
+    t =     4.78s         Wait for io.orbitd.t07probe to idle
+    t =     8.16s Checking existence of `Any (First Match)`
+    t =    10.03s Checking existence of `Any (First Match)`
+    t =    12.52s Checking existence of `Any (First Match)`
+    t =    15.63s Added attachment named '18a-asleep'
+    t =    15.63s Checking existence of `TextView (First Match)`
+    t =    15.80s Waiting 20.0s for TextView (First Match) to exist
+    t =    16.87s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    16.87s         Checking existence of `TextView (First Match)`
+    t =    17.02s Tap TextView (First Match)
+    t =    17.02s     Wait for io.orbitd.t07probe to idle
+    t =    17.02s     Find the TextView (First Match)
+    t =    17.25s     Check for interrupting elements affecting TextView
+    t =    17.43s     Synthesize event
+    t =    17.84s     Wait for io.orbitd.t07probe to idle
+    t =    19.77s Type 'T07-EVE-M1 wake wh...' into TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    19.77s     Wait for io.orbitd.t07probe to idle
+    t =    19.77s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    20.04s     Check for interrupting elements affecting TextView
+    t =    20.16s     Synthesize event
+    t =    21.22s     Wait for io.orbitd.t07probe to idle
+    t =    22.04s Checking existence of `TextView at {{32.0, 453.0}, {338.0, 22.0}}`
+    t =    22.34s Find the TextView at {{32.0, 453.0}, {338.0, 22.0}}
+    t =    22.67s Find the "T07-EVE-M1 wake while the Docker host is at its cap" TextView
+    t =    22.94s Find the "T07-EVE-M1 wake while the Docker host is at its cap" TextView
+    t =    23.27s Find the "T07-EVE-M1 wake while the Docker host is at its cap" TextView
+    t =    23.53s Find the "T07-EVE-M1 wake while the Docker host is at its cap" TextView
+    t =    23.80s Checking existence of `Button (First Match)`
+    t =    24.31s Checking existence of `Button (First Match)`
+    t =    25.02s Checking existence of `Button (First Match)`
+    t =    25.61s Checking existence of `Button (First Match)`
+    t =    25.95s Checking existence of `Button (First Match)`
+    t =    26.28s Find the Button (First Match)
+    t =    26.59s Find the "arrow.up.circle.fill" Button
+    t =    26.91s Find the "arrow.up.circle.fill" Button
+    t =    27.22s Find the "arrow.up.circle.fill" Button
+    t =    27.61s Find the "arrow.up.circle.fill" Button
+    t =    27.95s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    28.32s Find the "arrow.up.circle.fill" Button
+    t =    28.77s Tap "arrow.up.circle.fill" Button
+    t =    28.77s     Wait for io.orbitd.t07probe to idle
+    t =    28.77s     Find the "arrow.up.circle.fill" Button
+    t =    29.13s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    29.24s     Synthesize event
+    t =    29.55s     Wait for io.orbitd.t07probe to idle
+    t =    31.70s Checking existence of `Any (First Match)`
+    t =    36.79s Checking existence of `Any (First Match)`
+    t =    42.82s Added attachment named '18b-waking-at-the-container-cap'
+    t =    42.83s Checking existence of `Any (First Match)`
+    t =    44.98s Checking existence of `Any (First Match)`
+    t =    47.10s Checking existence of `Any (First Match)`
+    t =    49.00s Checking existence of `Any (First Match)`
+    t =    50.73s Checking existence of `Any (First Match)`
+    t =    52.56s Checking existence of `Any (First Match)`
+    t =    54.29s Checking existence of `Any (First Match)`
+    t =    56.25s Checking existence of `Any (First Match)`
+    t =    58.38s Checking existence of `Any (First Match)`
+    t =    60.18s Checking existence of `Any (First Match)`
+    t =    62.77s Checking existence of `Any (First Match)`
+    t =    65.05s Checking existence of `Any (First Match)`
+    t =    67.52s Checking existence of `Any (First Match)`
+    t =    69.70s Checking existence of `Any (First Match)`
+    t =    72.16s Checking existence of `Any (First Match)`
+    t =    75.04s Checking existence of `Any (First Match)`
+    t =    76.51s Checking existence of `Any (First Match)`
+    t =    77.94s Checking existence of `Any (First Match)`
+    t =    79.37s Checking existence of `Any (First Match)`
+    t =    80.79s Checking existence of `Any (First Match)`
+    t =    82.26s Checking existence of `Any (First Match)`
+    t =    84.07s Checking existence of `Any (First Match)`
+    t =    85.70s Checking existence of `Any (First Match)`
+    t =    87.62s Checking existence of `Any (First Match)`
+    t =    89.52s Checking existence of `Any (First Match)`
+    t =    91.70s Checking existence of `Any (First Match)`
+    t =    94.69s Added attachment named '18c-answered'
+    t =    96.72s Added attachment named 'verdict-18-docker-wake-at-the-cap.json'
+    t =    96.72s Terminate io.orbitd.t07probe:89427
+    t =    97.77s Tear Down
+    t =    97.77s     Added attachment named 'ReplayTeststest18DockerWakeAtTheCap-notes.txt'
+Test Case '-[T07ProbeUITests.ReplayTests test18DockerWakeAtTheCap]' passed (97.945 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+    t =     0.00s Start Test at 2026-10-18 07:45:36.391
+    t =     0.07s Set Up
+    t =     0.11s Open io.orbitd.t07probe
+    t =     0.11s     Launch io.orbitd.t07probe
+2026-10-18 07:45:36.512 xcodebuild[4223:18972] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 07:45:36.515 xcodebuild[4223:18972] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.96s         Setting up automation session
+    t =     3.77s         Wait for io.orbitd.t07probe to idle
+    t =     6.62s Checking existence of `Any (First Match)`
+    t =    11.42s Checking existence of `Any (First Match)`
+    t =    15.28s Checking existence of `Any (First Match)`
+    t =    17.88s Checking existence of `Any (First Match)`
+    t =    19.91s Checking existence of `Any (First Match)`
+    t =    22.21s Checking existence of `Any (First Match)`
+    t =    24.16s Checking existence of `Any (First Match)`
+    t =    25.81s Checking existence of `Any (First Match)`
+    t =    27.23s Checking existence of `Any (First Match)`
+    t =    28.74s Checking existence of `Any (First Match)`
+    t =    30.04s Checking existence of `Any (First Match)`
+    t =    31.44s Checking existence of `Any (First Match)`
+    t =    32.76s Checking existence of `Any (First Match)`
+    t =    34.14s Checking existence of `Any (First Match)`
+    t =    35.48s Checking existence of `Any (First Match)`
+    t =    36.78s Checking existence of `Any (First Match)`
+    t =    37.99s Checking existence of `Any (First Match)`
+    t =    39.34s Checking existence of `Any (First Match)`
+    t =    40.51s Checking existence of `Any (First Match)`
+    t =    41.69s Checking existence of `Any (First Match)`
+    t =    42.91s Checking existence of `Any (First Match)`
+    t =    44.15s Checking existence of `Any (First Match)`
+    t =    45.43s Checking existence of `Any (First Match)`
+    t =    47.96s Added attachment named '19a-asleep'
+    t =    47.96s Checking existence of `TextView (First Match)`
+    t =    48.31s Waiting 20.0s for TextView (First Match) to exist
+    t =    49.35s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    49.35s         Checking existence of `TextView (First Match)`
+    t =    49.50s Tap TextView (First Match)
+    t =    49.50s     Wait for io.orbitd.t07probe to idle
+    t =    49.51s     Find the TextView (First Match)
+    t =    49.72s     Check for interrupting elements affecting TextView
+    t =    49.92s     Synthesize event
+    t =    50.32s     Wait for io.orbitd.t07probe to idle
+    t =    52.46s Type 'T07-EVE-V1 wake wh...' into TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    52.46s     Wait for io.orbitd.t07probe to idle
+    t =    52.46s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    52.74s     Check for interrupting elements affecting TextView
+    t =    52.86s     Synthesize event
+    t =    54.00s     Wait for io.orbitd.t07probe to idle
+    t =    54.81s Checking existence of `TextView at {{32.0, 453.0}, {338.0, 22.0}}`
+    t =    55.05s Find the TextView at {{32.0, 453.0}, {338.0, 22.0}}
+    t =    55.36s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    55.61s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    55.89s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    56.08s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    56.25s Checking existence of `Button (First Match)`
+    t =    56.66s Checking existence of `Button (First Match)`
+    t =    57.07s Checking existence of `Button (First Match)`
+    t =    57.59s Checking existence of `Button (First Match)`
+    t =    57.75s Checking existence of `Button (First Match)`
+    t =    57.92s Find the Button (First Match)
+    t =    58.08s Find the "arrow.up.circle.fill" Button
+    t =    58.23s Find the "arrow.up.circle.fill" Button
+    t =    58.37s Find the "arrow.up.circle.fill" Button
+    t =    58.60s Find the "arrow.up.circle.fill" Button
+    t =    58.86s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    59.17s Find the "arrow.up.circle.fill" Button
+    t =    59.38s Tap "arrow.up.circle.fill" Button
+    t =    59.38s     Wait for io.orbitd.t07probe to idle
+    t =    59.38s     Find the "arrow.up.circle.fill" Button
+    t =    59.67s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    59.77s     Synthesize event
+    t =    60.08s     Wait for io.orbitd.t07probe to idle
+    t =    62.11s Checking existence of `Any (First Match)`
+    t =    64.17s Checking existence of `Any (First Match)`
+    t =    66.06s Checking existence of `Any (First Match)`
+    t =    67.96s Checking existence of `Any (First Match)`
+    t =    71.07s Added attachment named '19b-waking-volume-held'
+    t =    71.08s Checking existence of `Any (First Match)`
+    t =    73.71s Checking existence of `Any (First Match)`
+    t =    75.87s Checking existence of `Any (First Match)`
+    t =    78.35s Checking existence of `Any (First Match)`
+    t =    81.01s Checking existence of `Any (First Match)`
+    t =    83.67s Checking existence of `Any (First Match)`
+    t =    86.68s Checking existence of `Any (First Match)`
+    t =    89.28s Checking existence of `Any (First Match)`
+    t =    91.25s Checking existence of `Any (First Match)`
+    t =    93.78s Checking existence of `Any (First Match)`
+    t =    95.66s Checking existence of `Any (First Match)`
+    t =    97.37s Checking existence of `Any (First Match)`
+    t =    99.51s Checking existence of `Any (First Match)`
+    t =   101.45s Checking existence of `Any (First Match)`
+    t =   104.83s Checking existence of `Any (First Match)`
+    t =   108.47s Checking existence of `Any (First Match)`
+    t =   112.21s Checking existence of `Any (First Match)`
+    t =   115.37s Added attachment named '19c-answered-once-free'
+    t =   117.40s Added attachment named 'verdict-19-docker-volume-in-use.json'
+    t =   117.40s Terminate io.orbitd.t07probe:93018
+    t =   118.43s Tear Down
+    t =   118.43s     Added attachment named 'ReplayTeststest19DockerVolumeInUse-notes.txt'
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (119.004 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+    t =     0.00s Start Test at 2026-10-18 07:47:35.396
+    t =     0.08s Set Up
+    t =     0.21s Open io.orbitd.t07probe
+    t =     0.21s     Launch io.orbitd.t07probe
+2026-10-18 07:47:35.616 xcodebuild[4223:18972] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 07:47:35.618 xcodebuild[4223:18972] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.18s         Setting up automation session
+    t =     3.44s         Wait for io.orbitd.t07probe to idle
+    t =     6.02s Checking existence of `Any (First Match)`
+    t =     8.98s Checking existence of `Any (First Match)`
+    t =    11.49s Checking existence of `Any (First Match)`
+    t =    13.20s Checking existence of `Any (First Match)`
+    t =    15.10s Checking existence of `Any (First Match)`
+    t =    17.09s Checking existence of `Any (First Match)`
+    t =    19.56s Added attachment named '20a-asleep'
+    t =    19.56s Checking existence of `TextView (First Match)`
+    t =    19.75s Waiting 20.0s for TextView (First Match) to exist
+    t =    20.76s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    20.77s         Checking existence of `TextView (First Match)`
+    t =    20.88s Tap TextView (First Match)
+    t =    20.88s     Wait for io.orbitd.t07probe to idle
+    t =    20.89s     Find the TextView (First Match)
+    t =    21.03s     Check for interrupting elements affecting TextView
+    t =    21.17s     Synthesize event
+    t =    21.50s     Wait for io.orbitd.t07probe to idle
+    t =    22.93s Type 'T07-EVE-R1 wake af...' into TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    22.93s     Wait for io.orbitd.t07probe to idle
+    t =    22.93s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    23.18s     Check for interrupting elements affecting TextView
+    t =    23.26s     Synthesize event
+    t =    24.21s     Wait for io.orbitd.t07probe to idle
+    t =    25.03s Checking existence of `TextView at {{32.0, 453.0}, {338.0, 22.0}}`
+    t =    25.25s Find the TextView at {{32.0, 453.0}, {338.0, 22.0}}
+    t =    25.58s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    25.82s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    26.16s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    26.42s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    26.74s Checking existence of `Button (First Match)`
+    t =    27.35s Checking existence of `Button (First Match)`
+    t =    27.99s Checking existence of `Button (First Match)`
+    t =    28.61s Checking existence of `Button (First Match)`
+    t =    28.96s Checking existence of `Button (First Match)`
+    t =    29.28s Find the Button (First Match)
+    t =    29.65s Find the "arrow.up.circle.fill" Button
+    t =    29.98s Find the "arrow.up.circle.fill" Button
+    t =    30.30s Find the "arrow.up.circle.fill" Button
+    t =    30.61s Find the "arrow.up.circle.fill" Button
+    t =    31.00s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    31.34s Find the "arrow.up.circle.fill" Button
+    t =    31.87s Tap "arrow.up.circle.fill" Button
+    t =    31.87s     Wait for io.orbitd.t07probe to idle
+    t =    31.88s     Find the "arrow.up.circle.fill" Button
+    t =    32.25s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    32.37s     Synthesize event
+    t =    32.70s     Wait for io.orbitd.t07probe to idle
+    t =    34.72s Checking existence of `Any (First Match)`
+    t =    37.26s Checking existence of `Any (First Match)`
+    t =    39.58s Checking existence of `Any (First Match)`
+    t =    42.95s Added attachment named '20b-failed-volume-gone-no-retry'
+    t =    42.96s Checking existence of `Any (First Match)`
+    t =    43.94s Checking existence of `Any (First Match)`
+    t =    45.94s Checking existence of `Any (First Match)`
+    t =    48.90s Checking existence of `Any (First Match)`
+    t =    50.65s Checking existence of `Any (First Match)`
+    t =    53.26s Checking existence of `Any (First Match)`
+    t =    55.96s Checking existence of `Any (First Match)`
+    t =    58.77s Checking existence of `Any (First Match)`
+    t =    61.78s Checking existence of `Any (First Match)`
+    t =    64.59s Checking existence of `Any (First Match)`
+    t =    66.92s Checking existence of `Any (First Match)`
+    t =    69.34s Checking existence of `Any (First Match)`
+    t =    71.46s Checking existence of `Any (First Match)`
+    t =    74.54s Added attachment named '20c-restored-retry-offered'
+    t =    74.55s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Retry"'
+    t =    74.75s Checking existence of `Button (Element at index 0)`
+    t =    74.87s Find the Button (Element at index 0)
+    t =    75.13s Waiting 60.0s for "Retry" Button to exist
+    t =    76.20s     Checking `Expect predicate `existsNoRetry == 1` for object "Retry" Button`
+    t =    76.20s         Checking existence of `"Retry" Button`
+    t =    76.39s Checking existence of `"Retry" Button`
+    t =    76.59s Find the "Retry" Button
+    t =    76.77s Find the "Retry" Button
+    t =    77.02s Find the "Retry" Button
+    t =    77.27s Find the "Retry" Button
+    t =    77.81s Find the "Retry" Button
+    t =    78.11s Tap "Retry" Button
+    t =    78.11s     Wait for io.orbitd.t07probe to idle
+    t =    78.12s     Find the "Retry" Button
+    t =    78.31s     Check for interrupting elements affecting "Retry" Button
+    t =    78.55s     Synthesize event
+    t =    78.94s     Wait for io.orbitd.t07probe to idle
+    t =    81.04s Checking existence of `Any (First Match)`
+    t =    85.46s Added attachment named '20d-retried'
+    t =    85.47s Checking existence of `Any (First Match)`
+    t =    88.42s Added attachment named '20e-answered'
+    t =    90.44s Added attachment named 'verdict-20-docker-volume-restored-retry.json'
+    t =    90.44s Terminate io.orbitd.t07probe:97418
+    t =    91.47s Tear Down
+    t =    91.48s     Added attachment named 'ReplayTeststest20DockerVolumeRestoredRetry-notes.txt'
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' passed (91.622 seconds).
+Test Suite 'ReplayTests' passed at 2026-10-18 07:49:07.018.
+	 Executed 23 tests, with 0 failures (0 unexpected) in 2038.665 (2038.702) seconds
+Test Suite 'T07ProbeUITests.xctest' passed at 2026-10-18 07:49:07.020.
+	 Executed 23 tests, with 0 failures (0 unexpected) in 2038.665 (2038.703) seconds
+Test Suite 'All tests' passed at 2026-10-18 07:49:07.020.
+	 Executed 23 tests, with 0 failures (0 unexpected) in 2038.665 (2038.705) seconds
+2026-10-18 07:49:34.937 xcodebuild[4223:18972] [MT] IDETestOperationsObserverDebug: 2127.814 elapsed -- Testing started completed.
+2026-10-18 07:49:34.941 xcodebuild[4223:18972] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 07:49:34.941 xcodebuild[4223:18972] [MT] IDETestOperationsObserverDebug: 2127.814 sec, +2127.814 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.t07-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

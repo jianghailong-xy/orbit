@@ -1,0 +1,4 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.t07macprobe'
+  ↪︎Find: Descendants matching type Window
+    ↪︎Find: First Match

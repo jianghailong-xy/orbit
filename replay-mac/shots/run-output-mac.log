@@ -1,0 +1,174 @@
+==> replay ready on 127.0.0.1:8765 (pid 12139, after 2s)
+==> mac
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetCompose]' passed (33.043 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetSession]' passed (28.739 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseCompose]' passed (29.001 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseSession]' passed (28.660 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingCompose]' passed (33.183 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingSession]' passed (30.600 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test04WenFirstSessionOffered]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test04WenFirstSessionOffered]' passed (53.274 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test05WenPreparingAnswered]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test05WenPreparingAnswered]' passed (119.177 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test06WenSleepWake]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test06WenSleepWake]' passed (103.699 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test07WenRestartsFailedRetried]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test07WenRestartsFailedRetried]' passed (258.548 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test08NiaFirstSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test08NiaFirstSession]' passed (167.170 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test09NiaSleepWake]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test09NiaSleepWake]' passed (116.239 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' passed (188.760 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test11NiaQuotaWait]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test11NiaQuotaWait]' passed (116.132 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test12NiaVolumeInUse]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test12NiaVolumeInUse]' passed (93.523 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test13NiaVolumeDeleted]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test13NiaVolumeDeleted]' passed (46.478 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test14WenEnvironmentUnavailable]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test14WenEnvironmentUnavailable]' passed (28.378 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test15RootOnOwnWorkspace]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test15RootOnOwnWorkspace]' passed (31.136 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test16RootOnSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test16RootOnSession]' passed (28.750 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test17DockerFirstSessionThenAtTheCap]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test17DockerFirstSessionThenAtTheCap]' passed (177.784 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test18DockerWakeAtTheCap]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test18DockerWakeAtTheCap]' passed (102.459 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (115.750 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:25: error: -[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry] : failed - 20-docker-volume-restored-retry-00: "Managed runner asleep" never showed in 120.0 s
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:45: error: -[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry] : failed - 20-docker-volume-restored-retry-01: no composer to type into
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:56: error: -[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry] : Failed to get matching snapshot: Application io.orbitd.t07macprobe is not running
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' failed (188.836 seconds).
+	 Executed 23 tests, with 3 failures (0 unexpected) in 2119.322 (2119.338) seconds
+	 Executed 23 tests, with 3 failures (0 unexpected) in 2119.322 (2119.339) seconds
+	 Executed 23 tests, with 3 failures (0 unexpected) in 2119.322 (2119.340) seconds
+** TEST FAILED **
+/Users/runner/work/orbit/orbit/.t07-probe/shots/ios:
+total 0
+drwxr-xr-x  2 runner  staff   64 Oct 18 07:03 .
+drwxr-xr-x  4 runner  staff  128 Oct 18 07:03 ..
+
+/Users/runner/work/orbit/orbit/.t07-probe/shots/mac:
+total 14848
+drwxr-xr-x  111 runner  staff     3552 Oct 18 07:41 .
+drwxr-xr-x    4 runner  staff      128 Oct 18 07:03 ..
+-rw-r--r--    1 runner  staff   103859 Oct 18 07:41 01-off-unset-compose.png
+-rw-r--r--    1 runner  staff    80320 Oct 18 07:41 01-off-unset-session-deep-link.png
+-rw-r--r--    1 runner  staff   103557 Oct 18 07:41 02-off-false-compose.png
+-rw-r--r--    1 runner  staff    72930 Oct 18 07:41 02-off-false-session-deep-link.png
+-rw-r--r--    1 runner  staff   103521 Oct 18 07:41 03-off-missing-compose.png
+-rw-r--r--    1 runner  staff    72960 Oct 18 07:41 03-off-missing-session-deep-link.png
+-rw-r--r--    1 runner  staff    94097 Oct 18 07:41 04a-waiting-no-key-no-first-session.png
+-rw-r--r--    1 runner  staff   123896 Oct 18 07:41 04b-key-added-first-session-offered.png
+-rw-r--r--    1 runner  staff    95619 Oct 18 07:41 05a-first-session-queued-waiting.png
+-rw-r--r--    1 runner  staff    84305 Oct 18 07:41 05b-preparing.png
+-rw-r--r--    1 runner  staff   106602 Oct 18 07:41 05c-answered.png
+-rw-r--r--    1 runner  staff    95918 Oct 18 07:41 05d-ready.png
+-rw-r--r--    1 runner  staff   108354 Oct 18 07:41 06a-going-to-sleep.png
+-rw-r--r--    1 runner  staff   107575 Oct 18 07:41 06b-asleep.png
+-rw-r--r--    1 runner  staff   126692 Oct 18 07:41 06c-woken-by-a-message-answered.png
+-rw-r--r--    1 runner  staff   129359 Oct 18 07:41 07a-restarting.png
+-rw-r--r--    1 runner  staff   131936 Oct 18 07:41 07b-failed-stopped-too-often.png
+-rw-r--r--    1 runner  staff   126708 Oct 18 07:41 07c-retried-by-another-client.png
+-rw-r--r--    1 runner  staff    93556 Oct 18 07:41 08a-waiting-no-key-no-first-session.png
+-rw-r--r--    1 runner  staff   123406 Oct 18 07:41 08b-key-added-first-session-offered.png
+-rw-r--r--    1 runner  staff    93945 Oct 18 07:41 08c-first-session-queued-waiting.png
+-rw-r--r--    1 runner  staff    82912 Oct 18 07:41 08d-preparing.png
+-rw-r--r--    1 runner  staff   105550 Oct 18 07:41 08e-answered.png
+-rw-r--r--    1 runner  staff   108812 Oct 18 07:41 09a-going-to-sleep.png
+-rw-r--r--    1 runner  staff   108002 Oct 18 07:41 09b-asleep.png
+-rw-r--r--    1 runner  staff   117017 Oct 18 07:41 09c-waking-after-the-message.png
+-rw-r--r--    1 runner  staff   127996 Oct 18 07:41 09d-answered.png
+-rw-r--r--    1 runner  staff   131073 Oct 18 07:41 10a-restarting-out-of-memory.png
+-rw-r--r--    1 runner  staff   130661 Oct 18 07:41 10b-failed-kept-running-out-of-memory.png
+-rw-r--r--    1 runner  staff   126552 Oct 18 07:41 10c-retried-waking.png
+-rw-r--r--    1 runner  staff   116152 Oct 18 07:41 10d-ready-again.png
+-rw-r--r--    1 runner  staff   126940 Oct 18 07:41 11a-asleep.png
+-rw-r--r--    1 runner  staff   134520 Oct 18 07:41 11b-waking-quota-has-no-room.png
+-rw-r--r--    1 runner  staff   129618 Oct 18 07:41 11c-answered-once-there-was-room.png
+-rw-r--r--    1 runner  staff   128680 Oct 18 07:41 12a-asleep.png
+-rw-r--r--    1 runner  staff   133460 Oct 18 07:41 12b-waking-volume-held.png
+-rw-r--r--    1 runner  staff   129121 Oct 18 07:41 12c-answered-once-free.png
+-rw-r--r--    1 runner  staff   135573 Oct 18 07:41 13a-asleep.png
+-rw-r--r--    1 runner  staff   124507 Oct 18 07:41 13b-failed-volume-gone-no-retry.png
+-rw-r--r--    1 runner  staff   137210 Oct 18 07:41 14a-asleep-environment-unavailable.png
+-rw-r--r--    1 runner  staff   109216 Oct 18 07:41 15-on-own-workspace-draft.png
+-rw-r--r--    1 runner  staff    79344 Oct 18 07:41 16-on-session-deep-link.png
+-rw-r--r--    1 runner  staff   120102 Oct 18 07:41 17a-waiting-for-capacity.png
+-rw-r--r--    1 runner  staff   120135 Oct 18 07:41 17b-first-session-offered.png
+-rw-r--r--    1 runner  staff    87802 Oct 18 07:41 17c-first-session-queued.png
+-rw-r--r--    1 runner  staff    89576 Oct 18 07:41 17d-preparing-at-the-container-cap.png
+-rw-r--r--    1 runner  staff   103652 Oct 18 07:41 17e-answered.png
+-rw-r--r--    1 runner  staff   106055 Oct 18 07:41 18a-asleep.png
+-rw-r--r--    1 runner  staff   119957 Oct 18 07:41 18b-waking-at-the-container-cap.png
+-rw-r--r--    1 runner  staff   124777 Oct 18 07:41 18c-answered.png
+-rw-r--r--    1 runner  staff   123804 Oct 18 07:41 19a-asleep.png
+-rw-r--r--    1 runner  staff   129677 Oct 18 07:41 19b-waking-volume-held.png
+-rw-r--r--    1 runner  staff   133136 Oct 18 07:41 19c-answered-once-free.png
+-rw-r--r--    1 runner  staff    81046 Oct 18 07:41 20a-asleep.png
+-rw-r--r--    1 runner  staff    23856 Oct 18 07:41 App UI hierarchy for io.orbitd
+drwxr-xr-x  150 runner  staff     4800 Oct 18 07:41 attachments
+-rw-r--r--    1 runner  staff      144 Oct 18 07:41 Debug description for `TextField (First Match)`
+-rw-r--r--    1 runner  staff      141 Oct 18 07:41 Debug description for `Window (First Match)`
+-rw-r--r--    1 runner  staff       66 Oct 18 07:41 missing-20-docker-volume-restored-retry-00
+-rw-r--r--    1 runner  staff       66 Oct 18 07:41 no-composer-20-docker-volume-restored-retry-01
+-rw-r--r--    1 runner  staff   160436 Oct 18 07:40 replay.log
+-rw-r--r--    1 runner  staff       53 Oct 18 07:03 replay.log.out
+-rw-r--r--    1 runner  staff      235 Oct 18 07:41 ReplayTeststest01OffUnsetCompose-notes
+-rw-r--r--    1 runner  staff      244 Oct 18 07:41 ReplayTeststest01OffUnsetSession-notes
+-rw-r--r--    1 runner  staff      235 Oct 18 07:41 ReplayTeststest02OffFalseCompose-notes
+-rw-r--r--    1 runner  staff      244 Oct 18 07:41 ReplayTeststest02OffFalseSession-notes
+-rw-r--r--    1 runner  staff      242 Oct 18 07:41 ReplayTeststest03OffMissingCompose-notes
+-rw-r--r--    1 runner  staff      251 Oct 18 07:41 ReplayTeststest03OffMissingSession-notes
+-rw-r--r--    1 runner  staff      325 Oct 18 07:41 ReplayTeststest04WenFirstSessionOffered-notes
+-rw-r--r--    1 runner  staff      388 Oct 18 07:41 ReplayTeststest05WenPreparingAnswered-notes
+-rw-r--r--    1 runner  staff      341 Oct 18 07:41 ReplayTeststest06WenSleepWake-notes
+-rw-r--r--    1 runner  staff      479 Oct 18 07:41 ReplayTeststest07WenRestartsFailedRetried-notes
+-rw-r--r--    1 runner  staff     1147 Oct 18 07:41 ReplayTeststest08NiaFirstSession-notes
+-rw-r--r--    1 runner  staff      949 Oct 18 07:41 ReplayTeststest09NiaSleepWake-notes
+-rw-r--r--    1 runner  staff      743 Oct 18 07:41 ReplayTeststest10NiaOutOfMemoryRetry-notes
+-rw-r--r--    1 runner  staff      902 Oct 18 07:41 ReplayTeststest11NiaQuotaWait-notes
+-rw-r--r--    1 runner  staff      929 Oct 18 07:41 ReplayTeststest12NiaVolumeInUse-notes
+-rw-r--r--    1 runner  staff      904 Oct 18 07:41 ReplayTeststest13NiaVolumeDeleted-notes
+-rw-r--r--    1 runner  staff      352 Oct 18 07:41 ReplayTeststest14WenEnvironmentUnavailable-notes
+-rw-r--r--    1 runner  staff      250 Oct 18 07:41 ReplayTeststest15RootOnOwnWorkspace-notes
+-rw-r--r--    1 runner  staff      235 Oct 18 07:41 ReplayTeststest16RootOnSession-notes
+-rw-r--r--    1 runner  staff     1309 Oct 18 07:41 ReplayTeststest17DockerFirstSessionThenAtTheCap-notes
+-rw-r--r--    1 runner  staff      936 Oct 18 07:41 ReplayTeststest18DockerWakeAtTheCap-notes
+-rw-r--r--    1 runner  staff      943 Oct 18 07:41 ReplayTeststest19DockerVolumeInUse-notes
+-rw-r--r--    1 runner  staff      612 Oct 18 07:41 ReplayTeststest20DockerVolumeRestoredRetry-notes
+-rw-r--r--    1 runner  staff       99 Oct 18 07:41 verdict-01-off-unset-compose
+-rw-r--r--    1 runner  staff       99 Oct 18 07:41 verdict-01-off-unset-session
+-rw-r--r--    1 runner  staff       99 Oct 18 07:41 verdict-02-off-false-compose
+-rw-r--r--    1 runner  staff       99 Oct 18 07:41 verdict-02-off-false-session
+-rw-r--r--    1 runner  staff      101 Oct 18 07:41 verdict-03-off-missing-compose
+-rw-r--r--    1 runner  staff      101 Oct 18 07:41 verdict-03-off-missing-session
+-rw-r--r--    1 runner  staff      107 Oct 18 07:41 verdict-04-wen-first-session-offered
+-rw-r--r--    1 runner  staff      104 Oct 18 07:41 verdict-05-wen-preparing-answered
+-rw-r--r--    1 runner  staff       96 Oct 18 07:41 verdict-06-wen-sleep-wake
+-rw-r--r--    1 runner  staff      110 Oct 18 07:41 verdict-07-wen-restarts-failed-retried
+-rw-r--r--    1 runner  staff      100 Oct 18 07:41 verdict-08-nia-first-session
+-rw-r--r--    1 runner  staff       97 Oct 18 07:41 verdict-09-nia-sleep-wake
+-rw-r--r--    1 runner  staff      106 Oct 18 07:41 verdict-10-nia-out-of-memory-retry
+-rw-r--r--    1 runner  staff       97 Oct 18 07:41 verdict-11-nia-quota-wait
+-rw-r--r--    1 runner  staff       99 Oct 18 07:41 verdict-12-nia-volume-in-use
+-rw-r--r--    1 runner  staff      100 Oct 18 07:41 verdict-13-nia-volume-deleted
+-rw-r--r--    1 runner  staff      109 Oct 18 07:41 verdict-14-wen-environment-unavailable
+-rw-r--r--    1 runner  staff      103 Oct 18 07:41 verdict-15-root-on-own-workspace
+-rw-r--r--    1 runner  staff       97 Oct 18 07:41 verdict-16-root-on-session
+-rw-r--r--    1 runner  staff      119 Oct 18 07:41 verdict-17-docker-first-session-then-at-the-cap
+-rw-r--r--    1 runner  staff      105 Oct 18 07:41 verdict-18-docker-wake-at-the-cap
+-rw-r--r--    1 runner  staff      103 Oct 18 07:41 verdict-19-docker-volume-in-use
+-rw-r--r--    1 runner  staff        0 Oct 18 07:41 violations.txt
+-rw-r--r--    1 runner  staff  1021082 Oct 18 07:41 xcodebuild-mac.log
+.t07-probe/run.sh: line 92: 12139 Terminated: 15          python3 -u replay.py 8765 "$1" scenes > "$1.out" 2>&1
