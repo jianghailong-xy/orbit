@@ -432,6 +432,61 @@ python3 $K/timings.py beats.jsonl timeline.jsonl                                
 | A namespace quota | A ResourceQuota of zero Pods, then a message to amy asleep. Her Pod create was refused 403 `exceeded quota`, and she waited in STARTING with `KUBERNETES_QUOTA_EXCEEDED` and the quota's sentence (no Retry offered) for 2 minutes. She was asked again every 30 s with no attempt spent and never failed, and it was logged once. Before this change it went FAILED `KUBERNETES_FORBIDDEN`. With the quota removed, the next retry made the Pod about 4 s later, with no retry from the owner, and the message was answered. |
 | A new account's first session | ben signed in while amy held the one slot: WAITING_CAPACITY, his runner never having reported its engines, his default workspace already on his key (`deepseek-2`). His first session with nothing named, and one naming the key, were queued (201 PENDING, on the key). Before this change both answered 409 `MODEL_UNAVAILABLE`. One on Claude Code's own sign-in was still refused 409. When amy slept, ben was admitted. He was READY on the key 15.6 s after STARTING, and both sessions were answered 1.4–1.5 s after READY. |
 
+## The three clients (T07)
+
+Recorded 2026-10-18 by task T07: the web, iPhone and Mac apps against the lab's test server. The run covered:
+
+- the switch unset, `false`, missing and on;
+- new accounts' first sessions, sleep and wake;
+- a crash loop and an out-of-memory loop, each with its Retry;
+- a namespace quota, a held volume and a deleted volume;
+- an environment the server cannot use;
+- the Docker-only states, on the host's real Docker.
+
+The records are in [the evidence](evidence/managed-runner-clients-lab/2026-10-18/README.md). The owner's DeepSeek key file still did not
+exist, so every session ran on fake-model.py as a DeepSeek-preset key (T05's way), which is not a model. The runner image
+was T06b's, already in the guest. Nothing was built or pushed.
+
+- **Web, live.** This checkout's web build was served same-origin on 127.0.0.1 (`kit/serve-web.mjs`), passing `/api`
+  through to the test server; a second instance answers the capability route 404, as a server from before it would.
+  It ran in headless Chromium on the host (`kit/t07web.mjs`), one browser per account, each signed in through the login
+  page. The observer takes a picture and writes a line each time the managed notice, the composer or the answers
+  change, and it sends the presses (send, Retry) from command files.
+- **iPhone and Mac, replayed.** No Mac can reach the host, and the coordinator chose replay over a tunnel. A recorder
+  (`kit/t07rec.py`) asked the test server, as each account, every request the two apps make on these screens, on the
+  apps' cadences or faster. It also sent the apps' own writes (a first session from the draft, a message, Retry) in
+  their request shapes. Scenes are windows of those recordings. The probe on GitHub's macos-26 replays each to the real
+  apps (`kit/replay.py`), failing on any request it does not hold and on any write whose key fields differ.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t07     # T03–T06b's databases untouched
+W=scripts/managed-runner/lab/wake-lab.py; K=docs/evidence/managed-runner-clients-lab/2026-10-18/kit
+python3 $W prepare --image REF && python3 $K/t07lab.py profile                # one runner, 60 s idle, runner memory 1Gi
+python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start   # then --managed-false, --managed
+node $K/serve-web.mjs src/web/dist 5873 13710 &                               # T07_NO_CAPABILITIES=1: a server before it
+node $K/t07web.mjs run --account wen --out DIR --base http://127.0.0.1:5873   # node $K/t07web.mjs act --out DIR send TEXT
+python3 $K/t07rec.py run --account nia --out DIR --client ios                 # python3 $K/t07rec.py act --out DIR retry
+python3 $K/t07lab.py loop wen kill --times 5; python3 $K/t07lab.py loop nia oom --times 5
+python3 $K/t07lab.py va nia on|off; python3 $K/t07lab.py pvc-delete nia; python3 $W quota on|off
+python3 $K/t07docker.py up && bash $K/step-dock-limit.sh && bash $K/step-dock-cap.sh && bash $K/step-dock-volume.sh
+python3 $K/scenes.py pack RUN_DIR SCENES_DIR && bash $K/push-probe.sh PROBE_DIR   # the probe on macos-26
+```
+
+| Check | Result |
+| --- | --- |
+| Switch unset, `false`, capability missing | Root, an account with its own runner, saw its own workspace's draft on Claude Code, its session by deep link and Infrastructure as before. There was no managed notice and no registration prompt, on the web and in the replayed apps. |
+| A new account's first session | wen signed in while hana held the one slot, and nia while wen held it: "Waiting for capacity", with no draft. Once their key was added, the draft was offered on it (the web 3.4 s later). The first session sent from it with nothing named was queued, shown waiting and then preparing, and answered on the key once the runner was READY. eve did the same on Docker. |
+| Sleep and wake | Going to sleep, asleep, then a message: waking, then answered (k3s and Docker). The web says "Waking" 0.7 s after the send since this task's fix; before it, "asleep" stayed until the next 30 s read. |
+| Restarts and Retry | Five kills of wen's runner (the profile's five attempts): `POD_RESTARTING`, then failed with "stopped too often" and Retry, which the web pressed: waking, then READY. Five out-of-memory kills of nia's: `POD_RESTARTING_OUT_OF_MEMORY`, then `POD_OUT_OF_MEMORY` with Retry, pressed by the recorder as the iPhone presses it. |
+| Quota, held and deleted volume | A quota of zero Pods: waking with the quota's sentence, until it was lifted. A VolumeAttachment left behind: waking with `VOLUME_IN_USE`, until it was removed. The claim deleted while asleep: failed `PVC_MISSING`, with no Retry. |
+| Environment unusable | The switch on with a profile whose backend is neither Kubernetes nor Docker: "…not configured correctly", the composer closed. |
+| Docker only | The channel's cap held by a container nobody records: `CONTAINER_LIMIT` while preparing and while waking. A stopped container holding the volume: `VOLUME_IN_USE`. The volume removed, then restored by the runbook (`volume-backup.sh`): `PVC_MISSING`, then `PVC_RESTORED` with Retry, and answered. |
+| iPhone and Mac | Replayed on macos-26. Each of the 25 scenes passed on both apps: the switch off, the first session on the key, sleep and wake, both loops and their Retry, the quota, both volumes, the unusable environment, root's own workspace and deep link, the Docker states, and where each app lands by itself. No app made a request outside the recording, and every write matched the recording's key fields. The evidence explains round 1's replay artifact and round 2's one Mac exit, which did not recur. |
+
+One finding is reported, not fixed here: on k3s the restart reason is lost after the detach wait. The evidence also
+notes two behaviours from before this task: a Retry pressed on another client shows at the next 30 s read, and the
+web composer under a failed notice reads "Reply…" while the runner row is still online.
+
 ## Known limits
 
 - **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2

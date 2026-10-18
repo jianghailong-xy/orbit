@@ -104,6 +104,11 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     /// a runtime signed in on it, or one of the owner's model keys (its slug). Nil until the runner
     /// has been READY.
     public let initialProvider: String?
+    /// What a first session in the default workspace, sent with nothing named, starts on now:
+    /// `initialProvider` once the runner has been READY, before that the owner's model key the
+    /// session waits for the runner on. Nil when there is none (the server would refuse it with
+    /// MODEL_UNAVAILABLE), and from a server that predates the field.
+    public let firstSessionProvider: String?
     public let actions: ManagedRunnerActions
 }
 

@@ -11,15 +11,20 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/managed-runners/managed-runner-first-session.pg.spec.ts
  *
  * On each backend, a pool with room for one runner, which another account's READY runner holds. A new
- * account with a model key of its own signs up, and its runner waits for capacity, never having reported its
- * engines. Then:
+ * account signs up, and its runner waits for capacity, never having reported its engines. Without a model key
+ * of its own there is nothing a first session could start on: the owner's status names none
+ * (`firstSessionProvider` null), so no client offers one, and the create refuses it MODEL_UNAVAILABLE. It adds
+ * a key. Then:
+ *   - the status names that key as what a first session starts on, before READY, so the clients offer the
+ *     first session (task T07);
  *   - its default workspace starts on that key (the derived default before the runner was ever ready);
  *   - a first session on Claude Code's own sign-in is still refused MODEL_UNAVAILABLE: nobody could have
  *     signed it in on a runner that has never come up;
  *   - its first session with nothing named, and then one naming the key, are queued — 201 PENDING, on the
  *     key — where T06 saw 409 MODEL_UNAVAILABLE; the owner's status says what they wait for;
  *   - the other runner goes to sleep, and the new one is admitted, provisioned and started, reports Claude
- *     Code installed and signed out, is READY on the key, and claims the two sessions that waited, in order.
+ *     Code installed and signed out, is READY on the key, and claims the two sessions that waited, in order;
+ *     the status still names the key, now as what READY recorded.
  *
  * Destructive only to its own disposable database.
  */
@@ -263,12 +268,8 @@ test('a new account queues its first session while its managed runner waits for 
     await ensure(holder);
     const held = await upAndReady(holder.id, [{ engine: 'claude', installed: true, auth: 'yes' }]);
 
-    // The new account, with a model key of its own, signs up: its runner waits for capacity, nothing reported.
+    // The new account signs up, with no model key of its own yet: its runner waits for capacity, nothing reported.
     const fresh = await account(`fresh-${backend}`);
-    const key = await call(server, 'POST', '/api/providers/mine', fresh.token,
-      { label: 'own key', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: `sk-pg-first-session-${backend}-not-a-key` });
-    assert.equal(key.status, 201, key.text);
-    const slug = key.json.slug as string;
     await ensure(fresh);
     const waiting = await until(`${backend}: WAITING_CAPACITY`, async () => {
       const m = await mappingOf(fresh.id);
@@ -278,8 +279,32 @@ test('a new account queues its first session while its managed runner waits for 
     assert.equal((await db.runner.findUniqueOrThrow({ where: { id: waiting.runnerId } })).engines, null, 'it has never reported its engines');
 
     // The default workspace, as it is listed before anything ran in it (its default is checked below).
-    const workspaces = (await call(server, 'GET', '/api/workspaces', fresh.token)).json as Array<{ id: string; lastProvider: string; lastEngine: string; providerBuiltin: boolean }>;
-    const workspace = workspaces.find((w) => toUuid(w.id) === waiting.defaultWorkspaceId)!;
+    type Listed = { id: string; lastProvider: string; lastEngine: string; providerBuiltin: boolean };
+    const listed = async () => ((await call(server, 'GET', '/api/workspaces', fresh.token)).json as Listed[])
+      .find((w) => toUuid(w.id) === waiting.defaultWorkspaceId)!;
+    const keyless = await listed();
+
+    // With no key there is nothing a first session could start on: the status names none, no client
+    // offers one, and the create refuses the session a client would send with nothing named.
+    const unnamed = (await call(server, 'GET', '/api/managed-runner', fresh.token)).json;
+    assert.deepEqual([unnamed.managementState, unnamed.initialProvider, unnamed.firstSessionProvider], ['WAITING_CAPACITY', null, null]);
+    assert.deepEqual([managedRunnerDisplay(unnamed)!.acceptsWork, managedRunnerDisplay(unnamed)!.startsNewSession], [true, false]);
+    assert.deepEqual([keyless.lastProvider, keyless.providerBuiltin], ['claude', true], 'the floor, which this runner cannot run');
+    const keylessFirst = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: keyless.id, prompt: 'hello', title: 'no key yet' });
+    assert.equal(keylessFirst.status, 409, keylessFirst.text);
+    assert.equal(keylessFirst.json.code, MODEL_UNAVAILABLE);
+
+    // It adds a model key of its own.
+    const key = await call(server, 'POST', '/api/providers/mine', fresh.token,
+      { label: 'own key', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: `sk-pg-first-session-${backend}-not-a-key` });
+    assert.equal(key.status, 201, key.text);
+    const slug = key.json.slug as string;
+    // Before READY, the status now names the key a first session waits for the runner on, so a client
+    // offers that session.
+    const named0 = (await call(server, 'GET', '/api/managed-runner', fresh.token)).json;
+    assert.deepEqual([named0.managementState, named0.initialProvider, named0.firstSessionProvider], ['WAITING_CAPACITY', null, slug]);
+    assert.deepEqual([managedRunnerDisplay(named0)!.kind, managedRunnerDisplay(named0)!.startsNewSession], ['waitingCapacity', true]);
+    const workspace = await listed();
 
     // Claude Code's own sign-in: refused, as nothing could have signed it in yet.
     const signIn = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: workspace.id, prompt: 'hello', title: 'on a sign-in', provider: 'claude' });
@@ -296,13 +321,14 @@ test('a new account queues its first session while its managed runner waits for 
     // Before anything ran there, the workspace's default was already that key: what the first session took.
     assert.deepEqual([workspace.lastProvider, workspace.lastEngine, workspace.providerBuiltin], [slug, 'claude', false]);
 
-    // What the owner reads meanwhile: waiting for capacity, work accepted, and why.
+    // What the owner reads meanwhile: waiting for capacity, work accepted, and why; the first session's key.
     const status = (await call(server, 'GET', '/api/managed-runner', fresh.token)).json;
     assert.equal(status.managementState, 'WAITING_CAPACITY');
     assert.equal(status.reason.code, MANAGED_RUNNER_CAPACITY_UNAVAILABLE);
     assert.match(status.reason.message, /^The managed environment has no room for this runner right now \(.+\)\. It starts by itself when room frees up/);
+    assert.equal(status.firstSessionProvider, slug);
     const display = managedRunnerDisplay(status)!;
-    assert.deepEqual([display.kind, display.acceptsWork], ['waitingCapacity', true]);
+    assert.deepEqual([display.kind, display.acceptsWork, display.startsNewSession], ['waitingCapacity', true, true]);
     assert.equal(display.detail, status.reason.message);
 
     // The holder goes to sleep through the owner's request and the whole handshake.
@@ -319,6 +345,8 @@ test('a new account queues its first session while its managed runner waits for 
     // The new runner is admitted and started; it reports Claude Code installed, not signed in, and is READY on the key.
     const ready = await upAndReady(fresh.id, [{ engine: 'claude', installed: true, auth: 'no' }]);
     assert.equal(ready.initialProvider, slug);
+    const readyStatus = (await call(server, 'GET', '/api/managed-runner', fresh.token)).json;
+    assert.deepEqual([readyStatus.managementState, readyStatus.initialProvider, readyStatus.firstSessionProvider], ['READY', slug, slug]);
     // It claims the sessions that waited, in the order they were queued, each on the key.
     for (const queued of [first, named]) {
       const claimed = await claim(ready.runnerId);

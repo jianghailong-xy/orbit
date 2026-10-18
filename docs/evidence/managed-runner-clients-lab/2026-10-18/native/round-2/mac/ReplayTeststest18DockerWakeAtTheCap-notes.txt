@@ -1,0 +1,19 @@
+scene 18-docker-wake-at-the-cap: 80.616 s, actions (
+        {
+        body =         {
+            content = "T07-EVE-M1 wake while the Docker host is at its cap";
+            kind = message;
+        };
+        m = POST;
+        path = "/api/sessions/34huXsoh2eZnT7logfclT/turns";
+        t = "0.138";
+    }
+)
+18-docker-wake-at-the-cap: no window after launch; File > New Window
+18-docker-wake-at-the-cap-00: "Managed runner asleep" shows
+18-docker-wake-at-the-cap-01: typed into 49 label="" value="T07-EVE-M1 wake while the Docker host is at its cap" frame=(652.0, 584.0, 317.0, 36.0) hittable=true
+18-docker-wake-at-the-cap-01: send 9 label="Arrow Up Circle" value="" frame=(944.0, 633.0, 32.0, 32.0) hittable=true
+18-docker-wake-at-the-cap-02: "as many runner containers as it allows" shows
+18-docker-wake-at-the-cap-03: "Answering: T07-EVE-M1" shows
+18-docker-wake-at-the-cap: 100 requests, 0 violations, actions left [], notes (
+)

@@ -97,8 +97,29 @@ export async function managedFirstSessionKey(prisma: Pick<PrismaService, 'modelP
   return (await ownerManagedKeys(prisma, ownerId))[0]?.slug ?? null;
 }
 
+/**
+ * What a first session in a managed default workspace, sent with nothing named, starts on now — the
+ * status's `firstSessionProvider` (docs/managed-runner-design.md, "Server and three client interfaces"),
+ * so a client offers that session exactly when this server would take it. Once the runner has been
+ * READY it is `initialProvider`, which `lastProviderByWorkspace` answers for a workspace with no
+ * history. Before that the default is the owner's first key (`managedFirstSessionKey`), and the
+ * session is queued on it while the runner has not reported its engines, or taken at once when it
+ * reported that key's engine ready; with no key, or a report without that engine, there is none
+ * (`assertManagedFirstSessionRuntime` refuses it MODEL_UNAVAILABLE).
+ */
+export function managedFirstSessionProvider(
+  initialProvider: string | null,
+  firstKey: { slug: string; engine: LoginEngine } | null,
+  runner: ManagedSupplyRunner | null,
+): string | null {
+  if (initialProvider) return initialProvider;
+  if (!firstKey) return null;
+  if (runner?.engines == null) return firstKey.slug;
+  return managedRuntimeReady(runner, firstKey.engine, { bringsOwnCredentials: true }) ? firstKey.slug : null;
+}
+
 /** The owner's own enabled keys, in the owner's order, that run on a runtime counted as supply, with that runtime. */
-async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<Array<{ slug: string; engine: LoginEngine }>> {
+export async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<Array<{ slug: string; engine: LoginEngine }>> {
   const keys = await prisma.modelProvider.findMany({
     where: { ownerId, enabled: true },
     orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
