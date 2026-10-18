@@ -528,9 +528,15 @@ Shared status fields, defined in `@orbit/shared` and mirrored in OrbitKit, are:
 ```text
 contractVersion, revision, managementState, desiredState,
 runnerId?, workspaceId?, heartbeatStatus?, lastHeartbeatAt?, usable,
-reason? { code, message, retryable }, retryAfter?, initialProvider?,
+reason? { code, message, retryable }, retryAfter?, initialProvider?, firstSessionProvider?,
 actions { canEnsure, canWake, canSleep, canRetry, canDelete }
 ```
+
+`firstSessionProvider` (since 2026-10-18, task T07) is what a first session in the default workspace, sent with
+nothing named, starts on now: `initialProvider` once the runner has been READY, before that the owner's own model key
+such a session is queued on while the runner has not reported its engines or reported that key's engine installed, and
+null when the session would be refused `MODEL_UNAVAILABLE`. A client offers that session exactly when it is set; a
+server that predates the field is read by `initialProvider`.
 
 IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the
 mapping exists. Do not expose Ceph endpoints/keys, kubeconfig, node control credentials, Secret

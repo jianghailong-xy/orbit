@@ -188,6 +188,15 @@ export interface ManagedRunnerStatus {
    *  on it (its name), or else one of the owner's own model keys a runtime installed on it runs (the
    *  key's slug). A default workspace with no history starts its first session on it. Null until then. */
   initialProvider: string | null;
+  /**
+   * What a first session in the default workspace, sent with nothing named, starts on now, by the
+   * rule the session's create applies: `initialProvider` once the runner has been READY; before
+   * that, the owner's own model key such a session is queued on until the runner is ready — while
+   * the runner has not reported its engines yet, or reported that key's engine installed. Null when
+   * there is none, and such a session would be refused MODEL_UNAVAILABLE. Absent from a server that
+   * predates it, which queued nothing before READY: read `initialProvider` then.
+   */
+  firstSessionProvider?: string | null;
   actions: ManagedRunnerActions;
 }
 

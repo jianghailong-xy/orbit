@@ -97,9 +97,23 @@ interface Server {
   statuses: ManagedRunnerStatus[];
   /** What the managed default workspace says it starts a session on. */
   lastProvider: string;
+  /** The owner's configured providers (GET /providers). */
+  providers?: unknown[];
 }
 let server: Server;
 let statusReads = 0;
+let workspaceReads = 0;
+
+/** The owner's DeepSeek key, as GET /providers lists it: what the fixture's `deepseek` names. */
+const DEEPSEEK_KEY = {
+  slug: 'deepseek',
+  label: 'DeepSeek',
+  runtime: 'claude',
+  presetSlug: 'deepseek',
+  engines: ['claude', 'opencode', 'dsh'],
+  models: [{ value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' }],
+  defaultModel: 'deepseek-v4-flash',
+};
 let posted: { path: string; body: Record<string, unknown> }[] = [];
 
 let container: HTMLDivElement | null = null;
@@ -110,6 +124,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   statusReads = 0;
+  workspaceReads = 0;
   posted = [];
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockResolvedValue(ENDED as never);
@@ -144,12 +159,14 @@ beforeEach(() => {
     }
     if (path === '/runners') return Promise.resolve([runner(MANAGED_RUNNER, 'Managed runner'), runner(OWN_RUNNER, 'mac-01')]);
     if (path === '/workspaces') {
+      workspaceReads += 1;
       return Promise.resolve([
         { id: OWN_WORKSPACE, name: 'orbit', runnerId: OWN_RUNNER, createdAt: '2026-01-01T00:00:00Z', position: 0, lastProvider: 'claude' },
         { id: MANAGED_WORKSPACE, name: 'Default', runnerId: MANAGED_RUNNER, createdAt: '2026-10-09T00:00:00Z', position: null, lastProvider: server.lastProvider },
       ]);
     }
-    if (['/providers', '/providers/pools', '/providers/shared-pools', '/session-tags', '/session-folders'].includes(path)) return Promise.resolve([]);
+    if (path === '/providers') return Promise.resolve(server.providers ?? []);
+    if (['/providers/pools', '/providers/shared-pools', '/session-tags', '/session-folders'].includes(path)) return Promise.resolve([]);
     if (path.startsWith('/sessions?')) return Promise.resolve([]);
     if (path.startsWith(`/sessions/${ENDED_SESSION}`)) {
       if (path.includes('/diff')) return Promise.resolve({ files: [] });
@@ -281,6 +298,63 @@ describe('a managed workspace in the console', () => {
     expect(composer().placeholder).toBe('Preparing your managed runner');
     await type('Hello');
     expect(sendButton().disabled).toBe(true);
+  });
+
+  it('waiting for capacity with the owner\'s key named: the first session is offered on it and sent with nothing named', async () => {
+    server = {
+      capabilities: capability('switched on'),
+      statuses: [state("waiting for capacity before the first start, a first session waits on the owner's key")],
+      lastProvider: 'deepseek',
+      providers: [DEEPSEEK_KEY],
+    };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(noticeTitle()).toBe('Waiting for capacity'));
+    // The runner's state stays above the composer, and the draft offers the key's engine and model.
+    expect(notice()!.textContent).toContain('It starts by itself when room frees up');
+    await waitForUi(() => expect(mounted().querySelector('.np-hero')).toBeTruthy());
+    expect(mounted().querySelector('.composer-model-chip')).toBeTruthy();
+    expect(mounted().textContent?.toLowerCase()).not.toContain('register');
+
+    await type('Start on the release notes');
+    await waitForUi(() => expect(sendButton().disabled).toBe(false));
+    await act(async () => sendButton().click());
+    await waitForUi(() => expect(posted.map(({ path }) => path)).toEqual(['/sessions']));
+    // Nothing named: the server's own default for the workspace — the key — is what it queues on.
+    expect(posted[0].body.workspaceId).toBe(MANAGED_WORKSPACE);
+    expect(posted[0].body.provider).toBeUndefined();
+    expect(posted[0].body.engine).toBeUndefined();
+    expect(posted[0].body.model).toBe('deepseek-v4-flash');
+  });
+
+  it('the owner adds a key while it waits: the draft opens and follows the workspace list read again', async () => {
+    server = {
+      capabilities: capability('switched on'),
+      statuses: [state('waiting for capacity before the first start')],
+      lastProvider: 'claude',
+      providers: [],
+    };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(noticeTitle()).toBe('Waiting for capacity'));
+    expect(mounted().querySelector('.np-hero')).toBeNull();
+    const readsBefore = workspaceReads;
+
+    // The key is added: the server now names it for a first session, and derives it as the workspace's default.
+    server.statuses = [state("waiting for capacity before the first start, a first session waits on the owner's key")];
+    server.lastProvider = 'deepseek';
+    server.providers = [DEEPSEEK_KEY];
+    statusReads = 0;
+    await act(async () => {
+      await client!.invalidateQueries({ queryKey: ['providers'] });
+      await client!.invalidateQueries({ queryKey: ['managed-runner'] });
+    });
+    await waitForUi(() => expect(workspaceReads).toBeGreaterThan(readsBefore));
+    await waitForUi(() => expect(mounted().querySelector('.np-hero')).toBeTruthy());
+
+    await type('Hello');
+    await waitForUi(() => expect(sendButton().disabled).toBe(false));
+    await act(async () => sendButton().click());
+    await waitForUi(() => expect(posted.map(({ path }) => path)).toEqual(['/sessions']));
+    expect(posted[0].body.model).toBe('deepseek-v4-flash');
   });
 
   it('started without a signed-in runtime: says so, points at Infrastructure, and still offers no engine', async () => {

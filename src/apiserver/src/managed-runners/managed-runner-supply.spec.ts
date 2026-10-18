@@ -3,7 +3,14 @@ import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { MODEL_UNAVAILABLE } from '@orbit/shared';
 
-import { assertManagedFirstSessionRuntime, managedFirstSessionKey, managedKeySupply, managedRuntimeReady, managedRuntimeSupply } from './managed-runner-supply';
+import {
+  assertManagedFirstSessionRuntime,
+  managedFirstSessionKey,
+  managedFirstSessionProvider,
+  managedKeySupply,
+  managedRuntimeReady,
+  managedRuntimeSupply,
+} from './managed-runner-supply';
 
 // Model supply on a managed runner: what its heartbeat reported installed and signed in, and the
 // order a first session takes it in. A runtime that is not reported ready is never supply.
@@ -179,4 +186,38 @@ test('a first session on its own credential is queued for a runner that has repo
     assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { engines: [engine('claude', { installed: false })] } }),
     refused,
   );
+});
+
+// The status names what a first session starts on (`firstSessionProvider`), so a client offers that
+// session exactly when the create would take it: the same answer as assertManagedFirstSessionRuntime
+// for the default a session with nothing named gets.
+
+test('the first session the status names is the one the create takes: READY\'s record, else the owner\'s key while the runner can run it', async () => {
+  const deepseek = { slug: 'deepseek', engine: 'claude' as const };
+  const kimi = { slug: 'kimi-key', engine: 'kimi' as const };
+  // READY once: what it was found ready with, whatever it reports now and whatever keys there are.
+  assert.equal(managedFirstSessionProvider('claude', deepseek, { engines: [] }), 'claude');
+  assert.equal(managedFirstSessionProvider('deepseek', null, null), 'deepseek');
+  // Before READY, with no key of the owner's own: nothing to start on.
+  assert.equal(managedFirstSessionProvider(null, null, { engines: null }), null);
+  assert.equal(managedFirstSessionProvider(null, null, { engines: [engine('claude')] }), null);
+  // A runner row not read is treated as one that has reported nothing: the key is named.
+  assert.equal(managedFirstSessionProvider(null, deepseek, null), 'deepseek');
+
+  const prisma = { session: { findFirst: async () => null } } as never;
+  const cases: Array<[string, { slug: string; engine: 'claude' | 'kimi' }, { engines: unknown; capabilities?: string[] }, string | null]> = [
+    ['nothing reported yet (waiting for capacity, provisioning, starting)', deepseek, { engines: null }, 'deepseek'],
+    ["reported the key's engine installed, not signed in", deepseek, { engines: [engine('claude', { auth: 'no' })] }, 'deepseek'],
+    ["reported without the key's engine (MODEL_UNAVAILABLE)", deepseek, { engines: [engine('codex', { auth: 'no' })] }, null],
+    ['reported an empty list', deepseek, { engines: [] }, null],
+    ['a Kimi key, nothing reported yet', kimi, { engines: null }, 'kimi-key'],
+    ['a Kimi key on a runner that reported no Kimi Code', kimi, { engines: [engine('claude', { auth: 'no' })] }, null],
+  ];
+  for (const [name, key, runner, named] of cases) {
+    assert.equal(managedFirstSessionProvider(null, key, runner), named, name);
+    // The create, for the session a client sends with nothing named: the key, on its own engine.
+    const taken = await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: key.engine, bringsOwnCredentials: true, runner })
+      .then(() => true, () => false);
+    assert.equal(taken, named !== null, `${name}: the create agrees`);
+  }
 });
