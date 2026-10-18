@@ -141,12 +141,12 @@ final class MergeRecoveryWiringTests: XCTestCase {
     }
 
     /// ALREADY_LANDED is laid out as the board's ⑥: what origin has, the branches, Done — no repair row
-    /// once the repair has nothing left to do, no diagnostic, no push.
+    /// (nothing is left to repair), no diagnostic, no push.
     func testAnAlreadyLandedSessionIsLaidOutAsTheBoardsSixth() throws {
         let sheet = code(try source("Views/MergeRecoverySheet.swift"))
         let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
-        XCTAssertTrue(review.contains("if let repair, !landed || repair.state == .running"))
-        XCTAssertTrue(review.contains("landedSections(d, r, close: close)"))
+        XCTAssertTrue(review.contains("if landed {\n                landedSections(d, r, close: close)"),
+                      "its own sections in place of the review's (no repair row: MergeRepairRow has none for it)")
         let landed = try slice(sheet, from: "private func landedSections(", to: "private func checkRow(")
         for piece in ["MergeRecoveryCommitRow(commit: $0, landed: true)", "Text(\"On origin/\\(target)\")",
                       "r.landedByContentNote", "r.landedLocalNote", "RecoveryRouteRow("] {

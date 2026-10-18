@@ -219,12 +219,14 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
     // MARK: ALREADY_LANDED
 
     /// What ALREADY_LANDED says under its title: the day the last of this session's changes reached
-    /// origin.
+    /// origin (web's panel says the same).
     public func landedSummary(now: Date = Date(), timeZone: TimeZone = .current) -> String {
         let newest = (landedCommits ?? []).compactMap { c in RelativeTime.parse(c.date).map { (c, $0) } }
             .max { $0.1 < $1.1 }?.0
-        let day = newest.flatMap { RunnerPageFormat.day($0.date, now: now, timeZone: timeZone) }
-        return "This session’s changes reached origin/\(targetBranch)\(day.map { " on \($0)" } ?? ""). Nothing is left to merge."
+        guard let day = newest.flatMap({ RunnerPageFormat.day($0.date, now: now, timeZone: timeZone) }) else {
+            return "Nothing is left to merge."
+        }
+        return "This session’s changes reached origin/\(targetBranch) on \(day). Nothing is left to merge."
     }
 
     /// A landed commit's line leads with the day it reached origin: "Merged Oct 11".
@@ -236,8 +238,9 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
     /// Under the landed commits when they are copies, not the session's own commits: matched by
     /// patch-id because the branch was rewritten after they merged.
     public var landedByContentNote: String? {
-        (landedCommits ?? []).contains { $0.sourceSha != nil && $0.sourceSha != $0.sha }
-            ? "Matched by content — this branch was rewritten after these merged." : nil
+        let landed = landedCommits ?? []
+        guard landed.contains(where: { $0.sourceSha != nil && $0.sourceSha != $0.sha }) else { return nil }
+        return "Matched by content — this branch was rewritten after \(landed.count == 1 ? "it" : "these") merged."
     }
 
     /// Under the branches when the local target has commits of its own: Done leaves them where they are.
@@ -302,6 +305,7 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
 /// The repair session's row on the review sheet — the design board's six states (docs/mocks/
 /// merge-recovery-repair-loop-ios.html): what the repair is doing, or what the check of its last round
 /// found. The server checks the recovery again whenever a repair round ends (S1); this only reads it.
+/// Web's `MergeRecoveryPanel` derives the same states.
 public struct MergeRepairRow: Equatable, Sendable {
     public enum State: Equatable, Sendable {
         case running
@@ -313,10 +317,10 @@ public struct MergeRepairRow: Equatable, Sendable {
         case needsReply(said: String?, at: String?)
         case failed(String?)
         /// Over, and no check has seen its last round: a server that does not check by itself, or a
-        /// check it did not queue. Checking again is the owner's.
+        /// check it did not queue. Checking again is the owner's (the header's link).
         case unchecked
         /// Over and checked, with an answer the sheet's title gives (diverged targets, a failed fetch…).
-        case finished
+        case finished(checkedAt: String?)
     }
 
     public let id: String
@@ -326,9 +330,10 @@ public struct MergeRepairRow: Equatable, Sendable {
     /// session's own turn ends (`mergeRepairTurnEndedAt`). The sheet waits on it.
     public let checking: Bool
 
-    /// Nil without a repair session or a recovery.
+    /// Nil without a repair session or a recovery, and once the session is found already on origin:
+    /// nothing is left to repair then.
     public init?(detail d: SessionDetail) {
-        guard let repair = d.mergeRepairSession, let r = d.mergeRecovery else { return nil }
+        guard let repair = d.mergeRepairSession, let r = d.mergeRecovery, r.code != "ALREADY_LANDED" else { return nil }
         id = repair.id
         title = repair.title
         checking = (d.mergeStatus == "pending" && d.mergeRecoveryAction == "preview") || d.mergeRepairTurnEndedAt != nil
@@ -338,13 +343,13 @@ public struct MergeRepairRow: Equatable, Sendable {
         if checking { state = .checking; return }
         guard Self.checkedSince(repair, r) else { state = .unchecked; return }
         if r.code == "REPAIR_IN_PROGRESS" {
-            state = .needsReply(said: repair.lastAssistantText, at: repair.lastTurnAt)
+            state = .needsReply(said: repair.lastAssistantText, at: Self.roundEnded(repair))
         } else if r.ready, let at = r.checkedAt {
             state = .ready(checkedAt: at)
         } else if r.code == "CONFLICT", let n = r.conflicts?.count, n > 0, let at = r.checkedAt {
             state = .conflicts(n, checkedAt: at)
         } else {
-            state = .finished
+            state = .finished(checkedAt: r.checkedAt)
         }
     }
 
@@ -355,24 +360,28 @@ public struct MergeRepairRow: Equatable, Sendable {
         return true
     }
 
+    /// When the repair's last round ended: its last turn, or its finish.
+    private static func roundEnded(_ repair: MergeRepairSession) -> String? { repair.lastTurnAt ?? repair.finishedAt }
+
     /// Whether the recovery was checked after the repair's last round ended. A server that predates
     /// `lastTurnAt` can't say, which reads as no. The runner stamps `checkedAt` in whole seconds, so the
     /// round's end is compared at that grain.
     private static func checkedSince(_ repair: MergeRepairSession, _ r: MergeRecovery) -> Bool {
-        guard let ended = repair.lastTurnAt.flatMap(RelativeTime.parse),
+        guard let ended = roundEnded(repair).flatMap(RelativeTime.parse),
               let checked = r.checkedAt.flatMap(RelativeTime.parse) else { return false }
         return checked.timeIntervalSince1970 >= ended.timeIntervalSince1970.rounded(.down)
     }
 
     /// Whether the session's detail should keep being read for the check of a repair round: while
-    /// one is under way or owed, and for two minutes after a round no check has seen yet ended —
-    /// the server queues its check as the round ends, a moment a read can fall between.
+    /// one is under way or owed, and for a minute after a round no check has seen yet ended — the
+    /// server queues its check as the round ends, a moment a read can fall between (web's
+    /// `mergeRepairLoopLive`).
     public static func awaitsCheck(_ d: SessionDetail, now: Date = Date()) -> Bool {
         guard let row = MergeRepairRow(detail: d) else { return false }
         if row.checking { return true }
-        guard row.state == .unchecked,
-              let ended = d.mergeRepairSession?.lastTurnAt.flatMap(RelativeTime.parse) else { return false }
-        return now.timeIntervalSince(ended) < 120
+        guard row.state == .unchecked, let repair = d.mergeRepairSession,
+              let ended = roundEnded(repair).flatMap(RelativeTime.parse) else { return false }
+        return now.timeIntervalSince(ended) < 60
     }
 
     public var headline: String {
@@ -399,8 +408,8 @@ public struct MergeRepairRow: Equatable, Sendable {
         case .failed(let error):
             let why = error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return why.isEmpty ? nil : why
-        case .unchecked: return "Ready to check again"
-        case .finished: return nil
+        case .unchecked: return nil
+        case .finished(let at): return at.map { "Checked \(ago($0))" }
         }
     }
 }

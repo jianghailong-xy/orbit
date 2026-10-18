@@ -252,19 +252,25 @@ final class MergeRecoveryTests: XCTestCase {
     func testTheRowWithoutAVerdictOnTheLastRound() throws {
         let legacy = try row(repair: ["id": "repair", "status": "AWAITING_INPUT"])
         XCTAssertEqual(legacy.state, .unchecked, "a server that predates lastTurnAt can't say which round was checked")
-        XCTAssertEqual([legacy.headline, legacy.status(now: now)], ["Repair session finished", "Ready to check again"])
+        XCTAssertEqual([legacy.headline, legacy.status(now: now)], ["Repair session finished", nil],
+                       "no verdict to give: the header's Check again is the way to one")
+        XCTAssertEqual(try row(["checkedAt": "2026-10-11T11:20:30Z"],
+                               repair: ["id": "repair", "status": "SUCCEEDED", "finishedAt": "2026-10-11T11:20:10Z"]).state,
+                       .ready(checkedAt: "2026-10-11T11:20:30Z"), "a finished session's round ends when it finished")
         XCTAssertEqual(try row(["checkedAt": "2026-10-11T11:19:59Z"], repair: repairSession("AWAITING_INPUT")).state,
                        .unchecked, "checked before the round ended")
         XCTAssertEqual(try row(["checkedAt": "2026-10-11T11:20:00Z"], repair: repairSession("AWAITING_INPUT")).state,
                        .ready(checkedAt: "2026-10-11T11:20:00Z"), "the runner stamps whole seconds: the same second counts")
         let diverged = try row(["code": "TARGET_DIVERGED"], repair: repairSession("AWAITING_INPUT"))
-        XCTAssertEqual(diverged.state, .finished)
-        XCTAssertNil(diverged.status(now: now), "the title says what the check found")
+        XCTAssertEqual(diverged.state, .finished(checkedAt: "2026-10-11T11:20:00Z"))
+        XCTAssertEqual(diverged.status(now: now), "Checked just now", "the title says what the check found")
         XCTAssertNil(MergeRepairRow(detail: try detail(repair: nil)), "no repair session, no row")
+        XCTAssertNil(MergeRepairRow(detail: try detail(["code": "ALREADY_LANDED"], repair: repairSession("RUNNING"))),
+                     "already on origin: nothing is left to repair, so no row")
     }
 
-    /// The detail is read on while the server checks the repair, and for two minutes after a round no
-    /// check has seen yet ended: a read can fall between the round's end and the check it queues.
+    /// The detail is read on while the server checks the repair, and for a minute after a round no check
+    /// has seen yet ended: a read can fall between the round's end and the check it queues.
     func testTheDetailIsReadUntilTheRepairsCheckShows() throws {
         let stopped = repairSession("AWAITING_INPUT")
         XCTAssertTrue(MergeRepairRow.awaitsCheck(try detail(repair: stopped, ["mergeStatus": "pending", "mergeRecoveryAction": "preview"]),
@@ -272,7 +278,7 @@ final class MergeRecoveryTests: XCTestCase {
         XCTAssertTrue(MergeRepairRow.awaitsCheck(try detail(repair: stopped, ["mergeRepairTurnEndedAt": roundEnded]), now: now))
         let unchecked = try detail(["checkedAt": "2026-10-11T11:19:59Z"], repair: stopped)
         XCTAssertTrue(MergeRepairRow.awaitsCheck(unchecked, now: now))
-        XCTAssertFalse(MergeRepairRow.awaitsCheck(unchecked, now: now.addingTimeInterval(120)), "not forever")
+        XCTAssertFalse(MergeRepairRow.awaitsCheck(unchecked, now: now.addingTimeInterval(60)), "not forever: a minute")
         XCTAssertFalse(MergeRepairRow.awaitsCheck(try detail(repair: stopped), now: now), "checked since: the answer is here")
         XCTAssertFalse(MergeRepairRow.awaitsCheck(try detail(repair: ["id": "repair", "status": "AWAITING_INPUT"]), now: now),
                        "an older server checks nothing by itself")
@@ -319,8 +325,9 @@ final class MergeRecoveryTests: XCTestCase {
                        "no repair session to reply in: the existing rule")
         XCTAssertEqual(try buttons(["code": "ALREADY_LANDED"], repair: repairSession("AWAITING_INPUT")).primary,
                        MergeRecoveryButton(title: "Done", action: .confirmLanded))
-        XCTAssertEqual(try buttons(["code": "ALREADY_LANDED"], repair: repairSession("RUNNING")).primary?.action, .openRepair,
-                       "a repair at work is still the one step")
+        XCTAssertEqual(try buttons(["code": "ALREADY_LANDED"], repair: repairSession("RUNNING")).primary,
+                       MergeRecoveryButton(title: "Done", action: .confirmLanded),
+                       "once everything is on origin nothing is left to repair, even while the repair session runs")
         XCTAssertEqual(try buttons(["code": "LOCAL_SYNC_PENDING"], repair: repairSession("RUNNING")).primary,
                        MergeRecoveryButton(title: "Sync local checkout", action: .syncLocal), "a landing being finished keeps its step")
     }
@@ -385,11 +392,15 @@ final class MergeRecoveryTests: XCTestCase {
                        "This session’s changes reached origin/main on Oct 11, 2025. Nothing is left to merge.")
         XCTAssertEqual(same.landedLocalNote, "Local main’s own 1 commit isn’t part of this session.")
 
+        value["landedCommits"] = [["sha": sha("2"), "subject": "A copy", "author": "coordinator",
+                                   "date": "2026-10-11T10:00:00Z", "sourceSha": sha("1")]]
+        XCTAssertEqual(try decode(value).landedByContentNote,
+                       "Matched by content — this branch was rewritten after it merged.")
+
         value["landedCommits"] = nil
         value["localCommits"] = nil
         let bare = try decode(value)
-        XCTAssertEqual(bare.landedSummary(now: later, timeZone: utc),
-                       "This session’s changes reached origin/main. Nothing is left to merge.")
+        XCTAssertEqual(bare.landedSummary(now: later, timeZone: utc), "Nothing is left to merge.")
         XCTAssertNil(bare.landedLocalNote)
 
         value["previewId"] = nil

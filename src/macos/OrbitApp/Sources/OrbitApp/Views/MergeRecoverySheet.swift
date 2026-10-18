@@ -105,8 +105,7 @@ struct MergeRecoverySheet: View {
         return List {
             Section { header(r, check: buttons.headerCheck, working: working, checking: checking, blocked: blocked) }
                 .listRowBackground(Color.clear)
-            // Once origin is found to have it all, a repair has nothing left to do — unless it is at work.
-            if let repair, !landed || repair.state == .running {
+            if let repair {
                 Section { repairStatus(repair, target: r.targetBranch) }
             }
             if landed {
@@ -263,7 +262,7 @@ struct MergeRecoverySheet: View {
 
     /// The repair session in one row — `MergeRepairRow`'s six states: at work, its result being
     /// checked, ready to merge, conflicts left, waiting for the owner's reply (with what it asked), or
-    /// failed (with why). Tapping it opens that session.
+    /// failed (with why). Tapping it opens that session. None once the session is found on origin.
     private func repairStatus(_ repair: MergeRepairRow, target: String) -> some View {
         Button { openRepair(repair.id) } label: {
             HStack(spacing: 10) {
@@ -298,8 +297,10 @@ struct MergeRecoverySheet: View {
         switch state {
         case .running, .checking:
             ProgressView().controlSize(.small)
-        case .ready, .unchecked, .finished:
+        case .ready:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .unchecked, .finished:
+            Color.clear
         case .conflicts:
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
         case .needsReply:
