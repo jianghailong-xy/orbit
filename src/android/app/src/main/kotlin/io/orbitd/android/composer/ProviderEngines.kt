@@ -31,15 +31,17 @@ object ProviderEngines {
         OPENCODE to "OpenCode", DSH to "DeepSeek Harness", CURSOR to "Cursor CLI")
 
     /**
-     * Whether this app draws [engine] in a list of engines: every engine but Cursor CLI, which the server knows (project P1) and which
-     * has no screens here until P7c builds the owner's design board — web `webShowsEngine`, OrbitKit `appleShowsEngine`. The New
-     * Session's engines, a task's engine pin, Infrastructure's engine cards and a runner's Engines rows leave it out, a runner's report
-     * of it included, so they read as they did before it was registered. Opening Cursor CLI here is changing this one function.
+     * Whether this app draws [engine] in a list of engines, given the runners in view — the account's, where a page has them, else the
+     * one it is about (web `webShowsEngine`, OrbitKit `appleShowsEngine`). Every engine but Cursor CLI always; Cursor CLI once one of
+     * those runners knows it (CursorRuntime.knows: it declares `provider:cursor` or reports the engine), which is the order its rollout
+     * keeps: the runners and what they declare first, then the entrances (project P9). Until then the New Session's engines, a task's
+     * engine pin, Infrastructure's engine cards and a runner's Engines rows leave it out, and the app reads as it did before Cursor CLI;
+     * from then on a machine that predates it says so on its row.
      */
-    fun androidShowsEngine(engine: String?) = engine != CURSOR
+    fun androidShowsEngine(engine: String?, runners: List<JsonObject>?) = engine != CURSOR || runners.orEmpty().any(CursorRuntime::knows)
 
     /** The engines whose own sign-in on the runner is a credential: the provider slug is the engine's name. */
-    val LOGIN_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY)
+    val LOGIN_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY, CURSOR)
 
     /** The permission modes DeepSeek Harness enforces (@orbit/shared `DSH_PERMISSION_MODES`); the server refuses the rest. */
     val DSH_PERMISSION_MODES = listOf("default", "auto", "dontAsk")
@@ -61,17 +63,20 @@ object ProviderEngines {
     }
 
     /** The dialect a key's endpoint speaks, from the runtime its row borrows (@orbit/shared `keyDialect`). DeepSeek Harness rows
-     * hold DeepSeek's Anthropic-compatible endpoint; anything unknown speaks nothing. */
+     * hold DeepSeek's Anthropic-compatible endpoint; a Cursor User API Key speaks Cursor's own, which is no model API; anything unknown
+     * speaks nothing. */
     fun keyDialect(runtime: String?): String? = when (runtime ?: CLAUDE) {
         CLAUDE, DSH -> "anthropic"
         CODEX -> "openai"
         KIMI -> "openai-compatible"
         ANTIGRAVITY -> "gemini"
+        CURSOR -> "cursor"
         else -> null
     }
 
     /** The engine whose own protocol each dialect is: what a key runs on when nothing else is named. */
-    private val NATIVE_ENGINE = mapOf("anthropic" to CLAUDE, "openai" to CODEX, "openai-compatible" to KIMI, "gemini" to ANTIGRAVITY)
+    private val NATIVE_ENGINE = mapOf("anthropic" to CLAUDE, "openai" to CODEX, "openai-compatible" to KIMI, "gemini" to ANTIGRAVITY,
+        "cursor" to CURSOR)
 
     private const val DEEPSEEK_HOST = "api.deepseek.com"
     /** The presets whose key is a DeepSeek platform key. `deepseek-harness` rows exist until the migration folds them in. */
@@ -96,6 +101,8 @@ object ProviderEngines {
     private fun keyEngines(key: Credential.Key): List<String> {
         val dialect = keyDialect(key.runtime) ?: return emptyList()
         if (key.subscriptionToken) return if (dialect == "anthropic") listOf(CLAUDE) else emptyList()
+        // A Cursor key is spent by Cursor CLI alone: it is no model API OpenCode could call.
+        if (dialect == "cursor") return listOf(CURSOR)
         // A row still on the retired `dsh` runtime ran on DeepSeek Harness, and keeps doing so by default.
         val legacyDsh = key.runtime == DSH
         val native = if (legacyDsh) DSH else NATIVE_ENGINE.getValue(dialect)
@@ -138,7 +145,8 @@ object ProviderEngines {
 
     /** A vendor's name, as its keys are called in a sentence: one key runs on several engines, so it is never named after one. */
     private val KEY_VENDORS = mapOf("anthropic" to "Anthropic", "openai" to "OpenAI", "gemini" to "Google Gemini", "deepseek" to "DeepSeek",
-        "deepseek-harness" to "DeepSeek", "moonshot" to "Moonshot", "glm" to "Z.AI", "minimax" to "MiniMax", "qwen" to "Qwen")
+        "deepseek-harness" to "DeepSeek", "moonshot" to "Moonshot", CursorRuntime.KEY_PRESET to "Cursor", "glm" to "Z.AI", "minimax" to "MiniMax",
+        "qwen" to "Qwen")
 
     /** A key as a sentence names it, for the middle of one: `the DeepSeek key “DeepSeek 2”` — its vendor and the name its owner gave
      * it, never its slug; a custom endpoint is DeepSeek's when DeepSeek Harness runs it (`engines`, which only the server can tell).
