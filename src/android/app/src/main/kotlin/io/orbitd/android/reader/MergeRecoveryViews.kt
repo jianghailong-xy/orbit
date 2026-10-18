@@ -62,13 +62,9 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
     val working = state.busy || d.string("mergeStatus") == "pending"
     val repair = MergeRecovery.repair(d)
     val landed = r.code == "ALREADY_LANDED"
-    // A server that checks each repair turn by itself (S1) gets the loop's states and steps; an older one, the review as it was.
-    val loop = supported && MergeRecovery.followsRepairs(d)
-    // Board ⑥ has no repair row: with every commit on origin, there is nothing left for a repair to do.
-    val row = repair?.takeIf { !landed }?.let { r.repairRow(it, loop, MergeRecovery.checking(d)) }
-    val checking = row?.state == MergeRecovery.RepairState.CHECKING
+    // The repair loop's row, the server's check of what the repair left, and the steps (MergeRecovery.review).
+    val (row, checking, buttons) = r.review(d)
     val blocked = working || turnActive || repair?.running == true
-    val buttons = r.buttons(supported, row?.state?.takeIf { loop })
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     // What the check is about to replace fades while the server checks the repair.
     val dim = if (checking) Modifier.alpha(0.4f) else Modifier

@@ -122,6 +122,40 @@ class MergeRecoveryTest {
         assertEquals(Button("Checking…", "wait"), primary(r, RepairState.CHECKING))
     }
 
+    /** The session detail the review reads: a recovery-capable runner, a server that checks each repair turn, and a repair session. */
+    private fun detail(runState: String, vararg fields: Pair<String, JsonElement>) = JsonObject(mapOf(
+        "mergeRecoverySupported" to JsonPrimitive(true), "mergeStatus" to JsonPrimitive("conflict"), "mergeRecoveryAction" to JsonPrimitive("preview"),
+        "mergeRepairTurnEndedAt" to JsonNull, "mergeRepairSession" to json("""{"id":"34e2K7Cj2YG2CbwFip9QH","title":"Resolve merge recovery for main",
+            "runState":"$runState","lastTurnAt":"2026-10-11T11:28:00Z","finishedAt":null,"lastAssistantText":null,
+            "error":"The model provider rejected the request"}""")) + fields)
+
+    /**
+     * A failed repair's turn ends too, so it queues a check: while that check runs (or is owed), the row keeps saying the repair
+     * failed, and the page waits for the check as for any other — "Checking the repair…", the snapshot faded, a disabled
+     * "Checking…" the one step (web's panel, C2) — for conflicts and for a repair left unfinished alike.
+     */
+    @Test fun aFailedRepairsCheckIsWaitedForWhileItsRowStaysFailed() {
+        val failed = MergeRecovery.RepairRow(RepairState.FAILED, "Repair session failed", "The model provider rejected the request")
+        val waiting = MergeRecovery.Buttons(Button("Checking…", "wait"), emptyList(), null)
+        for (r in listOf(recovery(), recovery(*unfinished)))
+            for (check in listOf("mergeStatus" to JsonPrimitive("pending"), "mergeRepairTurnEndedAt" to JsonPrimitive("2026-10-11T11:28:00.120Z")))
+                assertEquals("${r.code}, ${check.first}", MergeRecovery.Review(failed, checking = true, buttons = waiting), r.review(detail("FAILED", check), now))
+        // Once the check has answered, the failed repair's own step is back.
+        assertEquals(MergeRecovery.Review(failed, false, MergeRecovery.Buttons(Button("Resolve in repair session", "repair", preparePR = false),
+            listOf(Button("Prepare PR candidate", "repair", preparePR = true)), Button("Check again", "preview"))), recovery().review(detail("FAILED"), now))
+        assertEquals(MergeRecovery.Review(MergeRecovery.RepairRow(RepairState.CHECKING, "Repair session finished", "Checking its result…"), true, waiting),
+            recovery().review(detail("AWAITING_INPUT", "mergeStatus" to JsonPrimitive("pending")), now))
+        // A repair turn running again outranks a check still in flight from its last one, as on web: the step is to open it.
+        assertEquals(MergeRecovery.Review(MergeRecovery.RepairRow(RepairState.RUNNING, "Repair session running", "Tap to open the running session"), false,
+            MergeRecovery.Buttons(Button("Open repair session", "open"), emptyList(), null, "Orbit checks again when the repair stops.")),
+            recovery().review(detail("RUNNING", "mergeStatus" to JsonPrimitive("pending")), now))
+        // Already on origin there is no repair row and no repair check to wait for; Done stays, held back by the bar's gate meanwhile.
+        assertEquals(MergeRecovery.Review(null, false, MergeRecovery.Buttons(Button("Done", "confirm-landed"), emptyList(), null)),
+            recovery(*landedOnOrigin).review(detail("FAILED", "mergeStatus" to JsonPrimitive("pending")), now))
+        assertFalse("an older server's review waits as it always did", recovery().review(
+            JsonObject(detail("FAILED", "mergeStatus" to JsonPrimitive("pending")) - "mergeRepairTurnEndedAt"), now).checking)
+    }
+
     /** A check that found none of the board's verdicts after the repair: the row says only when it checked; the page says the rest. */
     @Test fun anotherVerdictAfterTheRepairIsTheChecksTimeAlone() {
         val r = recovery("code" to JsonPrimitive("TARGET_DIVERGED"))

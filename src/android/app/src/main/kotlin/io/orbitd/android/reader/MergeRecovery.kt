@@ -47,6 +47,9 @@ internal data class MergeRecovery(
      */
     enum class RepairState { RUNNING, CHECKING, READY, CONFLICTS, NEEDS_REPLY, FAILED, FINISHED, COMPLETED }
     data class RepairRow(val state: RepairState, val headline: String, val line: String?)
+    /** The review of the repair loop: the repair row, whether the server is checking what the repair left — "Checking the repair…"
+     *  under the title, the snapshot faded — and the steps. */
+    data class Review(val row: RepairRow?, val checking: Boolean, val buttons: Buttons)
 
     val ready: Boolean get() = code == "READY" && !previewId.isNullOrEmpty() && patch != null && check?.status in setOf("passed", "unconfigured") &&
         listOf(sourceSha, localSha, remoteSha, candidateSha, candidateTreeSha).all { isSha(it) }
@@ -185,14 +188,30 @@ internal data class MergeRecovery(
     }
 
     /**
+     * The review for [detail], the session this recovery belongs to. A server that checks each repair turn by itself (S1) gets the
+     * loop's row and steps; an older one, or an older runner, the review as it was. With every commit on origin there is no repair
+     * row (board ⑥). While the server checks what a repair left, and no repair turn runs again, the one step is to wait — whatever
+     * the row says: a failed repair's row keeps saying it failed.
+     */
+    fun review(detail: JsonObject, now: Instant = Instant.now()): Review {
+        val supported = (detail["mergeRecoverySupported"] as? JsonPrimitive)?.booleanOrNull == true
+        val loop = supported && followsRepairs(detail)
+        val session = repair(detail)?.takeIf { code != "ALREADY_LANDED" }
+        val row = session?.let { repairRow(it, loop, checking(detail), now) }
+        val waiting = loop && session != null && !session.running && checking(detail)
+        return Review(row, waiting, buttons(supported, row?.state?.takeIf { loop }, waiting))
+    }
+
+    /**
      * The review's steps, arranged around the one the state asks for. An older runner can't recover, so it gets none. [repair]:
      * the repair row's state while the server checks each repair turn by itself — the board's steps; null keeps the steps as they were.
+     * [checking]: the server is checking what the repair left, whatever the row says.
      */
-    fun buttons(supported: Boolean, repair: RepairState? = null): Buttons {
+    fun buttons(supported: Boolean, repair: RepairState? = null, checking: Boolean = false): Buttons {
         if (!supported) return Buttons(null, emptyList(), null)
         if (code == "LOCAL_SYNC_PENDING") return Buttons(Button("Sync local checkout", "sync-local"), emptyList(), null)
         // Nothing to press until the server has said what the repair did.
-        if (repair == RepairState.CHECKING) return Buttons(Button("Checking…", "wait"), emptyList(), null)
+        if (checking || repair == RepairState.CHECKING) return Buttons(Button("Checking…", "wait"), emptyList(), null)
         // Every commit is on origin already: Done records the session merged and clears the recovery (confirm-landed).
         if (confirmable) return Buttons(Button("Done", "confirm-landed"), emptyList(), null)
         // A check now could only find the repair unfinished; the one step is to look at it.
