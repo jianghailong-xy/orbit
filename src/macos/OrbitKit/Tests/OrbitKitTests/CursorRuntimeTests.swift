@@ -362,6 +362,74 @@ final class CursorRuntimeTests: XCTestCase {
                                              configured: [cursorKey], runtimeDefaults: nil), "gpt-5.5")
     }
 
+    /// Board iOS 5 ②: Claude Opus 5.5's Context and Speed, the settings the runner's catalogue lists for
+    /// it (contract §10, Cursor's own names), carried in the session's model value by the coordinator's
+    /// convention of 2026-10-18 — `claude-opus-5-5[context=1m,fast=true]` — with the effort in its field.
+    func testAModelsContextAndSpeedTravelInItsValue() throws {
+        let catalog = try decode(RunnerModelCatalog.self, #"""
+        {"cursor":[{"value":"default","label":"Auto"},
+                   {"value":"claude-opus-5-5","label":"Claude Opus 5.5","reasoningLevels":["low","medium","high","xhigh","max"],
+                    "defaultReasoningLevel":"medium",
+                    "parameters":[{"id":"context","label":"Context","category":"model_config","default":"300k",
+                                   "values":[{"value":"300k","label":"300K"},{"value":"1m","label":"1M"}]},
+                                  {"id":"effort","label":"Effort","category":"thought_level","default":"medium",
+                                   "values":[{"value":"low","label":"Low"},{"value":"medium","label":"Medium"},{"value":"high","label":"High"}]},
+                                  {"id":"fast","label":"Fast","category":"model_config","default":"false",
+                                   "values":[{"value":"false","label":"Off"},{"value":"true","label":"Fast"}]},
+                                  {"label":"No id, no values"},
+                                  {"id":"thinking","values":[{"label":"no value"},{"value":"true"}]}]},
+                   {"value":"composer-2.5","label":"Composer 2.5"}]}
+        """#)
+        let row = try XCTUnwrap(catalog.modelInfo(for: "cursor", model: "claude-opus-5-5[context=1m,fast=true]"))
+        XCTAssertEqual(row.value, "claude-opus-5-5")
+        // Read leniently: what a setting leaves out costs that much of it, never the catalogue.
+        XCTAssertEqual(row.parameters?.map(\.id), ["context", "effort", "fast", "", "thinking"])
+        XCTAssertEqual(row.parameters?.last?.values, [RunnerModelParameterValue(value: "true")])
+
+        XCTAssertEqual(CursorRuntime.modelBase("claude-opus-5-5[context=1m,fast=true]"), "claude-opus-5-5")
+        XCTAssertEqual(CursorRuntime.modelBase("gpt-5.5"), "gpt-5.5")
+        XCTAssertEqual(CursorRuntime.modelParameters("claude-opus-5-5[context=1m, fast=true]"), ["context": "1m", "fast": "true"])
+        XCTAssertEqual(CursorRuntime.modelParameters("claude-opus-5-5"), [:])
+        // In the catalogue's order, a value at the model's own default left out.
+        XCTAssertEqual(CursorRuntime.withParameters("claude-opus-5-5", ["fast": "true", "context": "1m"], row: row),
+                       "claude-opus-5-5[context=1m,fast=true]")
+        XCTAssertEqual(CursorRuntime.withParameters("claude-opus-5-5", ["context": "300k", "fast": "true"], row: row),
+                       "claude-opus-5-5[fast=true]")
+        XCTAssertEqual(CursorRuntime.withParameters("claude-opus-5-5", ["context": "300k", "fast": "false"], row: row),
+                       "claude-opus-5-5")
+
+        // The rows: Context 300K / 1M, Speed Standard / Fast, each on its current value.
+        let context = try XCTUnwrap(CursorRuntime.parameter(row, CursorRuntime.contextParameter))
+        let fast = try XCTUnwrap(CursorRuntime.parameter(row, CursorRuntime.fastParameter))
+        XCTAssertEqual(context.values.map { CursorRuntime.valueLabel(context, $0.value) }, ["300K", "1M"])
+        XCTAssertEqual(fast.values.map { CursorRuntime.speedLabel(fast, $0.value) }, ["Standard", "Fast"])
+        XCTAssertEqual(CursorRuntime.currentValue(context, model: "claude-opus-5-5"), "300k")
+        XCTAssertEqual(CursorRuntime.currentValue(context, model: "claude-opus-5-5[context=1m]"), "1m")
+        XCTAssertNil(CursorRuntime.parameter(catalog.modelInfo(for: "cursor", model: "composer-2.5"), "context"))
+
+        // The chip: "Claude Opus 5.5 High · 1M · Fast" — a context away from the default, Fast while on.
+        XCTAssertEqual(CursorRuntime.chipParameters("claude-opus-5-5[context=1m,fast=true]", row: row), ["1M", "Fast"])
+        XCTAssertEqual(CursorRuntime.chipParameters("claude-opus-5-5[fast=true]", row: row), ["Fast"])
+        XCTAssertEqual(CursorRuntime.chipParameters("claude-opus-5-5", row: row), [])
+
+        // Everything that reads a model by its value reads a carried setting's model.
+        let value = "claude-opus-5-5[context=1m,fast=true]"
+        XCTAssertEqual(AgentDefaults.friendlyName(value, engine: "cursor", provider: "cursor", catalog: catalog, configured: []),
+                       "Claude Opus 5.5")
+        XCTAssertEqual(AgentDefaults.friendlyName(value, catalog: catalog), "Claude Opus 5.5")
+        XCTAssertEqual(AgentDefaults.efforts(for: "cursor", model: value, catalog: catalog),
+                       [.default, .low, .medium, .high, .xhigh, .max])
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.high, for: "cursor", model: value, catalog: catalog), .high)
+        XCTAssertEqual(AgentDefaults.livePin(value, engine: "cursor", provider: "cursor", catalog: catalog,
+                                             configured: [], runtimeDefaults: nil), value)
+        XCTAssertNil(AgentDefaults.livePin("grok-9[fast=true]", engine: "cursor", provider: "cursor", catalog: catalog,
+                                           configured: [], runtimeDefaults: nil))
+        XCTAssertFalse(CursorRuntime.isAuto(value))
+        XCTAssertTrue(CursorRuntime.isAuto("default[]"))
+        // Cursor's fast lane is a setting of the model, not the engine's /fast row.
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(runtime: "cursor", model: value, catalog: catalog))
+    }
+
     /// D6 A: no Default on Cursor CLI — shown, greyed, with why — and a session lands on Accept Edits.
     func testDefaultIsGreyedAndASessionLandsOnAcceptEdits() {
         XCTAssertFalse(AgentDefaults.isSupported(.default, engine: "cursor"))
@@ -486,11 +554,16 @@ final class CursorRuntimeTests: XCTestCase {
         // The web writes Cursor CLI's name and the pinned build as `${…}`: read them back as text.
         let rendered = web.replacingOccurrences(of: "${CURSOR_CLI}", with: CursorRuntime.name)
             .replacingOccurrences(of: "${CURSOR_PINNED_VERSION}", with: CursorRuntime.pinnedVersion)
-        for sentence in [CursorRuntime.moveBlockedNote, CursorRuntime.autoNote, CursorRuntime.queueNote,
+        for sentence in [CursorRuntime.moveBlockedNote, CursorRuntime.queueNote,
                          CursorRuntime.runningPlaceholder, CursorRuntime.contextUnavailable,
                          CursorRuntime.stateHint(.updateRunner)!, CursorRuntime.stateHint(.unsupportedPlatform)!] {
             XCTAssertTrue(rendered.contains(sentence), "cursorRuntime.ts no longer says “\(sentence)”")
         }
+        // Auto's note, but for context, which the web — with no Context row in its menu yet — leaves out
+        // (Android's CursorCopyParityTest reads it the same way).
+        let auto = CursorRuntime.autoNote
+        XCTAssertTrue(rendered.contains(auto) || rendered.contains(auto.replacingOccurrences(of: " or context", with: "")),
+                      "cursorRuntime.ts no longer says “\(auto)”")
         // The version hint is two literals on the web.
         let version = CursorRuntime.stateHint(.unsupportedVersion)!
         XCTAssertTrue(rendered.contains(String(version.prefix(version.count - 1))), version)

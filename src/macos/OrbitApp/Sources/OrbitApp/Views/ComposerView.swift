@@ -235,15 +235,21 @@ struct ComposerView: View {
                                           configured: console.configuredProviders)
         // A Runtime may report a valid default that has not appeared in its catalog yet. Preserve
         // it as a selectable row so choosing another model does not make the original unreachable.
-        if !models.contains(where: { $0.id == console.modelID }) {
+        if !models.contains(where: { $0.id == menuModelID }) {
             models.insert(ModelOption(
-                id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, engine: console.engine,
+                id: menuModelID,
+                name: AgentDefaults.friendlyName(menuModelID, engine: console.engine,
                                                   provider: console.provider,
                                                   catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
         return models
+    }
+
+    /// The model row the session is on: its model value, except that a Cursor CLI value carries its
+    /// settings beside the model (`claude-opus-5-5[context=1m]`), which the Context and Speed rows say.
+    private var menuModelID: String {
+        console.engine == CursorRuntime.engine ? CursorRuntime.modelBase(console.modelID) : console.modelID
     }
 
     /// Every mode, on every engine. A mode this engine cannot honor is still the user's stored
@@ -621,7 +627,8 @@ struct ComposerView: View {
                                        modelCatalog: console.modelCatalog,
                                        configured: console.configuredProviders,
                                        unavailable: console.engine == CursorRuntime.engine
-                                           ? CursorRuntime.contextUnavailable : nil)
+                                           ? CursorRuntime.contextUnavailable : nil,
+                                       modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil)
             }
             sendControls
         }
@@ -783,6 +790,69 @@ struct ComposerView: View {
         #endif
     }
 
+    /// The catalogue row of the Cursor CLI model this session is on, Auto aside: what its Context and
+    /// Speed rows offer.
+    private var cursorModelRow: RunnerModelInfo? {
+        guard console.engine == CursorRuntime.engine, !cursorAuto else { return nil }
+        return console.modelCatalog?.modelInfo(for: CursorRuntime.engine, model: console.modelID)
+    }
+
+    /// Cursor CLI's Context and Speed (board iOS 5 ②): settings of the model in the runner's catalogue,
+    /// carried in the session's model value — `claude-opus-5-5[context=1m,fast=true]`, the coordinator's
+    /// convention of 2026-10-18 — while its effort stays in the effort field. Only the settings the model
+    /// takes.
+    @ViewBuilder private func cursorSettingMenus(_ row: RunnerModelInfo) -> some View {
+        if let context = CursorRuntime.parameter(row, CursorRuntime.contextParameter) {
+            let current = CursorRuntime.currentValue(context, model: console.modelID)
+            Menu {
+                ForEach(context.values, id: \.value) { option in
+                    Button { pickCursorSetting(context.id, option.value, row: row) } label: {
+                        menuItemLabel(CursorRuntime.valueLabel(context, option.value), selected: option.value == current)
+                    }
+                }
+            } label: {
+                menuSubmenuLabel("Context", value: current.map { CursorRuntime.valueLabel(context, $0) } ?? "")
+            }
+        }
+        if let fast = CursorRuntime.parameter(row, CursorRuntime.fastParameter) {
+            let current = CursorRuntime.currentValue(fast, model: console.modelID) ?? "false"
+            Menu {
+                ForEach(fast.values, id: \.value) { option in
+                    Button { pickCursorSetting(fast.id, option.value, row: row) } label: {
+                        menuItemLabel(CursorRuntime.speedLabel(fast, option.value), selected: option.value == current)
+                    }
+                }
+            } label: {
+                menuSubmenuLabel("Speed", value: CursorRuntime.speedLabel(fast, current))
+            }
+        }
+    }
+
+    /// A Cursor CLI model's setting picked: the session's model value carries it, applied and remembered
+    /// as a model pick is.
+    private func pickCursorSetting(_ id: String, _ value: String, row: RunnerModelInfo) {
+        var settings = CursorRuntime.modelParameters(console.modelID)
+        settings[id] = value
+        let model = CursorRuntime.withParameters(CursorRuntime.modelBase(console.modelID), settings, row: row)
+        let clampedPermissionMode = console.selectModel(model)
+        app.rememberDefaultModel(model, engine: console.engine, provider: console.provider)
+        let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
+        Task { await console.applyConfig(model: model, permissionMode: permissionMode) }
+    }
+
+    /// The model a Cursor CLI session runs as the chip says it — "Auto", "Claude Opus 5.5 High · 1M · Fast" —
+    /// for the context sheet's Model row (board iOS 5 ④), never the bracketed value.
+    private var cursorModelLine: String {
+        chipEffortLabel.isEmpty ? modelDisplayName : "\(modelDisplayName) \(chipEffortLabel)"
+    }
+
+    /// The chip's words for a Cursor CLI model's settings — "1M", "Fast" — after its effort.
+    private var cursorChipSettings: [String] {
+        guard console.engine == CursorRuntime.engine, !cursorAuto else { return [] }
+        return CursorRuntime.chipParameters(
+            console.modelID, row: console.modelCatalog?.modelInfo(for: CursorRuntime.engine, model: console.modelID))
+    }
+
     /// Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto: it
     /// takes no parameters (contract §10), so the menu has no Effort to offer and the chip none to name.
     private var cursorAuto: Bool {
@@ -917,7 +987,7 @@ struct ComposerView: View {
                             effort: resetEffort ? nextEffort.rawValue : nil)
                     }
                 } label: {
-                    menuItemLabel(m.name, selected: m.id == console.modelID)
+                    menuItemLabel(m.name, selected: m.id == menuModelID)
                 }
                 // No model space until the provider identity resolves: the row shows the value it
                 // will run with, and cannot be switched yet.
@@ -951,6 +1021,9 @@ struct ComposerView: View {
                     }
                 } label: {
                     menuSubmenuLabel("Effort", value: console.effort.label)
+                }
+                if let row = cursorModelRow {
+                    cursorSettingMenus(row)
                 }
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
@@ -998,7 +1071,8 @@ struct ComposerView: View {
 
     /// What the chip is called aloud — web parity, the chip's `aria-label`.
     private var chipAccessibilityLabel: String {
-        let base = cursorAuto ? "Model \(modelDisplayName)" : "Model \(modelDisplayName), effort \(console.effort.label)"
+        let base = cursorAuto ? "Model \(modelDisplayName)"
+            : "Model \(modelDisplayName), effort \(console.effort.label)" + cursorChipSettings.map { ", \($0)" }.joined()
         return smartRoute == nil ? base : base + TaskDetailCopy.chipPickedBySmartSelection
     }
 
@@ -1066,8 +1140,9 @@ struct ComposerView: View {
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
     /// given a pill of its own, so the chip keeps saying one thing about the model.
     private var chipEffortLabel: String {
-        // Auto on Cursor CLI has no effort to name.
+        // Auto on Cursor CLI has no effort to name; another Cursor CLI model names its settings after it.
         if cursorAuto { return "" }
+        if !cursorChipSettings.isEmpty { return ([console.effort.label] + cursorChipSettings).joined(separator: " · ") }
         return fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
     }
 
@@ -2004,6 +2079,9 @@ private struct ContextWindowIndicator: View {
     /// Why there will never be a reading: an engine that does not report context use (Cursor CLI over
     /// ACP, contract §4.1), in a sentence. Never a 0% or a token count then — a dashed empty ring.
     var unavailable: String? = nil
+    /// The model the session runs, as the chip names it, for a row of its own under the reading — what
+    /// the context is of, when there is no number to read (Cursor CLI, board iOS 5 ④).
+    var modelLine: String? = nil
     @State private var showDetail = false
 
     private var window: Int? {
@@ -2041,7 +2119,7 @@ private struct ContextWindowIndicator: View {
         .help(helpText)
         .accessibilityLabel(helpText)
         .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct,
-                                                  known: known, unavailable: unavailable))
+                                                  known: known, unavailable: unavailable, modelLine: modelLine))
     }
 
     private var helpText: String {
@@ -2089,6 +2167,8 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     let known: Bool
     /// An engine that never reports a reading, and why (`ContextWindowIndicator.unavailable`).
     var unavailable: String? = nil
+    /// The model row under the reading (`ContextWindowIndicator.modelLine`).
+    var modelLine: String? = nil
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -2105,6 +2185,14 @@ private struct ContextWindowDetailPresentation: ViewModifier {
             }
             if sized && unavailable == nil { UsageBar(percent: pct).frame(height: 4) }
             Text(detailCaption).font(.caption).foregroundStyle(.secondary)
+            if let modelLine {
+                Divider().padding(.vertical, 4)
+                HStack {
+                    Text("Model").foregroundStyle(.secondary)
+                    Spacer()
+                    Text(modelLine).lineLimit(1)
+                }
+            }
         }
     }
 
@@ -2148,7 +2236,7 @@ private struct ContextWindowDetailPresentation: ViewModifier {
                     Spacer(minLength: 0)
                 }
                 .padding(20)
-                .presentationDetents([.height(160)])
+                .presentationDetents([.height(modelLine == nil ? 160 : 210)])
                 .presentationDragIndicator(.visible)
             }
         }

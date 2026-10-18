@@ -14,7 +14,8 @@
 #               it 4 min ago) and Cursor 2 (Cursor refused it)
 #   orbit       the workspace on hpc; box, mac, gpu and lab, one on each other machine
 #   C1          a Cursor CLI session on Auto that has talked (boards iOS 5 ①, iOS 6 ②④)
-#   C2          the same conversation on Claude Opus 5.5, High (iOS 5 ②)
+#   C2          the same conversation on Claude Opus 5.5, High, at 1M and Fast (iOS 5 ②): its model value
+#               carries the two settings, claude-opus-5-5[context=1m,fast=true] (the coordinator's convention)
 #   C3          a Cursor CLI turn running, a message queued behind it (iOS 5 ③)
 #   C4          a turn that met Cursor's usage limit on Default's Free plan (iOS 5 ⑧)
 #
@@ -114,18 +115,20 @@ def cursor_usage(default_spent=False):
 
 def opt(pid, label, category, values, default):
     return {"id": pid, "label": label, "category": category, "default": default,
-            "values": [{"value": v, "label": v} for v in values]}
+            "values": [{"value": v, "label": l} for v, l in values]}
 
 
 # Cursor CLI's ACP catalogue as the runner reports it (cursor_models.go): Auto is `default`, with no
-# parameters; the rest carry their effort as reasoning levels, beside every parameter Cursor lists.
+# parameters; the rest carry their effort as reasoning levels, beside every parameter Cursor lists, by
+# Cursor's own names (docs/evidence/cursor-cli/2026.10.14-941492e/p0c parameterized-model-picker).
 CURSOR_CATALOG = [
     {"value": "default", "label": "Auto"},
     {"value": "claude-opus-5-5", "label": "Claude Opus 5.5", "reasoningLevels": ["low", "medium", "high", "xhigh", "max"],
      "defaultReasoningLevel": "medium",
-     "parameters": [opt("context", "Context", "model_config", ["300k", "1m"], "300k"),
-                    opt("effort", "Effort", "thought_level", ["low", "medium", "high", "xhigh", "max"], "medium"),
-                    opt("fast", "Fast", "model_config", ["false", "true"], "false")]},
+     "parameters": [opt("context", "Context", "model_config", [("300k", "300K"), ("1m", "1M")], "300k"),
+                    opt("effort", "Effort", "thought_level", [("low", "Low"), ("medium", "Medium"), ("high", "High"),
+                                                              ("xhigh", "Extra High"), ("max", "Max")], "medium"),
+                    opt("fast", "Fast", "model_config", [("false", "Off"), ("true", "Fast")], "false")]},
     {"value": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5", "reasoningLevels": ["low", "medium", "high"],
      "defaultReasoningLevel": "medium"},
     {"value": "gpt-5.5", "label": "GPT-5.5", "reasoningLevels": ["low", "medium", "high", "xhigh"],
@@ -277,7 +280,7 @@ def session(sid, **over):
 def sessions():
     return {
         "C1": session("C1"),
-        "C2": session("C2", model="claude-opus-5-5", effort="high"),
+        "C2": session("C2", model="claude-opus-5-5[context=1m,fast=true]", effort="high"),
         "C3": session("C3", status="RUNNING", runStatus="RUNNING", runState="RUNNING", numTurns=2,
                       lastAssistantText="Running the full suite now.", engineTurnActive=True,
                       currentTurnStartedAt=ago(0.5)),

@@ -460,9 +460,12 @@ final class CursorShotTests: ProbeCase {
             tree(auto, "auto-menu-\(s)")
             auto.terminate()
 
+            // Claude Opus 5.5 at 1M and Fast: the chip says so, and the menu has Context and Speed under Effort.
             let opus = launch("console", session: "C2", dark: dark, until: "Model Claude Opus 5.5", "opus-\(s)")
+            expectText(opus, ["Model Claude Opus 5.5, effort High, 1M, Fast"], "opus-chip-\(s)")
+            shot("ios5-b0-chip-opus-\(s)")
             openModelMenu(opus, inside: "Effort", "opus-menu-\(s)")
-            expectText(opus, ["Cursor CLI", "Claude Opus 5.5", "Effort", "High"], "opus-menu-\(s)")
+            expectText(opus, ["Cursor CLI", "Claude Opus 5.5", "Effort", "Context", "Speed"], "opus-menu-\(s)")
             shot("ios5-b-model-menu-opus-\(s)")
             tree(opus, "opus-menu-\(s)")
             opus.terminate()
@@ -489,6 +492,9 @@ final class CursorShotTests: ProbeCase {
             settle(1.5)
             expectText(context, ["Context", "Context window", "Unavailable",
                                  "Cursor CLI doesn’t report how much of the window a session has used"], "context-\(s)")
+            if !context.staticTexts.matching(NSPredicate(format: "label == 'Model'")).firstMatch.exists {
+                XCTFail("context-\(s): the sheet has no Model row")
+            }
             shot("ios5-d-context-unavailable-\(s)")
             context.terminate()
 

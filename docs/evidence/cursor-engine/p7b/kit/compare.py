@@ -28,7 +28,8 @@ GROUPS = {
                           ('ios3-h-remove-refused', 8)],
     'ios-4-api-key': [('ios4-a-api-keys', 2), ('ios4-b-cursor-key-valid', 3), ('ios4-c-cursor-key-rejected', 4),
                       ('ios4-d-cursor-key-checked-again', 4)],
-    'ios-5-session': [('ios5-a-model-menu-auto', 1), ('ios5-b-model-menu-opus', 2), ('ios5-c-turn-running-queued', 3),
+    'ios-5-session': [('ios5-a-model-menu-auto', 1), ('ios5-b0-chip-opus', 2), ('ios5-b-model-menu-opus', 2),
+                      ('ios5-c-turn-running-queued', 3),
                       ('ios5-d-context-unavailable', 4), ('ios5-e-usage-limit', 5)],
     'ios-6-modes-and-switch': [('ios6-a-modes', 2), ('ios6-b-provider-blocked', 4), ('ios6-c-provider-draft', 5)],
 }

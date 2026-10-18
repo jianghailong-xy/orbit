@@ -150,9 +150,10 @@ public enum CursorRuntime {
     public static let moveBlockedNote =
         "\(name) can’t carry a conversation to another account or key yet. Start a new session to use one of these."
 
-    /// In the model menu under Auto, which has no parameters to set (contract §10).
+    /// In the model menu under Auto, which has no parameters to set (contract §10): the board's words (iOS
+    /// 5 ①), context among them now that the menu has its row — the web, with none yet, leaves context out.
     public static let autoNote =
-        "Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort to set."
+        "Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set."
 
     /// Under the tray of messages waiting for a running Cursor CLI turn (contract §3.2: a prompt sent
     /// mid-turn cancels the turn, so Orbit queues it).
@@ -169,7 +170,80 @@ public enum CursorRuntime {
     /// Whether `model` is Auto: its catalogue's `default`, or no model named at all, which runs as Auto.
     public static func isAuto(_ model: String?) -> Bool {
         let model = model ?? ""
-        return model.isEmpty || model == autoModel
+        return model.isEmpty || modelBase(model) == autoModel
+    }
+
+    // MARK: - a model's settings (the coordinator's convention for board iOS 5 ②④, 2026-10-18)
+
+    /// The settings a session's Cursor model value carries beside its model: the context and the speed,
+    /// each a parameter of the model in the runner's catalogue. Its effort stays in the session's effort
+    /// field, and Auto takes none.
+    public static let contextParameter = "context"
+    public static let fastParameter = "fast"
+
+    /// The model a Cursor model value names, without the settings it carries: `claude-opus-5-5[context=1m]`
+    /// is `claude-opus-5-5`.
+    public static func modelBase(_ model: String) -> String {
+        model.firstIndex(of: "[").map { String(model[..<$0]) } ?? model
+    }
+
+    /// The settings a Cursor model value carries, in Cursor's own bracket notation
+    /// (`claude-opus-5-5[context=1m,fast=true]`), by id.
+    public static func modelParameters(_ model: String?) -> [String: String] {
+        guard let model, let open = model.firstIndex(of: "[") else { return [:] }
+        var inside = model[model.index(after: open)...]
+        if inside.hasSuffix("]") { inside = inside.dropLast() }
+        var out: [String: String] = [:]
+        for pair in inside.split(separator: ",") {
+            let parts = pair.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count == 2, !parts[0].isEmpty { out[parts[0]] = parts[1] }
+        }
+        return out
+    }
+
+    /// `base` carrying `settings`, in the catalogue's order of them: a value at the model's own default is
+    /// left out, so a model on every default is its bare name.
+    public static func withParameters(_ base: String, _ settings: [String: String], row: RunnerModelInfo?) -> String {
+        let set = (row?.parameters ?? []).compactMap { parameter -> String? in
+            guard let value = settings[parameter.id], value != parameter.defaultValue else { return nil }
+            return "\(parameter.id)=\(value)"
+        }
+        return set.isEmpty ? base : "\(base)[\(set.joined(separator: ","))]"
+    }
+
+    /// One of a catalogue row's settings, by its id: the context, the speed.
+    public static func parameter(_ row: RunnerModelInfo?, _ id: String) -> RunnerModelParameter? {
+        row?.parameters?.first { $0.id == id }
+    }
+
+    /// A setting's value as its row names it: "1M", "Fast".
+    public static func valueLabel(_ parameter: RunnerModelParameter, _ value: String) -> String {
+        parameter.values.first { $0.value == value }?.label ?? value
+    }
+
+    /// What the model menu's Speed row calls the fast lane off and on (the board's Standard / Fast).
+    public static func speedLabel(_ parameter: RunnerModelParameter, _ value: String) -> String {
+        value == "true" ? valueLabel(parameter, value) : "Standard"
+    }
+
+    /// The value a session's model value sets for `parameter`, else the model's own default.
+    public static func currentValue(_ parameter: RunnerModelParameter, model: String?) -> String? {
+        modelParameters(model)[parameter.id] ?? parameter.defaultValue
+    }
+
+    /// The chip's words after the model's name and effort (the board's "Opus 5.5 High · 1M · Fast"): a
+    /// context the session set away from the model's default, and Fast while the fast lane is on.
+    public static func chipParameters(_ model: String?, row: RunnerModelInfo?) -> [String] {
+        let set = modelParameters(model)
+        var out: [String] = []
+        if let context = parameter(row, contextParameter), let value = set[contextParameter],
+           value != context.defaultValue {
+            out.append(valueLabel(context, value))
+        }
+        if let fast = parameter(row, fastParameter), (set[fastParameter] ?? fast.defaultValue) == "true" {
+            out.append(valueLabel(fast, "true"))
+        }
+        return out
     }
 
     // MARK: - permission modes (D6)

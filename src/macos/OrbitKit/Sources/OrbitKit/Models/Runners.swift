@@ -50,14 +50,18 @@ public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
     public let permissionModes: [String]?
     /// Whether this model has the runtime's fast lane, from the same probe. nil is "could not say".
     public let fastMode: Bool?
+    /// Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+    /// context size, fast lane and thinking (runner `ModelParameter`, docs/cursor-runtime-contract.md §10).
+    /// nil for a runtime that lists none.
+    public let parameters: [RunnerModelParameter]?
     public var id: String { value }
 
-    /// Spelled out rather than synthesized so the two fields above can be added without every
+    /// Spelled out rather than synthesized so the fields above can be added without every
     /// construction site having to name them.
     public init(value: String, label: String, priority: Int? = nil, contextWindow: Int? = nil,
                 reasoningLevels: [String]? = nil, defaultReasoningLevel: String? = nil,
                 serviceTiers: [String]? = nil, permissionModes: [String]? = nil,
-                fastMode: Bool? = nil) {
+                fastMode: Bool? = nil, parameters: [RunnerModelParameter]? = nil) {
         self.value = value
         self.label = label
         self.priority = priority
@@ -67,6 +71,55 @@ public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
         self.serviceTiers = serviceTiers
         self.permissionModes = permissionModes
         self.fastMode = fastMode
+        self.parameters = parameters
+    }
+}
+
+/// One setting a model takes beside its name, with the values it accepts and the one it starts on
+/// (runner `ModelParameter`): Cursor CLI's `context` (300K / 1M) and `fast` (Off / Fast), say. Read
+/// leniently — a field the runner leaves out or spells another way costs that field, never the
+/// catalogue around it.
+public struct RunnerModelParameter: Codable, Equatable, Sendable {
+    public let id: String
+    public let label: String?
+    public let category: String?
+    /// The value a session starts on when it names none.
+    public let defaultValue: String?
+    public let values: [RunnerModelParameterValue]
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, category, values
+        case defaultValue = "default"
+    }
+
+    public init(id: String, label: String? = nil, category: String? = nil, defaultValue: String? = nil,
+                values: [RunnerModelParameterValue]) {
+        self.id = id
+        self.label = label
+        self.category = category
+        self.defaultValue = defaultValue
+        self.values = values
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? ""
+        label = try? c.decodeIfPresent(String.self, forKey: .label)
+        category = try? c.decodeIfPresent(String.self, forKey: .category)
+        defaultValue = try? c.decodeIfPresent(String.self, forKey: .defaultValue)
+        values = ((try? c.decodeIfPresent([LossyDecodable<RunnerModelParameterValue>].self, forKey: .values)) ?? [])
+            .compactMap(\.value)
+    }
+}
+
+/// One value a model's setting takes, and its name: `1m` is "1M".
+public struct RunnerModelParameterValue: Codable, Equatable, Sendable {
+    public let value: String
+    public let label: String?
+
+    public init(value: String, label: String? = nil) {
+        self.value = value
+        self.label = label
     }
 }
 
@@ -137,7 +190,10 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "cursor": rows = cursor
         default: rows = claude
         }
-        return rows?.first { $0.value == model }
+        // A Cursor CLI model value carries its settings beside the model (`claude-opus-5-5[context=1m]`):
+        // its row is its model's.
+        let key = provider == CursorRuntime.engine ? CursorRuntime.modelBase(model) : model
+        return rows?.first { $0.value == key }
     }
 
     /// Runtimes whose reasoning levels are declared per model: Codex efforts, OpenCode variants,
