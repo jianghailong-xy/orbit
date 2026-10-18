@@ -13,9 +13,9 @@ import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.servic
  *
  * ONLY THE REDACTED TEXT IS KEPT (hard constraint 4). The runner sends the file as it read it; the
  * shared redactor takes out every credential shape it knows and the owner's own `workspace.env`
- * values before anything is hashed or stored, and the answer hands back the stored text, which is
- * what the runner gives its model. A quote the model copies is then checked (`sourceText`) against
- * the very text it read, and the text as it was sent is never written anywhere.
+ * values before anything is hashed or stored, and the stored text is what the server's import job
+ * hands the System model. A quote the model copies is then checked (`sourceText`) against the very
+ * text it read, and the text as it was sent is never written anywhere.
  *
  * ONE CONTENT IS ONE NOTE IN A SPACE. The note is keyed by the sha256 of its redacted text (UNIQUE
  * (space_id, content_sha256), migration 0316): importing the same file again, or the same text under
@@ -47,7 +47,7 @@ export interface WikiNoteAnswer {
   redacted: boolean;
   /** False when the space already held this text: nothing was written. */
   created: boolean;
-  /** The stored, redacted text: what the importer hands its model. */
+  /** The stored, redacted text, for the server's own callers: the runner door's answer leaves it out (contract `import.note.answer`). */
   text: string;
 }
 

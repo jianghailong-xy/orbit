@@ -3,14 +3,14 @@ import { validateArticlePart } from '../wiki/wiki-articles';
 
 /**
  * The writer's half of the articles (contracts/wiki.contract.json `articles`, `jobs.kindRuns.articles`),
- * ported from `src/runner-go/wiki_articles.go` for the server's `articles` job: the prompts the model is
- * asked, how what it answers is read, and the grouping of a topic too big for one article.
+ * ported from `src/runner-go/wiki_articles.go` before P11 deleted it, for the server's `articles` job: the prompts
+ * the model is asked, how what it answers is read, and the grouping of a topic too big for one article.
  *
  * WORD FOR WORD WHERE THE MODEL READS IT. The system prompt, the article and overview prompts, the entry
  * lines, the naming prompt and the retry suffix are the runner's text, so the System model is asked exactly
  * what the session's provider was. What the server decides is not here: which entries a topic has, its
  * fingerprint and what of a draft survives are `wiki/wiki-articles.ts`'s, the one implementation both paths
- * write through.
+ * wrote through and the job still does.
  *
  * ONE COUNT OF A DRAFT. The runner estimated what the server would keep of a draft before deciding to ask
  * again (`wikiArticleDraftChars`, "roughly"); here the server's own validation is in the same process, so the
@@ -25,7 +25,7 @@ import { validateArticlePart } from '../wiki/wiki-articles';
  * topic of thousands of entries is grouped.
  */
 
-/** The writer's own numbers, the runner's (`wiki_articles.go`); the contract's are `WIKI_ARTICLE_RULES`. */
+/** The writer's own numbers, as the runner's `wiki_articles.go` had them; the contract's are `WIKI_ARTICLE_RULES`. */
 export const WIKI_ARTICLE_WRITER = {
   /** A group's name is at most this many characters; one the model's answer does not give is a path's. */
   nameMaxChars: 24,

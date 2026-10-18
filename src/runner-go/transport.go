@@ -100,7 +100,6 @@ func init() {
 		kimiAccountRemoveCapabilityV1,
 		kimiAccountMoveCapabilityV1,
 		sessionMoveCapabilityV1,
-		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
 		cursorKeyCheckCapabilityV1,
@@ -2379,9 +2378,8 @@ func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (js
 }
 
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
-// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`) — or, on
-// `maintenance/verifications`, of the ops ended sessions left waiting there, which a maintenance run of the
-// space adopts (`reviewModes.verification.adoption`). route is the path after the space.
+// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`). route is the
+// path after the space.
 func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
@@ -2399,10 +2397,9 @@ func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after strin
 
 // requestWikiVerification asks the server to verify the ops the calling session proposed in a space
 // (contract `reviewModes.verification.routes.request`, `servedBy`): what `orbit wiki verify` calls where
-// the list answered that this deployment verifies on the server, so the command waits for the verdict
-// instead of asking a model of the session's provider about it. One queued job per session and space, so
-// asking twice while one is queued is one job; the answer names it, and answers `servedBy: runner` with
-// no job where the server does not run for the account.
+// the list answered that this deployment verifies on the server, before it waits for the verdicts. One
+// queued job per session and space, so asking twice while one is queued is one job; the answer names it,
+// and answers `servedBy: runner` with no job where the server does not run for the account.
 func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
@@ -2410,98 +2407,6 @@ func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.Raw
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications/request"
 	_, err := t.doWiki(http.MethodPost, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// reportWikiVerifications reports verdicts for ops the list on the same route gave. A report none of
-// whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
-//
-// Sent again through a transient failure: a verdict is recorded only while its op still waits for one
-// (the update's predicate), and the same verdict for an op already verified that way is answered with
-// what was recorded, writing nothing (wiki.service.ts applyVerdict).
-func (t *Transport) reportWikiVerifications(route, sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route
-	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// listWikiDossiers reads one page of a space's dossiers for the Wiki maintenance run the calling
-// session is (`orbit wiki dossier`, contract `maintenance.dossier`). after is a cursor token an earlier
-// page handed out, and a limit of 0 leaves the page's size to the server.
-func (t *Transport) listWikiDossiers(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	values := url.Values{}
-	if after != "" {
-		values.Set("after", after)
-	}
-	if limit > 0 {
-		values.Set("limit", strconv.Itoa(limit))
-	}
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/dossiers"
-	if encoded := values.Encode(); encoded != "" {
-		path += "?" + encoded
-	}
-	var out json.RawMessage
-	_, err := t.doWiki(http.MethodGet, path, nil, &out, wikiDossierPageTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// advanceWikiCursor reports how the calling session's maintenance run ended (`orbit wiki cursor
-// advance`, contract `maintenance.cursor.advance`): a succeeded run moves the space's cursor to its
-// token, and a failed or truncated one is recorded and moves nothing — and is counted, so only a
-// succeeded run's report is sent again through a transient failure (wikiReportsSuccess).
-func (t *Transport) advanceWikiCursor(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/cursor"
-	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), wikiReportsSuccess(body))
-	return out, err
-}
-
-// listWikiAnchors reads one page of a space's live entries with git anchors, for the Wiki maintenance
-// run the calling session is (`orbit wiki anchors verify`, contract `anchorRules.verify.list`). after is
-// the next an earlier page gave, and a limit of 0 leaves the page's size to the server.
-func (t *Transport) listWikiAnchors(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	values := url.Values{}
-	if after != "" {
-		values.Set("after", after)
-	}
-	if limit > 0 {
-		values.Set("limit", strconv.Itoa(limit))
-	}
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchors"
-	if encoded := values.Encode(); encoded != "" {
-		path += "?" + encoded
-	}
-	var out json.RawMessage
-	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// reportWikiAnchorChecks reports what the calling session's maintenance run found on origin/main
-// (`orbit wiki anchors verify`, contract `anchorRules.verify.report`): each entry is recorded on its own.
-//
-// Sent again through a transient failure: a check sets an entry's anchors and their state to what was
-// found (it counts nothing, and moves no revision), and files a challenge only while none of the entry's
-// is open (wiki.service.ts applyAnchorCheck), so a second landing writes what the first did.
-func (t *Transport) reportWikiAnchorChecks(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchor-checks"
-	_, err := t.doWiki(http.MethodPost, path, body, &out, wikiAnchorReportTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

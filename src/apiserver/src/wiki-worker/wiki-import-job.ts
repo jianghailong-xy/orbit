@@ -43,7 +43,8 @@ import {
  * (`import.note`) and remembers on its machine how far it has taken each (`import.cli.resume`); what it hands
  * this job is the notes, in the order it would have read them, each either to be read or carrying the ops an
  * earlier run found in it and has not proposed yet. The job's report is what the command prints and what it
- * writes back into its memory — so a run picks up where the last one stopped whichever of the two paths ran it.
+ * writes back into its memory — so a run picks up where the last one stopped, even one the runner's own path ran
+ * before P11.
  *
  * ONE RUN, AS THE RUNNER RAN IT. Notes are read a wave at a time (the command's --concurrency) until the run's
  * ops are found (--max-ops, at most rules.opsPerRun); each read is one call through the queue (step `import`,

@@ -129,7 +129,6 @@ import {
   TakeoverTurnLeasesResponse,
   TurnAttachment,
   TurnCompleteRequest,
-  WIKI_MAINTENANCE_RUN_V1,
   type WikiRepoOpCommand,
   type WikiRepoOpFragmentRequest,
   type WikiRepoOpProgressRequest,
@@ -206,7 +205,6 @@ import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
-import { wikiMaintenanceRunOf, withWikiMaintenanceRun } from '../wiki/wiki-maintenance-session';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -2660,7 +2658,6 @@ export class RunnerApiController {
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
-      runnerSupportsCapability(capabilities, WIKI_MAINTENANCE_RUN_V1),
       hungUp,
     );
     if (job?.allowOrchestration) {
@@ -2722,7 +2719,6 @@ export class RunnerApiController {
       SESSION_TERMINAL_HANDOFF_V1,
     );
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
-    const supportsWikiMaintenance = runnerSupportsCapability(capabilities, WIKI_MAINTENANCE_RUN_V1);
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: {
@@ -2826,12 +2822,6 @@ export class RunnerApiController {
       if (!supportsSourcePin && hasResolvedSource(s.sourceState)) {
         continue;
       }
-      // A Wiki maintenance session, and the run it is rebuilt on (wiki/wiki-maintenance-session.ts). The same
-      // refusal again as SR35 above: a runner that cannot start it clean is not handed it back at all.
-      const maintenance = await wikiMaintenanceRunOf(this.prisma, s);
-      if (maintenance && !supportsWikiMaintenance) {
-        continue;
-      }
       const workspace = s.workspace;
       const taskIntegrationRef = s.task && !s.task.codeless
         ? s.task.project?.codebases[0]?.integrationRef
@@ -2843,7 +2833,7 @@ export class RunnerApiController {
       // shared one only for an admin's (usableProviderScope), and an account pool is rebuilt on the
       // member the claim would choose, not the runner's login — a
       // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
-      // the claim builds it. A maintenance run, as on the claim, never through a pool.
+      // the claim builds it.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       // As on the claim (QueueService.buildSession): the key the slug names or a retired name of one,
       // and a legacy built-in dsh session's default DeepSeek key when its workspace holds no key itself.
@@ -2853,15 +2843,13 @@ export class RunnerApiController {
       const customRow = declaredIsBuiltin
         ? keyRow
         : (keyRow ??
-          (maintenance
-            ? null
-            : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
-              (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
-              (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
+          (await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
+          (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
+          (await this.queue.resolveSharedPool(this.prisma, s, declared!)));
       // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
       // the Claude default, as the line resolvePoolMember owed says; any other slug no enabled row holds
       // is left out, unavailable.
-      const poolFallback = !declaredIsBuiltin && !customRow && !maintenance
+      const poolFallback = !declaredIsBuiltin && !customRow
         && (await accountPoolRuntime(this.prisma, s.ownerId, declared!)) === AgentProvider.CLAUDE;
       if (!declaredIsBuiltin && !poolFallback && (!customRow?.enabled
         || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(customRow.runtime))) {
@@ -2984,7 +2972,6 @@ export class RunnerApiController {
           provider,
           runSource: s.runSource,
           spawnDepth: s.spawnDepth,
-          maintenance,
           env: exec.env,
         }),
         // Per-session effort wins; otherwise use the workspace's effort setting.
@@ -3005,7 +2992,6 @@ export class RunnerApiController {
       // but orchestration discovery and credential issuance use the authorizer's exact live
       // eligibility conditions. This prevents tools from appearing only to fail every call.
       const allowOrchestration =
-        maintenance === null &&
         supportsOrchestrationCredential &&
         s.ownerId === runner.ownerId &&
         s.assignedRunnerId === runner.id &&
@@ -3014,7 +3000,7 @@ export class RunnerApiController {
         OPEN.includes(s.status) &&
         workspace?.deletedAt === null &&
         orchestrationEnabled(s.owner);
-      out.push(withWikiMaintenanceRun({
+      out.push({
         sessionId: s.id,
         status: s.status as SharedRunStatus,
         provider,
@@ -3057,7 +3043,7 @@ export class RunnerApiController {
           s,
           s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null,
         ),
-      }, maintenance));
+      });
     }
     return { sessions: out };
   }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,36 @@ func TestMCPPermissionPromptEnv(t *testing.T) {
 	t.Setenv(envMCPPermissionPrompt, "")
 	if !mcpPermissionPromptEnabled() {
 		t.Fatalf("mcpPermissionPromptEnabled = false by default")
+	}
+}
+
+// Spawned with ORBIT_MCP_TOOLS, `orbit mcp` serves the tools it names and no others: tools/list names
+// those and no other, and a call to any other is refused without reaching Orbit (the server here has no
+// transport to reach it with). Unset, it serves every tool.
+func TestMCPServesOnlyTheToolsORBITMCPToolsNames(t *testing.T) {
+	t.Setenv(envMCPTools, "task_get, task_comment,,task_progress_report")
+	srv := &mcpServer{allowPermissionPrompt: true, onlyTools: mcpToolsFromEnv()}
+	resp, _ := srv.handle(&rpcRequest{ID: json.RawMessage("1"), Method: "tools/list"})
+	listed := []string{}
+	for _, tool := range resp.Result.(map[string]interface{})["tools"].([]map[string]interface{}) {
+		listed = append(listed, tool["name"].(string))
+	}
+	sort.Strings(listed)
+	if got := strings.Join(listed, ","); got != "task_comment,task_get,task_progress_report" {
+		t.Errorf("the server lists %s", got)
+	}
+	for _, name := range []string{"task_update", "task_create", "session_create", "wiki_propose", "bg_run", "permission_prompt"} {
+		params, _ := json.Marshal(map[string]interface{}{"name": name, "arguments": map[string]interface{}{}})
+		resp, _ := srv.handle(&rpcRequest{ID: json.RawMessage("2"), Method: "tools/call", Params: params})
+		result, _ := resp.Result.(map[string]interface{})
+		if result["isError"] != true {
+			t.Errorf("%s was served: %v", name, resp)
+		}
+	}
+
+	os.Unsetenv(envMCPTools)
+	if only := mcpToolsFromEnv(); only != nil {
+		t.Errorf("with ORBIT_MCP_TOOLS unset the server serves only %v, want every tool", only)
 	}
 }
 

@@ -29,12 +29,12 @@ import {
  * to before it becomes an op — the off-topic answer, the parse, each entry's kind and fields, every source a
  * line of the dossier with its quote copied from it, the anchors the space's snapshot holds, the one retry
  * with the reasons the first answer was refused, the batches a run proposes in, and the circuit breaker's
- * hold-back over them. Ported from `src/runner-go/wiki_maintain.go`, which does the same on the runner until
- * P10 removes it.
+ * hold-back over them. Ported from `src/runner-go/wiki_maintain.go`, which did the same on the runner until
+ * P11 removed it.
  *
- * ONE RULE, TWO IMPLEMENTATIONS, NO DRIFT. The runner's Go code and this file answer the same for the same
- * input: the prompt, the line reading, the plain comparison, the quote's place in the record, the retry
- * suffix, the batch grouping and the breaker's page arithmetic are the Go functions' word for word. What is
+ * ONE RULE, NO DRIFT. This file answers what the runner's Go code answered for the same input: the prompt,
+ * the line reading, the plain comparison, the quote's place in the record, the retry suffix, the batch
+ * grouping and the breaker's page arithmetic are the Go functions' word for word. What is
  * not a port is where the anchors are checked — the runner held them to its checkout, and the server holds
  * them to the space's snapshot of origin/main (`repoOps`) — and where the model is: the request queue, with
  * the deployment's System model.
@@ -77,7 +77,7 @@ export function wikiMaintainTopicsOf(topics: ReadonlyArray<{ slug: string; title
  * what it is, and to say so when the case is about something else.
  */
 export function wikiMaintainPrompt(context: WikiMaintainPromptContext, about: string, dossier: string): string {
-  // filepath.Base of the repository URL, as the Go prompt reads it.
+  // filepath.Base of the repository URL, as the Go prompt read it.
   const trimmed = context.repo.urlNorm.replace(/\/+$/u, '');
   const name = context.repo.urlNorm !== '' ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : context.title;
   let scope = `THE REPOSITORY: ${JSON.stringify(name)}`;
@@ -606,7 +606,7 @@ export interface WikiMaintainAnswer {
   breaker: { remaining: number | null } | null;
 }
 
-/** One op's outcome as the runner reads it: its status, and its first refusal's code and message. */
+/** One op's outcome as the runner read it: its status, and its first refusal's code and message. */
 export function wikiMaintainOutcomeAt(ops: readonly unknown[], index: number): {
   status: string;
   code: string;

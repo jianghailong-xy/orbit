@@ -269,9 +269,6 @@ function boot(): Promise<Harness> {
     const repoOps = new WikiRepoOps(prisma as unknown as PrismaService);
     const ownerId = randomUUID();
     await prisma.user.create({ data: { id: ownerId, email: `wiki-maintain-job-${ownerId}@wiki.invalid`, name: 'maintain job spec', passwordHash: 'x' } });
-    // The server executes this account's wiki: what makes the executor claim its jobs and the run's end owe
-    // the articles job (contract `jobs.executor`, `articles.regeneration`). Cleared in `after`.
-    process.env.ORBIT_WIKI_EXECUTOR = 'server';
     return { sql, prisma, model, service, docs, plans, maintenance, repoOps, ownerId };
   })();
   return harness;
@@ -280,8 +277,6 @@ function boot(): Promise<Harness> {
 after(async () => {
   if (!harness) return;
   const { prisma, sql, model, ownerId } = await harness;
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
   await prisma.wikiSpace.deleteMany({ where: { ownerId } }).catch(() => undefined);
   await prisma.session.deleteMany({ where: { ownerId } }).catch(() => undefined);
   await prisma.workspace.deleteMany({ where: { ownerId } }).catch(() => undefined);

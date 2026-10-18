@@ -985,8 +985,8 @@ type AgentExecConfig struct {
 	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
 	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
 	MaxTurns          *int                   `json:"maxTurns"`
-	MaxBudgetUsd *float64               `json:"maxBudgetUsd"`
-	McpConfig    map[string]interface{} `json:"mcpConfig"`
+	MaxBudgetUsd      *float64               `json:"maxBudgetUsd"`
+	McpConfig         map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }
@@ -1077,10 +1077,6 @@ type ClaimedSession struct {
 	// was created and nothing runs in the workDir; runSessionProcess ends the run FAILED with it
 	// instead of starting an engine. Runner-internal.
 	SourceRefusal *SourcePinRefusal `json:"-"`
-	// WikiMaintenance is present on a Wiki maintenance session only: the run it is pinned to and started
-	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
-	// wiki-maintenance-run/v1.
-	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 	// Naming asks this runner to name the session through the engine running it, once its opening
 	// turn is underway (session_naming.go). The control plane sends it only while the session still
 	// carries the title cut from its prompt, it holds no key it could name the session with itself,
@@ -1278,8 +1274,6 @@ type ReclaimSession struct {
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session
 	// already PINNED comes back on the SHA its first claim froze.
 	Source *SessionSource `json:"source,omitempty"`
-	// WikiMaintenance, cf. ClaimedSession.WikiMaintenance: a restarted runner starts the run clean again.
-	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 }
 
 type ReclaimResponse struct {

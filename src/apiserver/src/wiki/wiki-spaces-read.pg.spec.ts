@@ -38,10 +38,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { WikiDocs } from './wiki-docs';
+import { WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
 import { WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
@@ -59,6 +57,9 @@ interface Harness {
   prisma: PrismaClient;
   app: INestApplication;
   bearers: Map<string, string>;
+  /** The plan's and the documents' services: what the server's jobs draft, propose and write through. */
+  plans: WikiPlans;
+  docs: WikiDocs;
 }
 
 let harness: Promise<Harness> | undefined;
@@ -78,7 +79,7 @@ function boot(): Promise<Harness> {
     const docs = new WikiDocs(prisma as unknown as PrismaService, service, hub);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController, RunnerWikiPlanController, RunnerWikiDocsController],
+      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
@@ -107,7 +108,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, plans, docs };
   })();
   return harness;
 }
@@ -211,17 +212,6 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   return id;
 }
 
-async function task(h: Harness, ownerId: string, listId: string, assigneeId: string): Promise<string> {
-  const id = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id",
-                         "completion_criterion","updated_at")
-     VALUES ($1,'Wiki maintenance run',$2,'USER',$2,'OPEN'::task_status,$3,$4,'OWNER_CONFIRMED',now())`,
-    [id, ownerId, assigneeId, listId],
-  );
-  return id;
-}
-
 async function toolCall(h: Harness, sessionId: string, output: string): Promise<string> {
   const id = randomUUID();
   await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output","started_at") VALUES ($1,$2,'Bash',$3,now())`, [id, sessionId, JSON.stringify(output)]);
@@ -238,25 +228,33 @@ async function bind(h: Harness, owner: Account, spaceId: string, workspaceId: st
   expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }), 200, 'the owner binds a workspace');
 }
 
-/** Maintenance on, in this workspace: the space's hidden list, and a maintenance run of it. */
-async function maintain(
-  h: Harness,
-  owner: Account,
-  spaceId: string,
-  workspaceId: string,
-  machine: { id: string; token: string },
-): Promise<Caller & { session: string }> {
+/** The server's plan job, as the plan's writers know it: its owner, its space, and the wiki_job that runs it. */
+interface Drafter {
+  ownerId: string;
+  spaceId: string;
+  wikiJobId: string;
+}
+
+/**
+ * Maintenance on, in this workspace: the draft the space's creation asked for, which waited for a maintenance
+ * workspace, is made now as the wiki-worker's job — the drafter of this space's plan here.
+ */
+async function maintain(h: Harness, owner: Account, spaceId: string, workspaceId: string): Promise<Drafter> {
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId } });
   expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = toUuid(on.body.settings.maintenance.listId as string);
-  const run = await session(h, owner.id, workspaceId, machine.id, await task(h, owner.id, listId, workspaceId));
-  return { runner: machine.token, session: run };
+  const made = await h.sql.query<{ job_id: string }>(
+    `SELECT "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft' AND "state" = 'made' AND "job_id" IS NOT NULL`,
+    [spaceId],
+  );
+  assert.equal(made.rowCount, 1, 'the space\'s first draft is made on the server');
+  return { ownerId: owner.id, spaceId, wikiJobId: made.rows[0].job_id };
 }
 
 /**
  * The space's plan job, exactly: every job it has is taken away, and this one row written in its place —
  * what the doors made on the way here (a draft asked when the space was made, a build its confirmation
- * asked for) depends on whether a maintenance provider is set up, and the count is the subject here.
+ * asked for) depends on whether the space's maintenance names a workspace, and the count is the subject here.
+ * A job past held names the wiki_job it was made as.
  */
 async function onlyJob(
   h: Harness,
@@ -269,7 +267,7 @@ async function onlyJob(
   const made = job.state !== 'held';
   await h.sql.query(
     `INSERT INTO "wiki_plan_job"("id","space_id","owner_id","kind","trigger","instructions","state","held_reason","held_at",
-                                 "task_id","made_at","started_at","ended_at","outcome","version","errors","error")
+                                 "job_id","made_at","started_at","ended_at","outcome","version","errors","error")
      VALUES ($1,$2,$3,$4,'owner',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
     [
       randomUUID(),
@@ -318,16 +316,16 @@ const PLAN = {
 
 const REPO = { sha: 'a'.repeat(40), checked: 3, missing: [] };
 
-async function draft(h: Harness, maintainer: Caller, spaceId: string, baseVersion: number | null): Promise<number> {
-  const drafted = await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/drafts`, {
+/** The server's plan job stores a draft, as the wiki-worker's plan_draft job does. */
+async function draft(h: Harness, drafter: Drafter, baseVersion: number | null): Promise<number> {
+  const drafted = await h.plans.submitServerDraft(drafter, {
     baseVersion,
     target: { min: 1, max: 10 },
     plan: PLAN,
     repoCheck: REPO,
     model: 'qwen3.8-27b-fp8',
   });
-  expectStatus(drafted, 200, 'the maintenance run drafts the plan');
-  return drafted.body.version as number;
+  return drafted.version;
 }
 
 const b62 = (id: string): string => uuidToBase62(id);
@@ -375,31 +373,32 @@ test('each space carries what of its plan waits on the owner, the workspaces bou
   const full = await space(h, owner, 'A full space');
   const wsFull = await workspace(h, owner.id, machine.id);
   await bind(h, owner, full, wsFull);
-  const maintainer = await maintain(h, owner, full, wsFull, machine);
-  const v1 = await draft(h, maintainer, full, null);
+  const drafter = await maintain(h, owner, full, wsFull);
+  const ordinary = await session(h, owner.id, wsFull, machine.id);
+  const v1 = await draft(h, drafter, null);
   expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${full}/plan/versions/${v1}/confirm`), 200, 'the owner confirms v1');
-  expectStatus(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${full}/docs/session-runtime`, {
+  // One document written by the server's build, as its docs_build job writes it.
+  await h.docs.write(wikiDocsBuildJobPrincipal(owner.id), full, 'session-runtime', {
     planVersion: v1,
     repoSha: 'c'.repeat(40),
     model: 'qwen3.8-27b-fp8',
     sections: [{ key: 's1', materialSha256: 'd'.repeat(64), markdown: 'Orbit 的会话跑在 runner 上。turn 先落库再投递。', footnotes: [] }],
-  }), 200, 'one document is written');
+  });
   for (const slug of ['wiki-plan', 'wiki-docs']) {
-    expectStatus(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${full}/plan/proposals`, {
+    await h.plans.proposeServer(drafter, {
       reason: `The plan has no document for ${slug}.`,
       change: { doc: docInput(slug, slug) },
-      facts: [{ kind: 'session', id: maintainer.session }],
-    }), 200, `a proposal for ${slug}`);
+      facts: [{ kind: 'session', id: ordinary }],
+    });
   }
-  const v2 = await draft(h, maintainer, full, v1);
+  const v2 = await draft(h, drafter, v1);
   assert.equal(v2, v1 + 1);
   await onlyJob(h, owner.id, full, { kind: 'revise', state: 'ended', outcome: 'failed', startedAt: true });
   // A changeset op waiting in Review, beside the plan: the sidebar's number, which the plan's never joins.
   // Manual, so that the agent's add waits for the owner whatever the other modes would make of it.
   expectStatus(await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${full}`, { reviewMode: 'manual' }), 200, 'the owner sets Manual');
-  const ordinary = await session(h, owner.id, wsFull, machine.id);
   const tool = await toolCall(h, ordinary, 'a pg spec that skips itself proves nothing');
-  const proposed = await call(h, { runner: maintainer.runner, session: ordinary }, 'POST', '/runner/wiki/changesets', {
+  const proposed = await call(h, { runner: machine.token, session: ordinary }, 'POST', '/runner/wiki/changesets', {
     rationale: 'one proposal',
     ops: [{
       op: 'add',
@@ -424,7 +423,7 @@ test('each space carries what of its plan waits on the owner, the workspaces bou
   const elsewhere = await runner(h, owner.id);
   const wsOff = await workspace(h, owner.id, elsewhere.id);
   await bind(h, owner, offline, wsOff);
-  await maintain(h, owner, offline, wsOff, elsewhere);
+  await maintain(h, owner, offline, wsOff);
   await onlyJob(h, owner.id, offline, { kind: 'draft', state: 'made' });
 
   // Another owner's space is in nobody's list but theirs.
@@ -479,7 +478,7 @@ test('a draft made and not started waits on the owner only while its runner is k
   const spaceId = await space(h, owner, 'A space on one runner');
   const ws = await workspace(h, owner.id, machine.id);
   await bind(h, owner, spaceId, ws);
-  await maintain(h, owner, spaceId, ws, machine);
+  await maintain(h, owner, spaceId, ws);
   await onlyJob(h, owner.id, spaceId, { kind: 'draft', state: 'made' });
   const waiting = async () => (await rows(h, owner)).get(spaceId)!.planWaiting;
 

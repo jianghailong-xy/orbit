@@ -1,23 +1,23 @@
 /**
- * What `orbit wiki docs build` reads and writes on the runner door that the documents' own spec does not
- * (criterion 9; contracts/wiki.contract.json `docs.material`, `docs.reads.material`, `docs.reads.writerDoc`,
- * `docs.dispositions`, migration 0337), over real HTTP and against a real PostgreSQL.
+ * What the server's documents build reads and writes that the documents' own spec does not (criterion 9;
+ * contracts/wiki.contract.json `docs.material`, `docs.reads.writerDoc`, `docs.dispositions`, migration 0337),
+ * against a real PostgreSQL: the server's half of a section's material as the wiki-worker's docs_build and
+ * maintain jobs gather it (`gatherDocMaterial`, from the section's session condition in the confirmed plan),
+ * and the document as they read it back (`WikiDocs.writerDoc`).
  *
  * What the task's verification asks, each read back from the doors and from the database:
  *
- *   1. the server's half of a section's material, and the document as it is written, are a maintenance
- *      run's of the space and no one else's: another session of the owner is refused
- *      WIKI_NOT_MAINTENANCE_SESSION, a call with no session 400, a session this runner does not host 403;
- *   2. every record it hands out is redacted — the owner's workspace.env values and the shared
+ *   1. the document as it is written is the server's own jobs' to read: a session's principal is refused;
+ *   2. every record the material holds is redacted — the owner's workspace.env values and the shared
  *      redactor's shapes taken out — and placed: `chars` is where the text stands in the record's
  *      redacted text, as a footnote's check reads it, so a quote copied from it verifies;
- *   3. another tenant gets a 404 for every one of it, and no record of theirs ever comes back through
- *      an entry that cites one;
+ *   3. another tenant gets a 404 for the document, and no record of theirs ever comes back through an
+ *      entry that cites one;
  *
  * and beside them: what the condition finds (the entries its keywords and anchor paths pick, best first,
  * as the way in to the records they cite; the owner's own words and the tasks' comments in its projects
  * and window), a long record cut around what found it, and the material's ledger (dispositions) written
- * with the section, refused when malformed, and read back on both doors.
+ * with the section, refused when malformed, and read back by the owner and by the server alike.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-docs-build.pg.spec.ts
  *
@@ -26,11 +26,9 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { after, test } from 'node:test';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
@@ -38,6 +36,7 @@ import { toUuid, WIKI_DOC_DISPOSITION_ACTIONS, WIKI_DOC_MATERIAL_RULES } from '@
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { addTwins } from '../common/public-id-body';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { redactSecrets } from '../common/secret-redaction';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -46,12 +45,12 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { WikiDocs } from './wiki-docs';
+import { WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
+import { gatherDocMaterial, storedSessionCondition } from './wiki-docs-material';
 import { WikiDocsController } from './wiki-docs.controller';
-import { WikiPlans } from './wiki-plan';
+import { ownerEnvLiterals } from './wiki-dossier';
+import { requireConfirmedPlan, WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiController } from './wiki.controller';
@@ -60,14 +59,15 @@ import { WikiService, type WikiPrincipal } from './wiki.service';
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
-const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/wiki.contract.json'), 'utf8'));
-
 interface Harness {
   base: string;
   sql: Client;
   prisma: PrismaClient;
   app: INestApplication;
   service: WikiService;
+  /** The plan's and the documents' services: what the server's jobs draft, read and write through. */
+  plans: WikiPlans;
+  docs: WikiDocs;
   bearers: Map<string, string>;
 }
 
@@ -88,7 +88,7 @@ function boot(): Promise<Harness> {
     const docs = new WikiDocs(prisma as unknown as PrismaService, service, hub);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController, RunnerWikiPlanController, RunnerWikiDocsController],
+      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
@@ -117,7 +117,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, bearers };
+    return { base: await app.getUrl(), sql, prisma, app, service, plans, docs, bearers };
   })();
   return harness;
 }
@@ -158,6 +158,19 @@ async function call(h: Harness, who: Caller, method: string, route: string, body
     parsed = { unparsed: text };
   }
   return { status: response.status, body: parsed };
+}
+
+/**
+ * A call of the server's own reader or writer, answered as a door would answer it: what it returned as a 200, or the
+ * status and body of what it threw — so a refusal reads here exactly as it reads on any door.
+ */
+async function served(run: () => Promise<unknown>): Promise<Answer> {
+  try {
+    return { status: 200, body: JSON.parse(JSON.stringify(await run())) };
+  } catch (error) {
+    if (error instanceof HttpException) return { status: error.getStatus(), body: error.getResponse() };
+    throw error;
+  }
 }
 
 function expectStatus(answer: Answer, status: number, why: string): void {
@@ -206,13 +219,13 @@ async function project(h: Harness, ownerId: string, title: string, coordinatorSe
   return id;
 }
 
-async function task(h: Harness, ownerId: string, assigneeId: string, over: { listId?: string | null; projectId?: string | null; title?: string } = {}): Promise<string> {
+async function task(h: Harness, ownerId: string, assigneeId: string, over: { projectId?: string | null; title?: string } = {}): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id","project_id",
+    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","project_id",
                          "completion_criterion","updated_at")
-     VALUES ($1,$2,$3,'USER',$3,'OPEN'::task_status,$4,$5,$6,'OWNER_CONFIRMED',now())`,
-    [id, over.title ?? 'a task', ownerId, assigneeId, over.listId ?? null, over.projectId ?? null],
+     VALUES ($1,$2,$3,'USER',$3,'OPEN'::task_status,$4,$5,'OWNER_CONFIRMED',now())`,
+    [id, over.title ?? 'a task', ownerId, assigneeId, over.projectId ?? null],
   );
   return id;
 }
@@ -277,8 +290,10 @@ interface Scene {
   runner: { id: string; token: string };
   ws: string;
   spaceId: string;
-  maintainer: Caller;
-  maintenanceSession: string;
+  /** The wiki_job the space's first draft was made as: the author of the plan drafted here. */
+  drafter: { ownerId: string; spaceId: string; wikiJobId: string };
+  /** The server's own principal for the documents (`wikiDocsBuildJobPrincipal`): what its build and maintain jobs read and write as. */
+  writer: WikiPrincipal;
   ordinary: string;
   projectId: string;
   r: { owner: string; old: string; notOwners: string; delivery: string; long: string; plain: string };
@@ -299,8 +314,12 @@ async function scene(h: Harness): Promise<Scene> {
   expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId: ws }), 200, 'the owner binds the workspace');
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId: ws } });
   expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = toUuid(on.body.settings.maintenance.listId as string);
-  const maintenanceSession = await session(h, owner.id, ws, machine.id, await task(h, owner.id, ws, { listId, title: 'Wiki maintenance run' }));
+  // The draft the space's creation asked for waited for a maintenance workspace; named now, it is made as a wiki_job.
+  const drafting = await h.sql.query<{ job_id: string }>(
+    `SELECT "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft' AND "state" = 'made' AND "job_id" IS NOT NULL`,
+    [spaceId],
+  );
+  assert.equal(drafting.rowCount, 1, 'the space\'s first draft is made on the server');
   const ordinary = await session(h, owner.id, ws, machine.id, null, 'an ordinary session');
 
   // A project, its coordinator conversation and one of its tasks' sessions, with what was said in them.
@@ -349,7 +368,18 @@ async function scene(h: Harness): Promise<Scene> {
       [{ kind: 'tool_call', ref: r.plain, quote: 'working tree clean' }],
     ),
   };
-  return { owner, runner: machine, ws, spaceId, maintainer: { runner: machine.token, session: maintenanceSession }, maintenanceSession, ordinary, projectId, r, entries };
+  return {
+    owner,
+    runner: machine,
+    ws,
+    spaceId,
+    drafter: { ownerId: owner.id, spaceId, wikiJobId: drafting.rows[0].job_id },
+    writer: wikiDocsBuildJobPrincipal(owner.id),
+    ordinary,
+    projectId,
+    r,
+    entries,
+  };
 }
 
 // ── the plan ────────────────────────────────────────────────────────────────────────────────────
@@ -393,27 +423,42 @@ function planFor(s: Scene): Record<string, unknown> {
   };
 }
 
+/** A draft from the server's plan job, and the owner's confirmation of it: the version in force and its sections' keys. */
 async function confirmPlan(h: Harness, s: Scene): Promise<{ version: number; keys: string[] }> {
-  const drafted = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, {
+  const drafted = await h.plans.submitServerDraft(s.drafter, {
     baseVersion: null,
     target: { min: 1, max: 10 },
     plan: planFor(s),
     repoCheck: { sha: 'a'.repeat(40), checked: 1, missing: [] },
     model: 'qwen3.8-27b-fp8',
   });
-  expectStatus(drafted, 200, 'the maintenance run drafts the plan');
-  const confirmed = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${drafted.body.version}/confirm`);
+  const confirmed = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${drafted.version}/confirm`);
   expectStatus(confirmed, 200, 'the owner confirms the plan');
-  const state = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan`);
+  const state = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
   expectStatus(state, 200, 'the plan in force');
   const keys = state.body.confirmed.docs[0].sections.map((section: { key: string }) => section.key);
-  return { version: drafted.body.version as number, keys };
+  return { version: drafted.version, keys };
 }
 
 const SLUG = 'dev-session-commands';
 
-function materialRoute(s: Scene, key: string | null): string {
-  return `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}/material${key === null ? '' : `?section=${key}`}`;
+/**
+ * The server's half of one section's material, as the wiki-worker's build and maintain jobs gather it: the
+ * section's session condition read off the confirmed plan (`storedSessionCondition`), and `gatherDocMaterial` with
+ * the owner's workspace.env values to take out.
+ */
+async function gathered(h: Harness, s: Scene, key: string) {
+  const db = h.prisma as unknown as PrismaService;
+  const confirmed = await requireConfirmedPlan(db, { ownerId: s.owner.id, spaceId: s.spaceId });
+  const section = await h.prisma.wikiPlanSection.findFirstOrThrow({
+    where: { ownerId: s.owner.id, key, doc: { ownerId: s.owner.id, slug: SLUG, planId: confirmed.id } },
+    select: { sources: true },
+  });
+  const condition = storedSessionCondition(((section.sources ?? {}) as { sessions?: unknown }).sessions);
+  const material = await gatherDocMaterial(db, h.service, {
+    ownerId: s.owner.id, spaceId: s.spaceId, condition, literals: await ownerEnvLiterals(db, s.owner.id),
+  });
+  return { condition, ...material };
 }
 
 /** A record's text as a footnote's check reads it: the one reader, redacted with the owner's env values. */
@@ -426,36 +471,17 @@ async function redactedRecord(h: Harness, ownerId: string, kind: 'turn' | 'tool_
 
 // ── 1. who reads it ─────────────────────────────────────────────────────────────────────────────
 
-test('the material and the written document are a maintenance run\'s of the space: any other session is refused, a call with none 400', { skip }, async () => {
+test('the document as it is written is read by the server\'s own jobs alone: a session\'s principal is refused, a document the plan does not have is a 404', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);
-  const { keys } = await confirmPlan(h, s);
-  const conventions = keys[2];
-  const routes = [materialRoute(s, conventions), `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}`];
-  for (const route of routes) {
-    const ordinary = await call(h, { runner: s.runner.token, session: s.ordinary }, 'GET', route);
-    expectStatus(ordinary, 403, `another session of the owner asks ${route}`);
-    assert.equal(ordinary.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-    expectStatus(await call(h, { runner: s.runner.token }, 'GET', route), 400, `no session asks ${route}`);
-    const elsewhere = await runner(h, s.owner.id);
-    expectStatus(await call(h, { runner: elsewhere.token, session: s.maintenanceSession }, 'GET', route), 403, `a runner that does not host the session asks ${route}`);
-    expectStatus(await call(h, s.maintainer, 'GET', route), 200, `the maintenance run asks ${route}`);
+  await confirmPlan(h, s);
+  expectStatus(await served(() => h.docs.writerDoc(s.writer, s.spaceId, SLUG)), 200, 'the server\'s writer reads the document');
+  // A principal with a session — maintenance or agent — is no writer of the space's documents, and reads nothing of them.
+  for (const origin of ['maintenance', 'agent'] as const) {
+    const asSession: WikiPrincipal = { origin, ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null };
+    await assert.rejects(h.docs.writerDoc(asSession, s.spaceId, SLUG), /written by the server's own jobs or import/u, `a session reads it as ${origin}`);
   }
-  // The contract's routes, and nothing a runner could decide with.
-  assert.ok(CONTRACT.agentSurface.doors.runner.maintenanceRoutes.includes(CONTRACT.docs.routes.material));
-  assert.ok(CONTRACT.agentSurface.doors.runner.maintenanceRoutes.includes(CONTRACT.docs.routes.writerDoc));
-  // A section the plan's document does not have, or none named, is not read at all.
-  expectStatus(await call(h, s.maintainer, 'GET', materialRoute(s, 'no-such-section')), 404, 'a section the plan does not have');
-  expectStatus(await call(h, s.maintainer, 'GET', materialRoute(s, null)), 400, 'no section named');
-  expectStatus(await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs/no-such-doc/material?section=${conventions}`), 404, 'a document the plan does not have');
-});
-
-test('with no confirmed plan there is no material to read', { skip }, async () => {
-  const h = await boot();
-  const s = await scene(h);
-  const answer = await call(h, s.maintainer, 'GET', materialRoute(s, 's1'));
-  expectStatus(answer, 409, 'no plan confirmed');
-  assert.equal(answer.body.code, 'WIKI_PLAN_UNCONFIRMED');
+  expectStatus(await served(() => h.docs.writerDoc(s.writer, s.spaceId, 'no-such-doc')), 404, 'a document the plan does not have');
 });
 
 // ── 2. redacted and placed ──────────────────────────────────────────────────────────────────────
@@ -464,13 +490,10 @@ test('every record handed out is redacted and placed where a footnote\'s check r
   const h = await boot();
   const s = await scene(h);
   const { version, keys } = await confirmPlan(h, s);
-  const answer = await call(h, s.maintainer, 'GET', materialRoute(s, keys[2]));
-  expectStatus(answer, 200, 'the conventions section\'s material');
-  const material = answer.body;
-  assert.equal(material.section, keys[2]);
-  assert.equal(material.planVersion, version);
-  assert.deepEqual(material.condition.keywords, [KEYWORD, OTHER_KEYWORD]);
-  assert.deepEqual(material.condition.projects.map((p: { id: string; title: string }) => [toUuid(p.id), p.title]), [[s.projectId, 'Runner 托管后台作业']]);
+  const material = await gathered(h, s, keys[2]);
+  // The condition as the confirmed plan stores it: its keywords, and its project as the id the title resolved to.
+  assert.deepEqual(material.condition?.keywords, [KEYWORD, OTHER_KEYWORD]);
+  assert.deepEqual(material.condition?.projects, [s.projectId]);
 
   // Nothing secret in any of it: not the owner's env value, not a token the shared redactor knows.
   const all = JSON.stringify(material);
@@ -479,7 +502,7 @@ test('every record handed out is redacted and placed where a footnote\'s check r
   assert.ok(all.includes('[redacted]'), 'where they stood says so');
 
   type Rec = { kind: 'turn' | 'tool_call' | 'task_comment'; ref: string; found: string; text: string; chars: { start: number; end: number }; length: number; via: { entryId: string; title: string } | null; weight: string; ownerWords: boolean; sessionTitle: string | null; projectTitle: string | null; taskTitle: string | null };
-  const records: Rec[] = material.records;
+  const records = material.records as unknown as Rec[];
   const byRef = new Map(records.map((record) => [toUuid(record.ref), record]));
   // Each one placed: its text is exactly the range it names of the record's redacted text.
   for (const record of records) {
@@ -511,13 +534,13 @@ test('every record handed out is redacted and placed where a footnote\'s check r
   assert.ok(long.chars.start > 0);
   const plain = byRef.get(s.r.plain)!;
   assert.deepEqual([plain.found, plain.weight, toUuid(plain.via!.entryId)], ['entry', 'output', s.entries.path]);
-  const picked = material.entries.map((entry: { id: string }) => toUuid(entry.id));
+  const picked = material.entries.map((entry) => toUuid(entry.id));
   assert.deepEqual(picked, [s.entries.keyword, s.entries.path], 'the keyword\'s entry first, then the path\'s; the unrelated one not at all');
   assert.equal(records.filter((record) => toUuid(record.ref) === s.r.plain).length, 1, 'a record met twice is handed out once');
 
   // A quote copied from what was handed out, at the range it was handed out at, verifies.
   const quote = Array.from(long.text).slice(30, 90).join('');
-  const written = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}`, {
+  const written = await served(() => h.docs.write(s.writer, s.spaceId, SLUG, {
     planVersion: version,
     repoSha: 'c'.repeat(40),
     sections: [{
@@ -526,40 +549,37 @@ test('every record handed out is redacted and placed where a footnote\'s check r
       markdown: '整包测试在 runner 宿主上跑[1]。',
       footnotes: [{ kind: 'tool_call', ref: long.ref, chars: long.chars, quote, viaEntryId: long.via!.entryId }],
     }],
-  });
+  }));
   expectStatus(written, 200, 'a section written from the material');
   const footnote = await h.prisma.wikiDocFootnote.findFirst({ where: { ownerId: s.owner.id, ref: s.r.long } });
   assert.equal(footnote?.verdict, 'verified', `the quote verifies: ${JSON.stringify(footnote)}`);
   assert.ok(footnote!.charStart! >= long.chars.start && footnote!.charEnd! <= long.chars.end, 'and is found inside the range it was handed out at');
 
   // A section with no session condition has no server half.
-  const mechanism = await call(h, s.maintainer, 'GET', materialRoute(s, keys[1]));
-  expectStatus(mechanism, 200, 'the mechanism section');
-  assert.deepEqual([mechanism.body.condition, mechanism.body.entries, mechanism.body.records], [null, [], []]);
+  const mechanism = await gathered(h, s, keys[1]);
+  assert.deepEqual([mechanism.condition, mechanism.entries, mechanism.records], [null, [], []]);
 });
 
 // ── 3. another tenant ───────────────────────────────────────────────────────────────────────────
 
-test('another tenant gets a 404 for all of it, and no record of theirs comes back through an entry that cites one', { skip }, async () => {
+test('another tenant gets a 404 for the document, and no record of theirs comes back through an entry that cites one', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);
   const { keys } = await confirmPlan(h, s);
   const other = await scene(h);
   await confirmPlan(h, other);
-  for (const route of [materialRoute(s, keys[2]), `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}`]) {
-    const answer = await call(h, other.maintainer, 'GET', route);
-    expectStatus(answer, 404, `another owner's maintenance run asks ${route}`);
-    assert.ok(!JSON.stringify(answer.body).includes(OWNER_WORDS.slice(0, 20)));
-  }
+  // Another owner's jobs, reading as their own owner in this space: the 404 of a space that is not there.
+  const answer = await served(() => h.docs.writerDoc(other.writer, s.spaceId, SLUG));
+  expectStatus(answer, 404, 'another owner\'s job reads the document');
+  assert.ok(!JSON.stringify(answer.body).includes(OWNER_WORDS.slice(0, 20)));
   // An entry of this space that cites the other owner's record (written by hand: no door would take it).
   const foreign = await h.prisma.wikiEntry.findUniqueOrThrow({ where: { id: s.entries.keyword }, select: { currentRevision: true } });
   const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: s.entries.keyword, revision: foreign.currentRevision }, select: { id: true } });
   await h.prisma.wikiSource.create({ data: { revisionId: revision.id, ownerId: s.owner.id, kind: 'turn', ref: other.r.owner, locator: {}, quote: null, state: 'live' } });
-  const answer = await call(h, s.maintainer, 'GET', materialRoute(s, keys[2]));
-  expectStatus(answer, 200, 'the material');
-  assert.ok(!answer.body.records.some((record: { ref: string }) => toUuid(record.ref) === other.r.owner), 'the other owner\'s turn is not read');
+  const material = await gathered(h, s, keys[2]);
+  assert.ok(!material.records.some((record) => toUuid(record.ref) === other.r.owner), 'the other owner\'s turn is not read');
   assert.deepEqual(
-    answer.body.unresolved.map((item: { kind: string; ref: string; entryId: string }) => [item.kind, toUuid(item.ref), toUuid(item.entryId)]),
+    material.unresolved.map((item) => [item.kind, toUuid(item.ref), toUuid(item.entryId)]),
     [['turn', other.r.owner, s.entries.keyword]],
     'it is listed as a source no record of this account answers',
   );
@@ -567,7 +587,7 @@ test('another tenant gets a 404 for all of it, and no record of theirs comes bac
 
 // ── the ledger ──────────────────────────────────────────────────────────────────────────────────
 
-test('what became of each piece of material is written with its section, refused when malformed, and read back on both doors', { skip }, async () => {
+test('what became of each piece of material is written with its section, refused when malformed, and read back by the owner and the server alike', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);
   const { version, keys } = await confirmPlan(h, s);
@@ -582,7 +602,7 @@ test('what became of each piece of material is written with its section, refused
       dispositions,
     }],
   });
-  const write = (body: unknown) => call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}`, body);
+  const write = (body: Record<string, unknown>) => served(() => h.docs.write(s.writer, s.spaceId, SLUG, body));
   const ledger = [
     { material: 'C1', kind: 'code', ref: 'src/runner-go/runloop.go#L10-40', action: 'adopt', into: null, reason: '讲 runLoop 怎么领取' },
     { material: 'S1', kind: 'turn', ref: s.r.owner, action: 'merge', into: 'S2', reason: `与 S2 说的是同一件事，S2 更新；密钥 ${LITERAL}` },
@@ -598,14 +618,15 @@ test('what became of each piece of material is written with its section, refused
   assert.deepEqual(kept.map((item) => item.material), ledger.map((item) => item.material), 'stored as it came, in its order');
   assert.ok(kept.every((item) => !item.reason.includes(LITERAL)), 'a reason is redacted like everything stored');
 
-  // Both doors read it back with the section.
+  // The owner's page and the server's own read give it back with the section.
   const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/${SLUG}`);
   expectStatus(page, 200, 'the owner\'s page');
   const onPage = page.body.sections.find((sec: { key: string }) => sec.key === keys[1]);
   assert.deepEqual(onPage.dispositions.map((item: { action: string }) => item.action), ledger.map((item) => item.action));
-  const writerDoc = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}`);
-  expectStatus(writerDoc, 200, 'the maintenance run\'s read');
-  assert.deepEqual(writerDoc.body, page.body, 'the runner door reads the document as the owner does');
+  const writerDoc = await served(() => h.docs.writerDoc(s.writer, s.spaceId, SLUG));
+  expectStatus(writerDoc, 200, 'the server\'s read');
+  // Its ids as the owner's door spells them (PublicIdInterceptor), and otherwise the very same document.
+  assert.deepEqual(addTwins(writerDoc.body, true), page.body, 'the server reads the document as the owner does');
   const unwritten = page.body.sections.find((sec: { key: string }) => sec.key === keys[0]);
   assert.deepEqual(unwritten.dispositions, [], 'a section not written yet has none');
 
