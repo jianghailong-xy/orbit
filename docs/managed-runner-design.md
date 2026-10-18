@@ -504,6 +504,8 @@ The restored runtime stays unable to execute as the live runner until the origin
 and the manager explicitly switches the mapping to the verified new PVC UID/volume handle.
 Do not duplicate live runner credentials to run a restore test beside the original. Record the
 mapping change and observed recovery point/time; these are measurements, not promised values here.
+On Kubernetes that switch is an administrator's request the manager verifies and records
+("Implementation record: a restored volume back under its runner").
 
 ## Server and three client interfaces
 
@@ -1429,6 +1431,69 @@ by `scripts/managed-runner/lab/acceptance-lab.py` in one pass on the project lin
 | Busy and idle | A long turn and a background job each kept their runner READY past the idle interval, and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; once the work ended each slept by itself. |
 | The controller | Both apiservers SIGKILLed while one runner was being woken and the other ran a turn: the turn finished, the waking runner came up without a second Pod create, and the database and Kubernetes agreed. |
 | Backup and restore | The RBD image of a disabled, asleep account exported out of the VM to the host, checked there with no cluster (`debugfs`, SQLite, Git, checksums), and written into a new claim's image, which read back byte for byte as the backup; a Pod found the data there. The original was untouched and its runner woke on it. A static PV naming an imported image cannot be used with this Ceph-CSI (its ControllerPublish refuses the handle and its ControllerUnpublish panics), so the runbook restores into a claim the driver provisions. |
-| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node. A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented. Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
+| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node. A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented (since T08b an administrator's switch does it: "Implementation record: a restored volume back under its runner"). Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
 
 Verified on 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md), [the lab page](managed-runner-lab.md#end-to-end-acceptance-t08)).
+
+## Implementation record: a restored volume back under its runner
+
+Recorded 2026-10-18 for task T08b, which closes the gap T08 left (its record above, "Not established"): a restored volume
+had no way back under an account's runner. The manager accepts a runner's data volume only as recorded, and a Kubernetes
+claim's UID cannot be recreated, so a runner whose volume was lost or damaged stayed `FAILED` `PVC_MISSING` for good. The
+retention section above calls for the manager to switch the mapping explicitly to a verified new claim; this is that
+switch. The operator's side is [the runbook](managed-runner-kubernetes-operations.md#put-a-restored-volume-back-under-its-runner).
+
+| Area | As implemented, and why |
+| --- | --- |
+| Who asks | An Orbit administrator: `POST /api/admin/managed-runners/:id/volume-switch`, `:id` the runner's (`managed-runner-admin.controller.ts`), behind JwtAuthGuard, the managed switch and AdminRoleGuard in that order, and refused to a personal access token. Off, it answers `404 MANAGED_RUNNER_DISABLED` before the role or the body is read, as the owner's writes do. The body names the restored claim by the UID the administrator verified, the mapping's `revision`, a `reason` for the audit row and an `idempotencyKey`, and `confirmReplacement` unless the manager found the old volume missing itself. The other ways the task allowed were weighed. An owner can neither make nor check a claim. An operator's ConfigMap or annotation would carry no identity Orbit could put in the audit row, and its refusal would have to be read back from somewhere; the call answers at once with the check that failed. |
+| Which volume | Only the claim under the runner's own fixed name, `mr-data-<runner uuid>`, in the managed namespace. The names, the Pod template, the mapping's CHECK on its names and the admission guard stay as they are. A claim under a managed name is one no Pod but the runner's own may use from the moment it exists, so nothing can have mounted the restore before the switch, and nothing but the reserved generation can after it. A claim of another name could have been used by any Pod until the switch, and the manager, which may not list Pods, could not have shown none did. This design calls a claim found under the name with a different UID a conflict for review: the switch is that review's outcome, made explicit. |
+| The checks | Under the mapping's lease, with a holder of its own (`switchVolume` in `managed-runner-manager.ts`; the Kubernetes reads are `readReplacement` and `recordedVolumeHolders` in `kubernetes-backend.ts`). Each refuses the switch, nothing switched or recorded, with a code, a sentence and the operator's detail. The mapping is `SLEEPING` or `FAILED`, not deleted, with no resource operation in flight and a volume recorded, and either `FAILED` `PVC_MISSING` or confirmed (`managed-runner-volume-switch.ts`). An instance still recorded needs the gate's own stop proof (`stopProofFor`) and its object gone. The claim is the one named and not the recorded one, not being deleted, and bound. It carries the marks every pass checks (`pvcIdentityProblem`: owner and runner annotations, no owner reference, the storage class, `ReadWriteOnce`, `Filesystem`), and its PV is bound to it (`pvIdentityProblem`). No other mapping records its UID, its PV's UID or the handle, and its PV was not made before it, as a retained PV rebound by hand would be. Nothing attaches it, and no Pod is under the runner's name. No attachment holds the recorded PV, found by its recorded UID or handle (one whose PV cannot be read counts). The admission guard refuses a probe of the runner's template on it. |
+| The switch | One transaction (`commitSwitch`). The mapping is written by a compare-and-set on the revision, the switch's lease, the state, the generation and the recorded Pod: the new claim UID, PV UID and handle, `SLEEPING`, its reason, attempts and drain fields cleared. The desired state is kept, so demand that waited wakes the runner at once. An instance still recorded is retired there on its proof, as a sleep retires one: generation + 1, the credential nobody may hold any more replaced, the proof marked retired, its compute given back. The storage share stays, for a volume of the same size. |
+| Audit | One `activity` row in the same transaction, type `managed_runner.volume_switched`: the administrator (`actor_id`), the time, the mapping, owner, runner, backend, cluster and namespace, the generation, the state, desire and reason before, `from` and `to` (claim UID, PV UID, handle, and the new PV's name), the instance retired if any, the confirmation, the reason given and the idempotency key. The same key again is answered from the mapping, with nothing written. No migration: the activity feed is append-only with no foreign key, and is where the other administrator actions are recorded (`user.disabled`, `user.impersonated`). |
+| What stays as it was | The single-writer gate, its stop proofs and fencing, the admission guard's rules and the capacity rules. After a switch they read the new claim as they read the old one. The next wake is the reserved generation's Pod, admitted for the new claim's UID. Its next sleep's stop proof names the new claim and handle, and a Pod gone without a report fences. The old PV and RBD image, where they still exist, are no longer Orbit's: a storage operator purges them under the retention policy. |
+| Docker | No switch (`NOT_APPLICABLE`). The Docker runbook's restore (`volume-backup.sh`) gives the volume back its recorded identity, and a `PVC_MISSING` runner is retried once it is back (`PVC_RESTORED`, D7). |
+| Clients and census | No client changed: after a switch the runner is `SLEEPING`, a state every client shows, and no owner reason or fixture state was added. The route has a path parameter, so the tenant isolation census lists it, by hand (`TENANT_ISOLATION_BY_HAND`): the census server runs with managed runners off, where every caller is answered 404. The reading cites the guard, the lookups and the pg spec that sends the route. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md), [the lab page](managed-runner-lab.md#a-restored-volume-back-under-its-runner-t08b)):
+
+- `managed-runner-volume-switch.pg.spec.ts`, on the fake cluster with the admission guard and a real PostgreSQL, the route
+  sent over HTTP:
+  - (1) A volume lost while asleep fails its wake, `PVC_MISSING`. Thirteen switches that cannot be verified are refused,
+    each with its check, and nothing is switched or recorded in the database or the cluster: no volume; another account's
+    marks; storage another mapping records; a PV made before its claim; one not bound; one attached; one a Pod admitted
+    before the guard uses; a Pod under the runner's name; the recorded PV attached; another UID; a moved revision; no
+    guard; another manager's lease. So are a stranger (401), a member (403), an unknown runner (404) and malformed
+    requests (400). The restored claim is switched to with one audit row. The waiting wake starts the reserved generation
+    on it, its Pod admitted for the new claim's UID, no claim created. A replay, even while a pass holds the lease,
+    writes nothing.
+  - (2) After the switch, the guard refuses another Pod on the new claim, and the next sleep's stop proof names it. A Pod
+    gone without a report fences, and the switch then refuses the runner.
+  - (3) A disabled account's sleeping runner whose volume is replaced: refused while the recorded claim is under the name
+    and without the confirmation; switched with it; asleep while work waits; woken on the new claim once enabled.
+  - (4) A runner that failed `PVC_MISSING` with its stopped Pod recorded is switched on the recorded proof (the generation
+    retired, the credential replaced, the compute given back), and starts its next generation on the new claim. One that
+    failed with its Pod still running is refused.
+  - (5) READY is refused, and a server on Docker answers `NOT_APPLICABLE`.
+- Unit specs: `managed-runner-volume-switch.spec.ts` (the state rule, and the Kubernetes reads of the claim and of the
+  recorded PV's attachments on the in-memory cluster), `managed-runner-disabled.spec.ts` (off, the route reads nothing),
+  `managed-runner-boot.pg.spec.ts` (the production server, off and unavailable) and the census.
+- The lab's real k3s, `switch-lab.py` in one run at `eccae61cd` (22 steps, 78 checks, 8 minutes). An account was
+  provisioned, wrote data and was backed up off the cluster. Then its claim, PV and RBD image were deleted, and its wake
+  failed `PVC_MISSING`. The runbook's restore went into a new claim under the runner's name, which read back byte for byte
+  as the backup. A member's switch, another UID and a stale revision were refused; the administrator's switch wrote one
+  audit row. The waiting message then woke the runner on the restored claim: the same runner ID, generation 2, a Pod
+  admitted for the new claim's UID. The data, `integrity_check`, uploads, worktree, transcripts and the engine's session
+  were as backed up, and there was never more than one Pod on the volume.
+- Found in the lab and fixed (`eccae61cd`): the same switch sent again right after it was refused `MAPPING_BUSY`. The
+  switch kicks the manager, whose wake pass then holds the lease. A replay is now answered from a read.
+
+Left to later work, or not shown here:
+
+- Across nodes: a switch on a cluster of several nodes, with the restored claim attached on another node than the lost one.
+- Ceph clients: the manager cannot see them, so that nothing maps the old RBD image is the operator's check
+  (`rbd status`), not the switch's. In the lab the old image had been deleted.
+- A runner that failed `PVC_MISSING` while fencing, its predecessor's stop unproven, is refused. The manager reads an
+  operator's fencing receipt only in `FENCING`, which a failed mapping does not go back to. This was not reached in the lab
+  or the specs, and no way out is built for it.
+- No client offers the switch: it is the runbook's API call, and the admin pages have no button for it.
+- No model: fake-model.py stood in for the owner's DeepSeek key.

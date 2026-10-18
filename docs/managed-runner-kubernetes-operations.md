@@ -10,7 +10,9 @@ it. A deployment whose managed runners run on Docker has [its own runbook](manag
 
 The procedures were run in the single-machine lab ([docs/managed-runner-lab.md](managed-runner-lab.md)): k3s v1.36.5,
 Ceph 20.2.4, Ceph-CSI v3.18.0, one node. The deployment steps are its scripts' (tasks L0, T02a and T04); everything else,
-and every number, is from task T08's end-to-end run of 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md)).
+and every number, is from task T08's end-to-end run of 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md)),
+except the volume switch, whose procedure and numbers are task T08b's run of the same day
+([evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md)).
 What needs a second node, or was not run, is marked **Not verified here**. Read the [design contract](managed-runner-design.md)
 first: this page says how to operate it, not why it is built so.
 
@@ -34,6 +36,7 @@ inside the VM). The CSI driver's own CephX identity is never used for this.
 | The API server's admission configuration (the webhook's bearer token) | The control plane's configuration (in the lab: a k3s drop-in under `/etc/rancher/k3s/config.yaml.d/`) | The cluster operator |
 | A generation's bootstrap Secret `mr-boot-<runner uuid>` | The managed namespace | Nothing to keep: each generation gets a new credential |
 | Fencing receipts `mr-fence-<runner uuid>` | ConfigMaps in the managed namespace | The operator who wrote them, with the incident record |
+| Who switched which runner to a restored volume, when, from which to which | PostgreSQL table `activity`, type `managed_runner.volume_switched` | The deployment's PostgreSQL backups |
 | The runner image | The environment's registry, or each node's containerd, by digest | Rebuild it from the commit in `deploy/managed-runner/image`, or keep the archive |
 
 A volume backup holds what the account signed in with (engine credentials) and a runner credential. Treat it like the
@@ -108,8 +111,8 @@ supplied by its own owners does the same with that owner's tooling.
 ## Find an account's runner
 
 ```sql
-select u.email, m.management_state, m.desired_state, m.generation, m.attempt, m.runner_id, m.pvc_name, m.pvc_uid,
-       m.pv_uid, m.volume_handle, m.pod_uid, m.node_name, m.last_error->>'code' as reason, m.last_error->>'detail' as detail
+select u.email, m.management_state, m.desired_state, m.generation, m.revision, m.attempt, m.owner_id, m.runner_id, m.pvc_name,
+       m.pvc_uid, m.pv_uid, m.volume_handle, m.pod_uid, m.node_name, m.last_error->>'code' as reason, m.last_error->>'detail' as detail
   from managed_runner m join "user" u on u.id = m.owner_id order by u.email;
 ```
 
@@ -261,12 +264,122 @@ byte for byte as the backup; the Pod found it as ext4, the probe's file, rows an
 worktrees and transcripts with their checksums, and `ok` everywhere. The original claim, PV, handle and RBD image were
 untouched, and ann's runner then woke on its original volume with the same identity.
 
-**What a restore does not do.** The manager accepts a runner's data volume only as recorded: the claim's UID, the PV's
-UID and the volume handle. A new claim is never adopted, and the admission guard admits no Pod but the runner's own on the
-runner's claim. So a restored copy cannot be put back under an account's runner by these steps. If the runner's own
-volume is lost or damaged, the account's data can be handed over from the restored copy; putting it back as the runner's
-volume needs a mapping switch the manager does not have yet (see the design's "Retention explicit deletion and backup").
-Until then, a runner whose claim is gone stays `PVC_MISSING`, and nothing is created in its place.
+**What a restore does not do.** A claim restored this way, under another name, is not the runner's volume: the manager
+accepts a runner's data volume only as recorded (the claim's UID, the PV's UID and the volume handle) and never adopts a
+claim by itself, and the admission guard admits no Pod but the runner's own on the runner's claim. To put a restored copy
+back as the runner's volume, restore into a new claim under the runner's own name and switch the runner to it:
+[Put a restored volume back under its runner](#put-a-restored-volume-back-under-its-runner).
+
+## Put a restored volume back under its runner
+
+A runner whose volume is lost or damaged cannot run again by itself. The manager accepts a runner's data volume only as
+recorded (the claim's UID, the PV's UID and the volume handle), and Kubernetes gives every new claim a new UID, so a runner
+whose claim is gone stays `FAILED` `PVC_MISSING` and nothing is created in its place. An Orbit administrator puts a
+restored copy back as the runner's volume with the **volume switch**: the restore goes into a new claim under the runner's
+own name, and the switch has the manager verify that claim, and that nothing uses the old volume any more, and record it in
+the old one's place, with an audit row. The runner then wakes on it with the same runner ID. The switch is Kubernetes only:
+on Docker the restore gives the volume back its recorded identity ([its runbook](managed-runner-docker-operations.md)).
+
+It is an administrator's API call, not the owner's and not an object in the cluster. The restore needs the cluster and the
+Ceph admin host, which only an operator has, and the audit row has to name a person Orbit authenticated. An owner can
+neither make nor check a claim. A ConfigMap or an annotation asking for a switch would carry no identity Orbit can vouch
+for, and its refusal would have to be read back from somewhere else; the call answers at once with the check that failed.
+
+1. **Hold the runner still.** A runner that failed `PVC_MISSING` is still already. Otherwise disable the account
+   (**Admin → Users → Disable**) and wait until the query of [Find an account's runner](#find-an-accounts-runner) says
+   `SLEEPING`. The switch takes only a runner that is `SLEEPING`, or `FAILED` with nothing in flight.
+2. **Make sure nothing uses the old volume.** No Pod `mr-$R` (`$K get pod mr-$R`); no VolumeAttachment of its PV; and, if
+   its RBD image still exists, `rbd status <pool>/<image>` lists no watcher. The manager checks the first two itself, the
+   attachments by the PV UID and volume handle it recorded, but it cannot see Ceph clients. A runner that failed while its
+   stopped Pod was still recorded (`pod_uid` set) is switched only on the stop proof the manager recorded for that Pod
+   (`fencing_receipt->>'kind'` is `OBSERVED_STOP` or `FENCING_RECEIPT`), and only once the Pod object is gone: if the
+   stop-report finalizer still holds it, delete it and [take the finalizer off](#the-stop-report-finalizer), since its
+   stop is recorded already. Without that proof, it is fencing's business first ([Failover](#failover)).
+3. **Free the runner's name.** If the old claim still exists (a damaged volume), delete it: `$K delete pvc mr-data-$R`.
+   With `Retain`, its PV and RBD image stay. Keep them until the restored data is confirmed, then have a storage operator
+   purge them under the retention policy; Orbit no longer refers to them after the switch.
+4. **Create the restored claim under the runner's name**, with the marks the manager puts on its own claims (the
+   repository's `deploy/managed-runner/storage/pvc.template.json`) and the profile's volume size:
+
+   ```bash
+   OWNER=<owner uuid>                     # owner_id in the query above
+   $K create -f - <<EOF
+   {"apiVersion": "v1", "kind": "PersistentVolumeClaim",
+    "metadata": {"name": "mr-data-$R", "annotations": {"orbit.dev/owner-id": "$OWNER", "orbit.dev/runner-id": "$R"}},
+    "spec": {"storageClassName": "runner-data", "accessModes": ["ReadWriteOnce"], "volumeMode": "Filesystem",
+             "resources": {"requests": {"storage": "<the profile's storage.capacity>"}}}}
+   EOF
+   ```
+
+   Once it is `Bound`, read its UID (`$K get pvc mr-data-$R -o jsonpath='{.metadata.uid}'`) and its image (the PV's
+   `.spec.csi.volumeAttributes.imageName`). Nothing can mount it before the switch: the admission guard refuses every Pod
+   on a claim under a runner's name but the runner's own. The manager, which finds a claim under the name that is not the
+   recorded one, adopts nothing either: the reason stays `PVC_MISSING`, and its detail says what it found.
+5. **Write the backup into its image** with step 2 of [Restore to a new PVC](#restore-to-a-new-pvc): a scratch import,
+   `export-diff | import-diff` into the claim's image, the scratch removed, and the image read back, whose SHA-256 must be
+   the backup's. No check Pod can mount this claim, so check the archive itself first
+   ([Check a backup without the cluster](#check-a-backup-without-the-cluster)); the read-back shows the claim now holds
+   exactly those bytes.
+6. **Switch**, signed in as an administrator (a personal access token is refused), with the mapping's `revision` from the
+   query above and the claim's UID:
+
+   ```bash
+   curl -sS -X POST "$ORBIT_URL/api/admin/managed-runners/$R/volume-switch" \
+     -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" -H 'Content-Type: application/json' \
+     -d '{"idempotencyKey": "<a new UUID>", "revision": <revision>, "volumeUid": "<the claim UID>", "reason": "<why, for the audit row>"}'
+   ```
+
+   Add `"confirmReplacement": true` when the manager has not found the old volume missing itself (the runner was asleep,
+   or failed for another reason): it says you mean to replace it. The answer, `200`, gives the runner's state (`SLEEPING`),
+   its generation, and `from` and `to`: the claim UID, PV UID and volume handle recorded before, and the restored ones.
+   The same request again is answered as it stands, `replayed: true`. A refusal is `409 MANAGED_RUNNER_VOLUME_SWITCH_REFUSED`
+   with `check`, a sentence and `detail` (names, UIDs, nodes), and nothing is switched:
+
+   | `check` | What to do |
+   | --- | --- |
+   | `NOT_SWITCHABLE` | The runner is running, starting, fencing or deleted, has a create in flight or records no volume yet: hold it still (step 1). |
+   | `CONFIRMATION_REQUIRED` | Confirm the replacement (`confirmReplacement`), if that is what you mean. |
+   | `VOLUME_NOT_FOUND`, `VOLUME_NOT_BOUND` | Make the claim (step 4) and wait until it is `Bound`. |
+   | `VOLUME_ALREADY_RECORDED` | The claim under the name is still the recorded one: free the name first (step 3). |
+   | `VOLUME_NOT_VERIFIED` | The claim under the name is not the one you named: check it again. |
+   | `VOLUME_NOT_THIS_RUNNERS` | The claim lacks the owner and runner annotations, the storage class, `ReadWriteOnce` or `Filesystem`, has an owner reference, or its PV is not bound to it: make it again as in step 4. |
+   | `VOLUME_OF_ANOTHER_ACCOUNT` | Its PV, or that PV's volume handle, is recorded for another runner, or the PV was made before the claim (a retained PV rebound by hand): restore into a claim the driver provisions. |
+   | `VOLUME_IN_USE` | The restored claim's PV is attached to a node: find what mounted it. |
+   | `RECORDED_VOLUME_IN_USE` | A Pod under the runner's name exists, the old PV is still attached, or the stop of an instance still recorded is not proven (step 2). |
+   | `ADMISSION_GUARD_MISSING` | The admission guard is not in force: install it ([Deploy a test environment](#deploy-a-test-environment), step 4). |
+   | `MAPPING_BUSY` | A manager pass is on the runner right now: try again in a few seconds. |
+   | `BACKEND_UNAVAILABLE` (`503`) | The cluster could not be asked: try again. |
+
+   `409 MANAGED_RUNNER_REVISION_CONFLICT` carries the current `revision`: the mapping moved since you read it (the manager
+   writes what it finds under the name into the reason's detail), so read it again and decide again. With managed runners
+   off, the route answers `404 MANAGED_RUNNER_DISABLED`; a member is refused `403`.
+7. **Let it wake.** Enable the account again if you disabled it. The runner wakes at its next message, task or wakeup, and
+   at once when work was already waiting (as after a failed wake), on the restored claim as its next generation, with the
+   same runner ID and workspace; its sessions go on from what the backup held. From then on its stop proofs, its fencing
+   receipts and the admission guard name the restored claim, as they named the old one.
+
+The audit row is one `activity` row per switch:
+
+```sql
+select created_at, actor_id, payload->'from' as "from", payload->'to' as "to", payload->>'reason' as reason
+  from activity where type = 'managed_runner.volume_switched' order by created_at;
+```
+
+It names the administrator and the time, the mapping, its owner and runner, the generation, the state and reason it was in,
+the claim UID, PV UID and volume handle before and after (with the new PV's name), whether the replacement was confirmed,
+the reason given and the request's idempotency key. A stopped instance that was still recorded is named there too
+(`retired`): the switch retires its generation on its proof, as a sleep would, and gives its compute back.
+
+Measured in the lab (T08b, 2026-10-18, [evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md)): an account's
+volume was lost while it slept, its claim, PV and RBD image deleted. A message then failed its wake `PVC_MISSING` within 0.6 s,
+and nothing was made in its place. The restore into a new claim under the runner's name took 18.3 s: 17.1 s of it for the
+claim, its binding and the 2 GiB backup's write into the new image, which read back byte for byte as the backup. A check Pod on that claim was refused by
+the guard (`NOT_THE_MANAGER`). A member's switch, another UID and a stale revision were refused first, with nothing
+switched; the administrator's switch was answered in 0.4 s, with one audit row. The waiting message woke the runner at
+once: its Pod was made in the same second, the message was answered 23.7 s after the switch, and the runner was `READY`
+51 s after it, as generation 2 with the same runner ID and workspace, on the restored claim. Its probe data, every SQLite
+database (`integrity_check` ok), its uploads, worktree and transcripts and the engine's session were as backed up, and
+there was never more than one Pod on the volume.
 
 ## Rollback
 

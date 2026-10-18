@@ -1,0 +1,36 @@
+{
+ "steps": 22,
+ "checks": 78,
+ "failedSteps": [],
+ "from": "2026-10-18T15:18:39.255+00:00",
+ "to": "2026-10-18T15:26:40.756+00:00",
+ "phaseSeconds": {
+  "facts": 6.5,
+  "setup": 102.2,
+  "on": 13.4,
+  "account": 32.9,
+  "backup": 200.3,
+  "loss": 11.1,
+  "restore": 18.4,
+  "switch": 0.4,
+  "wake": 51.9,
+  "final": 44.5
+ },
+ "measures": {
+  "disableToAsleep": 28.4,
+  "export": {
+   "exportSeconds": 8.2,
+   "copySeconds": 0.2,
+   "gzipBytes": 18238544,
+   "imageBytes": 2147483648
+  },
+  "verifyOfflineSeconds": 4.4,
+  "wakeToPvcMissing": 0.6,
+  "restore": {
+   "writeSeconds": 17.1,
+   "restoreSeconds": 18.3
+  },
+  "switchToAnswered": 23.7,
+  "switchToReady": 51.2
+ }
+}
