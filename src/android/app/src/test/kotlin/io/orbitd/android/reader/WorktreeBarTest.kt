@@ -197,6 +197,63 @@ class WorktreeBarTest {
         compose.onNode(hasText("Check and repair") and hasClickAction()).assertIsNotEnabled()
     }
 
+    /**
+     * The repair loop through the review (project 34hIv3wbdtsxpc5RzDlOk): a running repair is opened, not checked; the server's
+     * check of it holds every step; conflicts left go back to the same repair session; a session already on origin ends with Done.
+     */
+    @Test fun theRepairLoopOpensTheRepairWaitsForItsCheckAndEndsWithDone() {
+        val repairId = "01a0cca7-8609-70ed-a0e2-d4b55b832b61"
+        fun repair(runState: String) = buildJsonObject { put("id", repairId); put("title", "Resolve merge recovery for main"); put("runState", runState)
+            put("lastTurnAt", "2026-10-11T11:28:00Z"); put("finishedAt", JsonNull); put("lastAssistantText", JsonNull); put("error", JsonNull) }
+        val conflict = Wire.json.parseToJsonElement("""{"code":"CONFLICT","targetBranch":"main","previewId":"5971aa","phase":"SOURCE_REPLAY",
+            "repairBranch":"orbit/recovery/5971aa","repairWorktree":"/w/recovery-5971aa","conflicts":["src/AgentsModel.swift"],"checkedAt":"2026-10-11T11:29:40Z"}""").jsonObject
+        fun loop(vararg fields: Pair<String, JsonElement>) = session("mergeRecoverySupported" to JsonPrimitive(true), "mergeRepairTurnEndedAt" to JsonNull,
+            "mergeStatus" to JsonPrimitive("conflict"), "mergeRecoveryAction" to JsonPrimitive("preview"), "mergeRecovery" to conflict, *fields)
+        detail = loop("mergeRepairSession" to repair("RUNNING"))
+        show()
+        compose.onNodeWithText("Your changes conflict with the synchronized target").performClick()
+        compose.onNodeWithText("Tap to open the running session").assertIsDisplayed()
+        compose.onNodeWithText("Orbit checks again when the repair stops.").assertIsDisplayed()
+        compose.onNodeWithText("Check again").assertDoesNotExist()
+        compose.onNode(hasText("Open repair session") and hasClickAction()).assertIsEnabled().performClick()
+        assertEquals(listOf("orbit-session:$repairId"), opened)
+
+        // The repair stopped: the server's check is in flight, and nothing is pressed until it answers.
+        settle(loop("mergeRepairSession" to repair("AWAITING_INPUT"), "mergeStatus" to JsonPrimitive("pending")))
+        compose.onNodeWithText("Your changes conflict with the synchronized target").performClick()
+        compose.onNodeWithText("Checking the repair…").assertIsDisplayed()
+        compose.onNodeWithText("Checking its result…").assertIsDisplayed()
+        compose.onNode(hasText("Checking…") and hasClickAction()).assertIsNotEnabled()
+
+        // Conflicts left: the same repair session carries on.
+        settle(loop("mergeRepairSession" to repair("AWAITING_INPUT")))
+        compose.onNodeWithText("Repair session finished").assertIsDisplayed()
+        compose.onNode(hasText("Continue repair") and hasClickAction()).performClick()
+        compose.waitUntil(5_000) { sent("sessions", id, "merge-repair").isNotEmpty() }
+        assertEquals(false, body(sent("sessions", id, "merge-repair").single())["preparePR"]?.jsonPrimitive?.booleanOrNull)
+
+        // The repair failed and its turn queued a check: the row says it failed, and the page waits for the check.
+        settle(loop("mergeRepairSession" to JsonObject(repair("FAILED") + ("error" to JsonPrimitive("The model provider rejected the request"))),
+            "mergeStatus" to JsonPrimitive("pending")))
+        compose.onNodeWithText("Repair session failed").assertIsDisplayed()
+        compose.onNodeWithText("Checking the repair…").assertIsDisplayed()
+        compose.onNode(hasText("Checking…") and hasClickAction()).assertIsNotEnabled()
+        compose.onNodeWithText("Resolve in repair session").assertDoesNotExist()
+
+        // Already on origin (the review is still open): no repair row, and Done asks the server to record it merged.
+        settle(loop("mergeRepairSession" to repair("AWAITING_INPUT"), "mergeRecovery" to Wire.json.parseToJsonElement("""{"code":"ALREADY_LANDED",
+            "targetBranch":"main","previewId":"1c0ffee","sourceSha":"${"a".repeat(40)}","landedCommits":[{"sha":"${"b".repeat(40)}",
+            "subject":"Explicit self in the session-list currency closure","author":"coordinator","date":"2026-10-11T10:34:12Z","sourceSha":"${"a".repeat(40)}"}]}""")))
+        compose.onNode(hasText("Already on origin/main") and isHeading()).assertIsDisplayed()
+        compose.onNodeWithText("Repair session finished").assertDoesNotExist()
+        compose.onNodeWithText("Explicit self in the session-list currency closure").assertIsDisplayed()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Done") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Done") and hasClickAction()).performClick()
+        compose.waitUntil(5_000) { sent("sessions", id, "merge").isNotEmpty() }
+        val done = body(sent("sessions", id, "merge").single())
+        assertEquals(listOf("main", "confirm-landed", "1c0ffee"), listOf(done.string("targetBranch"), done.string("recoveryAction"), done.string("previewId")))
+    }
+
     /** A06-8: the coordinator's bar names the project's integration line and merges where the server resolved. */
     @Test fun aCoordinatorsBarNamesItsProjectsLine() {
         detail = session("projectMembership" to buildJsonObject { put("projectId", "p"); put("role", "COORDINATOR") },
