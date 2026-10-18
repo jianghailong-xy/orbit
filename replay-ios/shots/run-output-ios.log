@@ -1,0 +1,43 @@
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+==> replay ready on 127.0.0.1:8765 (pid 5877, after 2s)
+==> ios
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (143.471 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' passed (103.851 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 247.322 (247.334) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 247.322 (247.336) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 247.322 (247.338) seconds
+** TEST SUCCEEDED **
+.t07-probe/run.sh: line 89:  5877 Terminated: 15          python3 -u replay.py 8765 "$1" scenes > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.t07-probe/shots/ios:
+total 7144
+drwxr-xr-x  24 runner  staff     768 Oct 18 08:03 .
+drwxr-xr-x   4 runner  staff     128 Oct 18 07:47 ..
+-rw-r--r--   1 runner  staff  279561 Oct 18 07:59 19a-asleep.png
+-rw-r--r--   1 runner  staff  379413 Oct 18 07:59 19b-waking-volume-held.png
+-rw-r--r--   1 runner  staff  381271 Oct 18 08:00 19c-answered-once-free.png
+-rw-r--r--   1 runner  staff  363618 Oct 18 08:00 20a-asleep.png
+-rw-r--r--   1 runner  staff  365734 Oct 18 08:01 20b-failed-volume-gone-no-retry.png
+-rw-r--r--   1 runner  staff  395986 Oct 18 08:01 20c-restored-retry-offered.png
+-rw-r--r--   1 runner  staff  391538 Oct 18 08:02 20d-retried.png
+-rw-r--r--   1 runner  staff  353277 Oct 18 08:02 20e-answered.png
+drwxr-xr-x  17 runner  staff     544 Oct 18 08:03 attachments
+-rw-r--r--   1 runner  staff     262 Oct 18 08:03 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff   21116 Oct 18 08:02 replay.log
+-rw-r--r--   1 runner  staff      53 Oct 18 07:48 replay.log.out
+-rw-r--r--   1 runner  staff     888 Oct 18 08:03 ReplayTeststest19DockerVolumeInUse-notes
+-rw-r--r--@  1 runner  staff     888 Oct 18 08:00 ReplayTeststest19DockerVolumeInUse-notes.txt
+-rw-r--r--   1 runner  staff    1296 Oct 18 08:03 ReplayTeststest20DockerVolumeRestoredRetry-notes
+-rw-r--r--@  1 runner  staff    1296 Oct 18 08:02 ReplayTeststest20DockerVolumeRestoredRetry-notes.txt
+-rw-r--r--   1 runner  staff     103 Oct 18 08:03 verdict-19-docker-volume-in-use
+-rw-r--r--@  1 runner  staff     103 Oct 18 08:00 verdict-19-docker-volume-in-use.json
+-rw-r--r--   1 runner  staff     111 Oct 18 08:03 verdict-20-docker-volume-restored-retry
+-rw-r--r--@  1 runner  staff     111 Oct 18 08:02 verdict-20-docker-volume-restored-retry.json
+-rw-r--r--   1 runner  staff       0 Oct 18 08:03 violations.txt
+-rw-r--r--   1 runner  staff  660944 Oct 18 08:03 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.t07-probe/shots/mac:
+total 0
+drwxr-xr-x  2 runner  staff   64 Oct 18 07:47 .
+drwxr-xr-x  4 runner  staff  128 Oct 18 07:47 ..

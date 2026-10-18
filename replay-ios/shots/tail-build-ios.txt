@@ -1,0 +1,300 @@
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/empty-T07ProbeUITests.plist (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/empty-T07ProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/T07ProbeUITests normal (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/T07ProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/T07ProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/T07ProbeUITests
+
+ExtractAppIntentsMetadata (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.jvmG2b/Metal.xctoolchain --module-name T07ProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.t07probe.uitests --output /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/T07ProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/T07ProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/T07ProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/Objects-normal/arm64/T07ProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-18 07:56:50.628 appintentsmetadataprocessor[20591:61586] Starting appintentsmetadataprocessor export
+2026-10-18 07:56:50.631 appintentsmetadataprocessor[20591:61586] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/T07ProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.jvmG2b/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/ssu --bundle-id io.orbitd.t07probe.uitests --product-path /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Intermediates.noindex/T07Probe.build/Debug-iphonesimulator/T07ProbeUITests.build/T07ProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-18 07:56:50.679 appintentsnltrainingprocessor[20598:61599] Parsing options for appintentsnltrainingprocessor
+2026-10-18 07:56:50.680 appintentsnltrainingprocessor[20598:61599] Starting AppIntents SSU YAML Generation
+2026-10-18 07:56:50.680 appintentsnltrainingprocessor[20598:61599] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME T07ProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.t07probe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME T07ProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.t07probe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/T07ProbeUITests-Runner (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/T07ProbeUITests-Runner -extract arm64
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest (in target 'T07ProbeUITests' from project 'T07Probe')
+    cd /Users/runner/work/orbit/orbit/.t07-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.t07-probe/.dd-ios/Build/Products/Debug-iphonesimulator/T07ProbeUITests-Runner.app/PlugIns/T07ProbeUITests.xctest
+
+2026-10-18 07:57:48.895254+0000 T07ProbeUITests-Runner[23033:67851] [Default] Running tests...
+objc[23033]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x109d64310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x10a610398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+Test Suite 'All tests' started at 2026-10-18 07:58:06.631.
+Test Suite 'T07ProbeUITests.xctest' started at 2026-10-18 07:58:06.633.
+Test Suite 'ReplayTests' started at 2026-10-18 07:58:06.634.
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+    t =     0.00s Start Test at 2026-10-18 07:58:06.639
+    t =     2.02s Set Up
+    t =     2.90s Open io.orbitd.t07probe
+    t =     2.90s     Launch io.orbitd.t07probe
+2026-10-18 07:58:11.098 xcodebuild[5884:23169] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 07:58:11.099 xcodebuild[5884:23169] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    18.04s         Setting up automation session
+    t =    27.06s         Wait for io.orbitd.t07probe to idle
+    t =    31.33s Checking existence of `Any (First Match)`
+    t =    36.43s Checking existence of `Any (First Match)`
+    t =    39.22s Checking existence of `Any (First Match)`
+    t =    49.95s Checking existence of `Any (First Match)`
+    t =    53.54s Added attachment named '19a-asleep'
+    t =    53.55s Checking existence of `TextView (First Match)`
+    t =    54.49s Waiting 20.0s for TextView (First Match) to exist
+    t =    55.53s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    55.53s         Checking existence of `TextView (First Match)`
+    t =    56.17s Tap TextView (First Match)
+    t =    56.17s     Wait for io.orbitd.t07probe to idle
+    t =    56.18s     Find the TextView (First Match)
+    t =    57.51s     Check for interrupting elements affecting TextView
+    t =    57.93s     Synthesize event
+    t =    58.43s     Wait for io.orbitd.t07probe to idle
+    t =    62.27s Type 'T07-EVE-V1 wake wh...' into TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    62.27s     Wait for io.orbitd.t07probe to idle
+    t =    63.79s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    68.25s     Check for interrupting elements affecting TextView
+    t =    68.73s     Synthesize event
+    t =    70.09s     Wait for io.orbitd.t07probe to idle
+    t =    70.96s Checking existence of `TextView at {{32.0, 453.0}, {338.0, 22.0}}`
+    t =    71.58s Find the TextView at {{32.0, 453.0}, {338.0, 22.0}}
+    t =    72.10s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    72.68s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    73.09s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    73.64s Find the "T07-EVE-V1 wake while another container holds the volume" TextView
+    t =    74.17s Checking existence of `Button (First Match)`
+    t =    75.06s Checking existence of `Button (First Match)`
+    t =    75.65s Checking existence of `Button (First Match)`
+    t =    76.10s Checking existence of `Button (First Match)`
+    t =    76.34s Checking existence of `Button (First Match)`
+    t =    76.72s Find the Button (First Match)
+    t =    77.39s Find the "arrow.up.circle.fill" Button
+    t =    78.11s Find the "arrow.up.circle.fill" Button
+    t =    78.79s Find the "arrow.up.circle.fill" Button
+    t =    79.20s Find the "arrow.up.circle.fill" Button
+    t =    79.52s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    79.88s Find the "arrow.up.circle.fill" Button
+    t =    80.34s Tap "arrow.up.circle.fill" Button
+    t =    80.34s     Wait for io.orbitd.t07probe to idle
+    t =    80.34s     Find the "arrow.up.circle.fill" Button
+    t =    80.67s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    80.82s     Synthesize event
+    t =    81.20s     Wait for io.orbitd.t07probe to idle
+    t =    83.34s Checking existence of `Any (First Match)`
+    t =    86.31s Checking existence of `Any (First Match)`
+    t =    90.20s Checking existence of `Any (First Match)`
+    t =    95.57s Added attachment named '19b-waking-volume-held'
+    t =    95.58s Checking existence of `Any (First Match)`
+    t =    97.89s Checking existence of `Any (First Match)`
+    t =   100.45s Checking existence of `Any (First Match)`
+    t =   102.96s Checking existence of `Any (First Match)`
+    t =   105.49s Checking existence of `Any (First Match)`
+    t =   108.41s Checking existence of `Any (First Match)`
+    t =   112.25s Checking existence of `Any (First Match)`
+    t =   114.54s Checking existence of `Any (First Match)`
+    t =   116.71s Checking existence of `Any (First Match)`
+    t =   119.41s Checking existence of `Any (First Match)`
+    t =   122.23s Checking existence of `Any (First Match)`
+    t =   124.30s Checking existence of `Any (First Match)`
+    t =   131.03s Checking existence of `Any (First Match)`
+    t =   133.80s Checking existence of `Any (First Match)`
+    t =   137.35s Added attachment named '19c-answered-once-free'
+    t =   139.43s Added attachment named 'verdict-19-docker-volume-in-use.json'
+    t =   139.46s Terminate io.orbitd.t07probe:24451
+    t =   142.53s Tear Down
+    t =   142.53s     Added attachment named 'ReplayTeststest19DockerVolumeInUse-notes.txt'
+Test Case '-[T07ProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (143.471 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+    t =     0.00s Start Test at 2026-10-18 08:00:30.118
+    t =     0.12s Set Up
+    t =     0.23s Open io.orbitd.t07probe
+    t =     0.23s     Launch io.orbitd.t07probe
+2026-10-18 08:00:30.744 xcodebuild[5884:23169] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-18 08:00:30.751 xcodebuild[5884:23169] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     6.45s         Setting up automation session
+    t =    10.28s         Wait for io.orbitd.t07probe to idle
+    t =    13.14s Checking existence of `Any (First Match)`
+    t =    14.99s Checking existence of `Any (First Match)`
+    t =    19.85s Checking existence of `Any (First Match)`
+    t =    22.62s Added attachment named '20a-asleep'
+    t =    22.62s Checking existence of `TextView (First Match)`
+    t =    22.79s Waiting 20.0s for TextView (First Match) to exist
+    t =    23.84s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    23.84s         Checking existence of `TextView (First Match)`
+    t =    23.97s Tap TextView (First Match)
+    t =    23.97s     Wait for io.orbitd.t07probe to idle
+    t =    23.97s     Find the TextView (First Match)
+    t =    24.10s     Check for interrupting elements affecting TextView
+    t =    24.23s     Synthesize event
+    t =    24.55s     Wait for io.orbitd.t07probe to idle
+    t =    26.02s Type 'T07-EVE-R1 wake af...' into TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    26.03s     Wait for io.orbitd.t07probe to idle
+    t =    26.03s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    27.44s     Check for interrupting elements affecting TextView
+    t =    27.71s     Synthesize event
+    t =    28.66s     Wait for io.orbitd.t07probe to idle
+    t =    29.47s Checking existence of `TextView at {{32.0, 453.0}, {338.0, 22.0}}`
+    t =    29.95s Find the TextView at {{32.0, 453.0}, {338.0, 22.0}}
+    t =    30.32s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    30.62s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    30.97s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    31.20s Find the "T07-EVE-R1 wake after the volume was removed" TextView
+    t =    31.43s Checking existence of `Button (First Match)`
+    t =    31.88s Checking existence of `Button (First Match)`
+    t =    32.71s Checking existence of `Button (First Match)`
+    t =    33.30s Checking existence of `Button (First Match)`
+    t =    33.60s Checking existence of `Button (First Match)`
+    t =    33.84s Find the Button (First Match)
+    t =    34.12s Find the "arrow.up.circle.fill" Button
+    t =    34.40s Find the "arrow.up.circle.fill" Button
+    t =    34.60s Find the "arrow.up.circle.fill" Button
+    t =    34.79s Find the "arrow.up.circle.fill" Button
+    t =    35.01s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    35.27s Find the "arrow.up.circle.fill" Button
+    t =    35.60s Tap "arrow.up.circle.fill" Button
+    t =    35.60s     Wait for io.orbitd.t07probe to idle
+    t =    35.60s     Find the "arrow.up.circle.fill" Button
+    t =    35.90s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    36.04s     Synthesize event
+    t =    36.35s     Wait for io.orbitd.t07probe to idle
+    t =    38.42s Checking existence of `Any (First Match)`
+    t =    41.23s Checking existence of `Any (First Match)`
+    t =    44.65s Checking existence of `Any (First Match)`
+    t =    47.87s Checking existence of `Any (First Match)`
+    t =    51.02s Added attachment named '20b-failed-volume-gone-no-retry'
+    t =    51.02s Checking existence of `Any (First Match)`
+    t =    51.91s Checking existence of `Any (First Match)`
+    t =    53.71s Checking existence of `Any (First Match)`
+    t =    56.06s Checking existence of `Any (First Match)`
+    t =    58.36s Checking existence of `Any (First Match)`
+    t =    59.95s Checking existence of `Any (First Match)`
+    t =    61.68s Checking existence of `Any (First Match)`
+    t =    63.42s Checking existence of `Any (First Match)`
+    t =    65.25s Checking existence of `Any (First Match)`
+    t =    66.88s Checking existence of `Any (First Match)`
+    t =    69.01s Checking existence of `Any (First Match)`
+    t =    71.03s Checking existence of `Any (First Match)`
+    t =    72.75s Checking existence of `Any (First Match)`
+    t =    74.47s Checking existence of `Any (First Match)`
+    t =    76.95s Checking existence of `Any (First Match)`
+    t =    79.35s Checking existence of `Any (First Match)`
+    t =    81.76s Checking existence of `Any (First Match)`
+    t =    83.57s Checking existence of `Any (First Match)`
+    t =    86.70s Added attachment named '20c-restored-retry-offered'
+    t =    86.71s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Retry"'
+    t =    87.03s Checking existence of `Button (Element at index 0)`
+    t =    87.22s Find the Button (Element at index 0)
+    t =    87.49s Waiting 60.0s for "Retry" Button to exist
+    t =    88.49s     Checking `Expect predicate `existsNoRetry == 1` for object "Retry" Button`
+    t =    88.50s         Checking existence of `"Retry" Button`
+    t =    88.84s Checking existence of `"Retry" Button`
+    t =    89.24s Find the "Retry" Button
+    t =    89.51s Find the "Retry" Button
+    t =    89.76s Find the "Retry" Button
+    t =    90.01s Find the "Retry" Button
+    t =    90.31s Find the "Retry" Button
+    t =    90.61s Tap "Retry" Button
+    t =    90.62s     Wait for io.orbitd.t07probe to idle
+    t =    90.66s     Find the "Retry" Button
+    t =    91.02s     Check for interrupting elements affecting "Retry" Button
+    t =    91.32s     Synthesize event
+    t =    91.70s     Wait for io.orbitd.t07probe to idle
+    t =    93.73s Checking existence of `Any (First Match)`
+    t =    97.79s Added attachment named '20d-retried'
+    t =    97.80s Checking existence of `Any (First Match)`
+    t =   100.60s Added attachment named '20e-answered'
+    t =   102.63s Added attachment named 'verdict-20-docker-volume-restored-retry.json'
+    t =   102.64s Terminate io.orbitd.t07probe:27536
+    t =   103.68s Tear Down
+    t =   103.68s     Added attachment named 'ReplayTeststest20DockerVolumeRestoredRetry-notes.txt'
+Test Case '-[T07ProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' passed (103.851 seconds).
+Test Suite 'ReplayTests' passed at 2026-10-18 08:02:13.968.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 247.322 (247.334) seconds
+Test Suite 'T07ProbeUITests.xctest' passed at 2026-10-18 08:02:13.969.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 247.322 (247.336) seconds
+Test Suite 'All tests' passed at 2026-10-18 08:02:13.969.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 247.322 (247.338) seconds
+2026-10-18 08:03:23.518 xcodebuild[5884:23169] [MT] IDETestOperationsObserverDebug: 392.202 elapsed -- Testing started completed.
+2026-10-18 08:03:23.519 xcodebuild[5884:23169] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 08:03:23.519 xcodebuild[5884:23169] [MT] IDETestOperationsObserverDebug: 392.202 sec, +392.202 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.t07-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

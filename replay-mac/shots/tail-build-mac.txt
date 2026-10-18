@@ -1,0 +1,300 @@
+    t =     4.31s         Capturing element debug description
+    t =     5.28s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     5.28s         Checking existence of `Window (First Match)`
+    t =     5.31s         Capturing element debug description
+    t =     6.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     6.26s         Checking existence of `Window (First Match)`
+    t =     6.29s         Capturing element debug description
+    t =     7.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     7.26s         Checking existence of `Window (First Match)`
+    t =     7.29s         Capturing element debug description
+    t =     8.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     8.26s         Checking existence of `Window (First Match)`
+    t =     8.28s         Capturing element debug description
+    t =     9.28s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     9.28s         Checking existence of `Window (First Match)`
+    t =     9.31s         Capturing element debug description
+    t =    10.35s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    10.35s         Checking existence of `Window (First Match)`
+    t =    10.39s         Capturing element debug description
+    t =    11.27s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    11.28s         Checking existence of `Window (First Match)`
+    t =    11.31s         Capturing element debug description
+    t =    12.27s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    12.27s         Checking existence of `Window (First Match)`
+    t =    12.31s         Capturing element debug description
+    t =    13.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    13.25s         Checking existence of `Window (First Match)`
+    t =    13.28s         Capturing element debug description
+    t =    14.28s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    14.28s         Checking existence of `Window (First Match)`
+    t =    14.31s         Capturing element debug description
+    t =    15.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    15.26s         Checking existence of `Window (First Match)`
+    t =    15.30s         Capturing element debug description
+    t =    16.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    16.25s         Checking existence of `Window (First Match)`
+    t =    16.29s         Capturing element debug description
+    t =    17.27s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    17.27s         Checking existence of `Window (First Match)`
+    t =    17.32s         Capturing element debug description
+    t =    18.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    18.26s         Checking existence of `Window (First Match)`
+    t =    18.29s         Capturing element debug description
+    t =    19.25s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    19.26s         Checking existence of `Window (First Match)`
+    t =    19.30s         Capturing element debug description
+    t =    20.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    20.26s         Checking existence of `Window (First Match)`
+    t =    20.30s         Capturing element debug description
+    t =    21.26s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    21.26s         Checking existence of `Window (First Match)`
+    t =    21.30s         Capturing element debug description
+    t =    21.30s     Checking existence of `Window (First Match)`
+    t =    21.32s Collecting debug information to assist test failure triage
+    t =    21.32s     Requesting snapshot of accessibility hierarchy for app with pid 26018
+    t =    21.36s Type 'n' key with modifiers '⌘' (0x10)
+    t =    21.36s     Wait for io.orbitd.t07macprobe to idle
+    t =    21.36s     Find the Target Application 'io.orbitd.t07macprobe'
+    t =    21.41s     Check for interrupting elements affecting "T07MacProbe" Application
+    t =    21.41s     Synthesize event
+    t =    22.04s     Wait for io.orbitd.t07macprobe to idle
+    t =    22.06s Checking existence of `Any (First Match)`
+    t =    22.31s Checking existence of `StaticText (First Match)`
+    t =    22.64s Checking existence of `TextView (First Match)`
+    t =    23.88s Checking existence of `Any (First Match)`
+    t =    23.97s Checking existence of `StaticText (First Match)`
+    t =    26.13s Checking existence of `Window (First Match)`
+    t =    26.14s Checking existence of `Window (First Match)`
+    t =    26.14s Find the Window (First Match)
+    t =    26.19s Added attachment named '20a-asleep'
+    t =    26.19s Checking existence of `TextView (First Match)`
+    t =    26.25s Waiting 20.0s for TextField (First Match) to exist
+    t =    27.29s     Checking `Expect predicate `existsNoRetry == 1` for object TextField (First Match)`
+    t =    27.29s         Checking existence of `TextField (First Match)`
+    t =    27.33s Click TextField (First Match)
+    t =    27.33s     Wait for io.orbitd.t07macprobe to idle
+    t =    27.33s     Find the TextField (First Match)
+    t =    27.38s     Check for interrupting elements affecting "Message…" TextField
+    t =    27.41s     Synthesize event
+    t =    27.90s     Wait for io.orbitd.t07macprobe to idle
+    t =    28.52s Type 'T07-EVE-R1 wake af...' into "Message…" TextField
+    t =    28.53s     Wait for io.orbitd.t07macprobe to idle
+    t =    28.53s     Find the "Message…" TextField
+    t =    28.67s     Check for interrupting elements affecting "Message…" TextField
+    t =    28.75s     Synthesize event
+    t =    30.99s     Wait for io.orbitd.t07macprobe to idle
+    t =    31.80s Checking existence of `"Message…" TextField`
+    t =    31.93s Find the "Message…" TextField
+    t =    32.01s Find the "Message…" TextField
+    t =    32.09s Find the "Message…" TextField
+    t =    32.16s Find the "Message…" TextField
+    t =    32.22s Find the "Message…" TextField
+    t =    32.31s Checking existence of `Button (First Match)`
+    t =    32.48s Checking existence of `Button (First Match)`
+    t =    32.62s Checking existence of `Button (First Match)`
+    t =    32.81s Checking existence of `Button (First Match)`
+    t =    32.89s Checking existence of `Button (First Match)`
+    t =    32.98s Find the Button (First Match)
+    t =    33.06s Find the "arrow.up.circle.fill" Button
+    t =    33.13s Find the "arrow.up.circle.fill" Button
+    t =    33.20s Find the "arrow.up.circle.fill" Button
+    t =    33.25s Find the "arrow.up.circle.fill" Button
+    t =    33.33s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    33.41s Find the "arrow.up.circle.fill" Button
+    t =    33.49s Click "arrow.up.circle.fill" Button
+    t =    33.49s     Wait for io.orbitd.t07macprobe to idle
+    t =    33.50s     Find the "arrow.up.circle.fill" Button
+    t =    33.58s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    33.62s     Synthesize event
+    t =    33.98s     Wait for io.orbitd.t07macprobe to idle
+    t =    36.13s Checking existence of `Any (First Match)`
+    t =    36.37s Checking existence of `StaticText (First Match)`
+    t =    36.53s Checking existence of `TextView (First Match)`
+    t =    37.70s Checking existence of `Any (First Match)`
+    t =    37.92s Checking existence of `StaticText (First Match)`
+    t =    38.14s Checking existence of `TextView (First Match)`
+    t =    39.32s Checking existence of `Any (First Match)`
+    t =    39.53s Checking existence of `StaticText (First Match)`
+    t =    39.68s Checking existence of `TextView (First Match)`
+    t =    40.83s Checking existence of `Any (First Match)`
+    t =    41.04s Checking existence of `StaticText (First Match)`
+    t =    43.25s Checking existence of `Window (First Match)`
+    t =    43.26s Checking existence of `Window (First Match)`
+    t =    43.27s Find the Window (First Match)
+    t =    43.36s Added attachment named '20b-failed-volume-gone-no-retry'
+    t =    43.36s Checking existence of `Any (First Match)`
+    t =    43.58s Checking existence of `StaticText (First Match)`
+    t =    43.72s Checking existence of `TextView (First Match)`
+    t =    43.87s Checking existence of `Any (First Match)`
+    t =    44.01s Checking existence of `StaticText (First Match)`
+    t =    44.18s Checking existence of `TextView (First Match)`
+    t =    45.33s Checking existence of `Any (First Match)`
+    t =    45.55s Checking existence of `StaticText (First Match)`
+    t =    45.70s Checking existence of `TextView (First Match)`
+    t =    46.80s Checking existence of `Any (First Match)`
+    t =    47.01s Checking existence of `StaticText (First Match)`
+    t =    47.20s Checking existence of `TextView (First Match)`
+    t =    48.35s Checking existence of `Any (First Match)`
+    t =    48.56s Checking existence of `StaticText (First Match)`
+    t =    48.74s Checking existence of `TextView (First Match)`
+    t =    49.86s Checking existence of `Any (First Match)`
+    t =    50.09s Checking existence of `StaticText (First Match)`
+    t =    50.29s Checking existence of `TextView (First Match)`
+    t =    51.46s Checking existence of `Any (First Match)`
+    t =    51.68s Checking existence of `StaticText (First Match)`
+    t =    51.86s Checking existence of `TextView (First Match)`
+    t =    52.99s Checking existence of `Any (First Match)`
+    t =    53.15s Checking existence of `StaticText (First Match)`
+    t =    53.31s Checking existence of `TextView (First Match)`
+    t =    54.47s Checking existence of `Any (First Match)`
+    t =    54.66s Checking existence of `StaticText (First Match)`
+    t =    54.82s Checking existence of `TextView (First Match)`
+    t =    55.97s Checking existence of `Any (First Match)`
+    t =    56.13s Checking existence of `StaticText (First Match)`
+    t =    56.28s Checking existence of `TextView (First Match)`
+    t =    57.45s Checking existence of `Any (First Match)`
+    t =    57.67s Checking existence of `StaticText (First Match)`
+    t =    57.87s Checking existence of `TextView (First Match)`
+    t =    59.00s Checking existence of `Any (First Match)`
+    t =    59.21s Checking existence of `StaticText (First Match)`
+    t =    59.32s Checking existence of `TextView (First Match)`
+    t =    60.48s Checking existence of `Any (First Match)`
+    t =    60.70s Checking existence of `StaticText (First Match)`
+    t =    60.89s Checking existence of `TextView (First Match)`
+    t =    62.04s Checking existence of `Any (First Match)`
+    t =    62.27s Checking existence of `StaticText (First Match)`
+    t =    62.45s Checking existence of `TextView (First Match)`
+    t =    63.63s Checking existence of `Any (First Match)`
+    t =    63.84s Checking existence of `StaticText (First Match)`
+    t =    64.03s Checking existence of `TextView (First Match)`
+    t =    65.21s Checking existence of `Any (First Match)`
+    t =    65.42s Checking existence of `StaticText (First Match)`
+    t =    65.52s Checking existence of `TextView (First Match)`
+    t =    66.68s Checking existence of `Any (First Match)`
+    t =    66.90s Checking existence of `StaticText (First Match)`
+    t =    67.06s Checking existence of `TextView (First Match)`
+    t =    68.22s Checking existence of `Any (First Match)`
+    t =    68.43s Checking existence of `StaticText (First Match)`
+    t =    68.58s Checking existence of `TextView (First Match)`
+    t =    69.71s Checking existence of `Any (First Match)`
+    t =    69.91s Checking existence of `StaticText (First Match)`
+    t =    70.09s Checking existence of `TextView (First Match)`
+    t =    71.25s Checking existence of `Any (First Match)`
+    t =    71.46s Checking existence of `StaticText (First Match)`
+    t =    71.63s Checking existence of `TextView (First Match)`
+    t =    72.73s Checking existence of `Any (First Match)`
+    t =    72.94s Checking existence of `StaticText (First Match)`
+    t =    73.12s Checking existence of `TextView (First Match)`
+    t =    74.29s Checking existence of `Any (First Match)`
+    t =    74.47s Checking existence of `StaticText (First Match)`
+    t =    74.62s Checking existence of `TextView (First Match)`
+    t =    75.76s Checking existence of `Any (First Match)`
+    t =    75.91s Checking existence of `StaticText (First Match)`
+    t =    76.08s Checking existence of `TextView (First Match)`
+    t =    77.27s Checking existence of `Any (First Match)`
+    t =    77.50s Checking existence of `StaticText (First Match)`
+    t =    77.68s Checking existence of `TextView (First Match)`
+    t =    78.86s Checking existence of `Any (First Match)`
+    t =    79.02s Checking existence of `StaticText (First Match)`
+    t =    79.16s Checking existence of `TextView (First Match)`
+    t =    80.34s Checking existence of `Any (First Match)`
+    t =    80.56s Checking existence of `StaticText (First Match)`
+    t =    80.73s Checking existence of `TextView (First Match)`
+    t =    81.88s Checking existence of `Any (First Match)`
+    t =    82.08s Checking existence of `StaticText (First Match)`
+    t =    82.22s Checking existence of `TextView (First Match)`
+    t =    83.38s Checking existence of `Any (First Match)`
+    t =    83.59s Checking existence of `StaticText (First Match)`
+    t =    83.74s Checking existence of `TextView (First Match)`
+    t =    84.89s Checking existence of `Any (First Match)`
+    t =    85.10s Checking existence of `StaticText (First Match)`
+    t =    85.25s Checking existence of `TextView (First Match)`
+    t =    86.38s Checking existence of `Any (First Match)`
+    t =    86.58s Checking existence of `StaticText (First Match)`
+    t =    86.74s Checking existence of `TextView (First Match)`
+    t =    87.90s Checking existence of `Any (First Match)`
+    t =    88.15s Checking existence of `StaticText (First Match)`
+    t =    88.36s Checking existence of `TextView (First Match)`
+    t =    89.47s Checking existence of `Any (First Match)`
+    t =    89.67s Checking existence of `StaticText (First Match)`
+    t =    89.86s Checking existence of `TextView (First Match)`
+    t =    91.03s Checking existence of `Any (First Match)`
+    t =    91.22s Checking existence of `StaticText (First Match)`
+    t =    91.33s Checking existence of `TextView (First Match)`
+    t =    92.45s Checking existence of `Any (First Match)`
+    t =    92.63s Checking existence of `StaticText (First Match)`
+    t =    92.85s Checking existence of `TextView (First Match)`
+    t =    94.02s Checking existence of `Any (First Match)`
+    t =    94.24s Checking existence of `StaticText (First Match)`
+    t =    94.42s Checking existence of `TextView (First Match)`
+    t =    95.60s Checking existence of `Any (First Match)`
+    t =    95.73s Checking existence of `StaticText (First Match)`
+    t =    95.93s Checking existence of `TextView (First Match)`
+    t =    97.09s Checking existence of `Any (First Match)`
+    t =    97.31s Checking existence of `StaticText (First Match)`
+    t =    97.49s Checking existence of `TextView (First Match)`
+    t =    98.63s Checking existence of `Any (First Match)`
+    t =    98.83s Checking existence of `StaticText (First Match)`
+    t =    99.01s Checking existence of `TextView (First Match)`
+    t =   100.17s Checking existence of `Any (First Match)`
+    t =   100.40s Checking existence of `StaticText (First Match)`
+    t =   100.59s Checking existence of `TextView (First Match)`
+    t =   101.77s Checking existence of `Any (First Match)`
+    t =   101.95s Checking existence of `StaticText (First Match)`
+    t =   104.12s Checking existence of `Window (First Match)`
+    t =   104.13s Checking existence of `Window (First Match)`
+    t =   104.13s Find the Window (First Match)
+    t =   104.23s Added attachment named '20c-restored-retry-offered'
+    t =   104.23s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Retry"'
+    t =   104.43s Checking existence of `Button (Element at index 0)`
+    t =   104.60s Find the Button (Element at index 0)
+    t =   104.83s Waiting 60.0s for "Retry" Button to exist
+    t =   105.86s     Checking `Expect predicate `existsNoRetry == 1` for object "Retry" Button`
+    t =   105.86s         Checking existence of `"Retry" Button`
+    t =   106.05s Checking existence of `"Retry" Button`
+    t =   106.17s Find the "Retry" Button
+    t =   106.35s Find the "Retry" Button
+    t =   106.54s Find the "Retry" Button
+    t =   106.76s Find the "Retry" Button
+    t =   106.97s Find the "Retry" Button
+    t =   107.15s Click "Retry" Button
+    t =   107.15s     Wait for io.orbitd.t07macprobe to idle
+    t =   107.15s     Find the "Retry" Button
+    t =   107.32s     Check for interrupting elements affecting "Retry" Button
+    t =   107.36s     Synthesize event
+    t =   107.78s     Wait for io.orbitd.t07macprobe to idle
+    t =   109.79s Checking existence of `Any (First Match)`
+    t =   110.01s Checking existence of `StaticText (First Match)`
+    t =   110.21s Checking existence of `TextView (First Match)`
+    t =   112.46s Checking existence of `Window (First Match)`
+    t =   112.48s Checking existence of `Window (First Match)`
+    t =   112.49s Find the Window (First Match)
+    t =   112.55s Added attachment named '20d-retried'
+    t =   112.56s Checking existence of `Any (First Match)`
+    t =   112.76s Checking existence of `StaticText (First Match)`
+    t =   115.03s Checking existence of `Window (First Match)`
+    t =   115.04s Checking existence of `Window (First Match)`
+    t =   115.04s Find the Window (First Match)
+    t =   115.12s Added attachment named '20e-answered'
+    t =   117.13s Added attachment named 'verdict-20-docker-volume-restored-retry.json'
+    t =   117.13s Terminate io.orbitd.t07macprobe:26018
+    t =   118.15s Tear Down
+    t =   118.16s     Added attachment named 'ReplayTeststest20DockerVolumeRestoredRetry-notes.txt'
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' passed (118.211 seconds).
+Test Suite 'ReplayTests' passed at 2026-10-18 07:54:52.342.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 233.160 (233.163) seconds
+Test Suite 'T07MacProbeUITests.xctest' passed at 2026-10-18 07:54:52.343.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 233.160 (233.164) seconds
+Test Suite 'All tests' passed at 2026-10-18 07:54:52.343.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 233.160 (233.165) seconds
+2026-10-18 07:54:52.671 xcodebuild[14502:41733] [MT] IDETestOperationsObserverDebug: 239.608 elapsed -- Testing started completed.
+2026-10-18 07:54:52.671 xcodebuild[14502:41733] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 07:54:52.671 xcodebuild[14502:41733] [MT] IDETestOperationsObserverDebug: 239.608 sec, +239.608 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.t07-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
