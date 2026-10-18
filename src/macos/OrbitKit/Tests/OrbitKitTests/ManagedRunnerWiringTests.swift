@@ -128,7 +128,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
     func testWorkSentToAManagedRunnerThatIsNotUpReadsItsStateAtOnce() throws {
         let console = code(try source("ConsoleModel.swift"))
         let wake = try slice(console, from: "private func managedWorkSent() {", to: "\n    }")
-        XCTAssertTrue(wake.contains("guard managed != nil, runnerOnline != true, let managedRunner else { return }"))
+        // Not up by the managed status: a runner that has just slept still reads online for a while.
+        XCTAssertTrue(wake.contains("guard let managed, managed.display.kind != .available, let managedRunner else { return }"))
+        XCTAssertFalse(wake.contains("runnerOnline"), "a just-slept runner's row still reads online")
         XCTAssertTrue(wake.contains("await managedRunner.load()"))
         XCTAssertEqual(console.components(separatedBy: "managedWorkSent()").count - 1, 3,
                        "declared once, called after an accepted turn and after a created session")

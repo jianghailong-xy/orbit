@@ -81,11 +81,11 @@ const ENDED = {
   capabilities: { canSend: false, canResume: false, resumeBlockedReason: 'RUNNER_OFFLINE', canComplete: true, canRestore: false },
 };
 
-const runner = (id: string, name: string) => ({
+const runner = (id: string, name: string, online = false) => ({
   id,
   name,
-  online: false,
-  status: 'OFFLINE',
+  online,
+  status: online ? 'ONLINE' : 'OFFLINE',
   maxConcurrent: 2,
   activeSessions: 0,
   engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
@@ -99,6 +99,8 @@ interface Server {
   lastProvider: string;
   /** The owner's configured providers (GET /providers). */
   providers?: unknown[];
+  /** The managed runner's row still reads online (it has just gone to sleep; its last beat is fresh). */
+  managedOnline?: boolean;
 }
 let server: Server;
 let statusReads = 0;
@@ -157,7 +159,9 @@ beforeEach(() => {
     if (path === '/users/me') {
       return Promise.resolve({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
     }
-    if (path === '/runners') return Promise.resolve([runner(MANAGED_RUNNER, 'Managed runner'), runner(OWN_RUNNER, 'mac-01')]);
+    if (path === '/runners') {
+      return Promise.resolve([runner(MANAGED_RUNNER, 'Managed runner', server.managedOnline), runner(OWN_RUNNER, 'mac-01')]);
+    }
     if (path === '/workspaces') {
       workspaceReads += 1;
       return Promise.resolve([
@@ -285,6 +289,26 @@ describe('a managed workspace in the console', () => {
     await waitForUi(() => expect(posted.map(({ path }) => path)).toEqual(['/sessions']));
     expect(posted[0].body.workspaceId).toBe(MANAGED_WORKSPACE);
     // The send asks the status again at once: the message is what woke it.
+    await waitForUi(() => expect(noticeTitle()).toBe('Waking your managed runner'));
+  });
+
+  it('just gone to sleep, its row still online: a message reads the status at once, so it shows waking', async () => {
+    // Seen on the lab's k3s (T07): a runner asleep for 15 s still read online (last beat 30 s old), so the
+    // console went on saying "asleep" while the message woke it and was answered.
+    server = {
+      capabilities: capability('switched on'),
+      statuses: [state('sleeping'), state('waking: a message asked the sleeping runner')],
+      lastProvider: 'claude',
+      managedOnline: true,
+    };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    const reads = statusReads;
+    await type('Wake up');
+    await waitForUi(() => expect(sendButton().disabled).toBe(false));
+    await act(async () => sendButton().click());
+    await waitForUi(() => expect(posted.map(({ path }) => path)).toEqual(['/sessions']));
+    await waitForUi(() => expect(statusReads).toBeGreaterThan(reads));
     await waitForUi(() => expect(noticeTitle()).toBe('Waking your managed runner'));
   });
 

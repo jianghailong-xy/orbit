@@ -6125,7 +6125,11 @@ export function WorkspaceView({
         sendOperationRef.current = null;
       }
       // Work for a managed runner that is not up asks it to wake: show that now, not at the next poll.
-      if (managed && !runner.online) qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey });
+      // Up is the managed status's own READY: a runner that has just gone to sleep still reads online
+      // until its last heartbeat goes stale, while its status already says it sleeps.
+      if (managed && managed.display.kind !== 'available') {
+        qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey });
+      }
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // Delivered, to the run that has this task rather than to the one it was typed in. Nothing
       // about this row changed, so none of the optimistic painting below applies — the bubble is

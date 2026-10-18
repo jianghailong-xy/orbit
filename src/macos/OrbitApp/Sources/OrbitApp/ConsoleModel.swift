@@ -1817,7 +1817,9 @@ final class ConsoleModel {
     /// Work for a managed runner that is not up asks it to wake: read its state now rather than at
     /// the next poll, so the console says it is waking.
     private func managedWorkSent() {
-        guard managed != nil, runnerOnline != true, let managedRunner else { return }
+        // Up is the managed status's own READY: a runner that has just gone to sleep still reads
+        // online until its last heartbeat goes stale, while its status already says it sleeps.
+        guard let managed, managed.display.kind != .available, let managedRunner else { return }
         Task { await managedRunner.load() }
     }
 
