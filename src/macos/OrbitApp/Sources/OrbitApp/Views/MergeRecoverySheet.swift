@@ -123,7 +123,7 @@ struct MergeRecoverySheet: View {
                         } header: {
                             Text(r.conflictsTitle).textCase(nil)
                         } footer: {
-                            if let note = r.targetMovedNote { Text(note) }
+                            if let note = r.targetMovedNote { footnote(note) }
                         }
                     }
                     // The branches in one row: what the review is about, before what it lists.
@@ -339,7 +339,7 @@ struct MergeRecoverySheet: View {
                 }
                 .textCase(nil)
             } footer: {
-                if let note = r.landedByContentNote { Text(note) }
+                if let note = r.landedByContentNote { footnote(note) }
             }
         }
         Section {
@@ -349,8 +349,14 @@ struct MergeRecoverySheet: View {
                 RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
             }
         } footer: {
-            if let note = r.landedLocalNote { Text(note) }
+            if let note = r.landedLocalNote { footnote(note) }
         }
+    }
+
+    /// A section footer carrying one of the board's sentences, whole: the Mac's list draws a footer on one
+    /// line and cuts the rest unless the text may grow to its height.
+    private func footnote(_ text: String) -> some View {
+        Text(text).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - check

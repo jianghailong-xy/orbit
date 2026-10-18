@@ -157,6 +157,18 @@ final class MergeRecoveryWiringTests: XCTestCase {
         XCTAssertTrue(lede.contains("r.landedSummary()"))
     }
 
+    /// The coordinator's send-back, 2026-10-19: on the Mac, ④'s footnote was cut to one line ("…only this
+    /// file conflicts with the new…"). The footers that carry the board's sentences may grow to their height.
+    func testTheBoardsFootnotesAreDrawnWhole() throws {
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        let helper = try slice(sheet, from: "private func footnote(", to: "\n    }")
+        XCTAssertTrue(helper.contains(".fixedSize(horizontal: false, vertical: true)"), "it grows to its height")
+        XCTAssertTrue(helper.contains(".lineLimit(nil)"), "with no line limit")
+        for note in ["r.targetMovedNote", "r.landedByContentNote", "r.landedLocalNote"] {
+            XCTAssertTrue(sheet.contains("if let note = \(note) { footnote(note) }"), "\(note) is a whole footnote")
+        }
+    }
+
     /// The server checks the recovery after a repair round, and nothing tells the console: its poll reads
     /// on until that check shows.
     func testThePollReadsOnUntilTheRepairsCheckShows() throws {
