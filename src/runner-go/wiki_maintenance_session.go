@@ -326,6 +326,8 @@ func wikiMaintenanceEnv(job *ClaimedSession) []string {
 			env = append(env, key+"="+value)
 		}
 	}
+	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+	env = append(env, managedInstanceEnv()...)
 	return append(env,
 		"ORBIT_SESSION_ID="+publicID(job.SessionID),
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),

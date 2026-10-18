@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,12 @@ import kotlinx.serialization.encodeToString
 
 /** How many times `signInMethods` sends its request through network failures. */
 private const val METHODS_ATTEMPTS = 3
+/** How many times `restore` reads storage through failures that may pass, and how long it waits between reads. */
+private const val RESTORE_ATTEMPTS = 3
+private const val RESTORE_RETRY_MS = 200L
+
+/** This failure's class and its causes', and never a message: a message can quote what was being read. */
+private fun Throwable.classes() = generateSequence(this) { it.cause }.take(8).joinToString(" < ") { it.javaClass.name }
 
 /** Identity, not value equality: logging in again as the same user still invalidates old work. */
 class SessionHandle internal constructor(val account: AccountKey)
@@ -67,6 +74,9 @@ class AuthSession(
     private val allowLoopbackHttp: Boolean = false,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val eventTransport: EventTransport = OkHttpEventTransport(),
+    private val emails: EmailStore? = null,
+    /** Diagnostics without values: which way a restore went, and the classes of what failed. */
+    private val log: (String) -> Unit = {},
 ) : OrbitApi {
     private class Epoch(val server: ServerAddress, dispatcher: CoroutineDispatcher) {
         val job = SupervisorJob()
@@ -86,28 +96,52 @@ class AuthSession(
 
     init { require(clientVersion.matches(Regex("[A-Za-z0-9.+-]{1,32}"))) }
 
+    /**
+     * Signs the stored session in. A stored session that can never be read again is retired: credentials and account data
+     * are cleared. A storage failure that may pass is read again; if it persists, this launch starts signed out but deletes
+     * nothing, so the next launch restores it, as iOS's Keychain read that fails only returns nil.
+     */
     suspend fun restore() = withContext(NonCancellable) {
         lock.withLock {
             if (initialized) return@withLock
             initialized = true
             var server: ServerAddress? = null
-            try {
-                server = instances.load()?.let { ServerAddress.parse(it, allowLoopbackHttp) }
-                val stored = credentials.load()
-                if (stored == null) {
-                    data.clearAll()
-                    mutableState.value = AuthState.SignedOut(server)
-                } else {
-                    val savedServer = ServerAddress.parse(stored.server, allowLoopbackHttp)
-                    if (server != null && server != savedServer) throw SecureStorageException()
-                    server = savedServer
-                    instances.save(savedServer.value)
-                    val next = Epoch(savedServer, dispatcher)
-                    epoch = next
-                    activateLocked(next, stored.credentials)
+            for (attempt in 1..RESTORE_ATTEMPTS) {
+                try {
+                    server = instances.load()?.let { ServerAddress.parse(it, allowLoopbackHttp) }
+                    val stored = credentials.load()
+                    if (stored == null) {
+                        data.clearAll()
+                        mutableState.value = AuthState.SignedOut(server)
+                        log("restore: no stored session")
+                    } else {
+                        val savedServer = ServerAddress.parse(stored.server, allowLoopbackHttp)
+                        if (server != null && server != savedServer) throw SecureStorageException(unrecoverable = true)
+                        server = savedServer
+                        instances.save(savedServer.value)
+                        val next = Epoch(savedServer, dispatcher)
+                        epoch = next
+                        activateLocked(next, stored.credentials)
+                        log("restore: stored session restored on attempt $attempt")
+                    }
+                    return@withLock
+                } catch (error: Exception) {
+                    if (error !is SecureStorageException || error.unrecoverable) {
+                        log("restore: stored session can never be read (${error.classes()}); " +
+                            "signed out, credentials and account data cleared")
+                        retireLocked(server, SignOutReason.STORAGE)
+                        return@withLock
+                    }
+                    if (attempt == RESTORE_ATTEMPTS) {
+                        log("restore: storage unreadable after $attempt attempts (${error.classes()}); " +
+                            "signed out, stored session and account data kept for the next launch")
+                        mutableState.value = AuthState.SignedOut(server, SignOutReason.STORAGE)
+                    } else {
+                        log("restore: attempt $attempt of $RESTORE_ATTEMPTS failed (${error.classes()}); " +
+                            "reading again in $RESTORE_RETRY_MS ms")
+                        delay(RESTORE_RETRY_MS)
+                    }
                 }
-            } catch (_: Exception) {
-                retireLocked(server, SignOutReason.STORAGE)
             }
         }
     }
@@ -137,9 +171,13 @@ class AuthSession(
         }
     }
 
+    /** The email the last successful password sign-in on [server] used, for its login page; null when there is none. */
+    suspend fun rememberedEmail(server: ServerAddress): String? =
+        try { emails?.load(server.value) } catch (_: SecureStorageException) { null }
+
     /** Also switches accounts: old requests/data are invalidated before the login leaves the device. */
     suspend fun login(server: ServerAddress, email: String, password: String): SessionHandle =
-        signIn(server, listOf("login"), Wire.json.encodeToString(LoginRequest(email, password)))
+        signIn(server, listOf("login"), Wire.json.encodeToString(LoginRequest(email, password)), email)
 
     /**
      * The last step of a Google sign-in (§4.3): its callback's one-time ticket and the verifier only
@@ -148,12 +186,11 @@ class AuthSession(
     suspend fun loginWithGoogleTicket(server: ServerAddress, ticket: String, codeVerifier: String): SessionHandle =
         signIn(server, listOf("google", "exchange"), Wire.json.encodeToString(GoogleExchangeRequest(ticket, codeVerifier)))
 
-    private suspend fun signIn(server: ServerAddress, operation: List<String>, body: String): SessionHandle {
+    private suspend fun signIn(server: ServerAddress, operation: List<String>, body: String, email: String? = null): SessionHandle {
         val next = withContext(NonCancellable) {
             lock.withLock {
                 initialized = true
                 retireLocked(server, SignOutReason.SWITCHED)
-                instances.save(server.value)
                 Epoch(server, dispatcher).also {
                     epoch = it
                     mutableState.value = AuthState.SigningIn(server)
@@ -166,7 +203,11 @@ class AuthSession(
                 val tokens = Wire.decode(response.requireSuccess().body, LoginResponse.serializer())
                 lock.withLock {
                     requireCurrent(next)
+                    // Only what signed in is remembered, so a mistyped server or email never sticks (iOS fdeb033ad).
+                    instances.save(server.value)
                     credentials.save(StoredSession(server.value, tokens))
+                    // The prefill is a convenience: a store that fails costs it, never the sign-in.
+                    if (email != null) try { emails?.save(server.value, email) } catch (_: SecureStorageException) {}
                     activateLocked(next, tokens)
                 }
             }

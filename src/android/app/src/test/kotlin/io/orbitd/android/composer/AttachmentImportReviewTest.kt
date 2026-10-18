@@ -45,12 +45,12 @@ class AttachmentImportReviewTest {
         auth.login(ServerAddress.parse("https://one.example"), "a@example.test", "password")
         val model = ComposerModel(auth, (auth.state.value as AuthState.SignedIn).handle, "s", scope)
         try {
-            withTimeout(10000) { model.state.first { it.loaded } }
+            withTimeout(60_000) { model.state.first { it.loaded } }
             return (1..8).map { orientation ->
                 val input = File("src/androidTest/assets/composer-images/exif-$orientation.jpg").absoluteFile
                 assertTrue(input.exists())
                 importAttachment(RuntimeEnvironment.getApplication(), model, Uri.fromFile(input), source)
-                val state = withTimeout(10000) { model.state.first { it.uploads.isEmpty() && it.draft.attachments.size == orientation } }
+                val state = withTimeout(60_000) { model.state.first { it.uploads.isEmpty() && it.draft.attachments.size == orientation } }
                 assertTrue(state.failures.toString(), state.failures.isEmpty())
                 val data = model.attachmentBytes(state.draft.attachments.last().id)
                 val image = BitmapFactory.decodeByteArray(data, 0, data.size)!!

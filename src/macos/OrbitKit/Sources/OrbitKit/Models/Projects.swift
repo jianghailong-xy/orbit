@@ -285,6 +285,9 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     /// Whether the read carried `startedAt` at all, which is what separates "never started" (a
     /// null) from "this read did not say" (no key) — the two answers `started` must not merge.
     public let startedAtRead: Bool
+    /// The project's main branch by name, which the row's merge approval and landing line name. Nil
+    /// with no repository bound and from an older server, and then it is main.
+    public let mainBranch: String?
 
     /// Whether the project has been started, read off `startedAt` as ``ProjectDocument/started``
     /// is. Nil for a read that did not carry the field, which no condition reads as either answer.
@@ -299,7 +302,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
                 coordinatorActivity: ProjectCoordinatorPulse? = nil,
                 taskCounts: ProjectSidebarTaskCounts? = nil, doneBy: ProjectDoneBy? = nil,
                 acceptedGaps: [AcceptedGap] = [],
-                startedAt: String? = nil, startedAtRead: Bool = false) {
+                startedAt: String? = nil, startedAtRead: Bool = false, mainBranch: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -317,6 +320,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         self.acceptedGaps = acceptedGaps
         self.startedAt = startedAt
         self.startedAtRead = startedAtRead || startedAt != nil
+        self.mainBranch = mainBranch
     }
 
     private struct Counts: Codable {
@@ -325,7 +329,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, createdAt, updatedAt, buckets, lastActivityAt, attention,
-             integration, coordinatorActivity, taskCounts, doneBy, acceptedGaps, startedAt
+             integration, coordinatorActivity, taskCounts, doneBy, acceptedGaps, startedAt, mainBranch
         case counts = "_count"
     }
 
@@ -348,6 +352,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
         startedAtRead = c.contains(.startedAt)
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+        mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -368,6 +373,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(doneBy, forKey: .doneBy)
         if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
         if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
+        try c.encodeIfPresent(mainBranch, forKey: .mainBranch)
     }
 
     /// What a DONE project's row says beside its status — who recorded it, and the gaps accepted —

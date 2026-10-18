@@ -22,6 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastHost
 
 /** Wiki settings (iOS `WikiSettingsPage`, `WikiMaintenanceForm`, `WikiSettingsView`): the review mode as one choice of
  * three, the spot checks only in Automatic, maintenance off or on — and, over a real store and an in-memory server, the
@@ -35,12 +37,12 @@ class WikiSettingsPageTest {
     private val actions = WikiSettingsActions(setMode = { calls += "mode $it" }, setSpotChecks = { calls += "spot checks $it" },
         setUp = { calls += "set up" }, turnOff = { calls += "turn off" })
 
-    @Before fun quiet() { WikiToast.text = null }
+    @Before fun quiet() { OrbitToasts.clear() }
 
     private fun space(settings: String) = Wire.json.decodeFromString(WikiSpace.serializer(),
         """{"id":"sp1","slug":"orbit","repoUrlNorm":"github.com/orbit/orbit","settings":$settings}""")
     private fun show(content: @Composable () -> Unit) {
-        compose.activityRule.scenario.onActivity { it.setContent { OrbitTheme { Box { content(); WikiToast.Host() } } } }
+        compose.activityRule.scenario.onActivity { it.setContent { OrbitTheme { Box { content(); ToastHost({}, {}, {}) } } } }
         compose.waitForIdle()
     }
     private fun says(tag: String, vararg texts: String) = texts.forEach { text ->
@@ -122,9 +124,12 @@ class WikiSettingsPageTest {
 
     private var spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic"}}"""
     private var patchAnswer: Pair<Int, String> = 200 to "{}"
+    /** `GET /wiki/system-model`: the account's executor switch, absent (404) from a control plane before P9. */
+    private var systemModelAnswer: Pair<Int, String>? = null
     private val rig = WikiTestRig { request -> answer(request) }
     private fun answer(request: ApiRequest): Pair<Int, String>? = when {
         request.method == HttpMethod.PATCH -> patchAnswer
+        request.path == listOf("wiki", "system-model") -> systemModelAnswer
         request.path == listOf("wiki", "spaces") -> 200 to "[$spaceRead]"
         request.path == listOf("workspaces") -> 200 to """[{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w1","name":"orbit","runnerId":"r1"}]"""
         request.path == listOf("runners") -> 200 to """[{"id":"r1","name":"host-1","displayName":"Mac mini"},{"id":"r2","name":"wikova","displayName":null}]"""
@@ -172,7 +177,7 @@ class WikiSettingsPageTest {
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w2","provider":"anthropic","dailyRunLimit":9,"lookbackDays":15}}""",
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":null}}""",
         ), patches())
-        assertEquals(WikiCopy.settingsSaved, WikiToast.text)
+        assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
         compose.onAllNodesWithTag("wiki-settings-form").assertCountEquals(0)
     }
 
@@ -195,6 +200,52 @@ class WikiSettingsPageTest {
             patches())
     }
 
+    /** While the server executes the account's wiki: the provider is not offered, the System model stands read-only
+     * with its state, the workspace reads as where the repository is read from, and one sentence says where the wiki's
+     * material goes — and the write leaves the provider out (mock 35 ①②, P9). */
+    @Test fun theServerExecutesTheWikiAndTheSystemModelStandsWhereTheProviderWas() {
+        spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic","maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}}"""
+        systemModelAnswer = 200 to """{"state":"up","model":"qwen3.8-27b-fp8","since":"2026-10-08T06:00:00.000Z","checkedAt":"2026-10-08T06:29:55.000Z","workerSeenAt":"2026-10-08T06:29:55.000Z","executor":{"mode":"server","serverExecutes":true}}"""
+        screen()
+        says("wiki-settings-workspace-row", WikiModeCopy.repoFrom, "orbit · Mac mini")
+        says("wiki-settings-model-row", WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8"), WikiRunsCopy.modelState("up"))
+        compose.onAllNodesWithTag("wiki-settings-provider-row").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-privacy").assertTextContains(WikiModeCopy.privacyNote)
+        compose.onNodeWithTag("wiki-settings-mode:automatic").assertTextContains(WikiModeCopy.modeNoteAutomaticServer)
+        // The Set up form: the System model in place of the provider, read-only, and the write leaves the provider out.
+        compose.onNodeWithTag("wiki-settings-edit").performClick()
+        says("wiki-settings-form-model", WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8"), WikiRunsCopy.modelState("up"))
+        compose.onNodeWithText(WikiModeCopy.modelNote).assertExists()
+        compose.onAllNodesWithTag("wiki-settings-provider").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains(WikiModeCopy.repoFrom, substring = true)
+        compose.onNodeWithTag("wiki-settings-form-privacy").assertTextContains(WikiModeCopy.privacyNote)
+        compose.onNodeWithTag("wiki-settings-form-submit").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":0}}"""),
+            patches())
+    }
+
+    /** Under runner — or from a control plane before the read — the page and the form are word for word what they
+     * always were, and the write still names the provider. */
+    @Test fun underRunnerThePageAndTheFormAreWhatTheyAlwaysWere() {
+        spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic","maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}}"""
+        systemModelAnswer = 404 to """{"message":"not found"}"""
+        screen()
+        says("wiki-settings-workspace-row", WikiModeCopy.workspace, "orbit · Mac mini")
+        says("wiki-settings-provider-row", WikiModeCopy.provider, "local-vllm")
+        compose.onAllNodesWithTag("wiki-settings-model-row").assertCountEquals(0)
+        compose.onAllNodesWithTag("wiki-settings-privacy").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-mode:automatic").assertTextContains(WikiModeCopy.modeNote("automatic"))
+        compose.onNodeWithTag("wiki-settings-edit").performClick()
+        compose.onNodeWithTag("wiki-settings-provider").assertTextContains("local-vllm", substring = true)
+        compose.onNodeWithTag("wiki-settings-form-submit").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}"""),
+            patches())
+    }
+
     @Test fun theModeTheSpotChecksAndTurnOffAreWrittenAtOnce() {
         spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic","maintenance":{"enabled":true,"workspaceId":"w1"}}}"""
         screen()
@@ -207,7 +258,7 @@ class WikiSettingsPageTest {
         compose.waitForIdle()
         assertEquals(listOf("""PATCH /api/wiki/spaces/sp1 {"automaticSpotChecks":true}""", """PATCH /api/wiki/spaces/sp1 {"reviewMode":"manual"}""",
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":false}}"""), patches())
-        assertEquals(WikiCopy.settingsSaved, WikiToast.text)
+        assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
     }
 
     @Test fun aRefusedSetUpSaysWhyAndKeepsTheForm() {
@@ -222,11 +273,12 @@ class WikiSettingsPageTest {
         compose.onNodeWithTag("wiki-settings-workspace:w1").performClick()
         compose.onNodeWithTag("wiki-settings-form-submit").assertIsEnabled().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(WikiCopy.refused).assertExists()
+        // The alert names what failed, as iOS's does (d625d9809); the server's reason is under it.
+        compose.onNodeWithText("Couldn't save the wiki settings").assertExists()
         compose.onNodeWithText("That workspace is not yours.").assertExists()
         compose.onNodeWithTag("wiki-refusal-ok").performClick()
         compose.onNodeWithTag("wiki-settings-form").assertExists()
         compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("orbit · Mac mini", substring = true)
-        assertNull(WikiToast.text)
+        assertNull(OrbitToasts.feed.value.transient)
     }
 }

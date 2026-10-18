@@ -1,0 +1,346 @@
++ 2026-10-17T14:00:33Z deploying 413714e9525ea853c0e78152d1bf5def7c615b79 (d6-off-baseline), c16d115b38900ba4c20237d060ecb0c004ac7051 plus the runner source change
+    413714e9 test(d6): runner source change for the off-baseline upgrade
+  
+   src/runner-go/main.go | 2 ++
+   1 file changed, 2 insertions(+)
++ .claude/skills/upgrade/upgrade.sh (no flags)
+==> Building images from source (apiserver wiki-worker web)
+ Image orbit-web Building 
+ Image orbit-apiserver:local Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.18kB done
+#1 DONE 0.0s
+
+#2 [apiserver internal] load build definition from Dockerfile
+#2 transferring dockerfile:
+#2 transferring dockerfile: 6.11kB 0.1s done
+#2 DONE 0.5s
+
+#3 [web internal] load build definition from Dockerfile
+#3 transferring dockerfile: 6.12kB 0.0s done
+#3 DONE 0.4s
+
+#4 [apiserver] resolve image config for docker-image://docker.io/docker/dockerfile:1
+#4 DONE 2.1s
+
+#5 [apiserver] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#5 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#5 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.2s done
+#5 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.2s done
+#5 CACHED
+
+#6 [web internal] load metadata for docker.io/library/orbit-web:previous-release
+#6 ...
+
+#7 [web internal] load metadata for docker.io/library/nginx:alpine
+#7 DONE 2.0s
+
+#8 [web internal] load metadata for docker.io/library/golang:1.27
+#8 DONE 2.1s
+
+#9 [apiserver internal] load metadata for docker.io/library/node:26-slim
+#9 DONE 2.1s
+
+#10 [apiserver internal] load .dockerignore
+#10 transferring context: 506B done
+#10 DONE 0.1s
+
+#11 [web internal] load metadata for docker.io/library/node:26-alpine
+#11 DONE 2.5s
+
+#12 [apiserver internal] load build context
+#12 ...
+
+#13 [apiserver build  1/10] FROM docker.io/library/node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4
+#13 resolve docker.io/library/node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4 0.2s done
+#13 DONE 0.2s
+
+#12 [apiserver internal] load build context
+#12 ...
+
+#10 [web internal] load .dockerignore
+#10 transferring context: 506B done
+#10 DONE 0.1s
+
+#6 [web internal] load metadata for docker.io/library/orbit-web:previous-release
+#6 DONE 3.4s
+
+#12 [apiserver internal] load build context
+#12 ...
+
+#14 [web internal] load build context
+#14 DONE 0.0s
+
+#12 [apiserver internal] load build context
+#12 ...
+
+#15 [web previous-release 1/1] FROM docker.io/library/orbit-web:previous-release@sha256:420077efacc9aa8bca77860750f369311ebfcd6d1fdbc71a69eada27f31914cc
+#15 resolve docker.io/library/orbit-web:previous-release@sha256:420077efacc9aa8bca77860750f369311ebfcd6d1fdbc71a69eada27f31914cc 1.3s done
+#15 DONE 1.3s
+
+#12 [apiserver internal] load build context
+#12 ...
+
+#16 [web runtime 1/6] FROM docker.io/library/nginx:alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d
+#16 resolve docker.io/library/nginx:alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d 1.3s done
+#16 DONE 1.4s
+
+#17 [web binbuild 1/9] FROM docker.io/library/golang:1.27@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8
+#17 resolve docker.io/library/golang:1.27@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 1.4s done
+#17 DONE 1.4s
+
+#12 [apiserver internal] load build context
+#12 ...
+
+#18 [web build  1/11] FROM docker.io/library/node:26-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5
+#18 resolve docker.io/library/node:26-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 1.4s done
+#18 DONE 1.5s
+
+#12 [apiserver internal] load build context
+#12 transferring context: 34.97MB 3.4s done
+#12 DONE 3.7s
+
+#14 [web internal] load build context
+#14 ...
+
+#19 [apiserver runtime  9/16] COPY --from=build /app/src/shared/dist ./src/shared/dist
+#19 CACHED
+
+#20 [apiserver runtime 10/16] COPY --from=build /app/src/apiserver/package.json ./src/apiserver/package.json
+#20 CACHED
+
+#21 [apiserver runtime 12/16] COPY --from=build /app/src/apiserver/dist ./src/apiserver/dist
+#21 CACHED
+
+#22 [apiserver runtime 15/16] COPY scripts/executable-acceptance-dead-man.mjs ./scripts/executable-acceptance-dead-man.mjs
+#22 CACHED
+
+#23 [apiserver build  8/10] COPY src/shared ./src/shared
+#23 CACHED
+
+#24 [apiserver build  9/10] COPY src/apiserver ./src/apiserver
+#24 CACHED
+
+#25 [apiserver runtime  6/16] COPY --from=build /app/src/apiserver/node_modules ./src/apiserver/node_modules
+#25 CACHED
+
+#26 [apiserver runtime 11/16] COPY --from=build /app/src/apiserver/prisma.config.ts ./src/apiserver/prisma.config.ts
+#26 CACHED
+
+#27 [apiserver build  7/10] RUN npm ci
+#27 CACHED
+
+#28 [apiserver build  5/10] COPY src/apiserver/package.json ./src/apiserver/
+#28 CACHED
+
+#29 [apiserver runtime 14/16] COPY contracts ./contracts
+#29 CACHED
+
+#30 [apiserver runtime  7/16] COPY --from=build /app/package.json ./package.json
+#30 CACHED
+
+#31 [apiserver build  6/10] COPY src/web/package.json ./src/web/
+#31 CACHED
+
+#32 [apiserver build 10/10] RUN npm run build -w @orbit/shared  && npm run prisma:generate -w @orbit/apiserver  && npm run build -w @orbit/apiserver
+#32 CACHED
+
+#33 [apiserver runtime 13/16] COPY --from=build /app/src/apiserver/prisma ./src/apiserver/prisma
+#33 CACHED
+
+#34 [apiserver build  4/10] COPY src/shared/package.json ./src/shared/
+#34 CACHED
+
+#35 [apiserver runtime  5/16] COPY --from=build /app/node_modules ./node_modules
+#35 CACHED
+
+#36 [apiserver build  2/10] WORKDIR /app
+#36 CACHED
+
+#37 [apiserver codex 2/2] RUN npm install -g @openai/codex@0.158.0  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
+#37 CACHED
+
+#38 [apiserver runtime  4/16] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && codex --version  && rm -rf /root/.codex
+#38 CACHED
+
+#39 [apiserver build  3/10] COPY package.json package-lock.json tsconfig.base.json ./
+#39 CACHED
+
+#40 [apiserver runtime  8/16] COPY --from=build /app/src/shared/package.json ./src/shared/package.json
+#40 CACHED
+
+#41 [apiserver runtime  3/16] COPY --from=codex /opt/codex /opt/codex
+#41 CACHED
+
+#42 [apiserver runtime 16/16] COPY runner-release.json ./runner-release.json
+#42 CACHED
+
+#15 [web previous-release 1/1] FROM docker.io/library/orbit-web:previous-release@sha256:420077efacc9aa8bca77860750f369311ebfcd6d1fdbc71a69eada27f31914cc
+#15 DONE 2.9s
+
+#43 [apiserver] exporting to image
+#43 exporting layers done
+#43 exporting manifest sha256:524f9a821dbf63901e848f8bbcd0c4b00206987e9fc132fd3dbfd32818630031 0.0s done
+#43 exporting config sha256:60520b7f45a26e847e72be549aa0bc6d217ebed8983e19c44d65f0d796fb8973
+#43 exporting config sha256:60520b7f45a26e847e72be549aa0bc6d217ebed8983e19c44d65f0d796fb8973 0.1s done
+#43 exporting attestation manifest sha256:cd844f6e347489a46d64a18517e5a207872e583d7212c401d8b710323aef742a
+#43 exporting attestation manifest sha256:cd844f6e347489a46d64a18517e5a207872e583d7212c401d8b710323aef742a 0.9s done
+#43 exporting manifest list sha256:492fd8448cc44e0df7b50a7f47999587cd48bac93227fa58dfb5d5034454597a
+#43 exporting manifest list sha256:492fd8448cc44e0df7b50a7f47999587cd48bac93227fa58dfb5d5034454597a 0.6s done
+#43 naming to docker.io/library/orbit-apiserver:local 0.0s done
+#43 unpacking to docker.io/library/orbit-apiserver:local
+#43 unpacking to docker.io/library/orbit-apiserver:local 0.1s done
+#43 DONE 2.6s
+
+#14 [web internal] load build context
+#14 transferring context: 16.50MB 5.6s
+#14 ...
+
+#44 [apiserver] resolving provenance for metadata file
+#44 DONE 0.0s
+
+#14 [web internal] load build context
+#14 transferring context: 28.24MB 6.4s done
+#14 DONE 6.6s
+
+#45 [web binbuild 2/9] WORKDIR /app
+#45 CACHED
+
+#46 [web binbuild 3/9] RUN if [ -n "$ORBIT_MACOS_SIGNING" ]; then       case "$(uname -m)" in         x86_64) arch=x86_64 sum=dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002 ;;         aarch64) arch=aarch64 sum=4af92c87ddf52f5f2d1258a3b4e56c7dcb8f1b2468df744976c5f139e031961f ;;         *) echo "no rcodesign release for $(uname -m)" >&2; exit 1 ;;       esac &&       curl -fsSL -o /tmp/rcodesign.tar.gz         "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign/0.29.0/apple-codesign-0.29.0-$arch-unknown-linux-musl.tar.gz" &&       echo "$sum  /tmp/rcodesign.tar.gz" | sha256sum -c - &&       tar -xzf /tmp/rcodesign.tar.gz -C /usr/local/bin --strip-components=1         "apple-codesign-0.29.0-$arch-unknown-linux-musl/rcodesign" &&       rm /tmp/rcodesign.tar.gz;     fi
+#46 CACHED
+
+#47 [web binbuild 4/9] COPY src/runner-go ./src/runner-go
+#47 DONE 0.9s
+
+#48 [web binbuild 5/9] COPY package.json ./package.json
+#48 DONE 0.6s
+
+#49 [web binbuild 6/9] COPY scripts ./scripts
+#49 DONE 0.6s
+
+#50 [web binbuild 7/9] COPY contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
+#50 DONE 0.9s
+
+#51 [web binbuild 8/9] COPY .gi[t] ./.git/
+#51 DONE 0.7s
+
+#52 [web binbuild 9/9] RUN --mount=type=cache,target=/root/.cache/go-build     --mount=type=secret,id=orbit_macos_signing_p12     --mount=type=secret,id=orbit_macos_signing_password     if [ -n "$ORBIT_MACOS_SIGNING" ]; then       export ORBIT_MACOS_SIGNING_P12=/run/secrets/orbit_macos_signing_p12         ORBIT_MACOS_SIGNING_PASSWORD_FILE=/run/secrets/orbit_macos_signing_password;     fi;     ORBIT_SOURCE_SHA="413714e9525ea853c0e78152d1bf5def7c615b79" bash scripts/build-binaries.sh dist-bin
+#52 0.995 >> source 413714e9525ea853c0e78152d1bf5def7c615b79
+#52 0.995 >> orbit-linux-x64 (linux/amd64) v0.1.232
+#52 11.82 >> orbit-linux-arm64 (linux/arm64) v0.1.232
+#52 19.47 >> orbit-darwin-x64 (darwin/amd64) v0.1.232
+#52 27.80 >> orbit-darwin-arm64 (darwin/arm64) v0.1.232
+#52 37.28 >> wrote dist-bin/version.json (v0.1.232)
+#52 37.30 total 22M
+#52 37.30 -rwxr-xr-x 1 root root 5.3M Oct 17 14:01 orbit-darwin-arm64.gz
+#52 37.30 -rwxr-xr-x 1 root root 5.7M Oct 17 14:01 orbit-darwin-x64.gz
+#52 37.30 -rwxr-xr-x 1 root root 5.1M Oct 17 14:01 orbit-linux-arm64.gz
+#52 37.30 -rwxr-xr-x 1 root root 5.7M Oct 17 14:01 orbit-linux-x64.gz
+#52 37.30 -rw-r--r-- 1 root root  726 Oct 17 14:01 version.json
+#52 DONE 38.1s
+
+#53 [web build  7/11] RUN npm ci
+#53 CACHED
+
+#54 [web build  8/11] COPY src/web ./src/web
+#54 CACHED
+
+#55 [web build  9/11] COPY src/shared ./src/shared
+#55 CACHED
+
+#56 [web build  3/11] COPY package.json package-lock.json tsconfig.base.json ./
+#56 CACHED
+
+#57 [web build 10/11] RUN npm run build -w @orbit/shared
+#57 CACHED
+
+#58 [web build 11/11] RUN npm run build -w @orbit/web
+#58 CACHED
+
+#59 [web build  2/11] WORKDIR /app
+#59 CACHED
+
+#60 [web build  4/11] COPY src/shared/package.json ./src/shared/
+#60 CACHED
+
+#61 [web build  5/11] COPY src/apiserver/package.json ./src/apiserver/
+#61 CACHED
+
+#62 [web runtime 2/6] COPY src/web/nginx.conf /etc/nginx/conf.d/default.conf
+#62 CACHED
+
+#63 [web build  6/11] COPY src/web/package.json ./src/web/
+#63 CACHED
+
+#64 [web runtime 3/6] COPY --from=build /app/src/web/dist /usr/share/nginx/html
+#64 CACHED
+
+#65 [web runtime 4/6] COPY --from=binbuild /app/dist-bin /usr/share/nginx/html/dl
+#65 DONE 0.3s
+
+#66 [web runtime 5/6] RUN --mount=type=bind,from=previous-release,target=/previous-release     --mount=type=bind,source=scripts/retain-runner-release.sh,target=/tmp/retain-runner-release.sh     sh /tmp/retain-runner-release.sh /previous-release/usr/share/nginx/html/dl /usr/share/nginx/html/dl
+#66 0.379 retain-runner-release: no release older than 0.1.232 to keep; /dl publishes 0.1.232 alone
+#66 DONE 0.5s
+
+#67 [web runtime 6/6] RUN if [ -n "http://localhost:2086" ]; then       sed -i "s|https://orbitd.io|http://localhost:2086|g" /usr/share/nginx/html/install.sh;     fi
+#67 DONE 0.7s
+
+#68 [web] exporting to image
+#68 exporting layers
+#68 exporting layers 1.2s done
+#68 exporting manifest sha256:9bbd6e0065d50ccf5f74cacdf2107e040d1f4036ba488b63651bca95e7d43b38 0.1s done
+#68 exporting config sha256:4dddc97bff71c63a01042e742fedca7cc1187eb8bc1583f6bb231eb6cd99b245
+#68 exporting config sha256:4dddc97bff71c63a01042e742fedca7cc1187eb8bc1583f6bb231eb6cd99b245 0.1s done
+#68 exporting attestation manifest sha256:63594540d41fea262fd835752617ac62d3f850c0e671e3f6c3cf58e9630f4b54
+#68 exporting attestation manifest sha256:63594540d41fea262fd835752617ac62d3f850c0e671e3f6c3cf58e9630f4b54 0.2s done
+#68 exporting manifest list sha256:841cfde6a324c386da9a9e16827d395de7a1d4352e4b06a4edd78e2758e2d032
+#68 exporting manifest list sha256:841cfde6a324c386da9a9e16827d395de7a1d4352e4b06a4edd78e2758e2d032 0.2s done
+#68 naming to docker.io/library/orbit-web:latest
+#68 naming to docker.io/library/orbit-web:latest 0.0s done
+#68 unpacking to docker.io/library/orbit-web:latest
+#68 unpacking to docker.io/library/orbit-web:latest 0.4s done
+#68 DONE 2.5s
+
+#69 [web] resolving provenance for metadata file
+#69 DONE 0.0s
+ Image orbit-web Built 
+ Image orbit-apiserver:local Built 
+==> Recreating changed services (apiserver applies DB migrations on boot)
+ Container orbit-gateway Running 
+ Container orbit-postgres Running 
+ Container orbit-apiserver Running 
+ Container orbit-wiki-worker Running 
+ Container orbit-web Recreate 
+ Container orbit-web Recreated 
+ Container orbit-postgres Waiting 
+ Container orbit-postgres Healthy 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+ Container orbit-apiserver Healthy 
+ Container orbit-web Starting 
+ Container orbit-web Started 
+ Container orbit-apiserver Waiting 
+ Container orbit-web Waiting 
+ Container orbit-apiserver Healthy 
+ Container orbit-web Healthy 
+ Container orbit-apiserver Waiting 
+ Container orbit-wiki-worker Waiting 
+ Container orbit-web Waiting 
+ Container orbit-gateway Waiting 
+ Container orbit-postgres Waiting 
+ Container orbit-web Healthy 
+ Container orbit-wiki-worker Healthy 
+ Container orbit-gateway Healthy 
+ Container orbit-postgres Healthy 
+ Container orbit-apiserver Healthy 
+==> Stack status
+NAME                IMAGE                                                                     COMMAND                  SERVICE       CREATED         STATUS                   PORTS
+orbit-apiserver     sha256:c163190c0ff3143553d7dd060532ae7273cd75c5b6451fcf58b2b4524bd694f0   "docker-entrypoint.s…"   apiserver     7 minutes ago   Up 6 minutes (healthy)   3000/tcp
+orbit-gateway       nginx:alpine                                                              "/docker-entrypoint.…"   gateway       7 minutes ago   Up 2 minutes (healthy)   0.0.0.0:2086->80/tcp, [::]:2086->80/tcp
+orbit-pgbackup      postgres:16-alpine                                                        "/bin/sh /usr/local/…"   pgbackup      7 minutes ago   Up 6 minutes             5432/tcp
+orbit-postgres      postgres:16-alpine                                                        "/bin/sh -c 'mkdir -…"   postgres      7 minutes ago   Up 7 minutes (healthy)   5432/tcp
+orbit-web           orbit-web                                                                 "/docker-entrypoint.…"   web           9 seconds ago   Up 6 seconds (healthy)   80/tcp
+orbit-wiki-worker   sha256:c163190c0ff3143553d7dd060532ae7273cd75c5b6451fcf58b2b4524bd694f0   "docker-entrypoint.s…"   wiki-worker   7 minutes ago   Up 2 minutes             3000/tcp
+✓ Upgrade complete — all services healthy.
++ 2026-10-17T14:01:47Z upgrade exit=0 after 74 s

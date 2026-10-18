@@ -25,7 +25,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
-import { BLOCKER_KIND_FOR, declaredPaths } from './blocker-disposition';
+import { declaredPaths } from './blocker-disposition';
 import {
   CompletionInputRouter,
   type TaskExceptionDelivery,
@@ -56,9 +56,9 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 
 /**
- * The four deliveries a machine may not settle, and where each of them is put: the two about the
- * ruler raise one owner blocker each, and the two about the delivery's landing become one delivery
- * review each, which the project's coordinator decides first (`blocker-disposition.ts` §4).
+ * The four deliveries a machine may not settle, and where each of them is put: the one about the
+ * ruler raises an owner blocker, and the three about the delivery itself become one delivery review
+ * each, which the project's coordinator decides first (`blocker-disposition.ts` §4).
  *
  *   COORDINATOR_PG_URL=postgresql://... \
  *   COORDINATOR_PG_EXPECTED_DATABASE=pcc... \
@@ -603,7 +603,7 @@ const messagesTo = async (db: PrismaClient, sessionId: string) =>
 
 const blockerNoticesTo = (db: PrismaClient, sessionId: string) =>
   db.conversationTurn.count({
-    where: { sessionId, content: { contains: '需要账号所有者裁决' } },
+    where: { sessionId, content: { contains: 'needs the account owner’s ruling' } },
   });
 
 /** The delivery reviews filed on one project — the coordinator's half of `blocker-disposition.ts` §4. */
@@ -666,20 +666,23 @@ const STATED: Readonly<Record<Case, string>> = {
   CONTROL: '这条标准的活规规矩矩',
 };
 
-/** The two about the RULER, and the owner blocker each raises. */
-const EXPECTED_KIND: Readonly<Record<'EXEMPTION' | 'STANDARD', string>> = {
-  EXEMPTION: 'HUMAN_DECISION_REQUIRED',
+/** The one about the RULER, and the owner blocker it raises. */
+const EXPECTED_KIND: Readonly<Record<'STANDARD', string>> = {
   STANDARD: 'POLICY_MANUAL_HOLD',
 };
 
-/** The two about the delivery's LANDING, and the reading the coordinator's review records. */
-const EXPECTED_REVIEW: Readonly<Record<'SCOPE' | 'CONFLICT', string>> = {
+/** The three about the delivery's LANDING, and the reading the coordinator's review records. */
+const EXPECTED_REVIEW: Readonly<Record<'EXEMPTION' | 'SCOPE' | 'CONFLICT', string>> = {
+  EXEMPTION: 'CRITERION_EXEMPTION_ARGUED',
   SCOPE: 'OUTSIDE_DECLARED_SCOPE',
   CONFLICT: 'MERGE_REFUSED_BY_GIT',
 };
 
-const isRulerCase = (which: Exclude<Case, 'CONTROL'>): which is 'EXEMPTION' | 'STANDARD' =>
-  which === 'EXEMPTION' || which === 'STANDARD';
+const isRulerCase = (which: Exclude<Case, 'CONTROL'>): which is 'STANDARD' => which === 'STANDARD';
+
+/** What case EXEMPTION's task writes in its override-reason column. */
+const EXEMPTION_ARGUMENT =
+  '这条标准的阴性一项没红过。那是因为配对的阳性那半更早被拒，所以我认为这一项对本任务不适用。';
 
 interface Delivered {
   f: Fixture;
@@ -708,13 +711,7 @@ async function deliverCase(
   const [stated] = await state(stack, f, [STATED[which]]);
   const choreId = await releasableSibling(stack, f, `${label} 的下一条`);
   const taskId = await serve(stack, f, stated!.key, `${label} 的交付`,
-    which === 'EXEMPTION'
-      ? {
-          completionCriterionOverrideReason:
-            '这条标准的阴性一项没红过。那是因为配对的阳性那半更早被拒，'
-            + '所以我认为这一项对本任务不适用。',
-        }
-      : {});
+    which === 'EXEMPTION' ? { completionCriterionOverrideReason: EXEMPTION_ARGUMENT } : {});
   if (which === 'STANDARD') await moveTheStandard(stack, f, [STATED[which]], stated!.key);
 
   const reported = stage(f.treeDir, which === 'SCOPE' ? [...IN_SCOPE, STRAY] : IN_SCOPE);
@@ -740,9 +737,9 @@ async function deliverCase(
 }
 
 // (a) -----------------------------------------------------------------------------------------
-test('four deliveries a machine may not settle — an argued exemption and a moved standard each raise '
-  + 'one owner blocker of their own kind, and an unasked-for file and a branch git refused each '
-  + 'become one delivery review the coordinator decides first',
+test('four deliveries a machine may not settle — a moved standard raises one owner blocker of its '
+  + 'own kind, and an argued exemption, an unasked-for file and a branch git refused each become one '
+  + 'delivery review the coordinator decides first',
   { skip, timeout: 420_000 }, async () => {
     const stack = await connect();
     const four: Array<Exclude<Case, 'CONTROL'>> = ['EXEMPTION', 'STANDARD', 'SCOPE', 'CONFLICT'];
@@ -758,7 +755,7 @@ test('four deliveries a machine may not settle — an argued exemption and a mov
         assert.equal(spent[0]?.outcome, 'CONSUMED', `${which}: the fact took the wrong terminal`);
         const told = await toldTo(stack.db, one.f.coordinatorSessionId);
         assert.equal(told.length, 1, `${which}: the coordinator was not handed exactly one message`);
-        assert.ok(told.every((text) => !text.includes('合并到 main')),
+        assert.ok(told.every((text) => !text.includes('merge into main')),
           `${which}: a delivery that had to stop still told the coordinator to merge it`);
 
         if (isRulerCase(which)) {
@@ -822,11 +819,11 @@ test('four deliveries a machine may not settle — an argued exemption and a mov
 
       const stops = delivered.map((one) => criterionFor(stack, one.f, one.criterionKey)[0]);
       assert.deepEqual(stops.map((d) => d?.blockerKind),
-        [EXPECTED_KIND.EXEMPTION, EXPECTED_KIND.STANDARD, undefined, undefined],
-        'the two questions about the ruler did not raise their two kinds');
+        [undefined, EXPECTED_KIND.STANDARD, undefined, undefined],
+        'the question about the ruler did not raise its kind, or another question raised one');
       assert.deepEqual(stops.map((d) => d?.review?.reason),
-        [undefined, undefined, EXPECTED_REVIEW.SCOPE, EXPECTED_REVIEW.CONFLICT],
-        'the two questions about the landing did not become their two reviews');
+        [EXPECTED_REVIEW.EXEMPTION, undefined, EXPECTED_REVIEW.SCOPE, EXPECTED_REVIEW.CONFLICT],
+        'the three questions about the landing did not become their three reviews');
 
       // 5 — and none of them chose an action. This is the whole of "the two tables never both
       // answer", and it is not a vacuous statement about deliveries nothing was going to be done
@@ -841,15 +838,13 @@ test('four deliveries a machine may not settle — an argued exemption and a mov
       assert.deepEqual(stops.map((d) => d?.action), [undefined, undefined, undefined, undefined],
         'a delivery that stopped also chose an action a coordinator would act on');
 
-      // The two blocker words are words the vocabulary already had: no new member of the closed set.
+      // The blocker word is one the vocabulary already had: no new member of the closed set.
       const [constraint] = await stack.db.$queryRaw<Array<{ def: string }>>`
         SELECT pg_get_constraintdef(oid) AS def
           FROM pg_constraint WHERE conname = 'project_blocker_kind_chk'`;
       assert.ok(constraint?.def, 'the closed set of kinds is not enforced by that constraint');
-      for (const which of ['EXEMPTION', 'STANDARD'] as const) {
-        assert.ok(constraint!.def.includes(`'${EXPECTED_KIND[which]}'`),
-          `${which}: its kind is not a member of the live closed set`);
-      }
+      assert.ok(constraint!.def.includes(`'${EXPECTED_KIND.STANDARD}'`),
+        'STANDARD: its kind is not a member of the live closed set');
 
       // The two reviews that are about paths name them: a question that cannot say WHICH files is
       // not a question anybody can answer.
@@ -865,6 +860,11 @@ test('four deliveries a machine may not settle — an argued exemption and a mov
       assert.deepEqual((conflictReview?.payload as { paths?: string[] })?.paths,
         [`${DECLARED_DIR}/blocker-disposition.ts`],
         'the review did not name what git refused to merge');
+      // And the one about a written reason quotes it, for the same reason.
+      const exemption = delivered[four.indexOf('EXEMPTION')]!;
+      const [exemptionReview] = await reviewsOf(stack.db, exemption.f.projectId);
+      assert.equal((exemptionReview?.payload as { argument?: string })?.argument, EXEMPTION_ARGUMENT,
+        'the review did not quote the reason it asks the coordinator to judge');
 
       // The reason a moved standard is a HOLD rather than an opinion: the table that decides who
       // may edit the exam says it is not this coordinator.
@@ -929,7 +929,7 @@ test('the file set is the input: two deliveries in one project, with one declara
         'the stopped delivery started the other half of this pair');
       const strayedTold = await toldTo(stack.db, f.coordinatorSessionId);
       assert.equal(strayedTold.length, 1, 'the coordinator was not handed the review');
-      assert.ok(!strayedTold[0]!.includes('合并到 main'),
+      assert.ok(!strayedTold[0]!.includes('merge into main'),
         'the stopped delivery told the coordinator to merge it anyway');
       assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 0,
         'the review was relayed to the coordinator as the owner’s decision');
@@ -1040,7 +1040,7 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
       const [stopped] = criterionFor(stack, control.f, control.criterionKey);
       assert.equal(stopped?.outcome, 'CONSUMED', 'the control fact was not delivered');
       const told = await toldTo(stack.db, control.f.coordinatorSessionId);
-      assert.ok(told.every((text) => !text.includes('合并到 main')),
+      assert.ok(told.every((text) => !text.includes('merge into main')),
         'the control told its coordinator to merge a delivery that had to stop');
       assert.equal(
         stopped?.review?.reason, EXPECTED_REVIEW.SCOPE,
@@ -1150,23 +1150,26 @@ test('a criterion-change record is not an argued exemption: the delivery the cha
       await deliver(stack, argued, arguedTask, 'exemption-argued', IN_SCOPE);
       const [arguedSpent] = criterionFor(stack, argued, arguedStated!.key);
 
-      // 2 — the positive control: the same delivery with written prose in that column still asks a
-      // person, and still merges and releases nothing until somebody has.
+      // 2 — the positive control: the same delivery with written prose in that column still asks
+      // somebody — its coordinator, as a delivery review — and still merges and releases nothing
+      // until somebody has.
       assert.equal(arguedSpent?.outcome, 'CONSUMED', 'the argued delivery\'s fact took the wrong terminal');
-      assert.equal(arguedSpent?.blockerKind, BLOCKER_KIND_FOR.CRITERION_EXEMPTION_ARGUED,
+      assert.equal(arguedSpent?.review?.reason, 'CRITERION_EXEMPTION_ARGUED',
         'a written exemption argument no longer stops the delivery');
+      assert.equal(arguedSpent?.blockerKind, undefined,
+        'a written exemption argument still raised the owner’s blocker');
       assert.equal(arguedSpent?.action, undefined,
         'the argued delivery both stopped and chose an action');
-      assert.equal(await blockerCount(stack.db, argued.projectId), 1,
-        'the argued delivery raised something other than exactly one blocker');
-      const [arguedBlocker] = await openBlockers(stack.db, argued.projectId);
-      assert.equal(arguedBlocker?.subjectId, arguedTask, 'the blocker is about a different task');
-      assert.equal((arguedBlocker?.detail as { reason?: string })?.reason,
-        'CRITERION_EXEMPTION_ARGUED', 'the blocker was raised for a different reason');
+      assert.equal(await blockerCount(stack.db, argued.projectId), 0,
+        'the argued delivery raised a blocker as well as its review');
+      const [arguedReview] = await reviewsOf(stack.db, argued.projectId);
+      assert.equal(arguedReview?.taskId, arguedTask, 'the review is about a different task');
+      assert.equal((arguedReview?.payload as { reason?: string })?.reason,
+        'CRITERION_EXEMPTION_ARGUED', 'the review was filed for a different reason');
       assert.equal(await messagesTo(stack.db, argued.coordinatorSessionId), 1,
-        'the argued delivery did not hand its blocker to the coordinator');
-      assert.equal(await blockerNoticesTo(stack.db, argued.coordinatorSessionId), 1,
-        'the argued delivery did not explain the human decision to the coordinator');
+        'the argued delivery did not hand its review to the coordinator');
+      assert.equal(await blockerNoticesTo(stack.db, argued.coordinatorSessionId), 0,
+        'the argued delivery was relayed to the coordinator as the owner’s decision');
       assert.equal(await sessionsOf(stack.db, arguedChore), 0,
         'the argued delivery released the next task anyway');
 

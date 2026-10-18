@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Design board Web 5 (T0, Cursor engine): a Cursor session — model and variant, a message sent while a turn
+     runs (queued, never steered), the context readout that Cursor never reports, and the quota error Cursor
+     sends as text. Real-page captures ("现在" main e00629fd4; "改后" + prototype.patch). Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web 5 · Cursor session: model and variant, queued messages, context, quota</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Web 5 · Cursor 会话：模型 + 变体；轮中发的消息排到下一轮并说明原因；上下文读数写「Unavailable」；额度用尽显示成额度卡</h1>
+  <p class="m-sub zh">模型目录来自 Cursor 的参数化选择器（契约 §10，<code>_meta.parameterizedModelPicker</code>）：先选模型，再选这个模型自己的参数——effort、context、fast，Auto 没有参数。Cursor 轮中再发一条 prompt 会<b>取消</b>正在跑的一轮（契约 §3.2），所以 Orbit 只排队、不插话，托盘上写明为什么。ACP 从不发 <code>usage_update</code>，上下文读数永远没有，和「还没报上来」不同，要写成「Unavailable」。额度用尽时 Cursor 只回一句文本 "Upgrade your plan to continue" 加 <code>end_turn</code>（契约 §12），P5b 把它归成额度错误，界面显示成额度卡而不是一条普通回复。示例：hpc 上的 orbit 工作区，会话「Fix the flaky export test」跑在 Cursor CLI 的 Default 账号上。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① composer 的模型菜单</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 一轮进行中再发一条：排到下一轮</div>
+    <div class="frames" id="s2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 上下文读数</div>
+    <div class="frames" id="s3"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 额度用尽：Cursor 的一句文本 → 额度卡</div>
+    <div class="frames" id="s4"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh" style="max-width:${cap.w ?? 700}px">${cap.t ?? cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('改后', 'Auto（新会话的默认）：没有参数，说明一句', shot('w5-model-menu', { width: 663, marks: [{ box: 'title', n: 1, pad: 2 }, { box: 'auto', n: 2, pad: 3 }] })) +
+  frame('改后', 'Claude Opus 5.5：Effort / Context / Speed', shot('w5-model-variant', { width: 663, marks: [{ box: 'context', n: 3, pad: 2 }, { box: 'speed', n: 4, pad: 2 }, { box: 'chip', n: 5, pad: 3 }] }));
+document.getElementById('s2').innerHTML =
+  frame('现在', '同样不能插话的 Kimi Code：只写 Queued for next turn', shot('w5-running-now', { width: 719 })) +
+  frame('改后', 'Cursor CLI：托盘下写原因，输入框也提示', shot('w5-running', { width: 719, marks: [{ box: 'note', n: 6, pad: 2 }, { box: 'input', n: 7, pad: 2 }] })) +
+  frame('改后', '整个会话栏', shot('w5-running-pane', { width: 693 }), { t: '工具卡、回合头、托盘本身都是现成的。Steer 按钮和「Queue for next turn」菜单不出现（<code>MID_TURN_STEER</code> 记为 NEVER，同 Kimi / DeepSeek Harness / OpenCode / Antigravity）。', w: 693 });
+document.getElementById('s3').innerHTML =
+  frame('现在', 'Kimi Code 还没报上来：Not reported yet', shot('w5-context-now', { width: 546 })) +
+  frame('改后', 'Cursor CLI：永远没有，写 Unavailable', shot('w5-context', { width: 546, marks: [{ box: 'pop', n: 8, pad: 2 }, { box: 'ring', n: 9, pad: 2 }] }));
+document.getElementById('s4').innerHTML =
+  frame('改后', 'Default 的 Free 套餐用完', shot('w5-quota', { width: 693, marks: [{ box: 'card', n: 10, pad: 3 }] }),
+    { t: '卡片就是今天的额度卡（<code>AutoRetryCard</code>）；只改两处文字：用账号名（「Default (Cursor CLI)」）而不是 slug「cursor」，并引 Cursor 原话、给出路：这段对话还不能换到 Team（D5），所以是「start a new session on Team」。重置时间取账期结束。', w: 693 });
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>菜单标题</b>「Cursor CLI」带 Cursor 标。Cursor 的品牌色是黑色，暗色主题下标题里的 glyph 用正文色（今天按品牌色上色，黑色会看不见）。'],
+  [2, '<b>Auto</b> 排第一、是新会话默认（<code>default[]</code>）。它没有 effort / context，菜单写一句：「Auto picks a model for each request. Cursor doesn’t report which one it used…」（契约 §10：实际用了哪个只在会话库里）。'],
+  [3, '<b>Context</b> 是 Cursor 模型自带的参数（如 Opus 5.5 的 300k / 1M），只在这个模型有该参数时出现。Effort 也按模型列（Opus 5.5：Low…Max）。'],
+  [4, '<b>Speed（Fast）</b>同样是 Cursor 模型的参数 <code>fast</code>。<span class="tbd coord">待协调确认</span> P1 的说明写「不声明 fast」：板上把它当模型变体画在现有的 Speed 行里；若首版不提供，就去掉这一行，菜单其余不变。'],
+  [5, '<b>chip</b>：「Claude Opus 5.5 High · 1M · Fast」——模型、effort、context（只在 1M 时写）、Fast。Auto 时只写「Auto」。'],
+  [6, '<b>托盘说明</b>：「Cursor CLI can’t take a message mid-turn — sending one would stop the turn. These go in order once it ends.」只在 Cursor 会话、托盘里有排队消息时出现；其他引擎的托盘不变。'],
+  [7, '<b>输入框</b>：一轮进行中 placeholder 写「Reply — it goes to Cursor CLI when this turn ends…」，发出前就知道。'],
+  [8, '<b>Unavailable</b>：弹层写「Cursor CLI doesn’t report how much of the window a session has used, so there is no reading to show.」不显示 0%、不显示 token 数。'],
+  [9, '<b>读数本身</b>：环改成虚线、只写「—」，和「Not reported yet」（实线空环）区分开。'],
+  [10, '<b>额度卡</b>：「Usage limit reached」，见上。文本匹配在 runner（P5b），界面只吃分好类的错误事件。'],
+  ['·', '<b>不变的：</b>转录区、工具卡、Stop、托盘的撤回、额度卡的自动重试开关。会话标题由 Cursor 自动起（<code>session_info_update</code>），可能晚于这一轮结束才出现，列表上先显示首条消息。'],
+]);
+finish();
+</script>
+</body>
+</html>

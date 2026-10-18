@@ -1,12 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
 import type { WikiSpace } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiCard } from './WikiCards';
 import { WikiDot } from './WikiMarks';
-import { wikiDocsQuery, wikiPlanQuery } from '../lib/queries';
+import { Button } from './ui/Button';
+import { wikiDocsQuery, wikiHealthQuery, wikiPlanQuery } from '../lib/queries';
 import { useWikiMaintenanceWhere } from '../lib/useWikiMaintenanceWhere';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
@@ -40,9 +40,12 @@ function usePlanLook(space: WikiSpace) {
   const plan = useQuery(wikiPlanQuery(space.id));
   const docs = useQuery(wikiDocsQuery(space.id));
   const maintenance = useWikiMaintenanceWhere(space);
+  // Whether the server drafts the plan instead of a session on the maintenance provider (`health.executor`,
+  // P9): the card's line under Draft plan names the System model while it does (owner's call 2026-10-08).
+  const health = useQuery(wikiHealthQuery(space.id));
   const counts = docs.data?.plan ? docs.data.docs : null;
   const look: WikiPlanLook | null = plan.data ? wikiPlanLook(plan.data, { runnerOnline: maintenance.runnerOnline }) : null;
-  return { plan: plan.data, look, counts, maintenance };
+  return { plan: plan.data, look, counts, maintenance, serverExecutes: health.data?.executor?.serverExecutes === true };
 }
 
 /**
@@ -80,10 +83,10 @@ export function WikiPlanBanners({ space, elsewhere = null }: { space: WikiSpace;
 export function WikiPlanCard({ space }: { space: WikiSpace }) {
   const navigate = useNavigate();
   const message = useToast();
-  const { plan, look, counts, maintenance } = usePlanLook(space);
+  const { plan, look, counts, maintenance, serverExecutes } = usePlanLook(space);
   const draft = useWikiWrite(() => redraftWikiPlan(space.id, null));
   if (!plan || !look) return null;
-  const card = wikiPlanCard(look, plan, { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline, provider: maintenance.provider });
+  const card = wikiPlanCard(look, plan, { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline, provider: maintenance.provider, serverExecutes });
   const base = plan.confirmed ? wikiPlanFromVersion(plan.confirmed) : null;
   const amber = card.dot === 'amber' || look === 'noPlan';
   const go = async (to: 'draft' | 'plan' | 'settings') => {
@@ -118,7 +121,7 @@ export function WikiPlanCard({ space }: { space: WikiSpace }) {
           );
         })}
       <div className="wk-rv-foot">
-        <Button type={amber ? 'primary' : 'default'} size="small" loading={draft.isPending} onClick={() => void go(card.primary.to)}>
+        <Button variant={amber ? 'primary' : 'default'} size="small" loading={draft.isPending} onClick={() => void go(card.primary.to)}>
           {card.primary.label}
         </Button>
         {card.secondary && (

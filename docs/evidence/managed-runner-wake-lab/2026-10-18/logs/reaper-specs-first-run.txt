@@ -1,0 +1,55 @@
+[31m[Nest] 1246268  - [39m10/18/2026, 9:06:04 AM [31m  ERROR[39m [38;5;3m[Reaper] [39m[31mreap of 11111111-1111-4111-8111-111111111111 failed: Cannot read properties of undefined (reading 'findFirst')[39m
+[33m[Nest] 1246268  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+[33m[Nest] 1246268  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+[33m[Nest] 1246268  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+✔ does not reap the run a just-started runner claimed before its first heartbeat (2.534869ms)
+✔ still reaps a run claimed longer ago than the window on a runner silent since (1.694788ms)
+✔ does not reap a run claimed again between the sweep read and the write (0.370994ms)
+✔ reaps a run never claimed, as before, when its runner is silent (0.423389ms)
+✔ a claim stops counting once it is older than the window (0.393905ms)
+✔ reaper keeps the short runtime-initialization watchdog for Kimi (1.196725ms)
+✔ reaper leaves a slow dynamic runtime inside the shared-state initialization window (0.35401ms)
+✔ reaper still finalizes Codex after the shared-state backstop expires (0.198246ms)
+[33m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-11111111111a -> FAILED (runner offline)[39m
+[32m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [32m    LOG[39m [38;5;3m[Reaper] [39m[32mnot reaping 11111111-1111-4111-8111-11111111111a: its runner answered again before the write landed[39m
+[31m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [31m  ERROR[39m [38;5;3m[Reaper] [39m[31mreap of 11111111-1111-4111-8111-11111111111a failed: Transaction API error: Unable to start a transaction in the given time. Current state of the pool: ...[39m
+[33m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mnot reaping 11111111-1111-4111-8111-11111111111b: this control plane could not reach its own database within the window its 90000ms of runner silence was read from[39m
+[33m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mnot reaping 11111111-1111-4111-8111-11111111111c: this control plane could not reach its own database within the window its 90000ms of runner silence was read from[39m
+[33m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mnot reaping 11111111-1111-4111-8111-11111111111b: this control plane could not reach its own database within the window its 90000ms of runner silence was read from[39m
+[33m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-11111111111c -> FAILED (runner offline)[39m
+✔ still reaps a session whose runner is silent at write time too (3.453563ms)
+✔ does not reap a runner that heartbeated between the sweep read and the write (0.582769ms)
+✔ stops calling runners offline once its own database has refused a transaction (1.325351ms)
+✔ carries the fence into the next sweep, and drops it after a clean one (0.901403ms)
+[31m[Nest] 1246270  - [39m10/18/2026, 9:06:04 AM [31m  ERROR[39m [38;5;3m[Reaper] [39m[31mreap of 11111111-1111-4111-8111-11111111111a failed: Transaction API error: Unable to start a transaction in the given time. Current state of the pool: ...[39m
+[33m[Nest] 1246276  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+[33m[Nest] 1246276  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+[33m[Nest] 1246276  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+[33m[Nest] 1246276  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+✔ hands a runner-offline session to auto-retry (2.879589ms)
+✔ takes the reaped run's running work with it (0.940684ms)
+✔ leaves an auto-running task's session to the task scheduler (0.794066ms)
+✔ arms a task-bound session whose task will not auto-run (0.465797ms)
+[32m[Nest] 1246282  - [39m10/18/2026, 9:06:04 AM [32m    LOG[39m [38;5;3m[Reaper] [39m[32mreaped session 11111111-1111-4111-8111-111111111111 -> CANCELLED (cancelled while queued)[39m
+[32m[Nest] 1246282  - [39m10/18/2026, 9:06:04 AM [32m    LOG[39m [38;5;3m[Reaper] [39m[32mreaped session 11111111-1111-4111-8111-111111111111 -> CANCELLED (cancelled while queued)[39m
+[33m[Nest] 1246282  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (cancel not honored)[39m
+✔ finalizes a cancel that was never honored on a queued session (3.218015ms)
+✔ a queued cancel settles clean, with no error recorded (0.797795ms)
+✔ an unhonored cancel on a live session still fails as before (0.460808ms)
+✔ reaper applies the startup watchdog to OpenCode sessions (1.298275ms)
+✔ reaper leaves initialized OpenCode and uninitialized Claude sessions alone (0.19807ms)
+✔ reaper applies the startup watchdog to Antigravity sessions that never reported init (0.193134ms)
+[32m[Nest] 1246294  - [39m10/18/2026, 9:06:04 AM [32m    LOG[39m [38;5;3m[Reaper] [39m[32mrecycling parked session 11111111-1111-4111-8111-111111111111[39m
+[32m[Nest] 1246294  - [39m10/18/2026, 9:06:04 AM [32m    LOG[39m [38;5;3m[Reaper] [39m[32mrecycling parked session 11111111-1111-4111-8111-111111111111[39m
+✔ reaper records task_done for a DONE linked task (1.999063ms)
+✔ reaper records task_cancelled for a CANCELLED linked task (0.192706ms)
+[33m[Nest] 1246295  - [39m10/18/2026, 9:06:04 AM [33m   WARN[39m [38;5;3m[Reaper] [39m[33mreaped session 11111111-1111-4111-8111-111111111111 -> FAILED (runner offline)[39m
+✔ reaper terminalization retires the generation then records leased CURRENT_WORK unconfirmed before drain (3.269557ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 398.760355

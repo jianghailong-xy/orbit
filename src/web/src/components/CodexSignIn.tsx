@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Modal, Typography } from 'antd';
 import {
   CheckCircleFilled,
+  CheckOutlined,
+  CopyOutlined,
   ExclamationCircleFilled,
   ExportOutlined,
   LoadingOutlined,
   WarningFilled,
 } from '@ant-design/icons';
 import { api, ApiError } from '../api';
+import { copyText } from '../lib/clipboard';
 import {
   codexLoginPath,
   loginLine,
@@ -21,6 +23,9 @@ import {
 import { formatResetTime, type ProviderPool } from '../lib/providerPools';
 import { ownsPool } from '../lib/sharedPools';
 import { ProviderTile } from './ProviderGallery';
+import { Button, LinkButton } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * "Sign in with ChatGPT": the accounts a Codex pool runs on go in by the official codex CLI's device flow,
@@ -86,6 +91,32 @@ function refusalStep(e: unknown): Step | null {
     return { kind: 'dup', email: typeof email === 'string' ? email : null };
   }
   return null;
+}
+
+/** How long the copy mark says Copied (the replaced text control's own beat). */
+const COPIED_MS = 3000;
+
+/** The one-time code's copy mark: a link-coloured icon button that says what it does on hover, and
+ *  turns into a check for a few seconds once the code is on the clipboard. */
+function CopyCode({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = () =>
+    void copyText(code).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
+    });
+  const label = copied ? 'Copied' : 'Copy code';
+  return (
+    <Tooltip content={label}>
+      <button type="button" className={`cx-code-copy${copied ? ' copied' : ''}`} aria-label={label} onClick={copy}>
+        {copied ? <CheckOutlined aria-hidden /> : <CopyOutlined aria-hidden />}
+      </button>
+    </Tooltip>
+  );
 }
 
 export function CodexSignInModal({
@@ -188,14 +219,14 @@ export function CodexSignInModal({
       // comes next — not the sign-in itself, which is finished there (03-flows, the notice's press).
       <>
         <Button onClick={close}>Cancel</Button>
-        <Button type="primary" loading={starting} onClick={() => void start()}>
+        <Button variant="primary" loading={starting} onClick={() => void start()}>
           Get a code
         </Button>
       </>
     ) : step.kind === 'code' ? (
       <Button onClick={close}>Cancel</Button>
     ) : step.kind === 'done' ? (
-      <Button type="primary" onClick={close}>
+      <Button variant="primary" onClick={close}>
         Done
       </Button>
     ) : (
@@ -203,14 +234,14 @@ export function CodexSignInModal({
       // over — with the same account or, after a duplicate, with a different one.
       <>
         <Button onClick={close}>Close</Button>
-        <Button type="primary" loading={starting} onClick={() => void start()}>
+        <Button variant="primary" loading={starting} onClick={() => void start()}>
           {step.kind === 'failed' ? 'Try again' : 'Get a new code'}
         </Button>
       </>
     );
 
   return (
-    <Modal open width={500} title="Sign in with ChatGPT" footer={footer} onCancel={close}>
+    <Dialog open width={500} className="pool-dialog" title="Sign in with ChatGPT" footer={footer} onClose={close}>
       {/* Adding one more to a pool that already runs on an account of its own: the notice says what the
           pool runs on now, that everyone in the pool — once it is shared — runs on this account too, and
           what the pool does without it. */}
@@ -301,9 +332,9 @@ export function CodexSignInModal({
       {step.kind === 'code' && (
         <div className="cx-code-step">
           <div className="cx-open">
-            <Button type="primary" icon={<ExportOutlined />} href={step.url} target="_blank" rel="noopener noreferrer">
+            <LinkButton variant="primary" icon={<ExportOutlined />} href={step.url} target="_blank" rel="noopener noreferrer">
               Open the sign-in page
-            </Button>
+            </LinkButton>
             <a className="cx-url" href={step.url} target="_blank" rel="noopener noreferrer">
               {step.url}
             </a>
@@ -318,12 +349,8 @@ export function CodexSignInModal({
             )}
           </div>
           <div className="cx-code">
-            <Typography.Text
-              className="cx-code-text"
-              copyable={{ text: step.code, tooltips: ['Copy code', 'Copied'] }}
-            >
-              {step.code}
-            </Typography.Text>
+            <span className="cx-code-text">{step.code}</span>
+            <CopyCode code={step.code} />
           </div>
           <div className="cx-wait">
             <LoadingOutlined /> Waiting for you to approve it…
@@ -389,6 +416,6 @@ export function CodexSignInModal({
           </div>
         </div>
       )}
-    </Modal>
+    </Dialog>
   );
 }

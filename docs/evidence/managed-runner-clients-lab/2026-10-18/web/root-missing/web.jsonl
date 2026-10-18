@@ -1,0 +1,17 @@
+{"at":"2026-10-18T05:56:16.220Z","kind":"api-write","method":"POST","path":"/api/auth/login","body":"(not logged)"}
+{"at":"2026-10-18T05:56:16.274Z","kind":"signed-in","url":"http://127.0.0.1:5874/"}
+{"at":"2026-10-18T05:56:16.312Z","kind":"seen","shot":"001-page.png","path":"/","notice":null,"composer":null,"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:56:16.392Z","kind":"api-error","status":404,"path":"/api/auth/capabilities"}
+{"at":"2026-10-18T05:56:16.392Z","kind":"console-error","text":"Failed to load resource: the server responded with a status of 404 (Not Found)"}
+{"at":"2026-10-18T05:56:17.049Z","kind":"seen","shot":"002-composer.png","path":"/sessions/34htasQH9ZMfYI7kB46z6","notice":null,"composer":{"placeholder":"Reply…","hero":false,"modelChip":"claude-opus-5Default","sendEnabled":false},"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:56:22.006Z","kind":"act","order":{"kind":"goto","arg":"/workspaces/34htasHVEnwCfDe1K58bE/new","at":"2026-10-18T05:56:21.824Z"},"result":{"url":"http://127.0.0.1:5874/workspaces/34htasHVEnwCfDe1K58bE/new"}}
+{"at":"2026-10-18T05:56:22.068Z","kind":"api-error","status":404,"path":"/api/auth/capabilities"}
+{"at":"2026-10-18T05:56:22.068Z","kind":"console-error","text":"Failed to load resource: the server responded with a status of 404 (Not Found)"}
+{"at":"2026-10-18T05:56:22.753Z","kind":"seen","shot":"003-composer-ready.png","path":"/workspaces/34htasHVEnwCfDe1K58bE/new","notice":null,"composer":{"placeholder":"Send this workspace a task…","hero":true,"modelChip":"claude-opus-5Default","sendEnabled":false},"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:56:26.301Z","kind":"act","order":{"kind":"shot","arg":"missing-selfhost-draft","at":"2026-10-18T05:56:26.151Z"},"result":{"shot":"004-missing-selfhost-draft.png"}}
+{"at":"2026-10-18T05:56:27.026Z","kind":"act","order":{"kind":"goto","arg":"/sessions/34htasQH9ZMfYI7kB46z6","at":"2026-10-18T05:56:26.476Z"},"result":{"url":"http://127.0.0.1:5874/sessions/34htasQH9ZMfYI7kB46z6"}}
+{"at":"2026-10-18T05:56:27.077Z","kind":"api-error","status":404,"path":"/api/auth/capabilities"}
+{"at":"2026-10-18T05:56:27.077Z","kind":"console-error","text":"Failed to load resource: the server responded with a status of 404 (Not Found)"}
+{"at":"2026-10-18T05:56:27.771Z","kind":"seen","shot":"005-composer.png","path":"/sessions/34htasQH9ZMfYI7kB46z6","notice":null,"composer":{"placeholder":"Reply…","hero":false,"modelChip":"claude-opus-5Default","sendEnabled":false},"answers":[],"register":false,"loading":false}
+{"at":"2026-10-18T05:56:31.320Z","kind":"act","order":{"kind":"shot","arg":"missing-session-deep-link","at":"2026-10-18T05:56:31.102Z"},"result":{"shot":"006-missing-session-deep-link.png"}}
+{"at":"2026-10-18T05:57:37.470Z","kind":"stopped"}

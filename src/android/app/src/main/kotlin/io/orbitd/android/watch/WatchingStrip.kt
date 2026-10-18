@@ -42,7 +42,8 @@ fun SessionWatches(app: OrbitApplication, handle: SessionHandle, sessionId: Stri
 @Composable
 internal fun WatchingCardStack(store: WatchStore, sessionId: String, sessionTitle: (String?) -> String?, open: (OrbitRoute) -> Unit) {
     val state by store.state.collectAsState()
-    val summary = state.summaries[watchKey(sessionId)] ?: return
+    // A08-6: a wait on tasks is an eye in the Tasks card; this card keeps the waits on anything else.
+    val summary = state.summaries[watchKey(sessionId)]?.beyondTasks ?: return
     // The "Not checked for" reminder is relative to now: redraw between fetches so it doesn't freeze.
     val now = rememberWatchClock()
     var opened by rememberSaveable(sessionId) { mutableStateOf(false) }

@@ -58,6 +58,8 @@ struct WikiPlanPage: View {
     /// Where a draft runs, and on what: `orbit · wikova`, `local-vllm`.
     let whereItRuns: String?
     let provider: String?
+    /// Whether the server executes this account's wiki: a draft is then the wiki-worker's, on the System model.
+    var serverExecutes = false
     var busy = false
     /// The gate's errors of a change whose acceptance it refused, by proposal.
     var refused: [String: [WikiPlanGateError]] = [:]
@@ -231,7 +233,7 @@ struct WikiPlanPage: View {
                 .foregroundStyle(.secondary)
             Text(WikiPlanCopy.emptyTitle)
                 .font(.title3.bold())
-            Text(WikiPlanCopy.emptyText(provider: provider))
+            Text(WikiPlanCopy.emptyText(provider: provider, serverExecutes: serverExecutes))
                 .font(.orbitSubtext)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -241,7 +243,7 @@ struct WikiPlanPage: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(busy)
-            Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider))
+            Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider, serverExecutes: serverExecutes))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -1,10 +1,10 @@
 import SwiftUI
 import OrbitKit
 
-/// "2 jobs in flight" — what pressing the landing row opens (docs/mocks/landing-jobs-sheet): every
-/// job the row counts, one row each, drawn as the landing row itself with its task's title. A task's
-/// row opens that task; a job the server says can be retried offers Retry, and a Retry that did not
-/// go through says why under its row.
+/// "2 jobs in flight" — what pressing a landing row opens (docs/mocks/landing-jobs-sheet): every job
+/// the row counts, one row each, drawn as the landing row itself — the head every landing row now
+/// wears, then the task it lands. A task's row opens that task; a job the server says can be retried
+/// offers Retry, and a Retry that did not go through says why under its row.
 ///
 /// The rows are what the opening page's own read says, asked for again at every tick of the sheet's
 /// one-second clock (`lines`): the page's poll keeps that read current, so the list follows it while
@@ -102,12 +102,20 @@ struct ProjectLandingJobsSheet: View {
         .padding(.vertical, 8)
     }
 
-    /// The row and its detail, beside the chevron that says a press opens the task. A job with no
-    /// task keeps the chevron's room, so every row's right-hand words line up.
+    /// The row and its detail, beside the chevron that says a press opens the task. The row is every
+    /// landing row's head (owner decision 2026-10-11, board docs/mocks/project-merge-check-row) —
+    /// the mark, the word, the live clock and the state's own line — then the task it lands, then
+    /// what happened to it. A job with no task keeps the chevron's room, so every row's right-hand
+    /// words line up.
     private func rowBody(_ row: ProjectPage.LandingJobLine, opens: Bool) -> some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                ProjectLandingRow(line: row.line)
+            VStack(alignment: .leading, spacing: 6) {
+                ProjectLandingHead(title: row.line.word, head: row.line.head, running: row.line.running,
+                                   timedOut: row.line.timedOut)
+                if let what = row.line.what {
+                    Text(what).font(.orbitLabel).lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if let detail = row.detail {
                     Text(detail)
                         .font(.orbitMeta)

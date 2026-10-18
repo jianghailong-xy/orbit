@@ -1,0 +1,110 @@
+{
+ "p42 Chromium dialogs opened after a notice (deterministic, caused by the fix)": {
+  "chromium-light-desktop/p42-pool-add-account.png": {
+   "reference 870e33a1f vs reference 15b7b5609": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "head run 1 vs head run 2 (d49a8749b)": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "reference 15b7b5609 vs head run 1": {
+    "differentPixels": 47387,
+    "maxChannelDelta": 2
+   },
+   "reference 15b7b5609 vs head run 2": {
+    "differentPixels": 47387,
+    "maxChannelDelta": 2
+   }
+  },
+  "chromium-light-desktop/p42-pool-replace-key.png": {
+   "reference 870e33a1f vs reference 15b7b5609": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "head run 1 vs head run 2 (d49a8749b)": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "reference 15b7b5609 vs head run 1": {
+    "differentPixels": 42409,
+    "maxChannelDelta": 3
+   },
+   "reference 15b7b5609 vs head run 2": {
+    "differentPixels": 42409,
+    "maxChannelDelta": 3
+   }
+  },
+  "chromium-dark-desktop/p42-pool-add-account.png": {
+   "reference 870e33a1f vs reference 15b7b5609": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "head run 1 vs head run 2 (d49a8749b)": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "reference 15b7b5609 vs head run 1": {
+    "differentPixels": 23567,
+    "maxChannelDelta": 1
+   },
+   "reference 15b7b5609 vs head run 2": {
+    "differentPixels": 23567,
+    "maxChannelDelta": 1
+   }
+  },
+  "chromium-dark-desktop/p42-pool-replace-key.png": {
+   "reference 870e33a1f vs reference 15b7b5609": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "head run 1 vs head run 2 (d49a8749b)": {
+    "differentPixels": 3,
+    "maxChannelDelta": 1
+   },
+   "reference 15b7b5609 vs head run 1": {
+    "differentPixels": 21291,
+    "maxChannelDelta": 2
+   },
+   "reference 15b7b5609 vs head run 2": {
+    "differentPixels": 21288,
+    "maxChannelDelta": 2
+   }
+  }
+ },
+ "pilot share dialog, no notice in the flow (run-to-run)": {
+  "chromium-light-desktop/pilot-share-loading.png": {
+   "reference 15b7b5609 vs head run 1": {
+    "differentPixels": 37641,
+    "maxChannelDelta": 2
+   },
+   "reference 15b7b5609 vs head run 2": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  "chromium-light-desktop/pilot-share-error.png": {
+   "reference 15b7b5609 vs head run 1": {
+    "differentPixels": 37545,
+    "maxChannelDelta": 2
+   },
+   "reference 15b7b5609 vs head run 2": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  }
+ },
+ "p41 profile photo (run-to-run)": {
+  "chromium-light-desktop/p41-profile-photo.png": {
+   "reference 870e33a1f vs reference 15b7b5609": {
+    "differentPixels": 354,
+    "maxChannelDelta": 30
+   },
+   "reference 15b7b5609 vs head": {
+    "differentPixels": 37,
+    "maxChannelDelta": 39
+   }
+  }
+ }
+}

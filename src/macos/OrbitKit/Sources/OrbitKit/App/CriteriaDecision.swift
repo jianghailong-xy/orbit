@@ -570,6 +570,9 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// the owner. Nil from a server that did not say.
     public let coordinatorSessionId: String?
     public let exceptionEscalationSeconds: Int?
+    /// The settings half of the project's integration line, for the main branch the done cards name
+    /// where its work landed. Nil from a server that did not say, and then they say main.
+    public let integration: ProjectIntegrationSettings?
 
     /// What the done cards read off this document.
     public var doneSubject: ProjectDoneSubject {
@@ -579,7 +582,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                                                             text: $0.text)
                            },
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps)
+                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef)
     }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
@@ -607,7 +610,8 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                 startedAt: String? = nil, startedAtRead: Bool = false,
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
                 doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
-                coordinatorSessionId: String? = nil, exceptionEscalationSeconds: Int? = nil) {
+                coordinatorSessionId: String? = nil, exceptionEscalationSeconds: Int? = nil,
+                integration: ProjectIntegrationSettings? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
@@ -622,6 +626,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         self.acceptedGaps = acceptedGaps
         self.coordinatorSessionId = coordinatorSessionId
         self.exceptionEscalationSeconds = exceptionEscalationSeconds
+        self.integration = integration
     }
 
     public init(from decoder: Decoder) throws {
@@ -642,6 +647,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
         coordinatorSessionId = try? c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
         exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
+        integration = try? c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -659,12 +665,13 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
         try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
         try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
+        try c.encodeIfPresent(integration, forKey: .integration)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
         case derivedDone, doneBy, doneAt, acceptedGaps
-        case coordinatorSessionId, exceptionEscalationSeconds
+        case coordinatorSessionId, exceptionEscalationSeconds, integration
         case counts = "_count"
     }
 }

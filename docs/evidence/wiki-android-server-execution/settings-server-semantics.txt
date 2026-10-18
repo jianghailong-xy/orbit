@@ -1,0 +1,108 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=411.0, b=1400.0)px
+ |-Node #59 at (l=0.0, t=0.0, r=411.0, b=1400.0)px, Tag: 'wiki-settings-page'
+   CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@610b39ab'
+   IsTraversalGroup = 'true'
+   VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+   Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+    |-Node #61 at (l=20.0, t=12.0, r=391.0, b=27.0)px, Tag: 'wiki-settings-space'
+    | Text = '[orbit · github.com/jianghailong-xy/orbit]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #63 at (l=32.0, t=45.0, r=379.0, b=60.0)px
+    | Text = '[Review mode]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    | MergeDescendants = 'true'
+    |-Node #66 at (l=0.0, t=64.0, r=411.0, b=463.0)px, Tag: 'wiki-settings-review-mode'
+    |  |-Node #67 at (l=16.0, t=74.0, r=395.0, b=150.0)px, Tag: 'wiki-settings-mode:manual'
+    |  | Focused = 'false'
+    |  | Role = 'RadioButton'
+    |  | Selected = 'false'
+    |  | Text = '[Manual, Every change from sessions, maintenance and imports waits for you in Review.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #73 at (l=16.0, t=151.0, r=395.0, b=227.0)px, Tag: 'wiki-settings-mode:tiered'
+    |  | Focused = 'false'
+    |  | Role = 'RadioButton'
+    |  | Selected = 'false'
+    |  | Text = '[Tiered, default, Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #80 at (l=16.0, t=228.0, r=395.0, b=340.0)px, Tag: 'wiki-settings-mode:automatic'
+    |  | Focused = 'false'
+    |  | Role = 'RadioButton'
+    |  | Selected = 'true'
+    |  | Text = '[Automatic, The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #87 at (l=16.0, t=341.0, r=395.0, b=453.0)px, Tag: 'wiki-settings-spot-checks'
+    |    Focused = 'false'
+    |    Role = 'Switch'
+    |    Text = '[Spot-check Automatic, Send 1 in 200 of the changes it applies to Review, to see what it lets through. Off by default; spot checks do not count toward the 30 waiting in Review.]'
+    |    ToggleableState = 'Off'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #95 at (l=32.0, t=467.0, r=379.0, b=536.0)px, Tag: 'wiki-settings-floors'
+    | Text = '[Always asks you, in any mode: principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #97 at (l=32.0, t=558.0, r=379.0, b=573.0)px
+    | Text = '[Maintenance]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    | MergeDescendants = 'true'
+    |-Node #100 at (l=0.0, t=577.0, r=411.0, b=837.0)px, Tag: 'wiki-settings-maintenance'
+    |  |-Node #101 at (l=32.0, t=597.0, r=379.0, b=621.0)px, Tag: 'wiki-settings-status'
+    |  |  |-Node #102 at (l=32.0, t=599.0, r=81.0, b=619.0)px
+    |  |  | Text = '[Status]'
+    |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |  |-Node #105 at (l=346.0, t=606.0, r=353.0, b=613.0)px
+    |  |  |-Node #106 at (l=358.0, t=599.0, r=379.0, b=619.0)px
+    |  |    Text = '[On]'
+    |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |-Node #108 at (l=32.0, t=642.0, r=379.0, b=666.0)px, Tag: 'wiki-settings-workspace-row'
+    |  |  |-Node #109 at (l=32.0, t=644.0, r=230.0, b=664.0)px
+    |  |  | Text = '[Reads the repository from]'
+    |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |  |-Node #111 at (l=262.0, t=644.0, r=379.0, b=664.0)px
+    |  |    Text = '[orbit · Mac mini]'
+    |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |-Node #113 at (l=32.0, t=687.0, r=379.0, b=727.0)px, Tag: 'wiki-settings-model-row'
+    |  |  |-Node #114 at (l=32.0, t=697.0, r=80.0, b=717.0)px
+    |  |  | Text = '[Model]'
+    |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |  |-Node #117 at (l=127.0, t=687.0, r=379.0, b=707.0)px
+    |  |  | Text = '[System model · qwen3.8-27b-fp8]'
+    |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |  |-Node #118 at (l=353.0, t=709.0, r=379.0, b=727.0)px, Tag: 'wiki-model-state'
+    |  |    Text = '[● Up]'
+    |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |-Node #120 at (l=32.0, t=748.0, r=379.0, b=772.0)px, Tag: 'wiki-settings-daily-row'
+    |  |  |-Node #121 at (l=32.0, t=750.0, r=105.0, b=770.0)px
+    |  |  | Text = '[Daily limit]'
+    |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |  |-Node #123 at (l=288.0, t=750.0, r=379.0, b=770.0)px
+    |  |    Text = '[8 runs a day]'
+    |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |-Node #125 at (l=32.0, t=793.0, r=379.0, b=817.0)px, Tag: 'wiki-settings-lookback-row'
+    |     |-Node #126 at (l=32.0, t=795.0, r=111.0, b=815.0)px
+    |     | Text = '[Look back]'
+    |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |     |-Node #128 at (l=282.0, t=795.0, r=379.0, b=815.0)px
+    |       Text = '[Last 14 days]'
+    |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #131 at (l=32.0, t=841.0, r=379.0, b=900.0)px, Tag: 'wiki-settings-privacy'
+    | Text = '[The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #133 at (l=16.0, t=914.0, r=395.0, b=1011.0)px
+       |-Node #134 at (l=16.0, t=914.0, r=395.0, b=962.0)px, Tag: 'wiki-settings-edit'
+       | Focused = 'false'
+       | Role = 'Button'
+       | Text = '[Edit…]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+       | MergeDescendants = 'true'
+       |-Node #137 at (l=16.0, t=963.0, r=395.0, b=1011.0)px, Tag: 'wiki-settings-turn-off'
+         Focused = 'false'
+         Role = 'Button'
+         Text = '[Turn off]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+         MergeDescendants = 'true'

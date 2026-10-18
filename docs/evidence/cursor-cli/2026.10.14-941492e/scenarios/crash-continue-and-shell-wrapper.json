@@ -1,0 +1,109 @@
+{
+ "name": "crash-continue-and-shell-wrapper",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "startedAt": "2026-10-16T17:46:01.106Z",
+ "finishedAt": "2026-10-16T17:46:34.056Z",
+ "passed": false,
+ "realPromptsDeclared": 2,
+ "realPrompts": [
+  {
+   "n": 13,
+   "at": "2026-10-16T17:46:11.151Z",
+   "note": "continue after crash + move: recall"
+  },
+  {
+   "n": 14,
+   "at": "2026-10-16T17:46:13.251Z",
+   "note": "SHELL wrapper: what HOME and which variable names agent commands see"
+  }
+ ],
+ "protocol": "protocol/crash-continue-and-shell-wrapper.ndjson",
+ "protocolLines": 58,
+ "fixtures": [
+  "crash-continue-and-shell-wrapper/continue"
+ ],
+ "checks": [
+  {
+   "name": "a crashed session from crash-recover-and-move is available (this run or the latest earlier one)",
+   "ok": true
+  },
+  {
+   "name": "the crashed session loads in a third config dir",
+   "ok": true
+  },
+  {
+   "name": "after crash + move the conversation continues with its context (names `sleep 31`)",
+   "ok": true,
+   "detail": "`sleep 31 && echo crash-finished > crash.txt`"
+  },
+  {
+   "name": "with SHELL pointing at a wrapper, agent commands see the wrapper's HOME, not the CLI's",
+   "ok": false,
+   "detail": "<RUN>/slots/c/home"
+  },
+  {
+   "name": "the CLI itself kept using its own HOME (writes under the slot home)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "crashed session used": {
+   "fromThisRun": true,
+   "runId": "2026-10-16T17-45-08-331Z"
+  },
+  "recall after crash": {
+   "stopReason": "end_turn",
+   "answer": "`sleep 31 && echo crash-finished > crash.txt`"
+  },
+  "agent command environment under the SHELL wrapper": {
+   "stopReason": "end_turn",
+   "home": "<RUN>/slots/c/home",
+   "names": [
+    "AGENT_CLI_CREDENTIAL_STORE",
+    "AGENT_TRANSCRIPTS",
+    "CURSOR_AGENT",
+    "CURSOR_API_KEY",
+    "CURSOR_CONFIG_DIR",
+    "CURSOR_CONVERSATION_ID",
+    "CURSOR_DATA_DIR",
+    "CURSOR_INVOKED_AS",
+    "CURSOR_REQUEST_ID",
+    "CURSOR_RIPGREP_PATH",
+    "FORCE_COLOR",
+    "GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE",
+    "HOME",
+    "LANG",
+    "NODE_COMPILE_CACHE",
+    "NO_COLOR",
+    "NO_OPEN_BROWSER",
+    "ORBIT_P0_CANARY",
+    "PATH",
+    "PWD",
+    "SHELL",
+    "SHLVL",
+    "TERM",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "_",
+    "_ZO_DOCTOR",
+    "__CURSOR_SANDBOX_ENV_RESTORE"
+   ],
+   "permissionRequests": [
+    "`env | cut -d= -f1 | sort > env-names-after-move.txt`",
+    "`printenv HOME > home-after-move.txt`"
+   ]
+  },
+  "variables the wrapper unset but commands still see (the per-command env is the CLI's, the snapshot only adds exports)": [
+   "AGENT_CLI_CREDENTIAL_STORE",
+   "CURSOR_API_KEY",
+   "CURSOR_CONFIG_DIR",
+   "CURSOR_DATA_DIR",
+   "XDG_CONFIG_HOME"
+  ]
+ }
+}

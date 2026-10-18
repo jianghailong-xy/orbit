@@ -34,7 +34,7 @@ import { SIGNUP_POLICIES, SignInProvidersService, type SignupPolicy } from './si
  * Which Orbit account a Google sign-in signs in as (docs/google-sign-in-design.md §5.2), and the doors
  * an account without a password changes (§5.1, §5.4):
  *
- *   - the table of §5.2 — every row of both its tables but ACCOUNT_DISABLED, which X1 adds — under
+ *   - the table of §5.2 — every row of both its tables, ACCOUNT_DISABLED (§5.5) included — under
  *     each sign-up policy (test-support/google-account-resolution-cases.ts), through POST
  *     /auth/google/exchange: who is signed in, what is linked, opened and recorded in Activity, and
  *     that a refusal writes nothing;
@@ -90,7 +90,7 @@ function tables(policy: SignupPolicy): Tables {
 }
 
 function seedUser(db: Tables, email: string, passwordHash: string | null = SEEDED_HASH, role = 'MEMBER'): Row {
-  const user = { id: randomUUID(), email, name: email.split('@')[0], passwordHash, role, createdAt: new Date() };
+  const user = { id: randomUUID(), email, name: email.split('@')[0], passwordHash, role, createdAt: new Date(), disabledAt: null as Date | null };
   db.users.push(user);
   return user;
 }
@@ -203,8 +203,8 @@ function memoryPrisma(db: Tables, beforeInsert?: BeforeInsert) {
       // §5.2 cases 3 and 4: the accounts with the email in any letter case.
       assert.equal(
         statement,
-        'SELECT u."id", u."email", u."name", EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ?) AS "linked" '
-          + 'FROM "user" u WHERE lower(u."email") = lower(?) LIMIT 2',
+        'SELECT u."id", u."email", u."name", EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ?) AS "linked", '
+          + 'u."disabled_at" IS NOT NULL AS "disabled" FROM "user" u WHERE lower(u."email") = lower(?) LIMIT 2',
       );
       const [provider, email] = values as string[];
       return db.users
@@ -215,6 +215,7 @@ function memoryPrisma(db: Tables, beforeInsert?: BeforeInsert) {
           email: user.email,
           name: user.name,
           linked: db.identities.some((identity) => identity.userId === user.id && identity.provider === provider),
+          disabled: user.disabledAt != null,
         }));
     },
     $transaction: async (closure: (tx: unknown) => Promise<unknown>) => {
@@ -319,7 +320,7 @@ const recorded = (row: Row) => ({
   credentialId: row.credentialId,
 });
 
-test('§5.2, table-driven: every row of both tables but ACCOUNT_DISABLED, under EXISTING_ACCOUNTS and under OPEN', async (t) => {
+test('§5.2, table-driven: every row of both tables, ACCOUNT_DISABLED included, under EXISTING_ACCOUNTS and under OPEN', async (t) => {
   for (const policy of SIGNUP_POLICIES) {
     for (const [index, entry] of RESOLUTION_CASES.entries()) {
       await t.test(`${policy} · row ${entry.row}: ${entry.what}`, async (t) => {
@@ -335,6 +336,7 @@ test('§5.2, table-driven: every row of both tables but ACCOUNT_DISABLED, under 
         entry.accounts.forEach((account, i) => {
           if (account.linkedTo === 'ME') seedIdentity(db, accounts[i].id, me.sub, `old.${tag}@gmail.com`);
           if (account.linkedTo === 'OTHER') seedIdentity(db, accounts[i].id, `other-${tag}`, me.email);
+          if (account.disabled) accounts[i].disabledAt = new Date();
         });
         const before = structuredClone({ users: db.users, identities: db.identities });
         const { signIn } = await boot(t, db);

@@ -169,6 +169,8 @@ struct WikiDetailPane: View {
             WikiSettingsView()
         } else if let run = model.nav.selectedWikiRunID {
             WikiRunView(changesetID: run).id(run)
+        } else if let job = model.nav.selectedWikiJobID {
+            WikiJobView(jobID: job).id(job)
         } else if let article = model.nav.selectedWikiArticle {
             WikiArticleScreen(address: article).id(article)
         } else if model.nav.wikiBrowseOnTop {

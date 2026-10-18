@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>协调者卡片：按钮与状态文案（效果图）</title>
+<style>
+  :root {
+    --mark: rgba(255, 59, 48, .9);
+    --ui: -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC", "Noto Sans SC", sans-serif;
+    --mono: "JetBrains Mono", SFMono-Regular, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e4e4e9; color: #16161a; font: 15px/1.55 var(--ui); -webkit-font-smoothing: antialiased; }
+
+  /* ── 画板 ─────────────────────────────────────────────── */
+  .board { width: 1640px; padding: 40px 50px 50px; background: #e4e4e9; }
+  .board + .board { border-top: 2px dashed #c9c9d1; }
+  h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; margin: 0 0 30px; font-size: 15.5px; max-width: 1500px; }
+  .lede b { color: #16161a; }
+  code { font: 12.5px var(--mono); background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+  .ui { font-family: var(--ui); font-size: 13.5px; background: #f4f4f7; color: #16161a; border-radius: 5px; padding: 1px 6px; white-space: nowrap; box-shadow: inset 0 0 0 1px #d4d4dc; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 10px; margin-right: 8px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .tag.same { background: #dcdce3; color: #3a3a42; }
+  figure { margin: 0; }
+  .ft { font-size: 14.5px; color: #26262c; margin: 0 0 12px; font-weight: 600; line-height: 1.5; min-height: 48px; }
+  figcaption { margin-top: 16px; font-size: 14px; line-height: 1.6; color: #4a4a52; }
+  figcaption ol { margin: 0; padding-left: 0; list-style: none; }
+  figcaption li { margin: 7px 0; padding-left: 27px; position: relative; }
+  figcaption li .num { position: absolute; left: 0; top: 2px; }
+  figcaption li b, figcaption p b { color: #16161a; }
+  figcaption p { margin: 8px 0 0; }
+  .num { display: inline-flex; width: 19px; height: 19px; border-radius: 50%; background: var(--mark); color: #fff;
+         font-size: 11.5px; font-weight: 700; line-height: 1; align-items: center; justify-content: center; vertical-align: 1px; letter-spacing: 0; }
+  .frame { position: relative; }
+  .mk { position: absolute; border: 1.6px dashed var(--mark); border-radius: 8px; pointer-events: none; z-index: 90; }
+  .mk .num { position: absolute; top: -11px; right: -11px; }
+
+  /* ── iPhone：你的截图，裁到卡片下方 ───────────────────── */
+  .row3 { display: grid; grid-template-columns: repeat(3, 430px); column-gap: 75px; align-items: start; }
+  .shot { display: block; border-radius: 44px 44px 0 0; box-shadow: 0 18px 44px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.08); background: #f2f1f5; }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 46px; background: linear-gradient(rgba(228,228,233,0), #e4e4e9); pointer-events: none; }
+  .t-label { font-family: Inter; font-size: 40.55px; font-weight: 400; letter-spacing: .26px; font-variation-settings: 'opsz' 14; }
+  .t-pill { font-family: Inter; font-size: 35.05px; font-weight: 600; letter-spacing: .38px; font-variation-settings: 'opsz' 14; }
+  .inset { margin-top: 12px; }
+  .inset .cap { font-size: 13px; color: #55555e; margin-bottom: 6px; }
+  .inset svg { display: block; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+
+  /* ── Web：真实卡片截图 ─────────────────────────────────── */
+  .row4 { display: grid; grid-template-columns: repeat(4, 352px); column-gap: 44px; align-items: start; }
+  .card { display: block; width: 352px; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.1); }
+  .webinset { width: 352px; height: 52px; overflow: hidden; border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,.08); background: #fff; }
+  .webinset img { width: 352px; margin-top: -350px; display: block; }
+
+  /* ── 规则表与说明 ─────────────────────────────────────── */
+  table { border-collapse: separate; border-spacing: 0; width: 100%; background: #fff; border-radius: 12px; overflow: hidden;
+          box-shadow: 0 0 0 1px #d4d4dc; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 16px; vertical-align: top; border-bottom: 1px solid #ececf1; line-height: 1.5; }
+  th { background: #f4f4f7; font-size: 13px; color: #55555e; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.chg { background: #f3f7ff; }
+  td .why { display: block; color: #6a6a72; font-size: 13px; margin-top: 3px; }
+  .pill { display: inline-block; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-right: 6px; white-space: nowrap; }
+  .p-warn { background: #fdecd9; color: #b75f00; }
+  .p-neu { background: #e9e9ee; color: #6a6a72; }
+  .p-brand { background: #dfe8ff; color: #2357d8; }
+  .btn { display: inline-block; font-size: 12.5px; font-weight: 500; border-radius: 6px; padding: 1px 8px; background: #2e69ff; color: #fff; white-space: nowrap; }
+  .same { color: #8a8a92; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; margin-top: 34px; }
+  .sec h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: -.01em; }
+  .sec ul { margin: 0; padding-left: 20px; }
+  .sec li { margin: 6px 0; line-height: 1.6; }
+  .box { background: #fff; border-radius: 12px; box-shadow: 0 0 0 1px #d4d4dc; padding: 18px 22px; }
+  .box + .box { margin-top: 22px; }
+  .decide { background: #fff8e8; box-shadow: 0 0 0 1px #f0d9a6; }
+  .decide ol { margin: 0; padding-left: 22px; }
+  .decide li { margin: 8px 0; line-height: 1.6; }
+  .rec { font-size: 12.5px; font-weight: 700; color: #14428f; background: #d6e4ff; border-radius: 5px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+</style>
+
+<!-- ════════════════════ 1 · iPhone ════════════════════ -->
+<div class="board" id="b1">
+  <h1>协调者卡片的状态与按钮 · iPhone</h1>
+  <p class="lede">
+    方案 <b>A + B</b>。<br>
+    <b>A</b>：按钮写按下去会看到什么。有东西等你时写 <span class="ui">Review 1 request</span>，其余情况写 <span class="ui">Open coordinator</span>。<br>
+    <b>B</b>：橙色 <span class="ui">Needs you</span> 只在真有东西等你时亮；协调者只是这一轮结束、停着等下一条消息时，显示灰色 <span class="ui">Idle</span>。<br>
+    ② ③ 是在你 22:24 的截图上直接改的，只动了标出的两处，其余像素没动。新字用 Inter 代替 SF。
+  </p>
+  <div class="row3">
+    <figure>
+      <div class="ft"><span class="tag now">今天</span>你 22:24 的截图（红圈是你画的）</div>
+      <div class="frame">
+        <svg class="shot" id="ios-today" viewBox="0 0 1279 1800" width="430" height="605">
+          <image href="00-owner-2224.jpg" width="1279" height="1800"/>
+          <rect data-mark="1" x="426" y="552" width="229" height="50" fill="none"/>
+          <rect data-mark="2" x="120" y="1568" width="1038" height="138" fill="none"/>
+        </svg>
+        <div class="fade"></div>
+      </div>
+      <figcaption><ol>
+        <li><span class="num">1</span><b>Needs you</b>：协调者只是这一轮结束、停着等下一条消息，也算“需要你”。它 25 分钟前收到唤醒，20 分钟前处理完就停了。</li>
+        <li><span class="num">2</span><b>Reply to coordinator</b>：按下去只是打开会话，和 Open coordinator 是同一个动作。卡片上也看不到它说了什么、要你回复什么。</li>
+      </ol></figcaption>
+    </figure>
+
+    <figure>
+      <div class="ft"><span class="tag after">改后</span>同一时刻：这一轮结束了，没有东西等你</div>
+      <div class="frame">
+        <svg class="shot" id="ios-idle" viewBox="0 0 1279 1800" width="430" height="605">
+          <image href="base-idle.jpg" width="1279" height="1800"/>
+          <g class="pill" data-mark="1">
+            <rect x="426" y="552" width="120" height="50" rx="25" fill="rgb(225,225,229)"/>
+            <text x="448" y="589" class="t-pill" fill="rgb(112,112,118)">Idle</text>
+          </g>
+          <text x="639.5" y="1652" class="t-label" text-anchor="middle" fill="#fff">Open coordinator</text>
+          <rect data-mark="2" x="120" y="1568" width="1038" height="138" fill="none"/>
+        </svg>
+        <div class="fade"></div>
+      </div>
+      <figcaption><ol>
+        <li><span class="num">1</span><b>Idle</b>（灰）：它处理完唤醒就停了，没有任何东西在等你，所以不再报 Needs you。</li>
+        <li><span class="num">2</span><b>Open coordinator</b>：写的就是按下去做的事。Open items 和合并审批卡里打开协调者，用的也是这个词。</li>
+      </ol></figcaption>
+    </figure>
+
+    <figure>
+      <div class="ft"><span class="tag after">改后</span>有东西等你：会话里有 1 张卡片，或它用 ask_owner 问了你 1 个问题</div>
+      <div class="frame">
+        <svg class="shot" id="ios-review" viewBox="0 0 1279 1800" width="430" height="605">
+          <image href="base-review.jpg" width="1279" height="1800"/>
+          <rect data-mark="1" x="426" y="552" width="229" height="50" fill="none"/>
+          <text x="639.5" y="1652" class="t-label" text-anchor="middle" fill="#fff">Review 1 request</text>
+          <rect data-mark="2" x="120" y="1568" width="1038" height="138" fill="none"/>
+        </svg>
+        <div class="fade"></div>
+      </div>
+      <figcaption><ol>
+        <li><span class="num">1</span><b>Needs you</b>（橙，不变）：现在只在真有东西等你时亮。</li>
+        <li><span class="num">2</span><b>Review 1 request</b>：数的是会话里等你的审批卡，加上归到这个会话的 Open items（问题、升级给你、合并审批、开始 / 关闭请求）。和会话列表里这条会话的数一致。</li>
+      </ol>
+      <p><b>ask_owner 的问题</b>要服务端一起改计数才会亮，见 3 号图。</p>
+      <div class="inset">
+        <div class="cap">2 个及以上：</div>
+        <svg viewBox="100 1546 1080 182" width="363" height="61.2">
+          <image href="base-review.jpg" width="1279" height="1800"/>
+          <text x="639.5" y="1652" class="t-label" text-anchor="middle" fill="#fff">Review 2 requests</text>
+        </svg>
+      </div>
+      </figcaption>
+    </figure>
+  </div>
+</div>
+
+<!-- ════════════════════ 2 · Web ════════════════════ -->
+<div class="board" id="b2">
+  <h1>同一改动在 Web · 项目页右侧的 Coordinator 卡片</h1>
+  <p class="lede">
+    这是用仓库的 ui-migration fixture 跑起来的真实项目页，只替换了协调者状态接口的返回。<br>
+    改后几列，是把改动真的写进 <code>ProjectCoordinatorCard.tsx</code> 之后拍的。fixture 项目有 2 个 open task，所以灰框里写 2（你截图里是 3）。<br>
+    Android 的文案和规则与 iPhone 相同，不另画；iPad、macOS 和 iPhone 共用 OrbitKit。
+  </p>
+  <div class="row4">
+    <figure>
+      <div class="ft"><span class="tag now">今天</span>这一轮结束（你截图的情况）</div>
+      <div class="frame">
+        <img class="card" src="web-today-rest.png">
+        <div data-box="241.1,20.6,91.9,22" data-n="1"></div>
+        <div data-box="19,359.3,283,32" data-n="2"></div>
+      </div>
+      <figcaption><ol>
+        <li><span class="num">1</span>橙色左边条 + <b>Needs you</b></li>
+        <li><span class="num">2</span><b>Reply to coordinator</b></li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <div class="ft"><span class="tag after">改后</span>同一时刻</div>
+      <div class="frame">
+        <img class="card" src="web-new-rest.png">
+        <div data-box="282,20.6,51,22" data-n="1"></div>
+        <div data-box="19,359.3,283,32" data-n="2"></div>
+      </div>
+      <figcaption><ol>
+        <li><span class="num">1</span><b>Idle</b>。左边条跟着状态颜色走，Idle 是中性色，所以边条消失。</li>
+        <li><span class="num">2</span><b>Open coordinator</b></li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <div class="ft"><span class="tag after">改后</span>有 1 个在等你</div>
+      <div class="frame">
+        <img class="card" src="web-new-asked.png">
+        <div data-box="241.1,20.6,91.9,22" data-n="1"></div>
+        <div data-box="19,359.3,283,32" data-n="2"></div>
+      </div>
+      <figcaption><ol>
+        <li><span class="num">1</span>橙条和 <b>Needs you</b> 保留。</li>
+        <li><span class="num">2</span><b>Review 1 request</b></li>
+      </ol>
+      <div class="inset"><div class="cap">2 个及以上：</div><div class="webinset"><img src="web-new-asked2.png"></div></div>
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="ft"><span class="tag same">不变</span>正在跑，没有东西等你</div>
+      <div class="frame">
+        <img class="card" src="web-new-working.png">
+      </div>
+      <figcaption><p><b>Working</b> + <b>Open coordinator</b>，和今天一样。</p></figcaption>
+    </figure>
+  </div>
+</div>
+
+<!-- ════════════════════ 3 · 规则 / 服务端 / 改动范围 / 待你定 ════════════════════ -->
+<div class="board" id="b3">
+  <h1>规则 · 服务端为什么要一起改 · 改动范围 · 待你定</h1>
+  <p class="lede">按钮按下去都是打开协调者会话，变的只是写什么。蓝底的格子是改动的地方。</p>
+  <table>
+    <tr><th style="width:34%">协调者会话此刻</th><th style="width:30%">今天：徽标 · 按钮</th><th>改后：徽标 · 按钮</th></tr>
+    <tr>
+      <td><b>这一轮结束，没有东西等你</b>（你截图的情况）</td>
+      <td><span class="pill p-warn">Needs you</span><span class="btn">Reply to coordinator</span></td>
+      <td class="chg"><span class="pill p-neu">Idle</span><span class="btn">Open coordinator</span></td>
+    </tr>
+    <tr>
+      <td><b>会话里有审批卡 / 确认卡在等你</b></td>
+      <td><span class="pill p-warn">Needs you</span><span class="btn">Reply to coordinator</span></td>
+      <td class="chg"><span class="pill p-warn">Needs you</span><span class="btn">Review 1 request</span> <span class="same">N 个：Review N requests</span></td>
+    </tr>
+    <tr>
+      <td><b>它用 ask_owner 问了你，这一轮已结束</b><span class="why">问题作为 Open item 挂着，你答了才回到它那里。</span></td>
+      <td><span class="pill p-warn">Needs you</span><span class="btn">Reply to coordinator</span><span class="why">会亮只是碰巧：它停着等输入。</span></td>
+      <td class="chg"><span class="pill p-warn">Needs you</span><span class="btn">Review 1 request</span><span class="why">需要服务端一起改计数，见下。</span></td>
+    </tr>
+    <tr>
+      <td><b>有归到这个会话的 Open item</b>：升级给你、合并审批、开始 / 关闭请求<span class="why">它可能正在跑，也可能停着。</span></td>
+      <td>正在跑：<span class="pill p-brand">Working</span><span class="btn">Open coordinator</span><br>停着：<span class="pill p-warn">Needs you</span><span class="btn">Reply to coordinator</span></td>
+      <td class="chg"><span class="pill p-warn">Needs you</span><span class="btn">Review N requests</span><span class="why">等你的事优先于 Working，和会话列表一样（待你定 ②）。</span></td>
+    </tr>
+    <tr>
+      <td>正在跑，没有东西等你</td>
+      <td><span class="pill p-brand">Working</span><span class="btn">Open coordinator</span></td>
+      <td class="same">不变</td>
+    </tr>
+    <tr>
+      <td>排队、失败、被中断、进程已结束</td>
+      <td><span class="pill p-neu">Idle</span><span class="btn">Open coordinator</span></td>
+      <td class="same">不变</td>
+    </tr>
+    <tr>
+      <td>会话已完成</td>
+      <td><span class="pill p-neu">Completed</span><span class="btn">Open coordinator</span></td>
+      <td class="same">不变</td>
+    </tr>
+  </table>
+
+  <div class="cols">
+    <div>
+      <div class="box sec">
+        <h2>B 为什么要连服务端一起改</h2>
+        <ul>
+          <li>协调者状态接口里的 <code>pendingApprovals</code> 今天只数审批卡（<code>countLiveApprovals</code>）。会话列表那一行还会加上归到这个会话的 owner 事项（<code>readOwnerDecisionsBySession</code>）。<code>projects.service.ts</code> 的注释说两边是“同一口径”，其实不是。</li>
+          <li>协调者用 <code>ask_owner</code> 提问后，这一轮就结束了。今天卡片之所以亮 Needs you，只是因为它停着等输入。如果只改客户端，这时会显示 <b>Idle</b>，问题就被藏起来了。</li>
+          <li>改法：协调者状态的计数也加上这个会话的 owner 事项（<code>countOwnerDecisionsBySession</code>，和会话列表读同一份数据），两边算出同一个数。字段不变，老版本客户端照常显示，只是数得更全。</li>
+        </ul>
+      </div>
+      <div class="box sec">
+        <h2>不变的地方</h2>
+        <ul>
+          <li>按钮按下去仍然打开协调者会话；右侧的 Start a new coordinator 菜单不变。</li>
+          <li>会话列表里这条会话的状态文字，比如 Waiting for your reply。</li>
+          <li>项目列表的 Needs you 标签、Open items 和它的计数、推送角标。</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="box sec">
+        <h2>改动范围</h2>
+        <ul>
+          <li><b>服务端</b>：<code>projects/projects.service.ts</code>（协调者状态的计数）及对应 spec</li>
+          <li><b>iPhone / iPad / macOS</b>（共用 OrbitKit）：<code>ProjectPage.swift</code>（徽标规则）、<code>ProjectPageSections.swift</code>（按钮文案）、<code>ProjectsView.swift</code>（把数量传给按钮）</li>
+          <li><b>Web</b>：<code>ProjectCoordinatorCard.tsx</code>（2 号图就是用这份改动拍的）</li>
+          <li><b>Android</b>：<code>projects/ProjectPage.kt</code>、<code>ProjectsScreen.kt</code></li>
+          <li><b>测试</b>：Swift 的 ProjectPage / ProjectPageSections 及文案一致性测试，Web 的 ProjectCoordinatorCard / ProjectCoordinatorSection，Android 的 ProjectPageTest</li>
+          <li><b>契约</b>：<code>docs/project-coordinator-status-contract.md</code>（Needs you 判断表、按钮文案）</li>
+        </ul>
+      </div>
+      <div class="box sec decide">
+        <h2>待你定</h2>
+        <ol>
+          <li>服务端一起改计数<span class="rec">推荐</span>。不改的话，协调者用 ask_owner 问你时，卡片会显示 Idle。</li>
+          <li>协调者正在跑、同时有东西等你时，显示 <b>Needs you</b><span class="rec">推荐</span>（等你的优先，和会话列表一致）；还是继续显示 Working？</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Size each drawn pill to its word (22 px of padding a side, as the 7 pt the app pads by).
+  function sizePills() {
+    document.querySelectorAll('g.pill').forEach((g) => {
+      const t = g.querySelector('text'), r = g.querySelector('rect');
+      r.setAttribute('width', String(t.getComputedTextLength() + 44));
+    });
+  }
+  // The dashed marks over whatever carries data-mark (SVG, in screenshot pixels) or data-box (the
+  // web shots, in CSS pixels of the card).
+  function drawMarks() {
+    sizePills();
+    document.querySelectorAll('.frame').forEach((frame) => {
+      const base = frame.getBoundingClientRect();
+      const put = (x, y, w, h, n, pad) => {
+        const d = document.createElement('div');
+        d.className = 'mk';
+        Object.assign(d.style, { left: `${x - pad}px`, top: `${y - pad}px`, width: `${w + 2 * pad}px`, height: `${h + 2 * pad}px` });
+        d.innerHTML = `<span class="num">${n}</span>`;
+        frame.appendChild(d);
+      };
+      frame.querySelectorAll('[data-mark]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        put(r.left - base.left, r.top - base.top, r.width, r.height, el.dataset.mark, 4);
+      });
+      frame.querySelectorAll('[data-box]').forEach((el) => {
+        const [x, y, w, h] = el.dataset.box.split(',').map(Number);
+        put(x, y, w, h, el.dataset.n, 4);
+      });
+    });
+  }
+  window.drawMarks = drawMarks;
+  window.sizePills = sizePills;
+</script>
+</html>

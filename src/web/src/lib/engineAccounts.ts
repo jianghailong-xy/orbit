@@ -33,6 +33,15 @@ export function addsAntigravityAccounts(runner: Pick<Runner, 'antigravity' | 'ca
   );
 }
 
+/** What a runner declares once it signs a Kimi Code account the control plane names into that
+ *  account's own KIMI_CODE_HOME. Without it a named sign-in would replace Default's, so nothing offers
+ *  to add one. */
+export const KIMI_ACCOUNT_LOGIN_CAPABILITY = 'kimi-account-login/v1';
+
+export function addsKimiAccounts(runner: Pick<Runner, 'capabilities'>): boolean {
+  return !!runner.capabilities?.includes(KIMI_ACCOUNT_LOGIN_CAPABILITY);
+}
+
 /**
  * Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY: the engine answers signed
  * in (on the key, `authSource` env_key) while Default, which is the runner's Google sign-in and

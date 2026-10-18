@@ -85,6 +85,22 @@ test('setconfig is ranked after the interrupt group and ahead of the reload it m
   // earlier by a patch of its own.
   assert.match(
     sql,
-    /ORDER BY \(CASE WHEN turn\."kind" IN \('interrupt', 'end', 'diff'\) THEN 0 WHEN turn\."kind" = 'setconfig' THEN 1 WHEN turn\."kind" IN \('reload', 'steer'\) THEN 2 ELSE 3 END\), turn\."seq" ASC/,
+    /ORDER BY \(CASE WHEN turn\."kind" IN \('interrupt', 'end', 'diff', 'withdraw'\) THEN 0 WHEN turn\."kind" = 'setconfig' THEN 1 WHEN turn\."kind" IN \('reload', 'steer'\) THEN 2 ELSE 3 END\), turn\."seq" ASC/,
   );
+});
+
+test('a withdraw lands at once like an interrupt, only for a poller that declared it, and only while fresh', async () => {
+  const sql = await leaseSQL();
+
+  // Its own arm: PENDING only (a control turn is acked on delivery, so there is no expired lease
+  // to re-deliver), gated on the poller's own declaration, and past its window never handed over —
+  // the request that filed it has stopped waiting by then (sessions/steer-withdraw.ts).
+  assert.match(
+    sql,
+    /turn\."kind" = 'withdraw' AND turn\."status" = 'PENDING' AND \S+::boolean\s*\n\s*AND turn\."created_at" > now\(\) - \(\S+ \* interval '1 millisecond'\)/,
+  );
+  // And it waits on nothing: no occupancy test names it.
+  for (const occupancy of sql.split('NOT EXISTS (').slice(1)) {
+    assert.doesNotMatch(occupancy.split('ORDER BY')[0].slice(0, 400), /'withdraw'/);
+  }
 });

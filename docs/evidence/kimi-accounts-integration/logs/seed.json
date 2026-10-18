@@ -1,0 +1,43 @@
+{
+  "owner": {
+    "id": "34cSsjjceSfJmYxPHcELD",
+    "email": "owner@kimi-int.test"
+  },
+  "runners": {
+    "hpc-kimi": {
+      "id": "34cSsjpxU1AVt4w2wGiis",
+      "bin": "orbit",
+      "defaultRegion": "global",
+      "defaultUser": "default@kimi.ai"
+    },
+    "old-kimi": {
+      "id": "34cStXE0R8wbtmXA7xgAP",
+      "bin": "orbit-nocap",
+      "defaultRegion": "mainland-cn",
+      "defaultUser": "old-default@kimi.com"
+    }
+  },
+  "workspaces": {
+    "hpc-kimi": {
+      "id": "34cStX9EAFu0Q44FlkkCi",
+      "name": "hpc-kimi-ws"
+    },
+    "old-kimi": {
+      "id": "34cSuKW0Pb0IDlfFqgpqO",
+      "name": "old-kimi-ws"
+    }
+  },
+  "work": {
+    "id": "a70fa033",
+    "home": "/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"
+  },
+  "session2": {
+    "id": "34cSuuxCqlKDnP5r7pEV8",
+    "kimiSessionId": "session_629d05ad-d1bf-461f-b788-94e261ed9c46"
+  },
+  "removed": {
+    "work": "a70fa033",
+    "session": "34cSzomAEoFbGTINSqcWp"
+  },
+  "oldSession": "34cT3gXsePqQ4gredDAi3"
+}

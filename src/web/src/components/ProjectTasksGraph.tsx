@@ -1,6 +1,6 @@
-import { Typography } from 'antd';
 import { Suspense, lazy } from 'react';
 import type { ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
+import './ui/Typography.css';
 
 /**
  * The project's dependency picture, as a section of its page.
@@ -50,9 +50,9 @@ export function ProjectTasksGraph({
       {/* The legend belongs here, at a size a reader can read. It used to be a 10.5px chip pinned
           into the bottom corner of the canvas, permanently, for a fact that is learned once. */}
       <div className="pdg-section-head">
-        <Typography.Title className="pdg-section-title" level={4} style={{ margin: 0 }}>
+        <h4 className="orbit-typography pdg-section-title" style={{ margin: 0 }}>
           Task graph
-        </Typography.Title>
+        </h4>
         <span
           className="pdg-legend"
           title="Prerequisite → dependent · boxes are parent tasks"

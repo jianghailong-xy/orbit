@@ -104,7 +104,7 @@ const ROUTING = 'main 上的路由行为符合设计';
 const SUITE = '全量服务测试通过';
 
 /** The sentence the card asks the coordinator to relay — the one (1) must no longer carry. */
-const ASKS_FOR_THE_CARD = /确认卡上确认/;
+const ASKS_FOR_THE_CARD = /confirm on the confirmation card/;
 
 let safety: Promise<void> | undefined;
 function verifyDisposableDatabase(): Promise<void> {
@@ -413,7 +413,7 @@ async function walkToTheLastReceipt(
     'the standing conversation was told something before the receipt other than why the project '
     + 'looks finished and is not done');
   if (looksFinished) {
-    assert.match(told[0]!.content ?? '', /看起来做完了，但 Orbit 自己记不了 Done/);
+    assert.match(told[0]!.content ?? '', /looks finished, but Orbit cannot record it Done by itself/);
     // The coordinator reads it and goes to get the suite work onto main — what its runner does
     // with a queued turn. A conversation still holding a message it has not read refuses the next
     // one (`coordinator-delivery.service.ts` §2.1), and the conversation the receipt below reaches
@@ -544,12 +544,12 @@ test('(1) confirmed before the last receipt: the project is DONE and nobody is s
       assert.doesNotMatch(message, ASKS_FOR_THE_CARD,
         'the project is confirmed and DONE, so no confirmation card can be drawn — and the '
         + 'coordinator was still asked to have the owner confirm on it');
-      assert.doesNotMatch(message, /请账号所有者/,
+      assert.doesNotMatch(message, /ask the account owner/,
         'the coordinator was asked to take something to the owner of a project that needs nothing');
       assert.ok(message.includes(confirmedAt.toISOString()),
         'the message does not say WHEN the owner confirmed the version that stands');
       assert.match(message, /DONE/);
-      assert.match(message, /无需任何动作/);
+      assert.match(message, /no action is needed/);
     } finally {
       await stack.db.$disconnect();
     }
@@ -575,7 +575,7 @@ test('(2) never confirmed: the card asks the owner to confirm, exactly as it alw
 
       assert.match(message, ASKS_FOR_THE_CARD,
         'the card no longer asks for the one act this project is waiting on');
-      assert.match(message, /请账号所有者在这个会话里的那张确认卡上确认/);
+      assert.match(message, /ask the account owner to confirm on the confirmation card in this conversation/);
       assert.match(message, /CONFIRM_ACCEPTANCE_CRITERIA/);
       assert.equal(message, theCardAsItWas(wake, f),
         'an unconfirmed project’s card changed: it must read exactly as it always has');
@@ -624,7 +624,7 @@ test('(3) confirmed, then a criterion was edited: the confirmation is stale and 
 
       assert.match(message, ASKS_FOR_THE_CARD,
         'the confirmation on record is stale, so the card must still ask for one');
-      assert.match(message, /请账号所有者在这个会话里的那张确认卡上确认/);
+      assert.match(message, /ask the account owner to confirm on the confirmation card in this conversation/);
       assert.equal(message, theCardAsItWas(wake, f),
         'a stale confirmation changed the card: it must read exactly as it always has');
     } finally {
@@ -672,12 +672,12 @@ test('(4) confirmed, but a serving task declared an older revision: not DONE, an
       assert.deepEqual(await withheld(stack, f), ['CRITERION_UNSATISFIED']);
 
       // ── what the coordinator was told ──────────────────────────────────────────────────────
-      assert.doesNotMatch(message, /记为 DONE/,
+      assert.doesNotMatch(message, /recorded as DONE/,
         'the message reports DONE for a project the projection is still holding back');
       assert.doesNotMatch(message, ASKS_FOR_THE_CARD,
         'the version that stands is confirmed, so there is no card — and the message sent the '
         + 'coordinator to one');
-      assert.doesNotMatch(message, /请账号所有者/);
+      assert.doesNotMatch(message, /ask the account owner/);
       assert.ok(message.includes(confirmedAt!.toISOString()),
         'the message does not say WHEN the owner confirmed the version that stands');
       // What IS missing, in the projection's own words, and where the rest of it is read.

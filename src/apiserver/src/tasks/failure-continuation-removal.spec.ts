@@ -235,6 +235,9 @@ function sourceFiles(): string[] {
   }).split('\n').filter(Boolean);
   return [...new Set(listed)]
     .filter((file) => !file.startsWith('src/apiserver/prisma/migrations/'))
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    .filter((file) => !file.startsWith('docs/evidence/'))
     .filter((file) => existsSync(path.join(ROOT, file)) && statSync(path.join(ROOT, file)).isFile());
 }
 

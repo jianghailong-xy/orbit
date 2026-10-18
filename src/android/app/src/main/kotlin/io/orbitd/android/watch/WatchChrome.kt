@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -163,6 +164,13 @@ internal fun WatchSpinner(modifier: Modifier = Modifier) {
     }
 }
 
+/** The running pill's spinner (iOS `SpinnerGlyph` in its 9-point pill frame, as the Tasks list's pill draws it), one for the
+ * task pill and the session pill alike. */
+@Composable
+internal fun WatchPillSpinner(color: Color) {
+    CircularProgressIndicator(Modifier.size(9.dp).testTag("pill-spinner"), color = color, strokeWidth = 1.5.dp)
+}
+
 /** A task's pill as the task list draws it (iOS `TaskStatusPill`). */
 @Composable
 internal fun WatchTaskStatusPill(pill: WatchTaskPill) {
@@ -176,7 +184,7 @@ internal fun WatchTaskStatusPill(pill: WatchTaskPill) {
     }
     Row(Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (pill.kind == WatchTaskPill.Kind.RUNNING) CircularProgressIndicator(Modifier.size(8.dp), color = color, strokeWidth = 1.5.dp)
+        if (pill.kind == WatchTaskPill.Kind.RUNNING) WatchPillSpinner(color)
         else Box(Modifier.size(6.dp).background(color, CircleShape))
         Text(pill.label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
     }
@@ -192,10 +200,11 @@ internal fun WatchSessionStatusPill(glyph: WatchSessionGlyph) {
         WatchSessionGlyph.Tone.ERROR -> WatchPalette.red
         WatchSessionGlyph.Tone.NEUTRAL -> WatchPalette.secondary
     }
-    Row(Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp),
+    // The task pill's spinner and padding, so a running session and a running task look alike side by side (iOS aaf077310).
+    Row(Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         val symbol = glyph.symbol
-        if (symbol == null) CircularProgressIndicator(Modifier.size(9.dp), color = color, strokeWidth = 1.5.dp)
+        if (symbol == null) WatchPillSpinner(color)
         else Icon(WatchIcons.symbol(symbol), null, Modifier.size(11.dp), tint = color)
         Text(glyph.label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

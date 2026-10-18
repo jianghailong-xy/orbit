@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "orbit.managed-runner.fencing-receipt",
+  "method": "NODE_POWER_OFF",
+  "predecessor": {
+    "runnerId": "__RUNNER_UUID__",
+    "generation": "__RECORDED_GENERATION_AS_A_NUMBER__",
+    "podName": "mr-__RUNNER_UUID__",
+    "podUid": "__RECORDED_POD_UID__",
+    "nodeName": "__RECORDED_NODE_NAME__",
+    "nodeUid": "__NODE_UID__",
+    "pvcUid": "__RECORDED_PVC_UID__",
+    "volumeHandle": "__RECORDED_CSI_VOLUME_HANDLE__",
+    "rbdImage": { "pool": "__RBD_POOL__", "image": "__RBD_IMAGE__" }
+  },
+  "action": {
+    "performedBy": "__OPERATOR_IDENTITY__",
+    "performedAt": "__ISO_8601_TIME_OF_THE_POWER_OFF__",
+    "description": "__WHAT_WAS_DONE_AND_THROUGH_WHICH_BMC_OR_HYPERVISOR__",
+    "reference": "__CHANGE_OR_INCIDENT_REFERENCE__"
+  },
+  "verification": {
+    "observedBy": "__WHO_OBSERVED_THE_RESULT__",
+    "observedAt": "__ISO_8601_TIME_OF_THE_OBSERVATION__",
+    "result": "POWERED_OFF",
+    "evidenceReference": "__WHERE_THE_INDEPENDENT_POWER_STATE_RECORD_IS__"
+  },
+  "nodePowerOff": {
+    "mechanism": "BMC",
+    "quarantined": true,
+    "quarantineReference": "__HOW_THE_NODE_IS_KEPT_OUT_UNTIL_STALE_PODS_AND_MOUNTS_ARE_GONE__"
+  }
+}

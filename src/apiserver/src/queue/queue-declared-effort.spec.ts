@@ -85,7 +85,10 @@ function queueFor(opts: { effort: string | null; workspaceEffort?: string | null
   };
   const prisma = {
     session: { findUniqueOrThrow: async () => session, update: async () => session },
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }), findFirst: async () => null },
+    // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never
+    // `aggregate` (Prisma compiles that into an OFFSET subquery the planner cannot flatten).
+    $queryRaw: async () => [{ max: 0 }],
+    runEvent: { findFirst: async () => null },
     modelProvider: { findFirst: async () => opts.row },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
     attachment: { updateMany: async () => ({ count: 0 }) },

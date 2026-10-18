@@ -1,0 +1,115 @@
+[
+ {
+  "image": "A10--chromium-light-desktop--wiki-home--crop.png",
+  "change": "A10",
+  "screenshot": "chromium-light-desktop/wiki-home.png",
+  "crop": [
+   780,
+   16,
+   500,
+   48
+  ],
+  "left": {
+   "run": "full-orig-7cc52e0cf",
+   "sha256": "f9033c749fc40d6af0650267ded6ab25ab5dd9bcbf6a700d05e046fdfee6def0"
+  },
+  "right": {
+   "run": "full-orig-2ba6765d9",
+   "sha256": "20ea0446b74471fd6e6997ac6e8a5805a4225fdfbf8198e5bc984e8decfcee97"
+  }
+ },
+ {
+  "image": "A10--chromium-light-desktop--wiki-home.png",
+  "change": "A10",
+  "screenshot": "chromium-light-desktop/wiki-home.png",
+  "crop": null,
+  "left": {
+   "run": "full-orig-7cc52e0cf",
+   "sha256": "f9033c749fc40d6af0650267ded6ab25ab5dd9bcbf6a700d05e046fdfee6def0"
+  },
+  "right": {
+   "run": "full-orig-2ba6765d9",
+   "sha256": "20ea0446b74471fd6e6997ac6e8a5805a4225fdfbf8198e5bc984e8decfcee97"
+  }
+ },
+ {
+  "image": "A10--chromium-light-phone--wiki-contents--crop.png",
+  "change": "A10",
+  "screenshot": "chromium-light-phone/wiki-contents.png",
+  "crop": [
+   300,
+   60,
+   90,
+   40
+  ],
+  "left": {
+   "run": "full-orig-7cc52e0cf",
+   "sha256": "bf6b190b6237fa376b90a6e02a942a42118eebdb2f051a56857a06b1159fc697"
+  },
+  "right": {
+   "run": "full-orig-2ba6765d9",
+   "sha256": "852535b3aef10af0e58aca89b6cd3f2886c2ea7907566afdcf207cf99e9bf809"
+  }
+ },
+ {
+  "image": "A10--webkit-dark-phone--wiki-home.png",
+  "change": "A10",
+  "screenshot": "webkit-dark-phone/wiki-home.png",
+  "crop": null,
+  "left": {
+   "run": "full-orig-7cc52e0cf",
+   "sha256": "79f1f51b7a388e1450315abefa3edbb8846d17194dcc27d72ee1a258354a5b08"
+  },
+  "right": {
+   "run": "full-orig-2ba6765d9",
+   "sha256": "9a19d303b85015f090fb4e32d206bbd461043fd08d830d5b95076329c4ce4b41"
+  }
+ },
+ {
+  "image": "A11--chromium-light-desktop--settings--crop.png",
+  "change": "A11",
+  "screenshot": "chromium-light-desktop/settings.png",
+  "crop": [
+   500,
+   230,
+   560,
+   170
+  ],
+  "left": {
+   "run": "full-fix-ebf5e6441",
+   "sha256": "b9eff5c79843595bd6e6dedbe242a4425380bf3a084e42ab08b8d5835af9dd3b"
+  },
+  "right": {
+   "run": "full-fix-def134095",
+   "sha256": "98ba11abaa3e18ae7d046fc8b64b84b60eee9b1f879233cb26ae2c19b89fd71e"
+  }
+ },
+ {
+  "image": "A11--chromium-light-desktop--settings.png",
+  "change": "A11",
+  "screenshot": "chromium-light-desktop/settings.png",
+  "crop": null,
+  "left": {
+   "run": "full-fix-ebf5e6441",
+   "sha256": "b9eff5c79843595bd6e6dedbe242a4425380bf3a084e42ab08b8d5835af9dd3b"
+  },
+  "right": {
+   "run": "full-fix-def134095",
+   "sha256": "98ba11abaa3e18ae7d046fc8b64b84b60eee9b1f879233cb26ae2c19b89fd71e"
+  }
+ },
+ {
+  "image": "A11--webkit-dark-phone--settings-saved.png",
+  "change": "A11",
+  "screenshot": "webkit-dark-phone/settings-saved.png",
+  "crop": null,
+  "left": {
+   "run": "full-fix-ebf5e6441",
+   "sha256": "394ad14943ed5f4e9674dc18a068989b38adcb1924b86cafb1e3a94174a24861"
+  },
+  "right": {
+   "run": "full-fix-def134095",
+   "sha256": "ce46c1231e9b8837f1ecc9bc0e030398068559f709d8fefeb6a2d39f1d74c69a"
+  }
+ }
+]

@@ -22,6 +22,8 @@ internal object WikiSharedFiles {
     fun json(relative: String): JsonObject = Wire.json.parseToJsonElement(file(relative).readText()).jsonObject
     val docs: JsonObject by lazy { json("src/shared/src/wiki-docs.fixture.json") }
     val reviewMode: JsonObject by lazy { json("src/shared/src/wiki-review-mode.fixture.json") }
+    val serverExecution: JsonObject by lazy { json("src/shared/src/wiki-server-execution.fixture.json") }
+    val health: JsonObject by lazy { json("src/shared/src/wiki-health.fixture.json") }
     val contract: JsonObject by lazy { json("contracts/wiki.contract.json") }
 }
 

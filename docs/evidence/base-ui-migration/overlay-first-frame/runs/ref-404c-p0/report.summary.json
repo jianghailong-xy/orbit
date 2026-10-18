@@ -1,0 +1,2732 @@
+{
+ "stats": {
+  "startTime": "2026-10-08T18:13:49.673Z",
+  "duration": 219582.471,
+  "expected": 101,
+  "skipped": 11,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7314,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/attachments/computed-styles-and-timings-4c3cc9d4958405d92d0138e55be2d0bd4a007d2f.json",
+       "sha256": "baf704ac751a313821e043d761e9ff99ff936568214ce1bfb155523ffda643aa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "chromium-light-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 47,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-phone/attachments/computed-styles-and-timings-7db486dc72ef3082ab82f5040e54d87cd2e9f40f.json",
+       "sha256": "95e2a1f5512e3aba90d2f53dbfde26102e0712e5f4537c08b730d11c858250c1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7111,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/attachments/computed-styles-and-timings-8e50ce93c4fcc9d013b346a01cb5154729f180d8.json",
+       "sha256": "87d3ab503c95a83e2a23c450e0fc3a14273541a1d9c0b33ef2743c87b2e1a5a3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 47,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-phone/attachments/computed-styles-and-timings-ecafe56d86f18b5a0a365801bef4981f57252ed1.json",
+       "sha256": "69a6e1a420d1790a759f608d226d28d441599ad767cda958df5f4098b78f4a97"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8171,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/attachments/computed-styles-and-timings-11789e1e063c4afbe12984959136ce48dc0a85a2.json",
+       "sha256": "e6e8b16d2ce19bad54218e283f492312d5df26c20078531050eb91442ad6903a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "webkit-light-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 159,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-phone/attachments/computed-styles-and-timings-d1ce2bbed61349770386a5cfbcd4607a8786500a.json",
+       "sha256": "6e14baa126d067c9e8b4dcb31b85a0a22b289eb66a58bb5a4c62127b85ba9f01"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7944,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/attachments/computed-styles-and-timings-273b2ab1461f074c069f715792b7718c73183c80.json",
+       "sha256": "048af74f23c8c8d894e578a5b94cc47f624bb30554dd656bf14f8fe31cb4d151"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "location": "breakpoints.browser.mjs:4",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 138,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-phone/attachments/computed-styles-and-timings-4338192db84ba1325cbe785fa3450ec5864ec7f7.json",
+       "sha256": "44eadc7f87585978ee41a49d5dc6cf8429332a9098200520ec78b549b32e3521"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2353,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1fdf3ed3c589cf0de3f14609b32d38e9b7d18b74268eeb40646f0b50f7d535ae"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e58caff51600e2bd02b240fa548bc830f77a764b8b6f7c950a5787a6f2faf2b6"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-chromium-light-desktop/attachments/computed-styles-and-timings-fdf9decebe15c82e0ca6430768df5c505610dcb3.json",
+       "sha256": "57b94fcf12d00c44077b1ef75826271176e9dc04357a3659acd25a9205bdb8ec"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2279,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dceb069b8caa2178eade8e2a5899763b78ed9724339924cdf8e49f4709cc7b5c"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-chromium-light-phone/attachments/computed-styles-and-timings-3b1a0bb33b461ffdcd3aaabae1cacb7accc114a8.json",
+       "sha256": "bab01c22cdd2bac64cae36e4d78414e87ad9d3248502b614c65e83232d44efc1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2649,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cf89e4da16348501ca07530ee1de81227d7389ca092451d326f6916ba6aa58dc"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1e799f036ced55b19820a0fb4d6e9bc0d25b8bf694997938fdbeb6074253698a"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-chromium-dark-desktop/attachments/computed-styles-and-timings-655cf5e0e962e2d9e266fe7602c4a8bf460c52bc.json",
+       "sha256": "5c51441a316bb2cab0f544533a97e2b6ae6122646781692fa496812c4924c61d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2354,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "619706f5374e7cca53a3270623eae186b069eeb0c517f619bc364395567b2a74"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-chromium-dark-phone/attachments/computed-styles-and-timings-a445d01f75b43da6724708a6d9e4c4f18786997c.json",
+       "sha256": "8b06b99fc1a17156dd81f8d882e7810c3f162f2b37ca5eb276ce5114c947a5c7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3031,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "878bda7c75e17cd4d3a52d308f64167a06688f7b82a8763a7e73e7e020f32dfc"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-webkit-light-desktop/attachments/computed-styles-and-timings-828e9e2f791038aba61929526f67a1da6ef71061.json",
+       "sha256": "ccb5b1c2bcc000a5ab7407cf17778edab1e993a021f816135e16cb287f240c6d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2720,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "706efeaad06e84ba1832f3a2ec4a22d4564210e5b8aa08e8dfb5c043ab482f3a"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-webkit-light-phone/attachments/computed-styles-and-timings-16f8eb8b6658822edeaf9d2a47f02e30ebbec52b.json",
+       "sha256": "66142ce3e5f53b55fe0aa1ee2d89ccf5eb949c5a915a6e56d41924027e61007c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3044,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3aebcf6913caee8978c14331cafbf225eb3b0b286d89a719f8cdbe54f5b8ea3f"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-webkit-dark-desktop/attachments/computed-styles-and-timings-d694de01435f89d119baa89f74f3012f768c6b2d.json",
+       "sha256": "ee948897c7579269d17ead7b7f19aba77a298f1f997c67f7893bff7ad28dc0e8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P2.3 production notification compatibility",
+   "location": "feedback-production.browser.mjs:7",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2779,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "notification-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2c329e0a5769442c93e21887d3bad660b8bd4762964186c2796eed04a02914db"
+      },
+      {
+       "name": "production-notification",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/feedback-production.browse-48216--notification-compatibility-webkit-dark-phone/attachments/computed-styles-and-timings-2181b782a15a80e29c153a6a3c076a69c9b871ad.json",
+       "sha256": "e991c169ee5a53fea7b01fc36fc8b9fbe064faf41a82e0ccbff6baf82a3f0253"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 682,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-light-desktop/attachments/computed-styles-and-timings-3000449094ec5cfe54690f62ddf8787cb1a94ae4.json",
+       "sha256": "53619e1182578d17e4e222b3139983083b5c7fc4a7be3ab8c67dcd083df1194c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 831,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-light-desktop/attachments/computed-styles-and-timings-37c76c5899f1626307e34827cf174a15ab6d7c23.json",
+       "sha256": "96707eb1481d1fb002301c472f7bc97069822754005af0d8659041bf6e37cbfe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 679,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-light-phone/attachments/computed-styles-and-timings-3546fa403c6da4eabc7916c29439a5eb0db9728d.json",
+       "sha256": "d8f58e015c9d73d3c65a831061c077f9f632ac3f74d71ce69f8886530d7f2092"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 696,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-light-phone/attachments/computed-styles-and-timings-ad851ef178e5b6d373b9569fa4342a37a001f033.json",
+       "sha256": "23a7eae7b51761db791da609d2efb506f50ebfaa2e2df00ecdd1ad9e3b6bd754"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 797,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-dark-desktop/attachments/computed-styles-and-timings-95d1bb1affcfebb23d1aa770450e74d488b75144.json",
+       "sha256": "87cfe8cd13eec4af46d102e4d2c8b9f7c2ff423da29e9507d6623ebc6ac0c918"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 808,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-dark-desktop/attachments/computed-styles-and-timings-2290ceccd50a924449bae8271680b0783c9dd804.json",
+       "sha256": "ef128d9d829d32c4101e3d983c79004ef3289be7d022279e6148d0bed02ea2ab"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 719,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-chromium-dark-phone/attachments/computed-styles-and-timings-64b2b9121e9c9b6b6a6245efb7bd62dc6e7e4f55.json",
+       "sha256": "affc496d4be2de7f0f149cdd60b8f44b0fbc2769d2a35c16bc8bc303b08eefaa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 841,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-chromium-dark-phone/attachments/computed-styles-and-timings-e33b25199428433389df29490527c1c2b5f664c3.json",
+       "sha256": "cfbb94e4efc94a3049cead680c2e925e6bcad33346d31a575740553234e528a2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1193,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-light-desktop/attachments/computed-styles-and-timings-8bc788d4edf4c087a9e407b8f613db0f303a2a4f.json",
+       "sha256": "e483d8d5962b48641d6aff0ebdf97243632e61ff27975e42a8562d6df2f30492"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1243,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-light-desktop/attachments/computed-styles-and-timings-e6ce59fc35b2397a436270be6902fe9a8bf2596c.json",
+       "sha256": "1e5d1c07d126039e3bdf8dbe076ae75871f24dfa96304cf452a64b10d5f0179a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1212,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-light-phone/attachments/computed-styles-and-timings-2aea391ec2da44d276fbe0c272779e90838ce665.json",
+       "sha256": "550bf6393f06a7e5917e01e9ef67be56ca77d372c79faaaf3d951a1ffb05e316"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1278,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-light-phone/attachments/computed-styles-and-timings-9e6c14937520eaada9ae5affa8999bf540a36c1c.json",
+       "sha256": "99f3cdab235297fdfbe4c6a833d49472a43c536346d7409020031c2170ae091d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1231,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-dark-desktop/attachments/computed-styles-and-timings-c03bad893cc983657a70de43b4c0fea543768b4b.json",
+       "sha256": "704654fa1bda68e3b7495a43d139b4d404ef57b37cd8b17ec7ff7c19a947a40b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1208,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-dark-desktop/attachments/computed-styles-and-timings-443d78a331f3cca29750d3036dd4849fe4affc52.json",
+       "sha256": "2db51c16b001a6e13ccd64e95a0dc39f6605aa552bd49717bcc80e564961f3d0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-1: task share Escape restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2065,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09903989238ecea2b4e1c58e2c5141a9b0c170d56316763dc3cfefd1b8d3a972"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-98ca3-share-Escape-restores-focus-webkit-dark-phone/attachments/computed-styles-and-timings-9ecaeafe6c954d68e7edfd0bb73b929f9b705e94.json",
+       "sha256": "22703388942d2f3488ded4a15d9c144a2b6eb4a3b70e0d107328ee514f96a5c2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "P0.2-FOCUS-2: task share Done restores focus",
+   "location": "known-failures.browser.mjs:12",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1356,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "known-focus-failure",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84c80f99fa759a03cc9205306f34adf8d290116d3c528e76d66f540b08f29579"
+      },
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/known-failures.browser.mjs-4c14c-k-share-Done-restores-focus-webkit-dark-phone/attachments/computed-styles-and-timings-91059c6de5a0ce8b3680a483babc92a8891e026d.json",
+       "sha256": "09045d85fda2cab166aad84da0d444410a53caf3e125dbcff3047da5e66fbef6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1878,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/attachments/computed-styles-and-timings-17b87b9b0ff8fc3fa328cde63ad1218087d9b6bd.json",
+       "sha256": "afcf779070a9711cf515eb29741c967192761ed62d3d3c00b40e99ebb2dcf883"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 422,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-chromium-light-desktop/attachments/computed-styles-and-timings-438387da4487f1e0b5a5340f56bb2220619e610a.json",
+       "sha256": "58fbb06d5d37f823c29b3546be03d86d8196008601c9758b9d7f9f9be6f07717"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2445,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-chromium-light-desktop/attachments/computed-styles-and-timings-f68a6a36882defae8dfdea9d1ca3cfef55140205.json",
+       "sha256": "b31476c02c1aa347d9830e905559ab323f62e5ea5d0b803edad487b91521ea3b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1079,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-chromium-light-desktop/attachments/computed-styles-and-timings-56c3d5c76ca86f8d9b94bd078ecc91bc7e599759.json",
+       "sha256": "3dba5f48e380ae92aad6950f6359bc8430fc8653dc2d590b79001a1544de74cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 725,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/attachments/computed-styles-and-timings-261cdacfaba7864c8149fcf467a2875dd0350405.json",
+       "sha256": "38a5bc5319a445df56d3ece96cc8b127e6b2fe785539f089e4490532d335da8a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 788,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-chromium-light-desktop/attachments/computed-styles-and-timings-1189977dffb1f194e78e5b717e33fd10c207e84e.json",
+       "sha256": "bdba39ba70d79a82d9b8a589a5c33975c8b79626f8f7160abe0e624401b2b5bb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3577,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/attachments/computed-styles-and-timings-6b77d5a980d0a9e2d9667e632d0e6c319784ec43.json",
+       "sha256": "daecc57b0d4380e902f1af350c704f8d551b14fea13703a1c49a2bdaac0e5122"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1725,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-1c0746b01bcb2bede34c5ee94cd958e36a6be7be.json",
+       "sha256": "bd6c44ab34a93e4527d9bd9756bf92f28285293bd61677f6a7b51c297b4d8e6d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 392,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-chromium-light-phone/attachments/computed-styles-and-timings-c0d5f97381eecd8bb3f74d14717def26e9ea11a8.json",
+       "sha256": "2e10892d84618f3cba6f82cc444df0b7bd25cc565e79542e4d6fae6e1a73d109"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2390,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-chromium-light-phone/attachments/computed-styles-and-timings-b3fa94595e32e9be667f857f3e689a5fb7e40733.json",
+       "sha256": "3001e9ca19bc24687620c8a7c31dbcd27ddd385165878106893a2df4b3b64ae1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1288,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-chromium-light-phone/attachments/computed-styles-and-timings-ce46f3ca5b2d65a9119f3476e0eec076e802c54b.json",
+       "sha256": "002bb1ee06c3e5f9c0f714f08bb88f6bfaf479831adc5d216cc08815df90a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 615,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/attachments/computed-styles-and-timings-d61ca12b1ac7487d995a93f111dfd0f59f3c5c45.json",
+       "sha256": "7772be2bc0112252f0f759e47a6265ead8d09853026b4ddf0c6d8d9e8d69155a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 724,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-chromium-light-phone/attachments/computed-styles-and-timings-51639f7ca3a990d093dce08e48933fa11b63fc24.json",
+       "sha256": "dcb926b9e5c7978c9c0542351f79c7700312177a6493a3d8830fff6c9be257c7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3379,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-chromium-light-phone/attachments/computed-styles-and-timings-a057ff3c74a15abedef931f4608eaa5190a8d42e.json",
+       "sha256": "738c062045fb169d095119b8e7fa45671d2f6cbeb5f3b0d87197bc17797e0496"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1863,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-fd05a0741f7abc6941ceb2f16399ead4f09abefd.json",
+       "sha256": "4361f0e6a5f07eb39cd4607b6286db46f4898e55258a97db9b7d5357ac7f8a34"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 444,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-chromium-dark-desktop/attachments/computed-styles-and-timings-fc2a0d708bebf390b2e343d44d5d69eb1a0aca8c.json",
+       "sha256": "875a0cdaede689639ba86a6bb3d6eb1afeb173f4b905672e2177cb6ec95dc686"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2544,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-chromium-dark-desktop/attachments/computed-styles-and-timings-c978a60b0053b2229dffb74e2437d757b579de79.json",
+       "sha256": "14a76ce92b11055a429fa96f6067e49bf6c01ea4aef945405d704624085a1830"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1092,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-chromium-dark-desktop/attachments/computed-styles-and-timings-fd84873cc86749fbc9e402a89d2f65d84ed94063.json",
+       "sha256": "858f54cb9dbe721c6149f51fa67781255cb4e6ffc408c3049fb965ad63f14c8d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 701,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/attachments/computed-styles-and-timings-2686de95ecaff2307717ac6f871749a7b6afb901.json",
+       "sha256": "5ec1b98fffe8dce70ee82ba06e00663caf87bf2c1d27024df3a3acae60c509c3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 806,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-chromium-dark-desktop/attachments/computed-styles-and-timings-1c7a35275815b7a6b3f79b41dcd2ee3f1d4daa96.json",
+       "sha256": "292016696c1b949b3e7be7f5da95c6feade0af20600513e810d19fefdbad8a0a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3632,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/attachments/computed-styles-and-timings-785cbc63fee9827e84144d283a9f2840e22efc63.json",
+       "sha256": "4dfa2071093a4581eec2e58d4484d3bec27619f3c59abed1dc0ed53e2ed24722"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1736,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/attachments/computed-styles-and-timings-3c2eab9c50548d0c82a8a77f94951214bb0cea81.json",
+       "sha256": "4aaa167fce247662e60b4bcd3f69eb895168dbe34e0bed218a2611f8cb787a98"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 363,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-chromium-dark-phone/attachments/computed-styles-and-timings-c1537a0ec03aecea1c6a5c38e3f3a3f630256d54.json",
+       "sha256": "a4a11ed142bfbeb50995ce45b700cf495572b3c93e32286a496965a24925f043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2354,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-chromium-dark-phone/attachments/computed-styles-and-timings-67ae378e334728052e42c9b4de639bcdb47b80d1.json",
+       "sha256": "a55c676bcdb38653655a56b15503df4d60cb22a2da2fbf54940939102f91aea4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1357,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-chromium-dark-phone/attachments/computed-styles-and-timings-ef72d3483944db14908695f1fa4ea0c7a038892a.json",
+       "sha256": "c01e0a9b1a70ecc07324bf8cea200a3d92822b47b1bb68c7e2a330f4b5daa36c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 621,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/attachments/computed-styles-and-timings-a3fc1cb552695c9b9d93bbf5e21883ff59c3a031.json",
+       "sha256": "bac8b882c353c6b144bb3a421027abc6898bad6d9216e9e13d8aaa627e2e1732"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 727,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-chromium-dark-phone/attachments/computed-styles-and-timings-2cca3ef5af6847ec4b7c4195da9784ffac13dbff.json",
+       "sha256": "682e504083db1cc5be11044bc2d3c3d732b2d3b5f07fbe0de4a6c76da282b617"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3380,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/attachments/computed-styles-and-timings-9a4d8e85b524214f35c894186eedb16185bde6be.json",
+       "sha256": "da0941fb53127373824fde47ef08b24dd62499d259c9d525e749ed289d98f038"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2531,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/attachments/computed-styles-and-timings-02ecd595dac5c0526bbb4342170090e83544f819.json",
+       "sha256": "a6ba9b37a8c107f39f53b318813326948c6d3fc4f7d95ccde2bb74eff1f0393d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 613,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-webkit-light-desktop/attachments/computed-styles-and-timings-b9a10be5e7e75d31f97ed0018f3d60d51ab04721.json",
+       "sha256": "d4f9c82ebf6f03edad5b7a507d1c890b18e13c2f010b0983ddc300fba78db509"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3100,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-webkit-light-desktop/attachments/computed-styles-and-timings-89710fac8013b5deacf7a2624083327c638c911e.json",
+       "sha256": "1ff2f6f658748a5421d09c6397fd80e29c6a366fa975d2de5f47d6b98ce85be9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1494,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-webkit-light-desktop/attachments/computed-styles-and-timings-05170a30393d2f7d8c31d1a401a2e69ce0b55022.json",
+       "sha256": "25ea147b2528c37659364e01ea1fe07dcd033dd06e3548e66c9b850742679f62"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 906,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-ea6d970d3f52c3a99c3c4127b6ead39c25988a05.json",
+       "sha256": "ae164fa2b880c4ece0ffb4f73329b7b059a1b6c540f12045e83f324a7a3466b8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1074,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-webkit-light-desktop/attachments/computed-styles-and-timings-cbcb43c0c8b4b27b4e473dbce89cd819d9d52e26.json",
+       "sha256": "10e3891143bdeff11eeecc7d20db198f41633db7dab65718c57bf2a4f5bf0320"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4355,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/attachments/computed-styles-and-timings-634a1a57c9a553ff83c746127c5a732f44e5310c.json",
+       "sha256": "0713ade5fc99ac8b207f83c39ec07a666d32d45f20ff028ac033c032b5bc76ff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2257,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-webkit-light-phone/attachments/computed-styles-and-timings-08d331e6b2a08ec16d5841ebb5b02b8a6f76ba04.json",
+       "sha256": "3d0fe8f424ffeedc0ffd01fdabf4ac5add8b75ab62d61f8c1c3241a547d759f4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 574,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-webkit-light-phone/attachments/computed-styles-and-timings-97cce2e6796e9d45a99ac9fb3af56f16f601f626.json",
+       "sha256": "ca8cd77ff415fad11c1f99d338ec23ac4845d287fedf33e82e92754b899ffa49"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2742,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-webkit-light-phone/attachments/computed-styles-and-timings-fa53a6764debfdb11660d9ace7b69f4aafd3de4b.json",
+       "sha256": "ae96ebd4a139a30bb5618ff79f599da65f9adc3208e82857b72aaec073a14b2f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1593,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-webkit-light-phone/attachments/computed-styles-and-timings-4a110c23fc14d255c4ff6ca9ad22113ddd7372b6.json",
+       "sha256": "2eb5265764b0260a1e645206037167d45a2732ca2556b00ea0fb81582e239999"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 816,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/attachments/computed-styles-and-timings-4b675869b538ec2b1e8c01ae92c87aa7b49c83b3.json",
+       "sha256": "c9d839a4669d2fe0e4af902eace416b4f4a3bb6187e899ee7eecfdc57b598b8a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 850,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-webkit-light-phone/attachments/computed-styles-and-timings-ebcd10e8a379b615f35d7ad60e026e097848ebec.json",
+       "sha256": "ec8b1aea7564e37ae3cbe951da234e14cb063290026de41e4f76dfd86280d407"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3820,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-webkit-light-phone/attachments/computed-styles-and-timings-04da254a648d50a89f8b3549181215024c2116b7.json",
+       "sha256": "c55ade35cce8076c04f324e50c154c9fc7db4d1f0977fc4742818e581ffca569"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2585,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/attachments/computed-styles-and-timings-d11ac18d9b6fc8b48e4dcdb2911de5a6937cee58.json",
+       "sha256": "e9550c45255042b9c5d532fcc5d6cb1352cf6aaf26ef9c4004583a1e40e81bae"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 628,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-webkit-dark-desktop/attachments/computed-styles-and-timings-2ae82a3af5aedff9e6c10ae329c1ca71725358f1.json",
+       "sha256": "f045e4f336e373600712639c712e4d85167f939ef62f0285aaa454084208c457"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3476,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-webkit-dark-desktop/attachments/computed-styles-and-timings-3885e897e06a73e45c8a6a1a14ba685fca970700.json",
+       "sha256": "231f7d534ce8c2ae2245cf77c2a766d0e3a2783253e20446624174867d21c00b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1452,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-webkit-dark-desktop/attachments/computed-styles-and-timings-8438cf4499837a1c16b97445fb953667ed34d160.json",
+       "sha256": "6fd65da687733c971a856980c287743ffbe3d3a9797fce826b9179814c67c658"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 970,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-b582b484bb7eb6dd426497f9f0907a28f20f93c1.json",
+       "sha256": "6436db588adcada8cd69c4264b5573183705c299c01e0c9f03f4c7b6f2bc2ecd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1020,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-webkit-dark-desktop/attachments/computed-styles-and-timings-b1631084d6d335eab027841e7ed8edcc59859d16.json",
+       "sha256": "5d0df6f3168a1f0710931402abf1cc17e86ce9106520f7f45e862a2b635f5743"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4283,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/attachments/computed-styles-and-timings-7a5b2216ddca2d7a3c0f47211e8b5c8ee82dbbb4.json",
+       "sha256": "ee94c91cec1b073fcf8fc0677500b42631030ab8a2c7d759df58a47ed5b022d9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "task",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2253,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/attachments/computed-styles-and-timings-a9a2a6464e75ee7c00c6b76ceda95e19965fe046.json",
+       "sha256": "e4125b3f24f5f83e0c8c501f84cef41126b8fcc73aa7655879d8a8b42a675feb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "share",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 576,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-share-webkit-dark-phone/attachments/computed-styles-and-timings-9a35e10735e36f05cb06b67d66eb7bc4eb16a9e7.json",
+       "sha256": "65c076468f4e16b07f58c4ceb9d9a14d7fe6cd9462d76cad088114f39cb9a59e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2911,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-projects-webkit-dark-phone/attachments/computed-styles-and-timings-d9270e5ce890b0784351c36f89d3be412ac8bd26.json",
+       "sha256": "377f406971751ef82eca1ac5f44525de52ee49c8662862d624590551a4dc7f4c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "wiki",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1575,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-wiki-webkit-dark-phone/attachments/computed-styles-and-timings-a6feb3938318929e4092366a7a249f4e39f615f3.json",
+       "sha256": "e0a85624f0e110353b4473722757de96e918eb545b0e0a5b0f93e29548f09ebe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "settings",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 863,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-078a197b8b19978bed08cc56727bbf71b7eb1b77.json",
+       "sha256": "e09451414186e450e32725075f10a449de51bf03612726cfa0511b200e9588ff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "profile",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 993,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-profile-webkit-dark-phone/attachments/computed-styles-and-timings-f30774bbca38c09997ef7fd1ae3a6a99a88223c2.json",
+       "sha256": "e1cb07135f0a947b7d19fdbbce28374349ef2ccd6b99ef8921effdb71d61403c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session",
+   "location": "pages.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4147,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/attachments/computed-styles-and-timings-aeae7a405ceca859d7cc7ab54f846e448c2f0a02.json",
+       "sha256": "7871f973d3ad9810a027bc6e46c0f6cd1566843ddff1cbb847beb2018106fa8d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 17325,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "browser-performance-samples",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/attachments/browser-performance-samples-2d9dd843afef2938117b304907aebcc2cc482f0c.json",
+       "sha256": "d620c2e44173b4d399919c4d2a5c4238fe229a32f35083af9d20603620c6118d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "chromium-light-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "webkit-light-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "record browser performance baseline",
+   "location": "performance.browser.mjs:16",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "skipped",
+   "status": "skipped",
+   "results": [
+    {
+     "status": "skipped",
+     "duration": 0,
+     "retry": 0,
+     "errors": [],
+     "attachments": []
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 498,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop/attachments/computed-styles-and-timings-cc659d3901a1c9f4ac1b2126a4b48ecfacbdb44f.json",
+       "sha256": "d1d3591e9910d6f13776a6201074a904cc6d52d2e58b379554e1918f780ee96b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 441,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone/attachments/computed-styles-and-timings-e2f89572b2b19d43f68710ffd5067ddbc08a4ac4.json",
+       "sha256": "9d62a50aa47d33cdcee52db90de661fc416d93038a4879e720be43d2a3a5e721"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 503,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop/attachments/computed-styles-and-timings-70bb8d6df26b713f673588b2278fe314467555a7.json",
+       "sha256": "388815d5051e91f2a75d48c4b37f424f1e0e4bb15d08dc875f9a630dd4ea32a8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 434,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone/attachments/computed-styles-and-timings-51fdc6ac291da526d3caf478cff2474b675f0fe2.json",
+       "sha256": "2674ea12e7fc313dcac37acf6e0b857766e8c8cc68d10fc1dba6ee1c4d498ed0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 783,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop/attachments/computed-styles-and-timings-bebb19cb11d1b3cad68069eea0c1f01a5a01de8e.json",
+       "sha256": "c32baceef7bd441a6fd591bac155b1cca511ff0dab91c1f46585360af19af4bf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 769,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone/attachments/computed-styles-and-timings-665c0464c0cb66ab75e5ee8ba589571abbc2272b.json",
+       "sha256": "58d1ba52f43099765898b2374940c4dc383c911724a0e67874a66c2db024cc0c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 813,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop/attachments/computed-styles-and-timings-94bc4df2ffd8731d6de93e491a16c298f33c4d89.json",
+       "sha256": "f903db1b2eaab09f6799ee8561c83c5f580b54923b72129c8652a59e06c83bab"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects loading and release",
+   "location": "states.browser.mjs:6",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1023,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone/attachments/computed-styles-and-timings-192e785cfa7cf7071172e302076973dc35f74770.json",
+       "sha256": "891136033cc2aba4322b77315e39bf37d91b103bf051f7b5336e8a1ea2c2fcec"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1756,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-desktop/attachments/computed-styles-and-timings-aa4b87bee565c8ec79f8f885038b6045309df5b0.json",
+       "sha256": "a904810b6842f2973b24919c654b0473457ad9518427d600c66d5a8a83b914e5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1712,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-phone/attachments/computed-styles-and-timings-b815206775e0d39e8efe308cbb254758fd90b66e.json",
+       "sha256": "9d55c6107bafdc78ba4d7e47c2a47ecf0496613295714a41ccdb5f6e17e006a2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1756,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-desktop/attachments/computed-styles-and-timings-ffe40bd58133cccbd554ca5d29e430051b1936ef.json",
+       "sha256": "43bbec737a023d2dec0c6bbe6e61303766ecb0e339f655798ca19d4e89d9772f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1739,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-phone/attachments/computed-styles-and-timings-db9767b1eba95cb014ed1c385733adffa6a8b84c.json",
+       "sha256": "54ade8c011814503e9ccd16e49e560f678a1912bc4ce5e035391556d4bf95a24"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3288,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-desktop/attachments/computed-styles-and-timings-5b753f6c0d7e0bf7a77b1e59aa5dfdb9e78d4f7c.json",
+       "sha256": "e119785053a3b3a904ca662fd337dc206f1ef4c932da5ed2284d25def916ce99"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3280,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-phone/attachments/computed-styles-and-timings-77ad734494e337d5f3bacd28657e94c7facbbb39.json",
+       "sha256": "6e7e75da8c1116c971fcd6a07f68569e32f90d7b22cb2829cd7a86e78d5ef6cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3315,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-desktop/attachments/computed-styles-and-timings-6dfdc16a0837570af0ca2372e33ba8778942bf91.json",
+       "sha256": "919146f45892ab30c8c5cabdded4a9cc1ddaaab8901d5b0aac211accab87d434"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "projects error and retry",
+   "location": "states.browser.mjs:22",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3377,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "computed-styles-and-timings",
+       "contentType": "application/json",
+       "path": "/mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/.ui-migration-results/states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-phone/attachments/computed-styles-and-timings-eab26a2ae1f6e1a70b13b7ae7153beddb360ef4b.json",
+       "sha256": "8b9591b06a3811b98a4a963eab9a483f289a6985de0eb29e30f2a9c6dd934809"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

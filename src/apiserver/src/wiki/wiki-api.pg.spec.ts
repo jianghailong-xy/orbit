@@ -382,6 +382,8 @@ test('the refusals, limits and effect policy this door answers with are the cont
       ['WIKI_REVIEW_QUEUE_FULL', 429],
       ['WIKI_REVISION_CONFLICT', 409],
       ['WIKI_SCHEMA', 400],
+      // The pipelines the server runs for an account (contract `jobs.executor`): the runner door's half is closed.
+      ['WIKI_SERVER_EXECUTES', 409],
       ['WIKI_SESSION_EXCLUDED', 403],
       ['WIKI_SOURCE_UNRESOLVED', 422],
       ['WIKI_SPACE_UNBOUND', 409],

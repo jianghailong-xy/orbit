@@ -1,0 +1,94 @@
+== Scenario 4: per-account quota, NEXT and Automatic follow it ==
+-- round 1: default@kimi.ai {"limit_5h":0.85,"limit_7d":0.4,"limit_month_total":0.3,"limit_month_code":0.2}, work@kimi.com {"limit_5h":0.2,"limit_7d":0.15,"limit_month_total":0.1,"limit_month_code":0.05} --
+fake kimi ← {"limit_5h":0.85,"limit_7d":0.4,"limit_month_total":0.3,"limit_month_code":0.2}
+fake kimi ← {"limit_5h":0.2,"limit_7d":0.15,"limit_month_total":0.1,"limit_month_code":0.05}
+stopped runner hpc-kimi (2875296)
+runner hpc-kimi pid 2885723 (orbit, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home)
+planUsage.kimi as stored (Default = the snapshot's own windows, Work = accounts[id]): {"default":{"fiveHour":"85%","sevenDay":"40%","month":"30%","monthCode":"20%","fetchedAt":"2026-10-08T17:15:05Z"},"a70fa033":{"fiveHour":"20%","sevenDay":"15%","month":"10%","monthCode":"5%","fetchedAt":"2026-10-08T17:15:05Z"}}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+account rows as shown: ["Default kimi.ai · /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code Available 5h limit 85% resets 03:45 Weekly limit 40% resets Mon 04:15 Monthly limit 30% resets Sun 08:00","WorkNEXT kimi.com · /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033 Available 5h limit 20% resets 03:45 Weekly limit 15% resets Mon 04:15 Monthly limit 10% resets Sun 08:00"]
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4a1-accounts-open.png
+Kimi head, folded: Kimi Code 2.1.1 · 2 of 2 accounts available Available Next: Work 5h limit 20% resets 03:45 Add account
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4a2-folded.png
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Kimi account options: ["Automatic\neach new session starts on the account whose quota resets soonest","Default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)\n5h limit 85% · signed in","Work\n5h limit 20% · signed in"]
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4a3-workspace-automatic.png
+workspace kimiAccount (null = Automatic): null
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4a4-new-session-automatic.png
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4a5-session-on-next.png
+composer quota gauge names: Work
+new session: {"id":"34cSwYHbY0C3v6c30DsqJ","kimiAccount":"a70fa033","kimiAccountPinned":false,"workspaceKimiAccount":null}
+runner record: {"file":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c83-55f4-7734-8387-8c5bbcfe233b/meta.json","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"}
+fake kimi: [{"event":"acp.start","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"},{"event":"acp.session.new","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"},{"event":"acp.prompt","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"}]
+-- round 2: default@kimi.ai {"limit_5h":0.1,"limit_7d":0.4,"limit_month_total":0.3,"limit_month_code":0.2}, work@kimi.com {"limit_5h":0.9,"limit_7d":0.15,"limit_month_total":0.1,"limit_month_code":0.05} --
+fake kimi ← {"limit_5h":0.1,"limit_7d":0.4,"limit_month_total":0.3,"limit_month_code":0.2}
+fake kimi ← {"limit_5h":0.9,"limit_7d":0.15,"limit_month_total":0.1,"limit_month_code":0.05}
+stopped runner hpc-kimi (2885723)
+runner hpc-kimi pid 2889831 (orbit, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home)
+planUsage.kimi as stored (Default = the snapshot's own windows, Work = accounts[id]): {"default":{"fiveHour":"10%","sevenDay":"40%","month":"30%","monthCode":"20%","fetchedAt":"2026-10-08T17:15:52Z"},"a70fa033":{"fiveHour":"90%","sevenDay":"15%","month":"10%","monthCode":"5%","fetchedAt":"2026-10-08T17:15:52Z"}}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+account rows as shown: ["DefaultNEXT kimi.ai · /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code Available 5h limit 10% resets 03:45 Weekly limit 40% resets Mon 04:15 Monthly limit 30% resets Sun 08:00","Work kimi.com · /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033 Available 5h limit 90% resets 03:45 Weekly limit 15% resets Mon 04:15 Monthly limit 10% resets Sun 08:00"]
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4b1-accounts-open.png
+Kimi head, folded: Kimi Code 2.1.1 · 2 of 2 accounts available Available Next: Default Weekly limit 40% resets Mon 04:15 Add account
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4b2-folded.png
+workspace kimiAccount (null = Automatic): null
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4b4-new-session-automatic.png
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4b5-session-on-next.png
+composer quota gauge names: Default
+new session: {"id":"34cSxeJrRGA3AjbPK52Un","kimiAccount":"default","kimiAccountPinned":false,"workspaceKimiAccount":null}
+runner record: {"file":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c83-fefd-762f-97c7-00e577079535/meta.json","kimiCodeHome":"(none: Default)"}
+fake kimi: [{"event":"acp.start","account":"default","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code"},{"event":"acp.session.new","account":"default","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code"},{"event":"acp.prompt","account":"default","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code"}]
+-- round 3: Automatic moves a session off an account that hits its limit --
+fake kimi ← {"limit_5h":0.1,"limit_7d":0.1,"limit_month_total":0.05,"limit_month_code":0.05}
+fake kimi ← {"limit_5h":0.85,"limit_7d":0.3,"limit_month_total":0.2,"limit_month_code":0.1}
+stopped runner hpc-kimi (2889831)
+runner hpc-kimi pid 2893182 (orbit, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home)
+planUsage.kimi as stored (Default = the snapshot's own windows, Work = accounts[id]): {"default":{"fiveHour":"85%","sevenDay":"30%","month":"20%","monthCode":"10%","fetchedAt":"2026-10-08T17:16:35Z"},"a70fa033":{"fiveHour":"10%","sevenDay":"10%","month":"5%","monthCode":"5%","fetchedAt":"2026-10-08T17:16:35Z"}}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+session after turn 1: {"id":"34cSyeIEYf4tB8LmeGF0k","kimiAccount":"a70fa033","kimiAccountPinned":false}
+work@kimi.com runs out — fake kimi ← {"limit_5h":1,"limit_7d":0.1,"limit_month_total":0.05,"limit_month_code":0.05}
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4c1-usage-limit-reached.png
+shot /var/tmp/kimi-accounts-stack/shots/4-quota-next/4c2-moved-to-default.png
+session after turn 2: {"kimiAccount":"default","kimiAccountPinned":false,"status":"AWAITING_INPUT"}
+fake kimi turns: [{"at":"2026-10-08T17:16:54.581Z","account":"a70fa033","reason":"completed","earlierTurns":0},{"at":"2026-10-08T17:16:59.045Z","account":"a70fa033","reason":"failed","earlierTurns":1},{"at":"2026-10-08T17:17:28.994Z","account":"default","reason":"completed","earlierTurns":2}]
+runner log:
+[orbit-runner 2026-10-08T17:17:28.890Z] kimi conversation for session_a416c885-4ba5-4ef0-a23f-bd2e2649a7bc carried from account a70fa033 (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033) to default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)
+fake kimi ← {"limit_5h":0.2,"limit_7d":0.15,"limit_month_total":0.1,"limit_month_code":0.05}
+token refreshes of default@kimi.ai seen by the fake Kimi server: [{"at":"2026-10-08T17:16:35.676Z","method":"POST","host":"auth.kimi.ai:18741","path":"/api/oauth/token","grant":"refresh_token","refresh":"d06a9349ce","user":"default@kimi.ai","expiresIn":86400,"newToken":"75f5e55a44","status":200}]
+Default quota reads after it: [{"at":"2026-10-08T17:16:35.681Z","host":"api.kimi.ai:18741","token":"75f5e55a44","status":200},{"at":"2026-10-08T17:17:28.987Z","host":"127.0.0.1:18741","token":"75f5e55a44","status":200}]
+PASS round 1: NEXT is on Work
+PASS round 1: the folded head names Work next
+PASS round 1: each row shows its own 5h quota
+PASS round 1: Automatic started the new session on Work
+PASS round 1: the session ran in Work's KIMI_CODE_HOME
+PASS round 1: the fake kimi answered as Work
+PASS round 2: NEXT is on Default
+PASS round 2: the folded head names Default next
+PASS round 2: each row shows its own 5h quota
+PASS round 2: Automatic started the new session on Default
+PASS round 2: the session ran in Default's KIMI_CODE_HOME
+PASS round 2: the fake kimi answered as Default
+PASS round 3: Automatic started the session on Work
+PASS round 3: Work's turn ended on its usage limit
+PASS round 3: the session moved to Default (still Automatic) and the message was answered there, with turn 1
+PASS round 3: the runner carried the conversation from Work to Default
+PASS Default's expired token was refreshed on its own site, and its quota read with the new one
+SCENARIO 4 PASS

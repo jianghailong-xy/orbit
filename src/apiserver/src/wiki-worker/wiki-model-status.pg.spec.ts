@@ -227,7 +227,11 @@ test('the read answers the model\'s name and its state, and nothing that names i
   // No worker has ever written: no row, and the read says the worker is not running.
   const before = await read(h);
   assert.equal(before.status, 200);
-  assert.deepEqual(before.body, { state: 'worker_not_running', model: null, since: null, checkedAt: null, workerSeenAt: null });
+  // Beside the model's state, the executor switch as it stands for the caller (P9): unset here, so runner.
+  assert.deepEqual(before.body, {
+    state: 'worker_not_running', model: null, since: null, checkedAt: null, workerSeenAt: null,
+    executor: { mode: 'runner', serverExecutes: false },
+  });
 
   await worker(h).check();
   const stored = await row(h);
@@ -239,7 +243,7 @@ test('the read answers the model\'s name and its state, and nothing that names i
 
   const answer = await read(h);
   assert.equal(answer.status, 200);
-  assert.deepEqual(Object.keys(answer.body).sort(), ['checkedAt', 'model', 'since', 'state', 'workerSeenAt']);
+  assert.deepEqual(Object.keys(answer.body).sort(), ['checkedAt', 'executor', 'model', 'since', 'state', 'workerSeenAt']);
   assert.equal(answer.body.state, 'up');
   assert.equal(answer.body.model, MODEL);
   assert.equal(answer.body.since, stored.since.toISOString());

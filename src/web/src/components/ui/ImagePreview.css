@@ -1,0 +1,66 @@
+/* The picture viewer (ImagePreview.tsx), as the replaced preview drew it in both themes: a 45% black mask, the picture
+   at most the window's width and 70% of its height, 42px round buttons on a 10% black wash (20% under the pointer)
+   12px from the edges, and under the picture the position in white at 65% above a pill of 42px buttons, 32px up from
+   the bottom. */
+.orbit-image-preview {
+  position: fixed; inset: 0; font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); text-align: center; user-select: none;
+}
+.orbit-image-preview-mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(0px); }
+.orbit-image-preview-body {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+.orbit-image-preview-body > * { pointer-events: auto; }
+.orbit-image-preview-img { max-width: 100%; max-height: 70%; vertical-align: middle; transform: scale3d(1, 1, 1); cursor: grab; }
+.orbit-image-preview-moving .orbit-image-preview-img { cursor: grabbing; }
+.orbit-image-preview-close,
+.orbit-image-preview-switch {
+  position: absolute; display: flex; margin: 0; padding: 12px; border: 0; border-radius: 50%; outline: 0;
+  color: #fff; background-color: rgba(0, 0, 0, 0.1); font-family: inherit; font-size: 18px; line-height: inherit; cursor: pointer;
+}
+.orbit-image-preview-close:hover,
+.orbit-image-preview-switch:hover { background-color: rgba(0, 0, 0, 0.2); }
+.orbit-image-preview-close:active,
+.orbit-image-preview-switch:active { background-color: rgba(0, 0, 0, 0.1); }
+.orbit-image-preview-close { top: 12px; right: 12px; }
+.orbit-image-preview-switch { top: 50%; transform: translateY(-50%); }
+.orbit-image-preview-switch-prev { left: 12px; }
+.orbit-image-preview-switch-next { right: 12px; }
+.orbit-image-preview-switch:disabled,
+.orbit-image-preview-switch:disabled:hover,
+.orbit-image-preview-switch:disabled:active { color: rgba(255, 255, 255, 0.25); background: transparent; cursor: not-allowed; }
+.orbit-image-preview-footer {
+  position: absolute; bottom: 32px; left: 50%; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  color: rgba(255, 255, 255, 0.65); transform: translateX(-50%);
+}
+.orbit-image-preview-actions {
+  display: flex; gap: 12px; padding: 0 24px; border-radius: 100px; background-color: rgba(0, 0, 0, 0.1); font-size: 18px;
+}
+.orbit-image-preview-action {
+  display: flex; margin: 0; padding: 12px; border: 0; color: inherit; background: transparent; font: inherit; cursor: pointer;
+}
+.orbit-image-preview-action:not(:disabled):hover { color: rgba(255, 255, 255, 0.85); }
+.orbit-image-preview-action:disabled { color: rgba(255, 255, 255, 0.25); cursor: not-allowed; }
+.orbit-image-preview-close:focus-visible,
+.orbit-image-preview-switch:focus-visible,
+.orbit-image-preview-action:focus-visible {
+  outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset);
+}
+/* The replaced preview faded in while the picture grew from the thumbnail that was pressed (from the middle when it
+   was opened another way), and shrank back on close, in .3s; zoom, rotation and the buttons eased too. With reduced
+   motion each change is immediate, as in every Orbit overlay. */
+@media (prefers-reduced-motion: no-preference) {
+  .orbit-image-preview { transition: opacity 0.3s; }
+  .orbit-image-preview[data-starting-style],
+  .orbit-image-preview[data-ending-style] { opacity: 0; }
+  .orbit-image-preview-body { transition: transform 0.3s; }
+  .orbit-image-preview[data-starting-style] > .orbit-image-preview-body,
+  .orbit-image-preview[data-ending-style] > .orbit-image-preview-body { transform: scale(0); }
+  .orbit-image-preview-mask { transition: backdrop-filter 0.3s; }
+  .orbit-image-preview-img { transition: transform 0.3s cubic-bezier(0.215, 0.61, 0.355, 1); }
+  .orbit-image-preview-close,
+  .orbit-image-preview-switch,
+  .orbit-image-preview-action { transition: all 0.3s; }
+  .orbit-image-preview-close:focus-visible,
+  .orbit-image-preview-switch:focus-visible,
+  .orbit-image-preview-action:focus-visible { transition: outline-offset 0s, outline 0s; }
+}

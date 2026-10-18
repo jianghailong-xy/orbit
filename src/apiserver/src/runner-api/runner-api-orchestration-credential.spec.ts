@@ -37,9 +37,8 @@ function makeController(options: {
     user: {
       findUnique: async () => null,
     },
-    runEvent: {
-      aggregate: async () => ({ _max: { seq: 3 } }),
-    },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+    $queryRaw: async () => [{ max: 3 }],
     $executeRaw: async () => 1,
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };

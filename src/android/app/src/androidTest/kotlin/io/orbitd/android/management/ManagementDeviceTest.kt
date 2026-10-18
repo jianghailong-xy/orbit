@@ -63,15 +63,43 @@ class ManagementDeviceTest {
     @Volatile private var runnerOnline = false
     /** The runner's selfUpdate report (JSON); null is a runner too old to report one. */
     @Volatile private var runnerSelfUpdate: String? = null
-    /** Runners served instead of the one controlled remote, for the Edit case; DELETE and reorder change it. */
+    /** Runners served instead of the one controlled remote, for the list case; DELETE and reorder change it. */
     @Volatile private var fleet: List<String>? = null
+    /** The remote reports Antigravity's Google accounts and more accounts of Claude Code (A13c). */
+    @Volatile private var accountsPass = false
+    /** Default's Claude login lapses in two days until it is signed in again, then in a month. */
+    @Volatile private var claudeRenewed = false
+    /** The remote reports Kimi Code's accounts: Default alone on kimi.ai, or with Work on kimi.com ([kimiTwo]); [kimiOld] is a
+     * runner too old for Kimi's accounts and sites, its one login signed out. */
+    @Volatile private var kimiPass = false
+    @Volatile private var kimiTwo = false
+    @Volatile private var kimiOld = false
+    /** The sign-in relay as GET runners/:id/login reads it; POST login and POST login/code move it on. */
+    @Volatile private var loginRelay = """{"status":null,"engine":null,"userCode":null,"url":null,"message":null,"account":null}"""
     @Volatile private var workspaceName = "Fixture workspace"
     @Volatile private var sharingActive = true
     @Volatile private var shareTools = false
     @Volatile private var bearerOnPublicManifest: String? = "unread"
+    /** A13d: the account's switch for smart model selection as users/me carries it (absent until written); the access tokens
+     * GET access-tokens answers (DELETE revokes one); and the DeepSeek key's balance, too low once [deepSeekLow]. */
+    @Volatile private var modelRouting: Boolean? = null
+    @Volatile private var revoked = emptySet<String>()
+    @Volatile private var deepSeekLow = false
+    /** A13g: the Infrastructure pass — Codex signed out on the remote and OpenCode missing there, a second machine offline, a pool no
+     * session can start on, and no keys, so OpenCode is Not set up. POST runners/:id/install starts [installRelay] for its engine. */
+    @Volatile private var infraPass = false
+    @Volatile private var installRelay = "null"
+    private val installs = CopyOnWriteArrayList<String>()
+    /** When each GET /api/runners came, by the device's clock, and each directory snapshot (the shell's own read of the runners,
+     * known by the session folders it reads beside them). */
+    private val runnerReads = CopyOnWriteArrayList<Long>()
+    private val snapshots = CopyOnWriteArrayList<Long>()
+    /** The runners read by a page, not by the shell's directory snapshot. */
+    private fun pageReads() = runnerReads.filter { read -> snapshots.none { Math.abs(it - read) < 3_000 } }
     private val workspaceId = "34Tcl0kralZrY8opuLJU4"
     private val runnerId = "34TcwNgAIo6tGUiIKjqnQ"
     private val sessionId = "34TcwNgAIo6tGUiIKjqnS"
+    private val thinkPadId = "34TcwNgAIo6tGUiIKjqnT"
     private val now get() = Instant.now()
 
     @Test fun settingsProfileSharingNotificationsAndRolesUseTheRealRoutes() {
@@ -83,7 +111,8 @@ class ManagementDeviceTest {
                 signIn(server)
                 settings()
                 assertTrue(compose.onAllNodes(hasText("Admin") and hasClickAction()).fetchSemanticsNodes().isEmpty())
-                await("0 of 1 online"); await("1 active")
+                // The runner is offline here: a line of Infrastructure's Needs you, which the row counts (A13g, iOS 5e75edbde).
+                await("1 needs you"); await("1 active")
                 capture("settings-home")
                 // Default permission and Appearance are menus on their rows; each write is one preference key.
                 click(hasText("Default permission") and hasClickAction()); click(hasText("Plan") and hasClickAction(), scroll = false)
@@ -129,7 +158,9 @@ class ManagementDeviceTest {
                 click(hasText("Refresh") and hasClickAction())
                 await("Updated fixture")
                 click(hasText("Sign out") and hasClickAction())
-                await("Sign out of ${server.url("/").host}:${server.port}?")
+                // iOS 6969f7840 (A13-15): "Sign out?", no server name, Cancel beside it.
+                await("Sign out?")
+                compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
                 capture("sign-out-confirm")
                 compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
                 compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }
@@ -189,15 +220,15 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
                 // The workspace list's gear opens the form; Done writes only what changed.
                 compose.onNodeWithContentDescription("Workspace settings").performClick()
-                await("Smart model selection for tasks")
+                await("Working directory")
                 compose.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement("Configured workspace")
                 capture("workspace-settings")
                 click(hasText("Done") and hasClickAction(), scroll = false)
                 compose.waitUntil(10_000) { workspaceName == "Configured workspace" }
                 settings()
-                click(hasText("Runners") and hasClickAction())
+                click(hasText("Infrastructure") and hasClickAction())
                 await("Controlled remote")
-                capture("runners-list")
+                capture("infrastructure")
                 click(hasText("Controlled remote") and hasClickAction())
                 await("Max Concurrent")
                 compose.onAllNodes(hasText("Refresh Model Lists")).assertCountEquals(0)
@@ -232,10 +263,11 @@ class ManagementDeviceTest {
                 await("Rotate Token…")
                 capture("runner-deep-link")
                 back()
-                await("Providers")
-                click(hasText("Providers") and hasClickAction())
+                await("Infrastructure")
+                click(hasText("Infrastructure") and hasClickAction())
                 await("Team Codex")
-                capture("providers")
+                compose.onNodeWithText("Account pools").performScrollTo()
+                capture("infrastructure-pools")
                 click(hasText("Team Codex") and hasClickAction())
                 await("Who can use it")
                 capture("codex-pool")
@@ -245,6 +277,244 @@ class ManagementDeviceTest {
             } finally {
                 runBlocking { app.session.logout() }
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("runner-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    /**
+     * A13c: Antigravity's Google sign-in and accounts, one quota window per Engines row, an account's row and menu, and the
+     * sign-in card (A13-3/4/5/9), through the real shell over controlled HTTP. The card's Paste reads the clipboard, which
+     * Android says it did ("pasted from your clipboard"): the platform's own notice, kept.
+     */
+    @Test fun antigravityAccountsOneWindowAndTheSignInCard() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; accountsPass = true; claudeRenewed = false
+                signIn(server); settings()
+                click(hasText("Infrastructure") and hasClickAction()); await("Controlled remote")
+                click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
+                // One window per Engines row; Antigravity's names the account a new session starts on above its own.
+                await("Next: Default"); await("2 accounts signed in"); await("98% remaining")
+                compose.onAllNodesWithText("98% remaining", substring = true).onFirst().performScrollTo()
+                capture("agy-runner-engines")
+                click(hasText("Antigravity CLI") and hasClickAction()); await("Accounts"); await("4% remaining")
+                capture("agy-engine")
+                compose.onAllNodesWithText("Google terms", substring = true).onLast().performScrollTo()
+                compose.onNode(hasText("Add Account") and hasClickAction()).assertExists()
+                capture("agy-engine-terms")
+                back()
+                click(hasText("Claude Code") and hasClickAction()); await("Login expires in 2 days")
+                await("Sessions can’t use this account until you sign in again.")
+                capture("accounts-state")
+                compose.onNodeWithContentDescription("More for Work").performScrollTo().performClick()
+                await("Resume Now"); await("Change Duration…")
+                capture("account-menu")
+                click(hasText("Resume Now"), scroll = false)
+                compose.waitUntil(10_000) { calls.contains("POST /api/runners/$runnerId/accounts/claude/1fda3f43/pause") }
+                // Sign In Again from Default's menu starts at once; the card offers one way out, and Paste sends the code.
+                compose.onNodeWithContentDescription("More for Default").performScrollTo().performClick()
+                click(hasText("Sign In Again"), scroll = false)
+                await("Approve it there, then paste the code the page gives you:")
+                assertTrue("one way out while it runs", compose.onAllNodes(hasText("Close") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+                compose.onNode(hasText("Paste") and hasClickAction()).performScrollTo()
+                capture("sign-in-paste")
+                compose.runOnUiThread {
+                    (app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                        .setPrimaryClip(android.content.ClipData.newPlainText("code", "a13c-pasted-code"))
+                }
+                // Only the focused app reads the clipboard. Android 13+ answers this test's own copy with its clipboard bubble,
+                // which can hold the focus for a moment; a user taps Paste back in the app, which has it. So the tap waits for
+                // the focus, and is tried again if a read was refused meanwhile. The attempts are kept with the requests.
+                var pasteAttempts = 0
+                while (!calls.contains("POST /api/runners/$runnerId/login/code") && pasteAttempts < 3) {
+                    val focusBy = SystemClock.uptimeMillis() + 10_000
+                    while (!compose.activity.hasWindowFocus() && SystemClock.uptimeMillis() < focusBy) SystemClock.sleep(250)
+                    pasteAttempts++
+                    click(hasText("Paste") and hasClickAction())
+                    val sentBy = SystemClock.uptimeMillis() + 5_000
+                    while (!calls.contains("POST /api/runners/$runnerId/login/code") && SystemClock.uptimeMillis() < sentBy) {
+                        compose.waitForIdle(); SystemClock.sleep(250)
+                    }
+                }
+                calls += "paste attempts=$pasteAttempts"
+                assertTrue("Paste sent the code", calls.contains("POST /api/runners/$runnerId/login/code"))
+                await("Signed in — this runner is ready.")
+                capture("sign-in-pasted")
+                // The runner reports Default signed in again, its login a month off: the card folds back into the row.
+                // The page's timers run on the test's clock, which a plain sleep never moves: move it with real time.
+                val foldBy = System.currentTimeMillis() + 30_000
+                while (compose.onAllNodesWithText("Signed in — this runner is ready.", substring = true).fetchSemanticsNodes().isNotEmpty() ||
+                    compose.onAllNodesWithText("Login expires", substring = true).fetchSemanticsNodes().isNotEmpty()) {
+                    assertTrue("the card folds back once the runner reports the account", System.currentTimeMillis() < foldBy)
+                    compose.mainClock.advanceTimeBy(500); compose.waitForIdle(); SystemClock.sleep(200)
+                }
+                capture("sign-in-folded")
+                back()
+                // A device code comes first, under one press that copies it and opens its page.
+                click(hasText("Codex") and hasClickAction()); await("Sessions on this runner can’t use Codex until you sign in again.")
+                click(hasText("Sign In") and hasClickAction())
+                await("Enter this one-time code on the sign-in page:"); await("WXYZ-1234"); await("Copy Code & Open Sign-In Page")
+                capture("sign-in-device-code")
+                click(hasText("Cancel") and hasClickAction())
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$runnerId/login") }
+                back()
+                assertTrue(calls.contains("POST /api/runners/$runnerId/login"))
+            } finally {
+                accountsPass = false
+                runBlocking { app.session.logout() }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("accounts-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    /**
+     * Kimi Code's accounts (docs/mocks/kimi-accounts/02-ios and its Android notes) through the real shell over controlled HTTP:
+     * one login with its site and Add Account; Sign In Again and Add Account asking the site first — the name first on an add —
+     * and the device step naming the site of the account being added, the other site one press away; two accounts each on
+     * its own site with its own three windows; NEXT on every engine page; and a runner too old for any of it.
+     */
+    @Test fun kimiAccountsSiteFirstTwoAccountsAndNext() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; kimiPass = true; kimiTwo = false; kimiOld = false
+                signIn(server); settings()
+                click(hasText("Infrastructure") and hasClickAction()); await("Controlled remote")
+                click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
+                // One login: its site after its version, and its window nearest the limit.
+                await("2.1.1 · kimi.ai · Signed in")
+                compose.onAllNodesWithText("2.1.1 · kimi.ai", substring = true).onFirst().performScrollTo()
+                capture("kimi-runner-one")
+                click(hasText("Kimi Code") and hasClickAction()); await("Accounts"); await("Monthly limit")
+                capture("kimi-engine-one")
+                // Signing the one login in again asks the site first, its own marked Current.
+                compose.onNodeWithContentDescription("More for Default").performScrollTo().performClick()
+                click(hasText("Sign In Again"), scroll = false)
+                await("Which Kimi account are you signing in with?"); await("Current")
+                compose.onNode(hasText("Close") and hasClickAction()).performScrollTo()
+                capture("kimi-sign-in-again-default")
+                click(hasText("Close") and hasClickAction())
+                // Add Account: a name first — the one picked, Account 2 — then the site; nothing is marked Current on an
+                // account not signed in yet. The name is not typed: a focused field raises the emulator keyboard's stylus
+                // onboarding over the page (RunnerEnginePageTest types one).
+                click(hasText("Add Account") and hasClickAction())
+                await("Which Kimi account are you signing in with?")
+                compose.onNode(hasSetTextAction()).assertTextContains("Account 2")
+                compose.onAllNodesWithText("The two sites keep separate accounts", substring = true).onFirst().performScrollTo()
+                capture("kimi-add-account")
+                click(hasText("kimi.com") and hasClickAction())
+                await("Sign in with the kimi.com account you are adding"); await("7K06-QP86")
+                compose.onAllNodesWithText("Use kimi.ai instead", substring = true).onFirst().performScrollTo()
+                capture("kimi-add-device-code")
+                click(hasText("Use kimi.ai instead") and hasClickAction())
+                await("Sign in with the kimi.ai account you are adding"); await("Use kimi.com instead")
+                capture("kimi-add-use-instead")
+                click(hasText("Cancel") and hasClickAction())
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$runnerId/login") }
+                // Work added on kimi.com: each account on its own site with its own three windows, NEXT on Default.
+                kimiTwo = true
+                compose.activityRule.scenario.recreate()
+                await("Work"); await("NEXT"); await("kimi.com · ~/.orbit/kimi-accounts/5c2e91a0")
+                capture("kimi-engine-two")
+                compose.onNodeWithContentDescription("More for Work").performScrollTo().performClick()
+                click(hasText("Sign In Again"), scroll = false)
+                await("Which Kimi account are you signing in with?"); await("Current")
+                compose.onNode(hasText("Close") and hasClickAction()).performScrollTo()
+                capture("kimi-sign-in-again-work")
+                click(hasText("Close") and hasClickAction())
+                back()
+                await("2.1.1 · 2 accounts signed in"); await("Next: Default")
+                compose.onAllNodesWithText("Next: Default", substring = true).onFirst().performScrollTo()
+                capture("kimi-runner-two")
+                // NEXT on every engine page, by the same rule.
+                for ((engine, shot) in listOf("Claude Code" to "next-claude", "Codex" to "next-codex", "Antigravity CLI" to "next-antigravity")) {
+                    click(hasText(engine) and hasClickAction()); await("NEXT")
+                    capture(shot)
+                    back()
+                }
+                // A runner too old for Kimi's accounts and sites: its one login under Sign-In, no Add Account, kimi.ai refused.
+                kimiOld = true
+                click(hasText("Kimi Code") and hasClickAction()); await("Sign-In")
+                assertTrue("no Add Account", compose.onAllNodesWithText("Add Account").fetchSemanticsNodes().isEmpty())
+                click(hasText("Sign In") and hasClickAction())
+                await("Which Kimi account are you signing in with?")
+                click(hasText("kimi.ai") and hasClickAction())
+                val refusal = "This runner is too old to choose a Kimi site — update it, then try again."
+                // The relay is read again every 2 s on the page's clock, which a plain sleep never moves.
+                val refusedBy = System.currentTimeMillis() + 30_000
+                while (compose.onAllNodesWithText(refusal, substring = true).fetchSemanticsNodes().isEmpty()) {
+                    assertTrue("the older runner's refusal is shown", System.currentTimeMillis() < refusedBy)
+                    compose.mainClock.advanceTimeBy(500); compose.waitForIdle(); SystemClock.sleep(200)
+                }
+                capture("kimi-old-runner")
+                back()
+            } finally {
+                kimiPass = false; kimiTwo = false; kimiOld = false
+                runBlocking { app.session.logout() }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("kimi-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    /**
+     * A13d's pages (A01b A13-7/13/14/16): Settings' Smart model selection switch — written alone — and Access tokens row; the
+     * tokens page's two tabs and a revoke asked first; Providers' new footers and a DeepSeek key's balance at the end of its row,
+     * its page — Refresh reading it again, too low this time — and a key DeepSeek refused.
+     */
+    @Test fun accessTokensSmartSelectionAndDeepSeekBalance() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; modelRouting = null; revoked = emptySet(); deepSeekLow = false
+                signIn(server); settings()
+                await("Smart model selection"); await("2 active")
+                capture("a13d-settings-sessions")
+                click(hasText("Smart model selection") and isToggleable())
+                compose.waitUntil(10_000) { modelRouting == true }
+                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
+                capture("a13d-smart-selection-on")
+                compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
+                capture("a13d-settings-account")
+                click(hasText("Access tokens") and hasClickAction())
+                await("Active 2"); await("orbit_pat_…k3Fq"); await("Never expires")
+                capture("a13d-access-tokens")
+                click(hasContentDescription("More for laptop"), scroll = false)
+                click(hasText("Revoke") and hasClickAction(), scroll = false)
+                await("Revoke “laptop”?")
+                compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
+                capture("a13d-revoke-confirm")
+                click(hasText("Revoke") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/access-tokens/t1") }
+                await("Active 1")
+                capture("a13d-access-tokens-revoked")
+                click(hasText("Revoked & expired 3") and hasClickAction(), scroll = false)
+                await("Revoked by an administrator")
+                capture("a13d-access-tokens-ended")
+                back(); await("Default permission")
+                click(hasText("Infrastructure") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
+                compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
+                capture("a13d-infrastructure-keys")
+                click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
+                capture("a13d-deepseek-key")
+                deepSeekLow = true
+                click(hasText("Refresh", substring = true) and hasClickAction())
+                compose.waitUntil(10_000) { calls.count { it == "GET /api/providers/mine/K1/balance" } >= 3 }
+                await("Balance too low — DeepSeek calls will fail")
+                capture("a13d-deepseek-key-low")
+                compose.onAllNodesWithText("Endpoint").onFirst().performScrollTo()
+                capture("a13d-deepseek-key-provider")
+                back(); await("API keys")
+                click(hasText("DeepSeek Harness") and hasClickAction()); await("Couldn't get the balance")
+                capture("a13d-deepseek-key-rejected")
+                back()
+            } finally {
+                modelRouting = null; revoked = emptySet(); deepSeekLow = false
+                runBlocking { app.session.logout() }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("a13d-requests.txt").writeText(calls.joinToString("\n"))
             }
         }
     }
@@ -302,27 +572,28 @@ class ManagementDeviceTest {
         await("Tool calls and output"); capture("$pass-session-share")
         compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         compose.onNodeWithContentDescription("Workspace settings").performClick()
-        await("Smart model selection for tasks"); capture("$pass-workspace-settings")
+        await("Working directory"); capture("$pass-workspace-settings")
         click(hasText("Cancel") and hasClickAction(), scroll = false)
         settings(); capture("$pass-settings-home")
         compose.onNodeWithContentDescription("Edit profile").performScrollTo().performClick(); await("Save profile"); capture("$pass-edit-profile"); back()
         click(hasText("Notifications") and hasClickAction()); await("When a session finishes"); capture("$pass-notifications"); back()
         click(hasText("Shared links") and hasClickAction()); await("Fixture shared session"); capture("$pass-shared-links"); back()
         click(hasText("Admin") and hasClickAction()); await("Second user"); capture("$pass-admin-users"); back()
-        click(hasText("Runners") and hasClickAction()); await("Controlled remote"); capture("$pass-runners-list")
+        click(hasText("Infrastructure") and hasClickAction()); await("Controlled remote"); capture("$pass-infrastructure")
         click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent"); capture("$pass-runner")
         click(hasText("Claude Code") and hasClickAction()); await("Add Account"); capture("$pass-runner-engine")
         back(); back(); back()
-        click(hasText("Providers") and hasClickAction()); await("Team Codex"); capture("$pass-providers")
+        click(hasText("Infrastructure") and hasClickAction()); await("Team Codex")
+        compose.onNodeWithText("Account pools").performScrollTo(); capture("$pass-infrastructure-pools")
         click(hasText("Team Codex") and hasClickAction()); await("Who can use it"); capture("$pass-codex-pool")
         back(); back()
     }
 
     /**
-     * Edit on the runners list with three runners: the first row (not the last) is removed and Edit stays on; the row
-     * that moved into its place is dragged by its handle below the next one. One order goes out and the rows stand in
-     * it. Before the handles were dropped with their rows, the removed row's handle lay over this one and the drag
-     * could start on the removed id and crash.
+     * The runners list with three runners and no Edit mode (iOS 91316c246, A13-11): the first row (not the last) is removed from
+     * its ⋯ menu, asked first; the row that moved into its place is dragged by its handle below the next one. One order goes
+     * out and the rows stand in it. Before the handles were dropped with their rows, the removed row's handle lay over this one
+     * and the drag could start on the removed id and crash.
      */
     @Test fun runnersListRemovesARowThenReordersTheNextByDragging() {
         start()
@@ -332,28 +603,106 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; runnerOnline = true; fleet = listOf(alpha, bravo, charlie)
                 signIn(server); settings()
-                click(hasText("Runners") and hasClickAction()); await("Charlie box")
-                click(hasText("Edit") and hasClickAction())
-                capture("runners-edit")
-                compose.onAllNodes(hasText("Remove") and hasClickAction()).onFirst().performClick()
+                click(hasText("Infrastructure") and hasClickAction()); await("Charlie box")
+                compose.onAllNodes(hasText("Edit") and hasClickAction()).assertCountEquals(0)
+                // The machines sit under what needs you and what each engine runs on: bring them on screen.
+                compose.onNode(hasText("Add Runner") and hasClickAction()).performScrollTo()
+                capture("runners-handles")
+                click(hasContentDescription("More for Alpha box"), scroll = false)
+                capture("runners-row-menu")
+                click(hasText("Remove…") and hasClickAction(), scroll = false)
+                await("Remove “Alpha box”?")
+                compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
+                capture("runners-remove-confirm")
                 click(hasText("Remove Runner") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
                 compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$alpha") && compose.onAllNodesWithText("Alpha box", substring = true).fetchSemanticsNodes().isEmpty() }
                 compose.waitForIdle()
-                capture("runners-edit-removed")
-                compose.onNodeWithContentDescription("Reorder Bravo box").performTouchInput {
-                    down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+                capture("runners-removed")
+                compose.onNode(hasText("Add Runner") and hasClickAction()).performScrollTo()
+                compose.onNodeWithTag("runner-handle:$bravo").performTouchInput {
+                    down(center)
                     repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, height / 10f)) }
                     up()
                 }
                 compose.waitUntil(10_000) { calls.contains("POST /api/runners/reorder") }
                 compose.waitForIdle()
-                capture("runners-edit-dragged")
+                capture("runners-dragged")
                 assertEquals(listOf(charlie, bravo), fleet)
                 assertEquals("One order per drag", 1, calls.count { it == "POST /api/runners/reorder" })
-                fun top(name: String) = compose.onAllNodesWithText(name, substring = true).onFirst().fetchSemanticsNode().boundsInRoot.top
+                fun top(name: String) = compose.onAllNodesWithText(name, substring = true).onFirst().fetchSemanticsNode().positionInRoot.y
                 assertTrue("The rows stand in the new order", top("Charlie box") < top("Bravo box"))
             } finally {
                 fleet = null
+                runBlocking { app.session.logout() }
+            }
+        }
+    }
+
+    /**
+     * A13g (A13-17 with A07-15 ②, iOS 5e75edbde): Settings' one Infrastructure row says how many things need you; the page says each —
+     * an engine signed out on a machine online, a machine offline, a pool no session can start on — with its way out in the app, then
+     * what each engine can run on, the machines, Add Runner, the pools and the keys, top to bottom; it installs OpenCode on the first
+     * machine online, which lacks it, and reads the machines again every 15 s while it is up (on the compose rule's clock, which a
+     * test's effects run on) and not while the app is in the background.
+     */
+    @Test fun infrastructureSaysWhatNeedsYouAndInstallsOpenCode() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; infraPass = true; installRelay = "null"
+                signIn(server); settings()
+                await("3 need you")
+                compose.onNodeWithText("Where your agents run, and whose model quota they spend.").assertExists()
+                listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+                capture("infrastructure-settings-row")
+                click(hasText("Infrastructure") and hasClickAction())
+                await("Codex is signed out on Controlled remote"); await("ThinkPad is offline"); await("Old keys is unavailable")
+                capture("infrastructure-needs-you")
+                val sections = listOf("Needs you", "What your agents can run on", "Machines", "Add Runner", "Account pools", "API keys")
+                // Down the page, on screen or scrolled out of it (boundsInRoot clips to what is on screen).
+                val tops = sections.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
+                assertEquals("top to bottom: $sections", tops.sorted(), tops)
+                compose.onNodeWithText("What your agents can run on").performScrollTo(); capture("infrastructure-engines")
+                compose.onNodeWithText("2 machines · 1 / 4 slots busy").performScrollTo()
+                await("1 / 4 running · 1 engine signed out"); capture("infrastructure-machines")
+                compose.onNodeWithText("API keys").performScrollTo(); await("No keys yet"); capture("infrastructure-pools-keys")
+                // Every line's way out stays in the app: the engine's page, the machine's record, the pool's page.
+                click(hasText("Sign in") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:out:$runnerId/codex")))
+                await("Accounts"); await("Signed out"); capture("infrastructure-sign-in-codex")
+                back(); await("Needs you")
+                click(hasText("Details") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:offline:$thinkPadId")))
+                await("Max Concurrent"); await("Offline"); capture("infrastructure-details-thinkpad")
+                back(); await("Needs you")
+                click(hasText("Manage") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:pool:P3")))
+                await("Account pool"); capture("infrastructure-manage-pool")
+                back(); await("Needs you")
+                // OpenCode: no key and no machine's own sign-in, so Install on a machine opens its page on the first machine online.
+                click(hasText("Install on a machine") and hasClickAction() and hasAnyAncestor(hasTestTag("engine-sources:opencode")))
+                await("Install OpenCode"); capture("infrastructure-opencode-page")
+                click(hasText("Install OpenCode") and hasClickAction())
+                compose.waitUntil(10_000) { installs.contains("opencode") }
+                await("Installing…"); capture("infrastructure-opencode-installing")
+                back(); await("Needs you")
+                // The machines, read again every 15 s while the page is up — and not while the app is in the background.
+                compose.waitForIdle(); SystemClock.sleep(1_000)
+                val before = pageReads().size
+                compose.mainClock.advanceTimeBy(15_500); compose.waitUntil(10_000) { pageReads().size >= before + 1 }
+                compose.mainClock.advanceTimeBy(15_500); compose.waitUntil(10_000) { pageReads().size >= before + 2 }
+                compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
+                compose.waitForIdle(); SystemClock.sleep(1_000)
+                val paused = pageReads().size
+                compose.mainClock.advanceTimeBy(46_000); compose.waitForIdle(); SystemClock.sleep(2_000)
+                val inBackground = pageReads().size - paused
+                compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+                compose.waitUntil(10_000) { pageReads().size >= paused + inBackground + 1 }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("infrastructure-reads.txt")
+                    .writeText("GET /api/runners at (elapsed ms): $runnerReads\ndirectory snapshots at: $snapshots\n" +
+                        "after 2 × 15.5 s on the page: ${paused - before}\nin the background for 46 s: $inBackground\n" +
+                        "back in front: ${pageReads().size - paused - inBackground}\n")
+                assertEquals("no reads while the app is in the background", 0, inBackground)
+            } finally {
+                infraPass = false
                 runBlocking { app.session.logout() }
             }
         }
@@ -407,21 +756,22 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
                 await("Default permission")
                 page("settings-home", report, problems)
-                activate("Runners", "talkback-settings-runners", report, problems); await("Controlled remote")
-                report.appendLine("double tap Runners -> the runners list opened")
-                page("runners-list", report, problems)
-                activate("Controlled remote", "talkback-runners-row", report, problems); await("Max Concurrent")
-                report.appendLine("double tap Controlled remote -> the runner page opened")
+                activate("Infrastructure", "talkback-settings-infrastructure", report, problems); await("Controlled remote")
+                report.appendLine("double tap Infrastructure -> the Infrastructure page opened")
+                page("infrastructure", report, problems)
+                // The row's own words: its ⋯ button is "More for Controlled remote", and the engines' lines name the machine too.
+                activate("1 / 4 running", "talkback-infrastructure-row", report, problems); await("Max Concurrent")
+                report.appendLine("double tap the Controlled remote row (1 / 4 running) -> the runner page opened")
                 page("runner", report, problems)
                 activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
                 report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
                 back(); back(); await("Default permission")
-                activate("Providers", "talkback-settings-providers", report, problems); await("Team Codex")
-                report.appendLine("double tap Providers -> the providers page opened")
-                page("providers", report, problems)
-                activate("Team Codex", "talkback-providers-pool", report, problems); await("Who can use it")
-                report.appendLine("double tap Team Codex -> the pool page opened")
+                activate("Infrastructure", "talkback-settings-infrastructure-pools", report, problems); await("Team Codex")
+                report.appendLine("double tap Infrastructure -> the Infrastructure page opened again")
+                // The pool's row by its SHARED mark: "Team Codex" is also the Codex engine's pool line, which opens nothing.
+                activate("SHARED", "talkback-infrastructure-pool", report, problems); await("Who can use it")
+                report.appendLine("double tap Team Codex (SHARED) -> the pool page opened")
                 page("codex-pool", report, problems)
                 back(); back(); await("Default permission")
                 activate("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
@@ -680,7 +1030,30 @@ class ManagementDeviceTest {
         }
     }
 
-    private fun user() = """{"id":"fixture-user","name":"$name","email":"a13@example.test","role":"$role","avatarUpdatedAt":null,"preferences":{"theme":"$theme","defaultPermissionMode":"$permission","notifySessionFinished":false,"notifyAgentMessage":true}}"""
+    private fun user() = """{"id":"fixture-user","name":"$name","email":"a13@example.test","role":"$role","avatarUpdatedAt":null,"preferences":{"theme":"$theme","defaultPermissionMode":"$permission","notifySessionFinished":false,"notifyAgentMessage":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}}}"""
+    private fun token(id: String, name: String, hint: String, scopes: String, extra: String) =
+        """{"id":"$id","name":"$name","tokenHint":"$hint","scopes":$scopes,"createdVia":"WEB","createdAt":"${now.minusSeconds(30 * 86_400)}",""" +
+            (if (id in revoked) """"state":"REVOKED","revokedAt":"$now","revokedReason":"USER",""" else "") + extra + "}"
+    private val everything = """["tasks:read","tasks:write","projects:read","projects:write","sessions:read","sessions:write","workspaces:read","workspaces:write","runners:read","wiki:read","wiki:write","events:read"]"""
+    private fun tokens() = """{"tokens":[""" + listOf(
+        token("t1", "laptop", "k3Fq", everything, """"workspaceIds":[],"workspaces":[],"expiresAt":null,"lastUsedAt":"${now.minusSeconds(12_000)}","lastUsedIp":"203.0.113.7"""" +
+            if ("t1" in revoked) "" else ""","state":"ACTIVE""""),
+        token("t2", "ci", "Zz90", """["tasks:read","tasks:write","sessions:read"]""", """"workspaceIds":["w1","w2"],"workspaces":[{"id":"w1","name":"orbit"}],"expiresAt":"${now.plusSeconds(90 * 86_400)}","lastUsedAt":null,"state":"ACTIVE""""),
+        token("t3", "old phone", "Ab12", everything, """"workspaceIds":[],"workspaces":[],"expiresAt":null,"revokedAt":"${now.minusSeconds(2 * 86_400)}","revokedReason":"ADMIN","state":"REVOKED""""),
+        token("t4", "spike", "Cd34", """["tasks:read","projects:read","sessions:read","workspaces:read","runners:read","wiki:read","events:read"]""",
+            """"workspaceIds":[],"workspaces":[],"expiresAt":"${now.minusSeconds(3 * 86_400)}","state":"EXPIRED""""),
+    ).joinToString(",") + "]}"
+    /** The account's own keys as GET providers/mine lists them, each with the engines the server says it runs on. */
+    private fun mine() = if (infraPass) "[]" else """[{"id":"K1","slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"defaultModel":"deepseek-chat",
+          "engines":["claude","opencode","dsh"]},
+        {"id":"K2","slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","presetSlug":"deepseek-harness","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"engines":["dsh","claude","opencode"]},
+        {"id":"K3","slug":"openai-work","label":"OpenAI (work)","runtime":"codex","presetSlug":"openai","baseUrl":"https://api.openai.com/v1","hasApiKey":true,"defaultModel":"gpt-5",
+          "engines":["codex","opencode"]}]"""
+    private fun balance(id: String) = when {
+        id == "K2" -> """{"ok":false,"reason":"KEY_REJECTED","message":"DeepSeek rejected this API key (401 Authentication Fails).","fetchedAt":"$now","sharedWith":[]}"""
+        deepSeekLow -> """{"ok":true,"isAvailable":false,"fetchedAt":"$now","sharedWith":[],"balances":[{"currency":"CNY","totalBalance":"0.42","grantedBalance":"0.00","toppedUpBalance":"0.42"}]}"""
+        else -> """{"ok":true,"isAvailable":true,"fetchedAt":"$now","sharedWith":[],"balances":[{"currency":"CNY","totalBalance":"110.00","grantedBalance":"10.00","toppedUpBalance":"100.00"},{"currency":"USD","totalBalance":"5.00","grantedBalance":"0.00","toppedUpBalance":"5.00"}]}"""
+    }
     private fun heartbeat() = if (runnerOnline) now.toString() else now.minusSeconds(5 * 3600).toString()
     private val fleetNames = mapOf("0198f3a2-aaaa-7000-8000-00000000000a" to "Alpha box", "0198f3a2-bbbb-7000-8000-00000000000b" to "Bravo box",
         "0198f3a2-cccc-7000-8000-00000000000c" to "Charlie box")
@@ -689,7 +1062,79 @@ class ManagementDeviceTest {
         "version":"0.1.200","online":true,"status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":2,"activeSessions":0,"runsAsRoot":false,
         "minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
     }
-    private fun runner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
+    private fun at(seconds: Long) = now.plusSeconds(seconds).toString()
+    private fun buckets(vararg left: Double) = listOf("gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h").zip(left.toList()).joinToString(",", "[", "]") { (id, rest) ->
+        """{"id":"$id","window":"${if (id.endsWith("5h")) "5h" else "weekly"}","remainingFraction":$rest,"resetTime":"${at(if (id.endsWith("5h")) 3 * 3600 else 4 * 86400)}"}"""
+    }
+    /** The remote in the A13c pass: Claude Code with three accounts (a login about to lapse, one paused, one signed out),
+     * Codex signed out, and Antigravity signed in to two Google accounts, each with its own buckets. */
+    private fun accountsRunner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
+        "online":true,"status":"ONLINE","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"selfUpdate":null,
+        "minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z",
+        "capabilities":["claude-account-remove/v1","antigravity-google-login/v1","antigravity-account-login/v1","antigravity-account-remove/v1","os:linux"],
+        "antigravity":{"supported":true,"installed":true,"version":"1.3.0","envKeyAvailable":true,"authSource":"google","googleLogin":"available"},
+        "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes",
+            "accounts":[{"id":"default","home":"/home/ci/.claude","auth":"yes","loginExpiresAt":"${at(if (claudeRenewed) 30 * 86400 else 47 * 3600)}"},
+              {"id":"1fda3f43","name":"Work","home":"/home/ci/.orbit/claude-accounts/1fda3f43","auth":"yes","pausedUntil":"${at(2 * 3600)}"},
+              {"id":"7d3e0c11","name":"Old","home":"/home/ci/.orbit/claude-accounts/7d3e0c11","auth":"no"}]},
+          {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"no"},{"engine":"kimi","installed":false},
+          {"engine":"antigravity","installed":true,"version":"1.3.0","auth":"yes","authSource":"google",
+            "accounts":[{"id":"default","home":"/home/ci/.orbit/antigravity/google","auth":"yes"},
+              {"id":"5c2e91a0","name":"Work","home":"/home/ci/.orbit/antigravity-accounts/5c2e91a0","auth":"yes"}],
+            "planUsage":{"provider":"antigravity","buckets":${buckets(1.0, 1.0, 0.98, 1.0)},
+              "accounts":{"5c2e91a0":{"provider":"antigravity","buckets":${buckets(0.61, 0.04, 1.0, 1.0)}}}}}],
+        "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${at(7200)}"},"sevenDay":{"utilization":61,"resetsAt":"${at(3 * 86400)}"},
+          "accounts":{"1fda3f43":{"fiveHour":{"utilization":12,"resetsAt":"${at(3600)}"},"sevenDay":{"utilization":30,"resetsAt":"${at(5 * 86400)}"}}}}},"install":null}"""
+    /** Kimi Code's three windows and the coding share of its month, which no page draws. */
+    private fun kimiWindows(five: Int, week: Int, month: Int, fiveIn: Long, weekIn: Long, monthIn: Long) =
+        """"provider":"kimi","fiveHour":{"utilization":$five,"resetsAt":"${at(fiveIn)}"},"sevenDay":{"utilization":$week,"resetsAt":"${at(weekIn)}"},""" +
+            """"month":{"utilization":$month,"resetsAt":"${at(monthIn)}"},"monthCode":{"utilization":${month / 2},"resetsAt":"${at(monthIn)}"}"""
+    /** The remote in the Kimi pass, as the board draws HPC: Default on kimi.ai, and once added Work on kimi.com, its five hours
+     * 91% used. Claude Code, Codex and Antigravity keep two accounts each, so every engine page has one marked NEXT. A runner
+     * too old for Kimi's accounts reads no Kimi quota either. */
+    private fun kimiRunner(): String {
+        val kimi = if (kimiOld) """{"engine":"kimi","installed":true,"version":"2.1.1","auth":"no","kimiRegion":"mainland-cn"}"""
+            else """{"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","kimiRegion":"global",
+              "accounts":[{"id":"default","home":"/home/ci/.kimi-code","auth":"yes","kimiRegion":"global"}${if (!kimiTwo) "" else """,
+                {"id":"5c2e91a0","name":"Work","home":"/home/ci/.orbit/kimi-accounts/5c2e91a0","auth":"yes","kimiRegion":"mainland-cn"}"""}]}"""
+        val kimiCapabilities = if (kimiOld) "" else """"kimi-account-login/v1","kimi-account-remove/v1","kimi-account-move/v1","kimi-login-region/v1","""
+        return """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.200",
+        "online":true,"status":"ONLINE","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"selfUpdate":null,
+        "minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z",
+        "capabilities":[$kimiCapabilities"claude-account-remove/v1","antigravity-google-login/v1","antigravity-account-login/v1","antigravity-account-remove/v1","os:linux"],
+        "antigravity":{"supported":true,"installed":true,"version":"1.3.0","envKeyAvailable":true,"authSource":"google","googleLogin":"available"},
+        "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes",
+            "accounts":[{"id":"default","home":"/home/ci/.claude","auth":"yes"},{"id":"1fda3f43","name":"Work","home":"/home/ci/.orbit/claude-accounts/1fda3f43","auth":"yes"}]},
+          {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"yes",
+            "accounts":[{"id":"default","home":"/home/ci/.codex","auth":"yes"},{"id":"1a2b3c4d","name":"Second","home":"/home/ci/.orbit/codex-accounts/1a2b3c4d","auth":"yes"}]},
+          $kimi,
+          {"engine":"antigravity","installed":true,"version":"1.3.0","auth":"yes","authSource":"google",
+            "accounts":[{"id":"default","home":"/home/ci/.orbit/antigravity/google","auth":"yes"},
+              {"id":"5c2e91a0","name":"Work","home":"/home/ci/.orbit/antigravity-accounts/5c2e91a0","auth":"yes"}],
+            "planUsage":{"provider":"antigravity","buckets":${buckets(1.0, 1.0, 0.98, 1.0)},
+              "accounts":{"5c2e91a0":{"provider":"antigravity","buckets":${buckets(0.61, 0.04, 1.0, 1.0)}}}}}],
+        "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${at(7200)}"},"sevenDay":{"utilization":61,"resetsAt":"${at(5 * 86400)}"},
+            "accounts":{"1fda3f43":{"fiveHour":{"utilization":12,"resetsAt":"${at(3600)}"},"sevenDay":{"utilization":30,"resetsAt":"${at(3 * 86400)}"}}}},
+          "codex":{"provider":"codex","primary":{"utilization":85,"windowDurationMins":300,"resetsAt":"${at(5400)}"},
+            "secondary":{"utilization":40,"windowDurationMins":10080,"resetsAt":"${at(4 * 86400)}"},
+            "accounts":{"1a2b3c4d":{"provider":"codex","primary":{"utilization":30,"windowDurationMins":300,"resetsAt":"${at(9000)}"},
+              "secondary":{"utilization":20,"windowDurationMins":10080,"resetsAt":"${at(6 * 86400)}"}}}},
+          "kimi":${if (kimiOld) "null" else """{${kimiWindows(12, 34, 8, 2 * 3600, 4 * 86400, 23 * 86400)},
+            "accounts":{"5c2e91a0":{${kimiWindows(91, 61, 22, 3600, 86400, 20 * 86400)}}}}"""}},"install":null}"""
+    }
+    /** The remote in the Infrastructure pass: Claude Code signed in, Codex signed out, Kimi Code and OpenCode not installed. */
+    private fun infraRunner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.200",
+        "online":true,"status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"selfUpdate":null,
+        "minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1","os:linux"],
+        "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes"},
+          {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"no"},{"engine":"kimi","installed":false},
+          {"engine":"opencode","installed":false,"auth":"unknown"}],"install":$installRelay}"""
+    /** A machine gone since yesterday. */
+    private fun thinkPad() = """{"id":"$thinkPadId","name":"thinkpad","displayName":"ThinkPad","hostname":"thinkpad-01","version":"0.1.200",
+        "online":false,"status":"OFFLINE","lastHeartbeatAt":"${now.minusSeconds(86_400)}","maxConcurrent":4,"activeSessions":0,"runsAsRoot":false,
+        "selfUpdate":null,"minFreeDiskMb":null,"enrolledAt":"2026-09-01T10:00:00Z",
+        "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"no"}],"install":null}"""
+    private fun runner() = if (kimiPass) kimiRunner() else if (accountsPass) accountsRunner() else """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
         "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,
         "runsAsRoot":false,"selfUpdate":${runnerSelfUpdate ?: "null"},"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
         "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes","update":{"status":"checked","at":"${now.minusSeconds(360)}","okAt":"${now.minusSeconds(360)}","latest":"2.1.284"},
@@ -714,7 +1159,9 @@ class ManagementDeviceTest {
           "usage":{"inputTokens":0,"outputTokens":0,"costUsd":4.2,"othersCostUsd":1.1},"running":false,"next":false}]}"""
     private fun pools() = """[{"id":"P1","slug":"team-codex","label":"Team Codex","engine":"codex","logins":[${login()}]},
         {"id":"P2","slug":"claude-pool","label":"Claude pool","engine":"claude","members":[{"id":"m1","slug":"anthropic-a","label":"Anthropic A","state":"AVAILABLE","next":true,"enabled":true,
-          "planUsage":{"fiveHour":{"utilization":20}}},{"id":"m2","slug":"anthropic-b","label":"Anthropic B","state":"SPENT","next":false,"enabled":true,"resetsAt":"${now.plusSeconds(3600)}"}]}]"""
+          "planUsage":{"fiveHour":{"utilization":20}}},{"id":"m2","slug":"anthropic-b","label":"Anthropic B","state":"SPENT","next":false,"enabled":true,"resetsAt":"${now.plusSeconds(3600)}"}]}${if (!infraPass) "" else """,
+        {"id":"P3","slug":"old-keys","label":"Old keys","engine":"claude","unavailable":"No account can run",
+          "members":[{"id":"m3","slug":"anthropic-c","label":"Anthropic C","state":"REFUSED","next":false,"enabled":true}]}"""}]"""
     private fun admins() = """[{"id":"fixture-user","email":"a13@example.test","name":"$name","role":"$role","createdAt":"2026-09-01T00:00:00Z"},
         {"id":"u2","email":"second@example.test","name":"Second user","role":"$secondRole","createdAt":"2026-09-02T00:00:00Z"}]"""
 
@@ -722,6 +1169,7 @@ class ManagementDeviceTest {
         override fun dispatch(request: RecordedRequest): MockResponse {
             val path = request.requestUrl!!.encodedPath
             calls += "${request.method} $path"
+            if (path == "/api/session-folders") snapshots += SystemClock.elapsedRealtime()
             if (path == "/dl/version.json") {
                 bearerOnPublicManifest = request.getHeader("Authorization")
                 return MockResponse().setHeader("Content-Type", "application/json").setBody("""{"version":"0.1.200"}""")
@@ -749,6 +1197,7 @@ class ManagementDeviceTest {
                     val patch = bodyOf()
                     patch["theme"]?.let { theme = it.jsonPrimitive.content }
                     patch["defaultPermissionMode"]?.let { permission = it.jsonPrimitive.content }
+                    patch["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
                     user()
                 }
                 "/api/admin/users" -> if (role == "ADMIN") admins() else return MockResponse().setResponseCode(403).setBody("""{"message":"Admin role required"}""")
@@ -763,17 +1212,66 @@ class ManagementDeviceTest {
                 }
                 "/api/workspaces" -> "[${workspace()}]"
                 "/api/workspaces/$workspaceId" -> { if (request.method == "PATCH") workspaceName = bodyOf()["name"]!!.jsonPrimitive.content; workspace() }
-                "/api/runners" -> "[${runner()}]"
-                "/api/runners/$runnerId/login" -> """{"status":null,"engine":null,"userCode":null,"url":null,"message":null,"account":null}"""
+                "/api/runners" -> { runnerReads += SystemClock.elapsedRealtime(); if (infraPass) "[${infraRunner()},${thinkPad()}]" else "[${runner()}]" }
+                "/api/runners/$runnerId/install" -> {
+                    val engine = bodyOf()["engine"]!!.jsonPrimitive.content
+                    installs += engine
+                    installRelay = """{"status":"installing","engine":"$engine","mode":"install","message":"Installing $engine on this machine…"}"""
+                    installRelay
+                }
+                "/api/runners/$runnerId/login" -> when (request.method) {
+                    "POST" -> {
+                        val start = bodyOf()
+                        val region = start["region"]?.jsonPrimitive?.content
+                        val account = start["account"]?.jsonPrimitive?.content?.let { "\"$it\"" } ?: "null"
+                        when {
+                            // An older runner's next check-in refuses a site it can't be told (RunnerApiController).
+                            start["engine"]?.jsonPrimitive?.content == "kimi" && kimiOld && region != null -> {
+                                loginRelay = """{"status":"failed","engine":"kimi","userCode":null,"url":null,"message":"This runner is too old to choose a Kimi site — update it, then try again.","account":null}"""
+                                """{"status":"pending","engine":"kimi","userCode":null,"url":null,"message":null,"account":null}"""
+                            }
+                            start["engine"]?.jsonPrimitive?.content == "kimi" -> {
+                                val (site, code) = if (region == "global") "kimi.ai" to "Q2PF-8XWA" else "kimi.com" to "7K06-QP86"
+                                loginRelay = """{"status":"awaiting_approval","engine":"kimi","userCode":"$code","url":"https://www.$site/code/authorize_device?user_code=$code","message":null,"account":$account}"""
+                                loginRelay
+                            }
+                            else -> {
+                                loginRelay = if (start["engine"]?.jsonPrimitive?.content == "codex")
+                                    """{"status":"awaiting_approval","engine":"codex","userCode":"WXYZ-1234","url":"https://auth.openai.com/codex/device","message":null,"account":null}"""
+                                else """{"status":"awaiting_code","engine":"claude","userCode":null,"url":"https://claude.ai/oauth/authorize?code=true","message":null,"account":"default"}"""
+                                loginRelay
+                            }
+                        }
+                    }
+                    "DELETE" -> { loginRelay = """{"status":"cancelled","engine":null,"userCode":null,"url":null,"message":null,"account":null}"""; loginRelay }
+                    else -> loginRelay
+                }
+                "/api/runners/$runnerId/login/code" -> {
+                    claudeRenewed = true
+                    loginRelay = """{"status":"done","engine":"claude","userCode":null,"url":null,"message":null,"account":"default"}"""
+                    loginRelay
+                }
                 "/api/sessions" -> if (request.requestUrl!!.queryParameter("view") == "open") "[${session()}]" else "[]"
                 "/api/sessions/counts" -> """[{"workspaceId":"$workspaceId","active":1,"running":1,"jobs":0,"needsYou":0}]"""
-                "/api/providers" -> """[{"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""
+                "/api/providers" -> """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat"},{"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh"},
+                    {"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""
+                "/api/providers/mine" -> mine()
+                "/api/access-tokens" -> tokens()
                 "/api/providers/pools" -> pools()
                 "/api/providers/shared-pools" -> "[]"
                 "/api/providers/shared-pools/P1" -> access()
                 "/api/events" -> return MockResponse().setHeader("Content-Type", "text/event-stream")
                     .setChunkedBody(": connected\n\n".repeat(120), 13).throttleBody(13, 1, TimeUnit.SECONDS)
-                else -> if (request.method == "GET") "[]" else "{}"
+                else -> when {
+                    path.startsWith("/api/access-tokens/") && request.method == "DELETE" -> {
+                        val id = path.removePrefix("/api/access-tokens/")
+                        revoked = revoked + id
+                        """{"id":"$id","revokedAt":"$now","revokedReason":"USER"}"""
+                    }
+                    path.startsWith("/api/providers/mine/") && path.endsWith("/balance") -> balance(path.removePrefix("/api/providers/mine/").removeSuffix("/balance"))
+                    request.method == "GET" -> "[]"
+                    else -> "{}"
+                }
             }
             return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
         }

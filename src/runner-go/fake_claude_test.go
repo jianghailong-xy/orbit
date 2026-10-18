@@ -35,9 +35,19 @@ const fakeClaudeTimeout = 10 * time.Second
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
 // `--input-format`…) never reaches the test framework. fakeCodexDirEnv does the same for the
-// fake `codex app-server` in codex_rate_limit_reset_read_test.go, and fakeCodexResetProviderEnv for
-// the programmable one in codex_rate_limit_reset_consume_test.go.
+// fake `codex app-server` in codex_rate_limit_reset_read_test.go, fakeCodexResetProviderEnv for
+// the programmable one in codex_rate_limit_reset_consume_test.go, and fakeKimiACPDirEnv for the
+// scripted `kimi acp` in fake_kimi_acp_test.go.
 func TestMain(m *testing.M) {
+	// This binary as a session process's keeper, which the runner starts as /proc/self/exe
+	// (session_scope_linux.go) — under test, this binary — ahead of the fakes the process may be.
+	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
+		os.Exit(runSessionScope(os.Args[2:]))
+	}
+	// What the scripted Cursor CLI's commands leave running (fake_cursor_acp_test.go).
+	if mode := os.Getenv(fakeCursorScopeProcessEnv); mode != "" {
+		os.Exit(runFakeCursorScopeProcess(mode))
+	}
 	if dir := os.Getenv(fakeClaudeDirEnv); dir != "" {
 		os.Exit(runFakeClaude(dir))
 	}
@@ -47,9 +57,26 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeCodexResetProviderEnv); dir != "" {
 		os.Exit(runFakeCodexResetProvider(dir))
 	}
+	// The scripted `kimi acp` (fake_kimi_acp_test.go).
+	if dir := os.Getenv(fakeKimiACPDirEnv); dir != "" {
+		os.Exit(runFakeKimiACP(dir))
+	}
+	// The scripted Cursor CLI, in the version directory of a fake release (cursor_install_test.go).
+	if dir := os.Getenv(fakeCursorAgentEnv); dir != "" {
+		os.Exit(runFakeCursorAgent(dir))
+	}
+	// A Cursor CLI `agent acp` replaying a P0 recording (fake_cursor_acp_test.go).
+	if dir := os.Getenv(fakeCursorACPDirEnv); dir != "" {
+		os.Exit(runFakeCursorACP(dir))
+	}
 	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))
+	}
+	// A Kimi Code process refreshing its token under Kimi's lock, beside the runner's own refresh
+	// (kimi_refresh_lock_test.go).
+	if os.Getenv(fakeKimiCLIEnv) != "" {
+		os.Exit(runFakeKimiCLI())
 	}
 	// This binary as the real `orbit hook …`, when a real agy runs an Antigravity session's approval
 	// gate (antigravity_approval_contract_test.go): the hooks name the runner's own executable, which
@@ -114,9 +141,9 @@ func clearCallingSession() {
 // fakeStep is one instruction of a fake CLI script: emit a frame, or block until one
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
-	// Emit: system_init | assistant | tool_use | tool_result | result | control_request |
-	// control_response | replay_user | local_command_stdout | task_notification | stop_reading |
-	// eof (eof exits, closing stdout).
+	// Emit: system_init | assistant | thinking_delta | thinking | tool_use | tool_result |
+	// result | prompt_suggestion | control_request | control_response | replay_user |
+	// local_command_stdout | task_notification | stop_reading | eof (eof exits, closing stdout).
 	//
 	// task_notification is a background task's lifecycle report, which Claude sends as a
 	// user-role message holding one bare string — the same shape as its local-command output.
@@ -387,6 +414,20 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		return marshalFrame(init), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
+	case "thinking_delta":
+		// One chunk of reasoning as --include-partial-messages streams it.
+		return marshalFrame(map[string]interface{}{
+			"type": "stream_event", "session_id": sessionID, "parent_tool_use_id": nil,
+			"event": map[string]interface{}{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "thinking_delta", "thinking": s.Text},
+			},
+		}), nil
+	case "thinking":
+		// The block that closes it. Claude's own carries no text and a signature in its place.
+		return assistantFrame(sessionID, map[string]interface{}{
+			"type": "thinking", "thinking": s.Text, "signature": "EqQBCkYIBxgCKkA",
+		}), nil
 	case "tool_use":
 		input := s.Input
 		if input == nil {
@@ -438,6 +479,13 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		return marshalFrame(map[string]interface{}{
 			"type": "result", "subtype": subtype, "is_error": s.IsError,
 			"num_turns": numTurns, "result": s.Text, "session_id": sessionID,
+		}), nil
+	case "prompt_suggestion":
+		// What --prompt-suggestions writes after a turn's result: the CLI's guess at the next
+		// user message, in Text.
+		return marshalFrame(map[string]interface{}{
+			"type": "prompt_suggestion", "suggestion": s.Text,
+			"uuid": "00000000-0000-4000-8000-000000000001", "session_id": sessionID,
 		}), nil
 	case "control_request":
 		req := map[string]interface{}{"subtype": s.Subtype}

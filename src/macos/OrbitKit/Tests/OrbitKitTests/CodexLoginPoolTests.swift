@@ -5,7 +5,7 @@ import XCTest
 /// /providers/pools draws each account it holds as one of the pool's members, the Providers row and the
 /// pool page say where they stand, the pickers offer the pool as Codex, and "Sign in with ChatGPT" reads
 /// the server's answers into its steps. Mirrors web's codexLogin.test.ts and
-/// ProvidersPage.codexLogin.test.tsx where the two overlap.
+/// InfrastructurePage.codexLogin.test.tsx where the two overlap.
 final class CodexLoginPoolTests: XCTestCase {
     private let decoder = JSONDecoder()
     private let utc = TimeZone(identifier: "UTC")!

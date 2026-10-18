@@ -1,0 +1,15 @@
+== mount
+/dev/rbd2 /var/lib/orbit ext4 rw,relatime,stripe=1024 0 0
+/dev/rbd2       2.0G  1.2M  1.9G   1% /var/lib/orbit
+== default workspace
+total 16
+drwx------ 3 orbit orbit 4096 Oct 17 23:37 .
+drwx------ 3 orbit orbit 4096 Oct 17 23:36 ..
+drwx------ 9 orbit orbit 4096 Oct 17 23:37 .git
+-rw------- 1 orbit orbit  191 Oct 17 23:37 .gitignore
+== git
+4df433b Orbit Runner <runner@orbit.invalid> orbit: baseline
+/var/lib/orbit/home/orbit-repos/default                                    4df433b [master]
+/var/lib/orbit/home/.orbit/worktrees/01a14c3a-7318-7589-9e93-cda0dea34ef6  4df433b [orbit/t05-erin-first-session-nothing-named-a57027]
+== id
+uid=10001(orbit) gid=10001(orbit) groups=10001(orbit)

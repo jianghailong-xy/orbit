@@ -1,0 +1,122 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--force",
+    "--disable-project-configs"
+  ],
+  "cards": null,
+  "checks": [
+    {
+      "name": "started-with-force",
+      "pass": true,
+      "detail": "args [\"acp\" \"--disable-auto-update\" \"--disable-indexing\" \"--force\" \"--disable-project-configs\"]"
+    },
+    {
+      "name": "nothing-asked",
+      "pass": true,
+      "detail": "0 requests, 0 cards"
+    },
+    {
+      "name": "command-ran",
+      "pass": true,
+      "detail": "bypass-cmd.txt exists"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll do those two steps now: create `bypass-cmd.txt` in the workspace, and write `bypass-outside.txt` with the word outside.\n\nBoth steps are done.\n\n1. `touch bypass-cmd.txt` completed in the workspace.\n2. `<TMP>/outside/bypass-outside.txt` was created and contains the word outside.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "touch bypass-cmd.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-1\nfc_<UUID_3>_1",
+        "input": {
+          "content": "outside",
+          "file_path": "<TMP>/outside/bypass-outside.txt"
+        },
+        "name": "Write"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_1"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "outsideWritten": true
+  },
+  "mode": "bypassPermissions",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --force --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    9
+  ],
+  "scenario": "bypass",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

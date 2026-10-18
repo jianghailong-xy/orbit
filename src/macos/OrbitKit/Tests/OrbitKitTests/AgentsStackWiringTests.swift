@@ -117,7 +117,7 @@ final class AgentsStackWiringTests: XCTestCase {
         let pushBranch = try XCTUnwrap(row.range(of: "case .push:"), "the compact branch")
         let tag = try XCTUnwrap(row.range(of: ".tag(s.id)"), "the three-column row stays tag-driven")
         let pushed = try XCTUnwrap(
-            row.range(of: "Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {"),
+            row.range(of: "Button { app.openSessionRow(s) } label: {"),
             "the compact row carries its destination")
         XCTAssertLessThan(tag.lowerBound, pushBranch.lowerBound,
                           "`.tag` belongs to the selection branch, not the pushing one")

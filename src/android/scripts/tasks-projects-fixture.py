@@ -63,6 +63,8 @@ def reset():
                  denyTasks=False, denyProjects=False, readError=False, generation=generation, journal=old_journal,
                  runTriggers={}, mutations=0, streamDown=False, eventStorm=False, delays={}, dropNext={}, manyJobs=False, createdTasks=False, pageLimit=None)
     state.update(shares={}, watches=[], attachments={})
+    # A11c: crossings this project is an end of, the account's smart selection switch, the session's route, the merge's own job.
+    state.update(crossings=[], modelRouting=False, route=None, promotionExecution=None, declined=None)
     state['tasks'] = {
         OUTSIDE: task(OUTSIDE, 'A11 task checklist', labels=['Mobile', 'Sprint, one']),
         PREREQUISITE: task(PREREQUISITE, 'A11 prerequisite', status='DONE', labels=['Mobile']),
@@ -133,6 +135,13 @@ def snapshot():
     view.update(title=state['tasks'].get(TID, {}).get('title', 'A11 project delivery'))
     if state['case'] not in ('owner', 'owner-review'):
         view.update(completionCriterion='EVIDENCE_JUDGMENT', waiting=None)
+    if state['case'] == 'done-request':
+        value['standing']['openItems']['doneRequest'] = done_request_row()
+        value['detail']['waitingKind'] = 'DONE_REQUEST'
+    if state.get('route'):
+        value['detail'].update(provider='claude', model=state['route']['model'], effort=state['route'].get('effort'), route=copy.deepcopy(state['route']))
+    if state['case'] == 'promotion' and state.get('promotionExecution') is not None:
+        value['standing']['promotion'].update(state='CONFIRMED', execution=copy.deepcopy(state['promotionExecution']))
     if state['mode'] == 'unknown':
         value['standing']['openItems']['needsYou'].append(dict(itemId='future-item', kind='FUTURE_ACTION', title='New server item',
             detailLine='Read the current server details.', assignee='OWNER', assigneeReason='DEFAULT', waitingSince=NOW,
@@ -141,6 +150,60 @@ def snapshot():
 
 
 cards.snapshot = snapshot
+
+
+def done_request_row():
+    # The coordinator's DONE_REQUEST, as the open-items read serves it beside the groups (main's ProjectOpenItemsView.doneRequest).
+    gap = dict(criterionKey='cards', title=state['project']['acceptanceCriteriaItems'][0]['text'], whyNotProven='Orbit saw no merge for its work.',
+               coordinatorChecked='main contains the release files', evidenceRefs=['run-42'])
+    return dict(itemId='done1', kind='DONE_REQUEST', title='Is this project done?', detailLine='The coordinator asked · 1 gap it couldn’t prove',
+                assignee='OWNER', assigneeReason='DEFAULT', waitingSince='2026-10-04T23:35:00.000Z', escalateAt=None, escalatedAt=None,
+                taskId=None, sessionId=None, promotionId=None, fuseEpisodeId=None, actions=['REVIEW'], question=None, facts=None,
+                delivery=dict(state='DELIVERED', sessionId=SID, at=NOW),
+                doneRequest=dict(criteriaDigest=cards.CORPUS['snapshot']['standing']['acceptanceConfirmation']['currentVersion']['digest'],
+                                 judgment='The goal is met: every criterion is on main. I checked the release evidence below.', gaps=[gap]))
+
+
+def close_out():
+    # Every criterion met by work Orbit saw no merge for: what the coordinator's request is about.
+    project = state['project']
+    for criterion in project['acceptanceCriteriaItems']:
+        criterion.update(satisfied=True, landing='UNKNOWN', unmet=[])
+    project['derivedDone'].update(criteria=[dict(c, satisfied=True, withheld=['CRITERION_UNLANDED']) for c in project['derivedDone']['criteria']])
+    project['derivedDone']['counts'].update(met=len(project['acceptanceCriteriaItems']))
+
+
+def crossing_rows():
+    # A move asked into this project and a filing asked out of it, as GET /projects/:id/handoffs serves them (main's handoff list row).
+    return [
+        dict(id='34cHandoffMove1', publicId='34cHandoffMove1', fromProjectId='34cOtherProject', fromProjectPublicId='34cOtherProject',
+             toProjectId=PID, toProjectPublicId=PID, fromProject=dict(title='A11 runner hardening', status='OPEN'),
+             toProject=dict(title=state['project']['title'], status='OPEN'), kind='MOVE_TASK', subjectTaskId=OUTSIDE, subjectTaskPublicId=OUTSIDE,
+             subjectTask=dict(id=OUTSIDE, publicId=OUTSIDE, title=state['tasks'][OUTSIDE]['title']),
+             requestedCriterion=dict(key='cards', text=state['project']['acceptanceCriteriaItems'][0]['text']),
+             withdrawnCriterion=dict(key='34cSourceCriterion', text='The runner restarts a wedged drain within a minute.'),
+             crossingKey='k' * 64, state='PENDING', title='A11 task checklist (as first asked)', reason='the checklist belongs to the launch',
+             requestedAt='2026-10-04T22:00:00.000Z', decidedAt=None, expiresAt=None),
+        dict(id='34cHandoffFile1', publicId='34cHandoffFile1', fromProjectId=PID, fromProjectPublicId=PID, toProjectId='34cReleaseTrain',
+             toProjectPublicId='34cReleaseTrain', fromProject=dict(title=state['project']['title'], status='OPEN'),
+             toProject=dict(title='A11 release train', status='OPEN'), kind='FILE_TASK', subjectTaskId=None, subjectTask=None,
+             requestedCriterion=None, withdrawnCriterion=None, crossingKey='f' * 64, state='DENIED', title='Publish the release notes',
+             reason=None, requestedAt='2026-10-03T09:00:00.000Z', decidedAt='2026-10-03T10:00:00.000Z', expiresAt=None),
+    ]
+
+
+def landing_jobs():
+    # The 21:57 screen: a landing whose runner went silent past its limit, and a merge into main queued behind it.
+    stuck = dict(jobId='34cJobStuck', kind='LAND_TASK', state='RUNNING', phase='FETCH', taskId=TID, taskTitle='A11 project delivery', generation=1,
+                 startedAt='2026-10-04T22:07:00.000Z', queuedAt='2026-10-04T22:06:50.000Z', heartbeatAt='2026-10-04T22:07:10.000Z',
+                 runnerName='workstation-gpu', retriedBy=None, timedOut=True, limitSeconds=600, retryable=True)
+    merge = dict(jobId='34cJobMerge', kind='LAND_PROMOTION', state='QUEUED', phase=None, taskId=None, taskTitle=None, generation=1,
+                 startedAt='2026-10-04T23:16:00.000Z', queuedAt='2026-10-04T23:16:00.000Z', heartbeatAt=None, runnerName=None, retriedBy=None,
+                 timedOut=False, limitSeconds=None, retryable=False)
+    return dict(integratingCount=1, queuedCount=1, inFlight=dict(taskTitle='A11 project delivery', kind='LAND_TASK', phase='FETCH', state='RUNNING',
+                startedAt=stuck['startedAt'], heartbeatAt=stuck['heartbeatAt']), inFlightJobs=[stuck, merge])
+
+
 reset()
 
 
@@ -245,6 +308,8 @@ class Handler(cards.Handler):
             if state['denyProjects'] and path.startswith('/api/projects/'):
                 return self.reply(dict(message='Permission denied'), 403)
             if path == '/api/workspaces': return self.reply([dict(id=WS, name='A11 workspace', enabled=True, runnerId='fixture-runner', workDir='/fixture', lastProvider='codex')])
+            if path == '/api/users/me': return self.reply(dict(id='a08-user', email='a08@example.test', name='A08', preferences=dict(modelRouting=state['modelRouting'])))
+            if path == '/api/projects/' + PID + '/handoffs': return self.reply(copy.deepcopy(state['crossings']))
             if path == '/api/runners': return self.reply([dict(id='fixture-runner', name='A11 fixture runner', status='ONLINE')])
             if path == '/api/runners/fixture-runner': return self.reply(dict(id='fixture-runner', name='A11 fixture runner', status='ONLINE', supportedProviders=['codex'], modelCatalog={'codex': [dict(value='gpt-6-astra', label='GPT-6 Astra')]}))
             if path == '/api/providers': return self.reply([])
@@ -264,7 +329,8 @@ class Handler(cards.Handler):
             if path in ('/api/projects', '/api/projects/sidebar'):
                 project = copy.deepcopy(state['project'])
                 if state['case'] in ('start', 'own-start'): project['startedAt'] = None
-                project.update(buckets=project_buckets(), attention=dict(ownerItems=[], coordinatorItems=None, userBlockers=0, systemBlockers=0, coordinatorBlockers=0),
+                project.update(buckets=project_buckets(), attention=dict(ownerItems=[], coordinatorItems=None, userBlockers=0, systemBlockers=0, coordinatorBlockers=0,
+                                                                         doneRequest=dict(waitingSince=done_request_row()['waitingSince']) if state['case'] == 'done-request' else None),
                                integration=dict(line=state['integration']['line'], activeJobCount=state['integration']['integratingCount'], queuedJobCount=0, commitsAheadOfUpstream=1),
                                coordinatorActivity=dict(working=False, lastTurnAt=NOW))
                 return self.reply([project])
@@ -369,6 +435,11 @@ class Handler(cards.Handler):
                 if 'project' in body: state['project'].update(body['project'])
                 if 'integration' in body: state['integration'].update(body['integration'])
                 if body.get('plan'): plan()
+                if body.get('crossings'): state['crossings'] = crossing_rows()
+                for key in ('modelRouting', 'route', 'promotionExecution'):
+                    if key in body: state[key] = body[key]
+                if body.get('closeOut'): close_out()
+                if body.get('landingJobs'): state['integration'].update(landing_jobs())
                 if state['case'] in ('owner', 'owner-review'):
                     state['tasks'][TID].update(completionCriterion='OWNER_CONFIRMED', status='IN_PROGRESS', awaitingOwnerConfirmation=True, runnable=False)
                 if body.get('mode') == 'unknown': state['tasks'][OUTSIDE].update(status='FUTURE_STATUS', runnable=False)
@@ -394,6 +465,8 @@ class Handler(cards.Handler):
                 '/api/projects/' + PID + '/pause', '/api/projects/' + PID + '/resume', '/api/projects/' + PID + '/coordinator', '/api/projects/' + PID + '/coordinator/replace')
             local = local or (path == '/api/projects/' + PID + '/start' and state['case'] == 'own-start') or path.startswith('/api/projects/' + PID + '/blockers/')
             local = local or path == '/api/projects/' + PID + '/done'
+            local = local or path.startswith('/api/projects/' + PID + '/done-requests/') or path.startswith('/api/projects/' + PID + '/handoffs/')
+            local = local or path.startswith('/api/projects/' + PID + '/integration/jobs/')
             local = local or path.endswith('/share') or path == '/api/watches' or path.startswith('/api/attachments/')
             if not local: return self.delegate_post(raw)
             self.journal(path, body=body)
@@ -476,11 +549,46 @@ class Handler(cards.Handler):
                 return dict(code='CRITERIA_DIGEST_MOVED', message='The criteria changed since you read them; read them again.'), 409
             if not isinstance(body.get('acceptedGaps'), list) or 'requestId' not in body:
                 return dict(message='criteriaDigest, acceptedGaps and requestId are required'), 400
+            if body['requestId'] is not None and (state['case'] != 'done-request' or body['requestId'] != 'done1'):
+                return dict(code='DONE_REQUEST_SUPERSEDED', message='That request is no longer open.'), 409
+            if state['case'] == 'done-request': state['case'] = 'normal'
             project.update(status='DONE', doneBy='OWNER', doneAt=NOW, acceptedGaps=body['acceptedGaps'])
             project['derivedDone'].update(status='DONE', done=True)
             bump(project)
             return dict(projectId=PID, status='DONE', doneBy='OWNER', doneAt=NOW, criteriaDigest=body['criteriaDigest'],
                         acceptedGaps=body['acceptedGaps'], requestId=body['requestId']), 200
+        if path.startswith('/api/projects/' + PID + '/done-requests/') and path.endswith('/decline'):
+            item = path.split('/')[-2]
+            if state['case'] != 'done-request' or item != 'done1': return dict(code='DONE_REQUEST_NOT_OPEN', message='That request is no longer open.'), 409
+            if not str(body.get('note', '')).strip(): return dict(message='A note is required'), 400
+            state['case'] = 'normal'; state['declined'] = dict(itemId=item, note=body['note'])
+            bump(project); return dict(itemId=item), 200
+        if path.startswith('/api/projects/' + PID + '/handoffs/') and path.endswith('/decision'):
+            identifier = path.split('/')[-2]
+            row = next((r for r in state['crossings'] if r['publicId'] == identifier or r['id'] == identifier), None)
+            if row is None: return dict(message='Crossing not found'), 404
+            if body.get('acknowledgedCrossingKey') != row['crossingKey']:
+                return dict(code='APPROVAL_TARGET_MISMATCH', message='That answer names another crossing than this row.'), 409
+            if row['state'] != 'PENDING': return dict(message=f"handoff approval {identifier} is {row['state']} and cannot be {body.get('decision')}D"), 409
+            if state['mode'] == 'landing-in-flight' and row['kind'] == 'MOVE_TASK' and body.get('decision') == 'APPROVE':
+                return dict(code='MOVE_TASK_LANDING_IN_FLIGHT', message='task ' + OUTSIDE + ' is being landed — nothing was written and the request is still waiting.'), 409
+            if body.get('decision') == 'APPROVE':
+                row.update(state='APPLIED' if row['kind'] == 'MOVE_TASK' else 'APPROVED', decidedAt=NOW)
+                if row['kind'] == 'MOVE_TASK': state['tasks'][OUTSIDE].update(projectId=PID, project=dict(id=PID, title=project['title'], status='OPEN'))
+            elif body.get('decision') == 'DENY': row.update(state='DENIED', decidedAt=NOW)
+            else: return dict(message='decision must be APPROVE or DENY'), 400
+            bump(); return copy.deepcopy(row), 200
+        if path.startswith('/api/projects/' + PID + '/integration/jobs/') and path.endswith('/retry'):
+            identifier = path.split('/')[-2]
+            jobs = state['integration'].get('inFlightJobs') or []
+            job = next((j for j in jobs if j['jobId'] == identifier), None)
+            if job is None or not job['retryable']: return dict(code='INTEGRATION_JOB_NOT_RETRYABLE', message='That job is not one a retry can end.'), 409
+            index = jobs.index(job)
+            jobs[index] = dict(job, jobId=identifier + '-g2', state='QUEUED', phase=None, generation=job['generation'] + 1, startedAt=NOW, queuedAt=NOW,
+                               heartbeatAt=None, runnerName=None, retriedBy='OWNER', timedOut=False, limitSeconds=None, retryable=False)
+            state['integration']['inFlight'] = dict(state['integration']['inFlight'], state='QUEUED', phase=None, startedAt=NOW, heartbeatAt=None)
+            state['integration'].update(integratingCount=0, queuedCount=len(jobs))
+            bump(); return copy.deepcopy(state['integration']), 200
         if path == '/api/projects/' + PID + '/start':
             required = ('criteriaDigest', 'line', 'automatic', 'maxConcurrentTasks', 'mergeCheckCommand', 'requestId')
             if any(key not in body for key in required): return dict(message='Every start setting is required'), 400

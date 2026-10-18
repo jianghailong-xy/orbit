@@ -21,11 +21,11 @@ func runnerMeBody(workspaces string) string {
 		`"workspaces":` + workspaces + `,"publicId":"3Nf1GScXFWjk1spCZ7o68P"}`
 }
 
-// An idle runner polls a provider's plan usage only while one of its workspaces runs that provider,
-// and it learns its workspaces from `GET /runner/me`. It used to decode them from `agents`, a key the
-// apiserver stopped sending at the Agent → Workspace rename, so no provider ever counted as
-// configured: an idle runner never read Codex usage and the Codex reset block never reached the
-// heartbeat.
+// An idle runner polls a provider's plan usage while one of its workspaces runs that provider (and
+// while the engine is signed in there: idleUsage), and it learns its workspaces from
+// `GET /runner/me`. It used to decode them from `agents`, a key the apiserver stopped sending at the
+// Agent → Workspace rename, so no provider ever counted as configured: an idle runner never read
+// Codex usage and the Codex reset block never reached the heartbeat.
 func TestRunnerMeWorkspacesEnableIdleUsageProbes(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -77,8 +77,9 @@ func TestRunnerMeWorkspacesEnableIdleUsageProbes(t *testing.T) {
 			}
 
 			// No session is active, so only the idle branch can read, and each probe is gated the way
-			// runLoop gates it. Both run over the same window: the enabled one must read on the idle
-			// cadence while the other never reads.
+			// runLoop gates it — by an engine probe that has not answered, so only the workspaces count.
+			// Both run over the same window: the enabled one must read on the idle cadence while the
+			// other never reads.
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			var codexReads, claudeReads atomic.Int64
@@ -90,7 +91,7 @@ func TestRunnerMeWorkspacesEnableIdleUsageProbes(t *testing.T) {
 						return &PlanUsage{Provider: provider}, nil
 					},
 				}
-				idle := func() bool { return agents.providerConfigured(provider) }
+				idle := idleUsage(provider, agents.providerConfigured, &engineHealthProbe{})
 				go p.runWithIntervals(ctx, func() int { return 0 }, idle, 5*time.Millisecond, time.Hour, 20*time.Millisecond)
 			}
 			startIdleProbe(providerCodex, &codexReads)

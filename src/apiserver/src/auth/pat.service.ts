@@ -3,11 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { DisabledAccounts, accountDisabled } from './disabled-accounts';
 
 /**
  * What every personal access token starts with. Secret scanners (GitHub, gitleaks) recognise a
@@ -104,7 +106,11 @@ export interface PatGrant {
  */
 @Injectable()
 export class PatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // AuthModule provides it. Without it (a test harness) no account is disabled.
+    @Optional() private readonly disabled?: DisabledAccounts,
+  ) {}
 
   /**
    * Issue a token to `ownerId`. The answer is the only place the token ever appears: a caller that
@@ -188,6 +194,9 @@ export class PatService {
    * Resolve a presented token to its grant, or null. Null alike for a token that does not exist,
    * was revoked or has expired (`expires_at` NULL never does): which one it was is not the caller's
    * to learn (§6.1). The user is there whenever the row is — the row cascades away with its user.
+   * A live token of an account an administrator disabled is refused 403 ACCOUNT_DISABLED
+   * (docs/google-sign-in-design.md §5.5), as JwtAuthGuard's view of the disabled accounts has it, and
+   * its use is not recorded: the token is kept, and works again once the account is enabled.
    *
    * Recording the use is not awaited: it must never make a valid request fail or wait on a write.
    */
@@ -200,6 +209,7 @@ export class PatService {
     const now = new Date();
     if (!row || row.revokedAt) return null;
     if (row.expiresAt && row.expiresAt.getTime() <= now.getTime()) return null;
+    if (this.disabled?.has(row.ownerId)) throw accountDisabled();
     if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() >= LAST_USED_THROTTLE_MS) {
       void this.recordUse(row.id, now, seen).catch(() => undefined);
     }

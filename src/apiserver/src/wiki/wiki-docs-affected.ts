@@ -7,7 +7,8 @@ import {
   type WikiDocsUnplacedEntry,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { anchorPathsOf, entryProjects, sectionFit, type FitCandidate, type StoredSessionCondition } from './wiki-docs-material';
+import { anchorPathsOf, entryProjects, sectionFit, storedSessionCondition, type FitCandidate, type StoredSessionCondition } from './wiki-docs-material';
+import { wikiPlanTopics } from './wiki-plan';
 
 /**
  * What a maintenance run writes again, and what it may propose (criterion 3, revision 3; contracts/
@@ -59,10 +60,9 @@ interface ChangedEntry {
   changedAt: Date;
 }
 
-/** A section's session condition as the plan stores it, or null. */
+/** A section's session condition as the plan stores it, its projects as ids (`storedSessionCondition`), or null. */
 function conditionOf(sources: unknown): StoredSessionCondition | null {
-  const raw = sources && typeof sources === 'object' ? (sources as { sessions?: unknown }).sessions : null;
-  return raw && typeof raw === 'object' ? (raw as StoredSessionCondition) : null;
+  return storedSessionCondition(sources && typeof sources === 'object' ? (sources as { sessions?: unknown }).sessions : null);
 }
 
 /** The design documents a plan's sections and a proposal's document cite: `sources.docs[].path`. */
@@ -83,7 +83,7 @@ function docPathsOf(sections: ReadonlyArray<{ sources?: unknown }>): string[] {
  * propose (contract `docs.reads.affected`). The caller has been found a maintenance run of the space.
  */
 export async function wikiDocsAffected(db: Db, ownerId: string, spaceId: string): Promise<WikiDocsAffected> {
-  const [confirmed, build, proposals] = await Promise.all([
+  const [confirmed, build, proposals, topics] = await Promise.all([
     db.wikiPlan.findFirst({
       where: { ownerId, spaceId, status: 'confirmed' },
       select: {
@@ -101,6 +101,7 @@ export async function wikiDocsAffected(db: Db, ownerId: string, spaceId: string)
       select: { id: true, state: true, version: true },
     }),
     db.wikiPlanProposal.findMany({ where: { ownerId, spaceId }, select: { facts: true, change: true } }),
+    wikiPlanTopics(db, ownerId, spaceId),
   ]);
   const proposed = { entryIds: new Set<string>(), commits: new Set<string>(), paths: new Set<string>() };
   for (const proposal of proposals) {
@@ -116,7 +117,7 @@ export async function wikiDocsAffected(db: Db, ownerId: string, spaceId: string)
     ? { jobId: build.id, state: (build.state === 'made' ? 'running' : build.state) as 'queued' | 'held' | 'running', version: build.version ?? 0 }
     : null;
   if (!confirmed?.confirmedAt) {
-    return { spaceId, plan: null, build: buildView, sections: [], unplaced: [], unplacedMore: 0, proposed: proposedView };
+    return { spaceId, plan: null, build: buildView, sections: [], unplaced: [], unplacedMore: 0, proposed: proposedView, topics };
   }
 
   // The commit the plan's references were last checked at: the confirmed version's, or the newest of the
@@ -216,6 +217,7 @@ export async function wikiDocsAffected(db: Db, ownerId: string, spaceId: string)
     unplaced,
     unplacedMore: unplacedAll.length - unplaced.length,
     proposed: proposedView,
+    topics,
   };
 }
 

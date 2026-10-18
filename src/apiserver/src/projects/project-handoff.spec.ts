@@ -8,6 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -29,6 +30,7 @@ import {
   sessionTriggerEvent,
   type HandoffRequestIdentity,
 } from './project-handoff';
+import { canonicalJson } from './canonical-json';
 import {
   SCOPE_WORK_TRANSITIONS,
   nextScopeWorkState,
@@ -150,6 +152,7 @@ test('the identity binds every field an approval authorises, not just the prose'
     ['completion criterion', identity({ completionCriterion: 'EVIDENCE_JUDGMENT' })],
     ['assignee', identity({ assigneeId: TASK })],
     ['list', identity({ listId: TASK })],
+    ['engine', identity({ engine: 'dsh' })],
     ['provider', identity({ provider: 'codex' })],
     ['model', identity({ model: 'claude-opus-5' })],
     ['autoRunWhenReady', identity({ autoRunWhenReady: true })],
@@ -220,6 +223,40 @@ test('two spellings of one request are one question; two sources are two', () =>
     crossing(handoffPayloadDigest(identity({}, { taskId: TASK }))),
     crossing(handoffPayloadDigest(identity({}, { taskId: OTHER_TASK }))),
   );
+});
+
+test('T3 follow-up handoff: the identity binds the engine pin beside the provider pin, and a plan that pins no engine keeps its identity', () => {
+  const source = identity().source;
+  // The preimage spelled out: every field the plans below carry, and the engine only where one is pinned.
+  const preimage = (v: number, plan: Record<string, unknown>) => createHash('sha256').update(canonicalJson({
+    v,
+    plan: {
+      title: 'ship the thing', description: 'the description', acceptanceCriteria: 'it ships', labels: ['a', 'b'],
+      assigneeId: null, listId: null, provider: null, model: null, autoRunWhenReady: null, runAt: null,
+      dueDate: null, completionPolicy: null, parentTaskId: null, parentRefDigest: null, verifiesTaskId: null,
+      verifiesRefDigest: null, supersedesTaskId: null, dependsOnTaskIds: [], dependsOnRefDigests: [], ...plan,
+    },
+    source,
+  })).digest('hex');
+  // One key on two engines is two runs, so two questions — a yes to Claude Code on a DeepSeek key is no
+  // yes to DeepSeek Harness on it — and so is the dependent a dependency crossing names by its plan.
+  const onClaude = identity({ engine: 'claude', provider: 'deepseek' });
+  const onHarness = identity({ engine: 'dsh', provider: 'deepseek' });
+  assert.notEqual(handoffPayloadDigest(onClaude), handoffPayloadDigest(onHarness));
+  assert.notEqual(handoffDependentDigest({ identity: onClaude }), handoffDependentDigest({ identity: onHarness }));
+  // Bound as v8, beside the provider.
+  assert.equal(handoffPayloadDigest(onHarness), preimage(8, { engine: 'dsh', provider: 'deepseek' }));
+  // With the fields earlier versions bind, none of them dropped for it.
+  assert.equal(
+    handoffPayloadDigest(identity({ engine: 'dsh', provider: 'deepseek', attachmentIds: [TASK], modelHint: 'M' })),
+    preimage(8, {
+      engine: 'dsh', provider: 'deepseek', attachmentIds: [TASK], modelHint: 'M', modelHintReason: null,
+    }),
+  );
+  // No engine pin, absent or null, is the identity the plan always had: v2 here, provider or not.
+  assert.equal(handoffPayloadDigest(identity()), preimage(2, {}));
+  assert.equal(handoffPayloadDigest(identity({ engine: null })), preimage(2, {}));
+  assert.equal(handoffPayloadDigest(identity({ provider: 'deepseek' })), preimage(2, { provider: 'deepseek' }));
 });
 
 test('the crossing key separates every end, kind and subject', () => {

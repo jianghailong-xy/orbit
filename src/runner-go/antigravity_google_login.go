@@ -216,6 +216,13 @@ func (r *loginRelay) pumpAntigravityGoogle(run *loginRun, cmd *exec.Cmd, report 
 		select {
 		case <-waited:
 			exited = true
+			// agy's exit can be seen before its last output has come through the PTY. Decide on all
+			// of it, but don't wait long for a child of agy that still holds the terminal open.
+			select {
+			case <-run.googleCopied:
+			case <-run.ctx.Done():
+			case <-time.After(2 * time.Second):
+			}
 		case <-run.ctx.Done():
 		case <-tick.C:
 		}

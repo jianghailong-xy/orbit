@@ -75,6 +75,19 @@ class WikiLargeTypeTest {
         assertTrue("a cut label says it is cut, as a segmented control's does", amend.isLineEllipsized(0))
     }
 
+    /** The bar's Activity badge (A12-2) keeps the size it has at the default type size, as the bar's icons do: grown with
+     * the type, it passed the icon button's round clip and was cut in half (dark, 200 %, emulator-5554). TalkBack says
+     * the number as words either way. */
+    @Test fun theActivityBadgeKeepsItsSizeAtTwiceTheType() {
+        compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme { Column {
+            WikiActivityButton(3) {}
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) { WikiActivityButton(3) {} }
+        } } } }
+        val sizes = compose.onAllNodesWithTag("wiki-bar-activity-badge", useUnmergedTree = true).fetchSemanticsNodes().map { it.size }
+        assertEquals(2, sizes.size)
+        assertEquals("the badge at twice the type against the default", sizes[0], sizes[1])
+    }
+
     @Test fun aBarTitleWithoutRoomEndsInAnEllipsisOnOneLine() {
         val route = OrbitRoute(Destination.WATCH, id = "01a0cca7-8609-70ed-a0e2-d4b55b832b63")
         large { Column {

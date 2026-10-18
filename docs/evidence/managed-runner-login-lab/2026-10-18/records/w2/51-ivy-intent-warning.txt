@@ -1,0 +1,1 @@
+[Nest] 921147  - 10/18/2026, 7:41:11 AM    WARN [ManagedRunners] managed runner intent not recorded at sign-in for owner 01a14c3d-a947-7348-9bfb-838dbc2bd501; an explicit ensure records it: 

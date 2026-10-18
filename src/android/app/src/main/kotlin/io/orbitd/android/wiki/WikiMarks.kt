@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.*
@@ -68,14 +69,17 @@ internal fun WikiMarkText(mark: WikiAnchorMark) {
         color = WikiPalette.color(mark.tone))
 }
 
-/** A list row: a title (struck through once agents no longer get it) with a time on its right, then a line under it. */
+/** A list row: a title (struck through once agents no longer get it) with a time on its right, then a line under it —
+ * with Activity's [dot] before the title when it has one (blue: it came after the reader last looked). */
 @Composable
 internal fun WikiRowLabel(title: String, time: String? = null, detail: String? = null, note: String? = null,
-    struck: Boolean = false, mark: String? = null) {
+    struck: Boolean = false, mark: String? = null, dot: Color? = null) {
     Column(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // The title takes the room the time leaves, and the mark follows it (iOS: title, mark, Spacer, time).
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // A glyph TalkBack would only spell out: the band's header says how many are new.
+                if (dot != null) Text("●", Modifier.clearAndSetSemantics {}, style = WikiType.meta, color = dot)
                 Text(title, Modifier.weight(1f, fill = false), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     textDecoration = if (struck) TextDecoration.LineThrough else null,
                     color = if (struck) WikiPalette.secondary else MaterialTheme.colorScheme.onSurface)
@@ -95,15 +99,20 @@ internal fun WikiRowButton(tag: String, enabled: Boolean = true, onClick: () -> 
         .padding(horizontal = 16.dp, vertical = 6.dp).testTag(tag), contentAlignment = Alignment.CenterStart) { content() }
 }
 
-/** A band's heading, as the first row of its band: the title, its count, a badge, a hint. */
+/** A band's heading, as the first row of its band: the title, its count, a badge, a hint — and [new], Activity's line
+ * beside Recently changed (`4 new since you last looked`), in the blue of the dots it counts. */
 @Composable
-internal fun WikiBandHeader(title: String, count: Int? = null, badge: String? = null, hint: String? = null) {
+internal fun WikiBandHeader(title: String, count: Int? = null, badge: String? = null, hint: String? = null, new: String? = null) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp).semantics(mergeDescendants = true) { heading() },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = WikiType.subtext.copy(fontWeight = FontWeight.Bold))
         if (count != null) Text("$count", style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = WikiPalette.secondary)
         if (badge != null) WikiBadge(badge, WikiTone.OWNER)
         if (hint != null) Text(hint, style = WikiType.label, color = WikiPalette.secondary)
+        if (new != null) Row(Modifier.testTag("wiki-activity-new"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("●", Modifier.clearAndSetSemantics {}, style = WikiType.meta, color = WikiPalette.color(WikiTone.BLUE))
+            Text(new, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = WikiPalette.color(WikiTone.BLUE))
+        }
     }
 }
 

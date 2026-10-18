@@ -471,14 +471,16 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
           'the message is not the item’s own delivery');
         const text = turns[0]!.content;
         for (const want of [
-          'Changed files it didn’t declare', STRAY, DECLARED_DIR, '机械的范围告警', 'open_item_resolve',
-          'task_reopen', 'supersedesTaskId', 'integration_retry', '不要为它 ask_owner',
-          'exceptionEscalationSeconds',
+          'Changed files it didn’t declare', STRAY, DECLARED_DIR, 'mechanical scope warning', 'open_item_resolve',
+          'task_reopen', 'supersedesTaskId', 'integration_retry', 'do not put it to the account owner as one',
+          'once you take it up it stays yours',
         ]) {
           assert.ok(text.includes(want), `the review message does not say ${JSON.stringify(want)}`);
         }
-        assert.ok(!text.includes('合并到 main'), 'the review was sent as an order to merge');
-        assert.ok(!text.includes('需要账号所有者裁决'), 'the review was worded as the owner’s decision');
+        // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
+        assert.ok(!text.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
+        assert.ok(!text.includes('merge into main'), 'the review was sent as an order to merge');
+        assert.ok(!text.includes('needs the account owner’s ruling'), 'the review was worded as the owner’s decision');
         assert.equal(await stack.db.projectOpenItemDelivery.count({
           where: { itemId: item!.id, sessionId: f.coordinatorSessionId, purpose: 'ITEM' },
         }), 1, 'the hand-over was not recorded against the item');
@@ -552,13 +554,13 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
   });
 
 // (b) ----------------------------------------------------------------------------------------
-test('an argued exemption and a moved standard are the owner’s blockers even in an Automatic '
-  + 'project: questions about the ruler are never the coordinator’s to decide',
+test('a moved standard is the owner’s blocker even in an Automatic project, and an argued exemption '
+  + 'is the coordinator’s review: only a question about the ruler itself is never the coordinator’s',
   { skip, timeout: 300_000 }, async () => {
     const stack = await connect();
     try {
       const f = await fixture(stack, 'ruler');
-      const texts = ['这条标准的活声称某条判据不适用', '这条标准的活要通过就得改验收标准'];
+      const texts = ['这条标准的活写了保留完成判据的理由', '这条标准的活要通过就得改验收标准'];
       const [exemptionKey, standardKey] = await state(stack, f, texts);
       const exemption = await fileWork(stack, f, exemptionKey!, 'ruler：写了豁免理由的交付', {
         completionCriterionOverrideReason: ARGUMENT,
@@ -566,7 +568,7 @@ test('an argued exemption and a moved standard are the owner’s blockers even i
       const standard = await fileWork(stack, f, standardKey!, 'ruler：开工后标准被改过的交付');
       await moveTheStandard(stack, f, texts, standardKey!);
       // Neither declaration names a path, so no path reading can fire: what stops these two is the
-      // ruler, and only the ruler.
+      // reason and the ruler, and only those.
       await settle(stack, exemption);
       await attempt(stack, f, exemption, 'ruler-exemption', [IN_SCOPE]);
       await settle(stack, standard);
@@ -575,9 +577,10 @@ test('an argued exemption and a moved standard are the owner’s blockers even i
       const spentFor = (key: string) => delivered.find(
         (one) => one.criterionSubjectId === criterionSubjectId(f.projectId, key),
       );
-      assert.equal(spentFor(exemptionKey!)?.blockerKind, 'HUMAN_DECISION_REQUIRED');
+      assert.equal(spentFor(exemptionKey!)?.blockerKind, undefined,
+        'an argued exemption still raised the owner’s blocker');
+      assert.equal(spentFor(exemptionKey!)?.review?.reason, 'CRITERION_EXEMPTION_ARGUED');
       assert.equal(spentFor(standardKey!)?.blockerKind, 'POLICY_MANUAL_HOLD');
-      assert.equal(spentFor(exemptionKey!)?.review, undefined);
       assert.equal(spentFor(standardKey!)?.review, undefined);
 
       const blockers = await stack.db.projectBlocker.findMany({
@@ -585,20 +588,30 @@ test('an argued exemption and a moved standard are the owner’s blockers even i
         select: { owner: true, detail: true },
       });
       assert.deepEqual(
-        blockers.map((row) => [(row.detail as { reason?: string }).reason, row.owner]).sort(),
-        [['ACCEPTANCE_STANDARD_MOVED', 'USER'], ['CRITERION_EXEMPTION_ARGUED', 'USER']],
-        'a question about the ruler was not put to the owner',
+        blockers.map((row) => [(row.detail as { reason?: string }).reason, row.owner]),
+        [['ACCEPTANCE_STANDARD_MOVED', 'USER']],
+        'the moved standard was not put to the owner, or the argued exemption was as well',
       );
-      assert.equal((await itemsOf(stack, f.projectId, 'DELIVERY_REVIEW')).length, 0,
-        'a question about the ruler was handed to the coordinator to decide');
-      // The coordinator is TOLD — it is the conversation the owner switched on — but what it is told
-      // is that the owner decides, and it is handed no item it could close itself.
+      const reviews = await itemsOf(stack, f.projectId, 'DELIVERY_REVIEW');
+      assert.deepEqual(reviews.map((item) => [item.taskId, item.assignee]), [[exemption, 'COORDINATOR']],
+        'the argued exemption was not handed to the coordinator, or the moved standard was as well');
+      assert.equal(reviews[0]!.id, spentFor(exemptionKey!)?.review?.itemId);
+      assert.equal(reviews[0]!.title, 'Kept the judgment method Orbit questioned: ruler：写了豁免理由的交付');
+      assert.equal((reviews[0]!.payload as { argument?: string }).argument, ARGUMENT,
+        'the review does not carry the reason it asks about');
+
+      // The coordinator is handed the review it decides, and TOLD about the moved standard — what it
+      // is told there is that the owner decides, and it is handed no item it could close itself.
       const turns = await turnsTo(stack, f.coordinatorSessionId);
-      assert.ok(turns.length > 0, 'the coordinator was not told that its project is waiting on the owner');
-      for (const turn of turns) {
-        assert.ok(!turn.clientTurnId?.startsWith(OPEN_ITEM_TURN_PREFIX),
-          'the coordinator was handed an exception item about the ruler');
-        assert.ok(turn.content.includes('需要账号所有者裁决'),
+      const handed = turns.filter((turn) => turn.clientTurnId?.startsWith(OPEN_ITEM_TURN_PREFIX));
+      assert.equal(handed.length, 1, 'the coordinator was not handed exactly the exemption review');
+      for (const want of [ARGUMENT, 'Accept the reason', 'open_item_resolve', 'task_reopen']) {
+        assert.ok(handed[0]!.content.includes(want), `the review message does not say ${JSON.stringify(want)}`);
+      }
+      const told = turns.filter((turn) => !turn.clientTurnId?.startsWith(OPEN_ITEM_TURN_PREFIX));
+      assert.ok(told.length > 0, 'the coordinator was not told that its project is waiting on the owner');
+      for (const turn of told) {
+        assert.ok(turn.content.includes('needs the account owner’s ruling'),
           'the coordinator was told about the ruler as something other than the owner’s decision');
       }
     } finally {
@@ -730,8 +743,8 @@ test('a branch git refused is the coordinator’s review too, and it ends when t
       assert.equal(item?.dedupeKey, `DR:MERGE_REFUSED_BY_GIT:${taskId}`);
       assert.deepEqual((item?.payload as { paths?: string[] }).paths, [IN_SCOPE]);
       const [turn] = await turnsTo(stack, f.coordinatorSessionId);
-      for (const want of ['Git refused to merge it', 'git 拒绝了合并', IN_SCOPE, 'task_reopen',
-        'merge_receipt', '不要原样重跑']) {
+      for (const want of ['Git refused to merge it', 'git refused the merge', IN_SCOPE, 'task_reopen',
+        'merge_receipt', 'Do not rerun it as it stands']) {
         assert.ok(turn?.content.includes(want), `the refused-merge message does not say ${want}`);
       }
 

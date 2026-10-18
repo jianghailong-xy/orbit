@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSessionTurn } from '../api';
@@ -11,10 +10,10 @@ import type { Runner } from './TasksSidePanel';
 /**
  * A wake a watch queued waits in the queued tail like any follow-up (docs/watch-contract.md §6). Drawn
  * as a queued message it put the watch's head line, raw id and whole JSON payload under the user's
- * name and filled the pane (owner's report, 2026-09-14). It is the watch's card there too — the one the
- * transcript draws once a runner takes it — with the words the agent will read folded away. And
- * nobody typed it: withdrawing it is not Cancel, and neither that nor Stop hands its words to the
- * composer as if they were the user's.
+ * name and filled the pane (owner's report, 2026-09-14). It is the watch's line there too — the one
+ * the transcript draws once a runner takes it, dashed — with the words the agent will read folded
+ * away. And nobody typed it: withdrawing it is not Cancel, and neither that nor Stop hands its words
+ * to the composer as if they were the user's.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -234,40 +233,38 @@ async function mountQueue(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
   });
   await waitForUi(() => {
     expect(mounted().querySelector('.watch-wake')).not.toBeNull();
-    expect(mounted().querySelector('.chat-queued')).not.toBeNull();
+    // The message the reader typed behind it waits in the tray above the composer.
+    expect(mounted().querySelector('.pending-tray-row')).not.toBeNull();
   });
 }
 
 describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () => {
-  it('is the watch’s card with the queue’s line, and its JSON stays folded', async () => {
+  it('is the watch’s line with the queue’s line under it, and its JSON stays folded', async () => {
     await mountQueue();
 
     const card = mounted().querySelector<HTMLElement>('.watch-wake')!;
     expect(card.classList.contains('is-queued'), 'drawn as still queued').toBe(true);
-    expect(card.querySelector('.watch-wake-title')?.textContent?.trim()).toBe('Watch triggered');
+    expect(card.querySelector('.bgwake-title')?.textContent?.trim()).toBe('Watch triggered');
+    expect(card.querySelector('.bgwake-name')?.textContent).toBe('2 tasks');
     expect(card.querySelectorAll('.watch-wake-changed li')).toHaveLength(2);
-    // The delivered card's own line (Transcript.watchWake.test.tsx), down to when it was queued.
-    expect(card.querySelector('.watch-wake-meta')?.textContent).toMatch(
-      /^Queued by a watch, not typed by you · generation 1 · /,
-    );
+    // The delivered line's own fold (Transcript.watchWake.test.tsx); when it was queued is on the line.
+    expect(card.querySelector('.bgwake-meta')?.textContent).toBe('Queued by a watch, not typed by you · generation 1');
     expect(card.hasAttribute('data-seq'), 'a queued wake is no event for ⌘F to land on').toBe(false);
 
     // What the agent will read is kept whole, one closed disclosure away.
-    const raw = card.querySelector('details.watch-wake-raw')!;
+    const raw = card.querySelector('details.bgwake-raw')!;
     expect(raw.hasAttribute('open')).toBe(false);
     expect(raw.querySelector('pre')?.textContent).toBe(WAKE);
     // Outside it, none of the head line, the raw id or the payload is on the page.
     const shown = card.cloneNode(true) as HTMLElement;
-    shown.querySelector('details')!.remove();
+    shown.querySelector('details.bgwake-raw')!.remove();
     expect(shown.textContent).not.toContain('Orbit Watch');
     expect(shown.textContent).not.toContain(WATCH);
     expect(shown.textContent).not.toContain('latestSnapshot');
@@ -276,36 +273,36 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
       'no part of the wake is drawn as something the user typed',
     ).toBe(false);
 
-    // The queue's own line: its state, the action named for what it does, and what that costs.
-    const line = card.querySelector('.watch-wake-queued .chat-queued-meta')!;
+    // The queue's own line: its state and the action named for what it does. What that costs is
+    // said when the action asks to confirm (below), not under a one-line event.
+    const line = card.querySelector('.bgwake-queued .chat-queued-meta')!;
     expect(line.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
-    expect(line.querySelector('.chat-queued-why')?.textContent).toBe(CONSEQUENCE);
+    expect(line.querySelector('.chat-queued-why')).toBeNull();
     expect([...line.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Withdraw wake']);
 
-    // The message typed behind it is drawn as it always was.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    const bubble = bubbles[0];
-    expect(bubble.className).toBe('chat-msg chat-user chat-queued');
-    expect(bubble.querySelector('.md')?.textContent?.trim()).toBe(TYPED);
-    const meta = bubble.querySelector('.chat-queued-meta')!;
-    expect(meta.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
-    expect(meta.querySelector('.chat-queued-why')).toBeNull();
-    expect([...meta.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
+    // The message typed behind it is the reader's: a row of the tray above the composer, with its
+    // way back.
+    expect(mounted().querySelectorAll('.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
+    expect(rows[0].querySelector('.pending-tray-state')?.textContent).toBe('Queued for next turn');
+    expect(rows[0].querySelector('[aria-label="Withdraw"]')).not.toBeNull();
   });
 
   it('asks before withdrawing it, withdraws only it, and puts none of it in the composer', async () => {
     await mountQueue();
 
-    const withdraw = [...mounted().querySelectorAll('.watch-wake-queued a')].find((a) => a.textContent === 'Withdraw wake')!;
+    const withdraw = [...mounted().querySelectorAll('.watch-wake .bgwake-queued a')].find((a) => a.textContent === 'Withdraw wake')!;
     await click(withdraw);
 
     let dialog: HTMLElement | null = null;
     await waitForUi(() => {
-      dialog = document.querySelector<HTMLElement>('.ant-modal-confirm');
+      dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
       expect(dialog, 'withdrawing asks first').not.toBeNull();
     });
-    expect(dialog!.querySelector('.ant-modal-confirm-title')?.textContent).toBe('Withdraw this wake?');
+    // Named by its title.
+    expect(document.getElementById(dialog!.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Withdraw this wake?');
     expect(dialog!.textContent).toContain(CONSEQUENCE);
     expect(cancelMock, 'nothing is withdrawn until the owner confirms').not.toHaveBeenCalled();
 
@@ -319,7 +316,7 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     expect(cancelMock).toHaveBeenCalledTimes(1);
     // The watch's words were never the user's to edit and send again.
     expect(composer()?.value).toBe('');
-    expect(mounted().querySelector('.chat-queued')?.textContent).toContain(TYPED);
+    expect(mounted().querySelector('.pending-tray-row')?.textContent).toContain(TYPED);
   });
 
   it('is left out when Stop folds the queue back into the composer', async () => {
@@ -333,7 +330,11 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       // What was typed comes back to be edited and resent; the watch's words do not come with it.
       expect(composer()?.value).toBe(TYPED);
     });
@@ -389,7 +390,11 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       expect(composer()?.value).toBe(TYPED);
     });
   });
@@ -419,9 +424,9 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     expect(steered!.querySelectorAll('a')).toHaveLength(0);
     expect(cancelMock).not.toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-steered-wake');
 
-    // The same Cancel on a message somebody typed still hands it back, so the empty composer above
-    // is the rule and not a Cancel that restores nothing.
-    await click(cancelIn(bubbleSaying(TYPED)));
+    // Withdrawing a message somebody typed — from the tray — still hands it back, so the empty
+    // composer above is the rule and not a Cancel that restores nothing.
+    await click(mounted().querySelector('.pending-tray-row [aria-label="Withdraw"]')!);
     await waitForUi(() => expect(composer()?.value).toBe(TYPED));
   });
 });

@@ -1,0 +1,209 @@
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9 is ready to build and test
+==> building the test tree (rm -rf build first)
+==> provisioning pccspec-pg-2802509-19009 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:33530, system_identifier=7694343388690186281
+==> prisma migrate deploy (template pccspec_tpl)
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> 406 migrations applied
+########## wiki-maintain-job.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.14/32:5432 system_identifier=7694343388690186281 version=16.15
+# [Nest] 2804508  - 10/09/2026, 1:02:08 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:08 AM     LOG [WikiExecutor] The server executes wiki jobs (ORBIT_WIKI_EXECUTOR=server)
+# [Nest] 2804508  - 10/09/2026, 1:02:10 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:10 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: read 2 session(s) after the space's cursor: 2 dossier(s) to extract from, 0 already processed
+# [Nest] 2804508  - 10/09/2026, 1:02:10 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244:   "狼人杀": not about this repository — nothing taken from it
+# [Nest] 2804508  - 10/09/2026, 1:02:10 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: extracted 3 entr(ies) from 2 dossier(s) (1 off topic, 0 dropped by the checks, 1 anchored outside the repository)
+# [Nest] 2804508  - 10/09/2026, 1:02:11 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: proposed 3 op(s): 0 applied, 3 waiting, 0 refused (0 dropped by the self-check, 0 held back by the review queue, 0 held back by the breaker)
+# [Nest] 2804508  - 10/09/2026, 1:02:11 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: the ops are recorded: the cursor moved past their sessions, to wc1.eyJzIjoiZTY3NWNhYjgtOTdjNy00OGYzLTk5MzgtNzE3ZThkMmE4YjQ4IiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCI0NTIyYzFiYi00ZDNhLTRmY2QtYmYzOC05NDQ4MGFmMzI4NTciXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:11 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: op 01a11c77-1e40-71aa-8f54-52a7492f8c9c (PORT 在导入时读取 p1 0): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:11 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: op 01a11c77-1e4a-72eb-b0bd-8938eaa962a0 (PORT 在导入时读取 p1 1): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:11 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: op 01a11c77-1e4f-71b8-86b2-832ee4bc9183 (PORT 在导入时读取，fixture 之后再设无效): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:11 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: adopted 0 op(s) ended sessions left waiting for their verification: 0 verified, 0 without a verdict, which wait for the next run
+# [Nest] 2804508  - 10/09/2026, 1:02:13 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: re-checked the anchors of 3 entr(ies): 0 changed, 0 missing
+# [Nest] 2804508  - 10/09/2026, 1:02:13 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: no confirmed plan: the space's owner has not confirmed a plan, so no document was written — the entries were
+# [Nest] 2804508  - 10/09/2026, 1:02:13 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244: every step succeeded: the cursor is at wc1.eyJzIjoiZTY3NWNhYjgtOTdjNy00OGYzLTk5MzgtNzE3ZThkMmE4YjQ4IiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCI0NTIyYzFiYi00ZDNhLTRmY2QtYmYzOC05NDQ4MGFmMzI4NTciXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:13 AM     LOG [WikiJobExecutor] job 68fad8bf-6cba-4087-b175-72a8cbeea244 (maintain) succeeded
+# Subtest: a server run reads, checks, proposes, advances, verifies and re-checks the anchors, and owes an articles job
+ok 1 - a server run reads, checks, proposes, advances, verifies and re-checks the anchors, and owes an articles job
+  ---
+  duration_ms: 4597.442774
+  type: 'test'
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:13 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:15 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:15 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: read 0 session(s) after the space's cursor: 0 dossier(s) to extract from, 0 already processed
+# [Nest] 2804508  - 10/09/2026, 1:02:15 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: proposed 0 op(s): 0 applied, 0 waiting, 0 refused (0 dropped by the self-check, 0 held back by the review queue, 0 held back by the breaker)
+# [Nest] 2804508  - 10/09/2026, 1:02:15 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: the ops are recorded: the cursor moved past their sessions, to wc1.eyJzIjoiYmE4ZGNkYWQtNzQ4MS00MWUzLWE0NWEtYTc0MmRmZDI1ZjFiIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCIzN2Y0YzhhZi1jNDA5LTQ5NGQtYTJhZi00OWYyMGJhZTQzZTAiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:15 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: adopted 0 op(s) ended sessions left waiting for their verification: 0 verified, 0 without a verdict, which wait for the next run
+# [Nest] 2804508  - 10/09/2026, 1:02:17 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: re-checked the anchors of 2 entr(ies): 0 changed, 2 missing
+# [Nest] 2804508  - 10/09/2026, 1:02:17 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: no confirmed plan: the space's owner has not confirmed a plan, so no document was written — the entries were
+# [Nest] 2804508  - 10/09/2026, 1:02:17 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b: every step succeeded: the cursor is at wc1.eyJzIjoiYmE4ZGNkYWQtNzQ4MS00MWUzLWE0NWEtYTc0MmRmZDI1ZjFiIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCIzN2Y0YzhhZi1jNDA5LTQ5NGQtYTJhZi00OWYyMGJhZTQzZTAiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:17 AM     LOG [WikiJobExecutor] job 3c178951-1cfc-4c24-bb2f-f6303803ca6b (maintain) succeeded
+# Subtest: the anchors step records each entry's checks on its own anchors — a page of entries is never one entry
+not ok 2 - the anchors step records each entry's checks on its own anchors — a page of entries is never one entry
+  ---
+  duration_ms: 4085.777253
+  type: 'test'
+  location: '/root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/src/apiserver/build/wiki-worker/wiki-maintain-job.pg.spec.js:527:22'
+  failureType: 'testCodeFailure'
+  error: |-
+    the kept entry's path holds
+    + actual - expected
+    
+    + 'missing'
+    - 'verified'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'verified'
+  actual: 'missing'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/src/apiserver/build/wiki-worker/wiki-maintain-job.pg.spec.js:570:22)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:17 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:19 AM     LOG [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:19 AM     LOG [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146: read 0 session(s) after the space's cursor: 0 dossier(s) to extract from, 0 already processed
+# [Nest] 2804508  - 10/09/2026, 1:02:19 AM     LOG [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146: proposed 0 op(s): 0 applied, 0 waiting, 0 refused (0 dropped by the self-check, 0 held back by the review queue, 0 held back by the breaker)
+# [Nest] 2804508  - 10/09/2026, 1:02:19 AM     LOG [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146: the ops are recorded: the cursor moved past their sessions, to wc1.eyJzIjoiYTZiMGE3YmMtN2U1Zi00YjM0LThiYWYtY2FhOGJhYWQ3ZTZkIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCJjZWZlZjU4Ny1iNjg1LTQ3YTItOTZlNC03YTMwMTM1YjUyOTMiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:19 AM     LOG [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146: adopted 0 op(s) ended sessions left waiting for their verification: 0 verified, 0 without a verdict, which wait for the next run
+# [Nest] 2804508  - 10/09/2026, 1:02:21 AM     LOG [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146: stopped at anchors (content): git could not check 1 anchor(s), and the server refused 0 entr(ies)
+# [Nest] 2804508  - 10/09/2026, 1:02:21 AM    WARN [WikiJobExecutor] job f33b25b0-846f-4bdf-aed6-33108b13c146 (maintain) failed: anchors: git could not check 1 anchor(s), and the server refused 0 entr(ies)
+# Subtest: anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess
+not ok 3 - anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess
+  ---
+  duration_ms: 4109.277874
+  type: 'test'
+  location: '/root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/src/apiserver/build/wiki-worker/wiki-maintain-job.pg.spec.js:591:22'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /refuses to guess/u. Input:
+    
+    'anchors: git could not check 1 anchor(s), and the server refused 0 entr(ies)'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: 'anchors: git could not check 1 anchor(s), and the server refused 0 entr(ies)'
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (/root/.orbit/worktrees/4073cb8c-7faf-52a9-be18-3e8c98f033f9/src/apiserver/build/wiki-worker/wiki-maintain-job.pg.spec.js:615:22)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:21 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: read 2 session(s) after the space's cursor: 2 dossier(s) to extract from, 0 already processed
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f:   "狼人杀": not about this repository — nothing taken from it
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: extracted 2 entr(ies) from 2 dossier(s) (1 off topic, 0 dropped by the checks, 1 anchored outside the repository)
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: proposed 2 op(s): 0 applied, 2 waiting, 0 refused (0 dropped by the self-check, 0 held back by the review queue, 0 held back by the breaker)
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: the ops are recorded: the cursor moved past their sessions, to wc1.eyJzIjoiNTNmZWU0MWYtMDEzMi00ZjYwLWFlZGMtYTYwNDRkMzU2Y2JkIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCI5NDQwMmU2NS03YTkxLTRlNmYtOGNmZC1kOGMwOTI2ZjI3MmMiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: op 01a11c77-5010-715b-835a-0ffe3926c847 (PORT 在导入时读取 p1 0): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: op 01a11c77-5020-750f-8d46-a92cdd15c10e (PORT 在导入时读取，fixture 之后再设无效): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:23 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: adopted 0 op(s) ended sessions left waiting for their verification: 0 verified, 0 without a verdict, which wait for the next run
+# [Nest] 2804508  - 10/09/2026, 1:02:25 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: re-checked the anchors of 2 entr(ies): 0 changed, 0 missing
+# [Nest] 2804508  - 10/09/2026, 1:02:25 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: the space is catching up: its oldest fact not taken in is more than a day old, so no document was written and no change to the plan proposed — the first run after it has caught up writes what changed meanwhile
+# [Nest] 2804508  - 10/09/2026, 1:02:25 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f: every step succeeded: the cursor is at wc1.eyJzIjoiNTNmZWU0MWYtMDEzMi00ZjYwLWFlZGMtYTYwNDRkMzU2Y2JkIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCI5NDQwMmU2NS03YTkxLTRlNmYtOGNmZC1kOGMwOTI2ZjI3MmMiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:25 AM     LOG [WikiJobExecutor] job a7d3781d-10a0-4da4-a244-e928e0e0016f (maintain) succeeded
+# Subtest: a run made while the space is catching up writes no document and proposes no plan change, and owes no articles job
+ok 4 - a run made while the space is catching up writes no document and proposes no plan change, and owes no articles job
+  ---
+  duration_ms: 4539.035803
+  type: 'test'
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:25 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: read 2 session(s) after the space's cursor: 2 dossier(s) to extract from, 0 already processed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314:   "狼人杀": not about this repository — nothing taken from it
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: extracted 6 entr(ies) from 2 dossier(s) (1 off topic, 0 dropped by the checks, 1 anchored outside the repository)
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: proposed 6 op(s): 0 applied, 6 waiting, 0 refused (0 dropped by the self-check, 0 held back by the review queue, 0 held back by the breaker)
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: the ops are recorded: the cursor moved past their sessions, to wc1.eyJzIjoiZDU4ZTlhMzItN2E4Yi00NzJkLWFmNTEtNTRlYmU3MmVjN2FiIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCJmMTc4YjA0MC1kZjU5LTRiOTEtYmM1Mi1jNDI1NDZkMjFjYmEiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: op 01a11c77-61ca-71e9-ab0b-4423abd98def (PORT 在导入时读取 p1 0): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: op 01a11c77-61d1-722f-9e38-250cc7f3114b (PORT 在导入时读取 p1 1): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: op 01a11c77-61d6-76a8-b24b-3a98853aedbb (PORT 在导入时读取 p1 2): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: op 01a11c77-61e8-70be-9307-0470240077a8 (PORT 在导入时读取 p1 3): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: op 01a11c77-61ec-7233-93e1-d9e2a95f88be (PORT 在导入时读取 p1 4): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: op 01a11c77-61f0-7658-bb03-7e94685343a7 (PORT 在导入时读取 p1 5): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:28 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: adopted 0 op(s) ended sessions left waiting for their verification: 0 verified, 0 without a verdict, which wait for the next run
+# [Nest] 2804508  - 10/09/2026, 1:02:30 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: re-checked the anchors of 6 entr(ies): 0 changed, 0 missing
+# [Nest] 2804508  - 10/09/2026, 1:02:30 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: no confirmed plan: the space's owner has not confirmed a plan, so no document was written — the entries were
+# [Nest] 2804508  - 10/09/2026, 1:02:30 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314: every step succeeded: the cursor is at wc1.eyJzIjoiZDU4ZTlhMzItN2E4Yi00NzJkLWFmNTEtNTRlYmU3MmVjN2FiIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCJmMTc4YjA0MC1kZjU5LTRiOTEtYmM1Mi1jNDI1NDZkMjFjYmEiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:30 AM     LOG [WikiJobExecutor] job 1c9dc2ed-b1eb-47ca-8980-5978ab598314 (maintain) succeeded
+# Subtest: the breaker holds back the ops of the first page that does not fit and stops the cursor where that page starts
+ok 5 - the breaker holds back the ops of the first page that does not fit and stops the cursor where that page starts
+  ---
+  duration_ms: 4748.426955
+  type: 'test'
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:30 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: read 4 session(s) after the space's cursor: 4 dossier(s) to extract from, 0 already processed
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d:   "狼人杀": not about this repository — nothing taken from it
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d:   "狼人杀": not about this repository — nothing taken from it
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: extracted 12 entr(ies) from 4 dossier(s) (2 off topic, 0 dropped by the checks, 2 anchored outside the repository)
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: the breaker held back 6 op(s) from page 2 on, past the 10 entr(ies) the run may still change: the cursor stops where that page starts, and the next run reads its dossiers again
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: proposed 6 op(s): 0 applied, 6 waiting, 0 refused (0 dropped by the self-check, 0 held back by the review queue, 6 held back by the breaker)
+# [Nest] 2804508  - 10/09/2026, 1:02:32 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: the ops are recorded: the cursor moved past their sessions, to wc1.eyJzIjoiYTM0MDQ4YzQtY2UxMi00YTg4LWEyY2UtOGFlYWZhMDJiOGQxIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCIwOWZjNTExMC00YzcwLTQzMDgtOWVlMy1lNjU3ZTM1MmU0NWQiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: op 01a11c77-7402-752c-a54a-3545a356b567 (PORT 在导入时读取 p1 0): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: op 01a11c77-7406-72ed-8f6b-14ccb4c812cb (PORT 在导入时读取 p1 1): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: op 01a11c77-740a-77d9-a177-847c5d2ce9be (PORT 在导入时读取 p1 2): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: op 01a11c77-740d-746e-87ae-855491529809 (PORT 在导入时读取 p1 3): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: op 01a11c77-7412-740a-9046-ef3a3592fe3e (PORT 在导入时读取 p1 4): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: op 01a11c77-7416-72cb-9679-20575d99c60c (PORT 在导入时读取 p1 5): supported — applied as Auto, and pushed
+# [Nest] 2804508  - 10/09/2026, 1:02:33 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: adopted 0 op(s) ended sessions left waiting for their verification: 0 verified, 0 without a verdict, which wait for the next run
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: re-checked the anchors of 6 entr(ies): 0 changed, 0 missing
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: no confirmed plan: the space's owner has not confirmed a plan, so no document was written — the entries were
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d: every step succeeded: the cursor is at wc1.eyJzIjoiYTM0MDQ4YzQtY2UxMi00YTg4LWEyY2UtOGFlYWZhMDJiOGQxIiwicCI6WyIyMDI2LTA5LTIwVDAwOjAwOjAwLjAwMFoiLCJzZXNzaW9uX3NldHRsZWQiLCIwOWZjNTExMC00YzcwLTQzMDgtOWVlMy1lNjU3ZTM1MmU0NWQiXX0
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiJobExecutor] job a5ca243b-0ef4-4d0f-96fb-a73a69f94e5d (maintain) succeeded
+# Subtest: a run whose second page does not fit holds it back and stops the cursor there
+ok 6 - a run whose second page does not fit holds it back and stops the cursor there
+  ---
+  duration_ms: 4570.316926
+  type: 'test'
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiJobExecutor] job 6a3a9fe9-3707-4f2f-aded-482fda0a9c99: stopped at repo (infra): REPO_OP_FAILED: the snapshot of origin/main failed: the machine went away
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM    WARN [WikiJobExecutor] job 6a3a9fe9-3707-4f2f-aded-482fda0a9c99 (maintain) will be tried again: repo: REPO_OP_FAILED: the snapshot of origin/main failed: the machine went away
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiJobExecutor] job 6a3a9fe9-3707-4f2f-aded-482fda0a9c99: stopped at repo (infra): REPO_OP_FAILED: the snapshot of origin/main failed: the machine went away
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM    WARN [WikiJobExecutor] job 6a3a9fe9-3707-4f2f-aded-482fda0a9c99 (maintain) will be tried again: repo: REPO_OP_FAILED: the snapshot of origin/main failed: the machine went away
+# Subtest: a repository operation the runner never answers is the platform's: the job is queued again and nothing is counted
+ok 7 - a repository operation the runner never answers is the platform's: the job is queued again and nothing is counted
+  ---
+  duration_ms: 463.104673
+  type: 'test'
+  ...
+# [Nest] 2804508  - 10/09/2026, 1:02:35 AM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 2804508  - 10/09/2026, 1:02:37 AM     LOG [WikiJobExecutor] job 6c39eadd-ab8b-4f7b-8a48-9ee541c7e2cc: the repository at aaaaaaaaaaaa (3 files)
+# [Nest] 2804508  - 10/09/2026, 1:02:37 AM     LOG [WikiJobExecutor] job 6c39eadd-ab8b-4f7b-8a48-9ee541c7e2cc: stopped at dossiers (content): the dossiers could not be read: the page names no position this space handed out
+# [Nest] 2804508  - 10/09/2026, 1:02:37 AM    WARN [WikiJobExecutor] job 6c39eadd-ab8b-4f7b-8a48-9ee541c7e2cc (maintain) failed: dossiers: the dossiers could not be read: the page names no position this space handed out
+# Subtest: a refusal of the run's own ends it failed, counts it against the space and fails the job as content
+ok 8 - a refusal of the run's own ends it failed, counts it against the space and fails the job as content
+  ---
+  duration_ms: 2051.552023
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 6
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29948.033859
+SPEC_EXIT=1
+==== wiki-maintain-job.pg.spec.ts tests=8 pass=6 fail=2 skipped=0 node exited rc=1; 2 failing
+RED: wiki-maintain-job.pg.spec.ts: node exited rc=1; 2 failing
+==> removing pccspec-pg-2802509-19009

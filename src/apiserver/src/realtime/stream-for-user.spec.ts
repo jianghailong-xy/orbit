@@ -48,6 +48,12 @@ type Row = {
   sourceState?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: unknown;
+  /** The row's two reply previews and its rolling recap (0418), which the summary carries so a
+   *  list folding it in keeps previewing the turn that just finished. */
+  lastAssistantText?: string | null;
+  lastUserText?: string | null;
+  recapText?: string | null;
+  recapAt?: Date | null;
 };
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary,
@@ -205,6 +211,55 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
     projectStatus: 'OPEN',
     role: 'COORDINATOR',
   });
+});
+
+test('the reply previews and the rolling recap ride in the summary, clipped as the list clips them', async () => {
+  // The two halves a list folding this summary in cannot do without: `lastAssistantText` /
+  // `lastUserText` are what its rows preview, and the recap is what it prefers to them. The
+  // double honours `select` (see fakePrisma), so a value reaching these assertions proves the
+  // summary's own query asked for the column — one it never asked for would arrive as null.
+  const long = 'a'.repeat(199) + '😀' + 'b'.repeat(50);
+  const recapped: Row = {
+    ...rowA,
+    lastAssistantText: long,
+    lastUserText: 'fix the drawer shadow',
+    recapText: 'Refactored the drawer shadow; specs pass; next: merge.',
+    recapAt: new Date('2026-06-26T00:01:00.000Z'),
+  };
+  const svc = svcWith({ sessA: recapped }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessA');
+  await delay(30);
+  sub.unsubscribe();
+
+  const data = got[0]!.data as Record<string, unknown>;
+  assert.equal(data.recapText, 'Refactored the drawer shadow; specs pass; next: merge.');
+  assert.equal(data.recapAt, '2026-06-26T00:01:00.000Z');
+  assert.equal(data.lastUserText, 'fix the drawer shadow');
+  // Clipped to the list's own 200 (`SessionsService.PREVIEW_LEN`, `left(col, 200)`), counted in
+  // code points as `left()` counts them: the emoji sits exactly on the cap and survives whole.
+  assert.equal(data.lastAssistantText, 'a'.repeat(199) + '😀');
+});
+
+test('a session with no recap and no previews still answers them as nulls, not as absent keys', async () => {
+  // Null as a value is the convention every other clearing key in this summary follows: a client
+  // folding it into a row has to be able to clear what it holds, and an absent key means "unchanged"
+  // (an older control plane). A mapper that passed `undefined` through would be neither.
+  const svc = svcWith({ sessA: rowA }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessA');
+  await delay(30);
+  sub.unsubscribe();
+
+  const data = got[0]!.data as Record<string, unknown>;
+  for (const key of ['recapText', 'recapAt', 'lastAssistantText', 'lastUserText'] as const) {
+    assert.equal(Object.hasOwn(data, key), true, `${key} is on the summary`);
+    assert.equal(data[key], null, `${key} is null`);
+  }
 });
 
 test('a parked conversation counts the cards a live runner-hosted job is still reading', async () => {

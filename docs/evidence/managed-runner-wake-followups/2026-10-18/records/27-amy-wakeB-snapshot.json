@@ -1,0 +1,198 @@
+{
+  "at": "2026-10-18T04:05:37.199+00:00",
+  "attachments": [
+    {
+      "attached": true,
+      "deleting": false,
+      "name": "csi-fc130ac6441702e90303f78a5519b5f1143a3b53534548bc105cf7e41eb666f3"
+    }
+  ],
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "enable_worktree": true,
+    "id": "01a14d26-b013-74ad-b17a-8b127f528105",
+    "name": "Default",
+    "runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "target_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "mapping": {
+    "attempt": 0,
+    "demand_revision": 2,
+    "desired_state": "RUNNING",
+    "generation": 3,
+    "id": "01a14d26-b015-74ae-adbf-b0eb3ffeabe6",
+    "initial_provider": "deepseek",
+    "last_demand_at": "2026-10-18T04:05:15.731+00:00",
+    "last_error": null,
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab",
+    "pod_name": "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "pod_uid": "8421584c-6734-4428-96cd-a34c61fc0f53",
+    "pv_uid": "29a6631c-4f0c-4d25-b69d-d8d591862e9b",
+    "pvc_name": "mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "pvc_uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 3,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-18T04:05:15.759Z"
+      },
+      "pool": "8bb69c69-79f8-42a6-91a8-96d365abe63c",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-18T03:55:43.529Z"
+      },
+      "version": 1
+    },
+    "revision": 44,
+    "state_entered_at": "2026-10-18T04:05:36.223+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada"
+  },
+  "owner": "amy",
+  "pod": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://107fd89b0b66bba36badc800037aab42fa1d59a272e2d1b546d015b0aea3c539",
+            "exitCode": 0,
+            "finishedAt": "2026-10-18T04:05:26Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-18T04:05:26Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-18T04:05:27Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": null,
+    "generation": "3",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+    ],
+    "name": "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "8421584c-6734-4428-96cd-a34c61fc0f53"
+  },
+  "podsUsingTheClaim": [
+    "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5"
+  ],
+  "pv": {
+    "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada",
+    "image": "csi-vol-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada",
+    "reclaim": "Retain",
+    "uid": "29a6631c-4f0c-4d25-b69d-d8d591862e9b"
+  },
+  "pvc": {
+    "createdAt": "2026-10-18T03:55:43Z",
+    "phase": "Bound",
+    "uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388",
+    "volumeName": "pvc-4a06a82f-fcfd-4b7e-a32c-aea44e40d388"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-maintenance-run/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-18T03:55:43.504",
+    "id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "last_heartbeat_at": "2026-10-18T04:05:35.113",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "token_hash_prefix": "ceeb9e603de0"
+  },
+  "sessions": [
+    {
+      "id": "01a14d28-86e3-779e-a191-0fe345bd2b7c",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": null,
+      "title": "T06B-AMY-S1 the first session, sent while the runn"
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": true,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "ONLINE",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 44,
+    "usable": true
+  }
+}

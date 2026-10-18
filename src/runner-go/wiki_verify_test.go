@@ -323,10 +323,17 @@ type fakeVerifyDoor struct {
 	items      []map[string]interface{}
 	listMode   string
 	reportMode string
-	refuse     bool
-	lists      []string
-	sessions   []string
-	verdicts   []map[string]interface{}
+	// The server's own verification: servedBy and waiting as the gated list answers them, requests as the
+	// request route records them, and what waiting becomes once that route was asked (0: the worker verified
+	// them by the time it answered).
+	servedBy         string
+	waiting          int
+	waitAfterRequest int
+	requests         []string
+	refuse           bool
+	lists            []string
+	sessions         []string
+	verdicts         []map[string]interface{}
 }
 
 func newFakeVerifyDoor(t *testing.T, items []map[string]interface{}) *fakeVerifyDoor {
@@ -344,7 +351,22 @@ func newFakeVerifyDoor(t *testing.T, items []map[string]interface{}) *fakeVerify
 		}
 		if r.Method == http.MethodGet {
 			door.lists = append(door.lists, r.URL.RequestURI())
-			out, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "mode": door.listMode, "items": door.items, "next": nil})
+			// Where this deployment verifies on the server, the list is empty and says so, with the number
+			// of the session's ops that wait (contract `reviewModes.verification.servedBy`).
+			page := map[string]interface{}{"spaceId": "space-1", "mode": door.listMode, "items": door.items, "next": nil}
+			if door.servedBy != "" {
+				page["items"], page["servedBy"], page["waiting"] = []map[string]interface{}{}, door.servedBy, door.waiting
+			}
+			out, _ := json.Marshal(page)
+			_, _ = w.Write(out)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/verifications/request") {
+			door.requests = append(door.requests, r.URL.Path)
+			// What the worker's verdict does to the real list: by the time the ask is answered the ops are
+			// the worker's to verify, so what this door reports waiting next is the test's waitAfterRequest.
+			door.waiting = door.waitAfterRequest
+			out, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "servedBy": "server", "jobId": "job-1"})
 			_, _ = w.Write(out)
 			return
 		}
@@ -385,6 +407,14 @@ func newFakeVerifyDoor(t *testing.T, items []map[string]interface{}) *fakeVerify
 	t.Cleanup(srv.Close)
 	door.URL = srv.URL
 	return door
+}
+
+// Requests is every ask the request route recorded, in order (contract
+// `reviewModes.verification.routes.request`).
+func (d *fakeVerifyDoor) Requests() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string{}, d.requests...)
 }
 
 func (d *fakeVerifyDoor) Verdicts() []map[string]interface{} {
@@ -1110,8 +1140,14 @@ func TestWikiVerifyTakesTheModelAndItsEndpointFromTheProvider(t *testing.T) {
 		}
 		t.Setenv(missing.env, value)
 	}
-	if len(door.lists) != 0 || len(spawns()) != 0 {
-		t.Fatalf("a run with no model to ask read the list or ran Claude Code")
+	// Each attempt read ONE page — how the command learns who verifies (`servedBy`, contract
+	// reviewModes.verification.servedBy) — and stopped there: no Claude Code, and no verdict of a model
+	// this session does not have.
+	if len(spawns()) != 0 || len(door.Verdicts()) != 0 {
+		t.Fatalf("a run with no model to ask ran Claude Code or reported a verdict")
+	}
+	if len(door.lists) != 3 {
+		t.Errorf("the three attempts read %d pages, want one each (the ask that learns who verifies)", len(door.lists))
 	}
 	if err := cmdWikiCLI([]string{"verify"}, strings.NewReader(""), io.Discard); err == nil || !strings.Contains(err.Error(), "--space is required") {
 		t.Errorf("no --space = %v", err)
@@ -1128,14 +1164,15 @@ func TestWikiVerifyTakesTheModelAndItsEndpointFromTheProvider(t *testing.T) {
 		t.Errorf("the verdict does not name the model that gave it: %#v", verdicts)
 	}
 
-	// An endpoint that is not there: nothing is read and no model is asked.
+	// An endpoint that is not there: no model is asked, and the only page read is the one ask that learns
+	// who verifies (`servedBy`) — the endpoint is probed before any op of the list is looked at.
 	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:1")
 	before := len(door.lists)
 	err := cmdWikiCLI([]string{"verify", "--space", "space-1"}, strings.NewReader(""), io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "is not reachable") {
 		t.Errorf("a dead endpoint = %v", err)
 	}
-	if len(door.lists) != before {
+	if len(door.lists) != before+1 {
 		t.Errorf("the list was read with no model to ask")
 	}
 }
@@ -1347,5 +1384,130 @@ func TestWikiVerifyDrivesTheRealClaudeCodeCleanly(t *testing.T) {
 		if strings.Contains(request.System, "CLAUDE.md") || len(request.System) > 4_000 {
 			t.Errorf("the system prompt carries more than the clean launch should (%d bytes)", len(request.System))
 		}
+	}
+}
+
+// ── The server's own verification ───────────────────────────────────────────────────────────────
+
+// Where this deployment verifies on the server (contract `reviewModes.verification.servedBy`), the command
+// asks for a verification and waits for the worker's verdict: no Claude Code is started, the session's
+// provider is asked nothing, and what it prints says who verified.
+func TestWikiVerifyWaitsForTheServersOwnVerification(t *testing.T) {
+	door := newFakeVerifyDoor(t, fourOps())
+	door.mu.Lock()
+	door.servedBy, door.waiting = "server", 4
+	door.mu.Unlock()
+	vllm := newFakeVLLM(t, scriptedVerdicts)
+	spawns := fakeVerifyClaude(t)
+	wikiVerifySession(t, door, vllm)
+	previousWait, previousPoll := wikiVerifyServerWaitFor, wikiVerifyServerPollFor
+	wikiVerifyServerWaitFor, wikiVerifyServerPollFor = 30*time.Second, time.Millisecond
+	t.Cleanup(func() { wikiVerifyServerWaitFor, wikiVerifyServerPollFor = previousWait, previousPoll })
+
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"verify", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("orbit wiki verify where the server verifies: %v\n%s", err, out.String())
+	}
+	if n := len(spawns()); n != 0 {
+		t.Errorf("the command started %d Claude Code(s): no model of this session's is to be asked", n)
+	}
+	if n := len(vllm.Requests()); n != 0 {
+		t.Errorf("the model endpoint was asked %d time(s): the server verifies, not this session", n)
+	}
+	if got := door.Requests(); len(got) != 1 {
+		t.Errorf("the door was asked to verify %v, want exactly one ask", got)
+	}
+	if n := len(door.Verdicts()); n != 0 {
+		t.Errorf("the session reported %d verdict(s) of its own: the verdicts are the worker's", n)
+	}
+	for _, phrase := range []string{
+		"The server verifies the ops this session proposed in space space-1: waiting for 4 ops to be verified (no model is asked here).",
+		"The server verified 4 ops in space space-1.",
+		"Verified 4 of 4 by the server's own worker in space space-1. No model of this session's was asked.",
+	} {
+		if !strings.Contains(out.String(), phrase) {
+			t.Errorf("the run does not say %q:\n%s", phrase, out.String())
+		}
+	}
+
+	// The same run, as JSON: the summary says who verified, so a caller reads it rather than the prose.
+	door.mu.Lock()
+	door.waiting = 2
+	door.mu.Unlock()
+	var jsonOut strings.Builder
+	if err := cmdWikiCLI([]string{"verify", "--space", "space-1", "--json"}, strings.NewReader(""), &jsonOut); err != nil {
+		t.Fatalf("orbit wiki verify --json where the server verifies: %v\n%s", err, jsonOut.String())
+	}
+	var summary wikiVerifySummary
+	if err := json.Unmarshal([]byte(jsonOut.String()), &summary); err != nil {
+		t.Fatalf("--json printed something that is not the summary: %v (%q)", err, jsonOut.String())
+	}
+	if summary.ServedBy != "server" || summary.Looked != 2 || summary.Verified != 2 || summary.Failed != 0 {
+		t.Errorf("summary = %+v, want the server's own verification of both ops", summary)
+	}
+	if n := len(spawns()); n != 0 {
+		t.Errorf("the JSON run started %d Claude Code(s)", n)
+	}
+}
+
+// An op the server has not verified by the time the wait runs out is reported as one left without a verdict
+// — the session asked, waited, and says so — and the command exits non-zero so the next run tries again.
+func TestWikiVerifyReportsOpsTheServerHasNotVerifiedYet(t *testing.T) {
+	door := newFakeVerifyDoor(t, fourOps())
+	door.mu.Lock()
+	door.servedBy, door.waiting, door.waitAfterRequest = "server", 3, 3
+	door.mu.Unlock()
+	vllm := newFakeVLLM(t, scriptedVerdicts)
+	spawns := fakeVerifyClaude(t)
+	wikiVerifySession(t, door, vllm)
+	previousWait, previousPoll := wikiVerifyServerWaitFor, wikiVerifyServerPollFor
+	wikiVerifyServerWaitFor, wikiVerifyServerPollFor = 20*time.Millisecond, time.Millisecond
+	t.Cleanup(func() { wikiVerifyServerWaitFor, wikiVerifyServerPollFor = previousWait, previousPoll })
+
+	var out strings.Builder
+	err := cmdWikiCLI([]string{"verify", "--space", "space-1"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "3 ops were left without a verdict") {
+		t.Fatalf("a wait that ran out = %v, want the command to fail naming them", err)
+	}
+	if !strings.Contains(err.Error(), "the server is still verifying them") {
+		t.Errorf("the failure does not say what it waited for: %v", err)
+	}
+	if n := len(spawns()); n != 0 {
+		t.Errorf("the command started %d Claude Code(s) on the waiting path", n)
+	}
+	if !strings.Contains(out.String(), "Verified 3 of 3") && !strings.Contains(out.String(), "waiting") {
+		t.Errorf("the run says nothing about waiting:\n%s", out.String())
+	}
+}
+
+// What the session is told after proposing where the server verifies: the verdict arrives by itself, there
+// is nothing for it to run, and no model of its provider is asked. The runner path's wording, and the op
+// lines under it, are unchanged wherever the server does not serve.
+func TestWikiProposeSaysTheServerVerifies(t *testing.T) {
+	ops := []map[string]interface{}{{"seq": float64(0), "status": "pending", "waitsFor": "verification", "opId": "op-1"}}
+	names := []string{"A pitfall"}
+	server := describeWikiPropose(wikiProposeAnswer{ChangesetID: "cs-1", Ops: ops, ServedBy: "server"}, names, false)
+	for _, phrase := range []string{
+		"the deployment's own worker verifies what waits for its verification",
+		"the verdict arrives by itself",
+		"nothing for this session to run, and no model of this session's is asked",
+	} {
+		if !strings.Contains(server, phrase) {
+			t.Errorf("the server-mode answer does not say %q:\n%s", phrase, server)
+		}
+	}
+	if strings.Contains(server, "orbit wiki verify") {
+		t.Errorf("the server-mode answer still asks the session to run the command:\n%s", server)
+	}
+	if line := describeWikiOp(ops[0], names, true); line != "op 0 A pitfall: pending — the deployment's own worker verifies it, not live yet" {
+		t.Errorf("the op line where the server verifies reads %q", line)
+	}
+	// The runner path, word for word as it was: this command's own verifier, and the op line naming it.
+	plain := describeWikiPropose(wikiProposeAnswer{ChangesetID: "cs-1", Ops: ops}, names, false)
+	if !strings.Contains(plain, "goes live only when `orbit wiki verify` reports a verdict for it") {
+		t.Errorf("the runner path's answer changed:\n%s", plain)
+	}
+	if line := describeWikiOp(ops[0], names, false); line != "op 0 A pitfall: pending — waiting for its verification (orbit wiki verify), not live yet" {
+		t.Errorf("the runner path's op line reads %q", line)
 	}
 }

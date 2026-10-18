@@ -88,19 +88,40 @@ type PlanUsageBucket struct {
 	ResetTime         string  `json:"resetTime,omitempty"`
 }
 
+// PlanUsageIncludedUsage is one Cursor CLI account's included usage this period, as Cursor's dashboard
+// reports it (cursor_usage.go). Mirrors @orbit/shared PlanUsageIncludedUsage, which says what each
+// field means; every one is omitted when Cursor did not send it.
+type PlanUsageIncludedUsage struct {
+	Period   string `json:"period,omitempty"`   // "weekly" or "monthly", as Cursor names its period
+	StartsAt string `json:"startsAt,omitempty"` // when this period began
+	ResetsAt string `json:"resetsAt,omitempty"` // when the included usage resets
+	// PercentUsed is Cursor's share used, above 0 only: a 0 is no reading (contract §11), and omitted.
+	PercentUsed float64 `json:"percentUsed,omitempty"`
+	// LimitReachedAt is when a turn on the account last met Cursor's usage limit within this period.
+	LimitReachedAt string `json:"limitReachedAt,omitempty"`
+}
+
 // PlanUsage is a provider usage snapshot. For compatibility, a single-provider
 // heartbeat can still be flat; when the runner has multiple providers active, Claude
 // and Codex snapshots are nested under claude/codex.
 type PlanUsage struct {
 	Provider string `json:"provider,omitempty"`
+	// Cursor CLI's (cursor_usage.go): the account the snapshot is about, its plan and its included usage.
+	Account       string                  `json:"account,omitempty"`
+	PlanName      string                  `json:"planName,omitempty"`
+	IncludedUsage *PlanUsageIncludedUsage `json:"includedUsage,omitempty"`
 	// Antigravity Google account buckets from the independent /usage command.
 	Buckets []PlanUsageBucket `json:"buckets,omitempty"`
 
-	// Claude windows.
+	// Claude windows; Kimi Code's 5-hour and 7-day limits land in the first two too.
 	FiveHour       *PlanUsageWindow `json:"fiveHour,omitempty"`
 	SevenDay       *PlanUsageWindow `json:"sevenDay,omitempty"`
 	SevenDayOpus   *PlanUsageWindow `json:"sevenDayOpus,omitempty"`
 	SevenDaySonnet *PlanUsageWindow `json:"sevenDaySonnet,omitempty"`
+
+	// Kimi Code's monthly limits: everything the account spends, and its coding use (kimi_usage.go).
+	Month     *PlanUsageWindow `json:"month,omitempty"`
+	MonthCode *PlanUsageWindow `json:"monthCode,omitempty"`
 
 	// Codex windows, from app-server account/rateLimits/read.
 	Primary              *PlanUsageWindow     `json:"primary,omitempty"`
@@ -114,13 +135,16 @@ type PlanUsage struct {
 	// Earned rate-limit reset state of the default Codex account
 	// (docs/codex-rate-limit-reset-contract.md). Nil until a reader fills it; omitted on the wire.
 	RateLimitReset *PlanUsageRateLimitReset `json:"rateLimitReset,omitempty"`
-	// Codex only: every other account slot's own snapshot, by slot id (codex_account_usage.go). The
-	// windows beside it are Default's. Omitted while no other account has been read.
+	// Every other account slot's own snapshot, by slot id (codex_account_usage.go,
+	// claude_account_usage.go, kimi_account_usage.go, cursor_usage.go). The windows beside it are
+	// Default's. Omitted while no other account has been read.
 	Accounts map[string]*PlanUsage `json:"accounts,omitempty"`
 
-	// Nested snapshots when more than one provider is available.
+	// Nested snapshots when more than one provider is available, and Kimi Code's and Cursor CLI's always.
 	Claude *PlanUsage `json:"claude,omitempty"`
 	Codex  *PlanUsage `json:"codex,omitempty"`
+	Kimi   *PlanUsage `json:"kimi,omitempty"`
+	Cursor *PlanUsage `json:"cursor,omitempty"`
 
 	FetchedAt string `json:"fetchedAt,omitempty"`
 }
@@ -198,10 +222,11 @@ func (p *planUsageProbe) mergeCodexRateLimits(raw map[string]interface{}) {
 // run keeps the usage snapshot fresh without blocking heartbeats: it refreshes on
 // the idle→busy edge (fresh when work starts), periodically while sessions run, once
 // more on the busy→idle edge (capture just-finished usage), and at a slower idle
-// cadence when this runner has an agent for the provider. activeCount reports how
-// many sessions are currently running for that provider; idleEnabled reports whether
-// it is worth polling the provider while no sessions are active. Failures are soft:
-// the last good value is kept and a repeated error is logged only once.
+// cadence when this runner has an agent for the provider or the engine is signed in
+// here (idleUsage). activeCount reports how many sessions are currently running for
+// that provider; idleEnabled reports whether it is worth polling the provider while
+// no sessions are active. Failures are soft: the last good value is kept and a
+// repeated error is logged only once.
 func (p *planUsageProbe) run(ctx context.Context, activeCount func() int, idleEnabled func() bool) {
 	p.runWithIntervals(ctx, activeCount, idleEnabled, planUsageCheckInterval, planUsageActiveInterval, planUsageIdleInterval)
 }
@@ -270,16 +295,21 @@ func planUsageRefreshDue(lastFetch time.Time, lastUsage *PlanUsage, now time.Tim
 
 func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool) {
 	var best time.Time
-	add := func(w *PlanUsageWindow) {
-		if w == nil || w.ResetsAt == "" {
+	addAt := func(resetsAt string) {
+		if resetsAt == "" {
 			return
 		}
-		t, err := time.Parse(time.RFC3339, w.ResetsAt)
+		t, err := time.Parse(time.RFC3339, resetsAt)
 		if err != nil || !t.After(after) {
 			return
 		}
 		if best.IsZero() || t.Before(best) {
 			best = t
+		}
+	}
+	add := func(w *PlanUsageWindow) {
+		if w != nil {
+			addAt(w.ResetsAt)
 		}
 	}
 	var visit func(*PlanUsage)
@@ -291,14 +321,21 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 		add(u.SevenDay)
 		add(u.SevenDayOpus)
 		add(u.SevenDaySonnet)
+		add(u.Month)
+		add(u.MonthCode)
 		add(u.Primary)
 		add(u.Secondary)
 		for _, limit := range u.RateLimits {
 			add(limit.Primary)
 			add(limit.Secondary)
 		}
+		if u.IncludedUsage != nil {
+			addAt(u.IncludedUsage.ResetsAt)
+		}
 		visit(u.Claude)
 		visit(u.Codex)
+		visit(u.Kimi)
+		visit(u.Cursor)
 	}
 	visit(usage)
 	return best, !best.IsZero()
@@ -391,21 +428,23 @@ func claudeOAuthLoginIn(configDir string) (claudeOAuthLogin, error) {
 // file error is preserved when the fallback also fails, so the logged reason stays accurate on
 // non-mac hosts.
 //
-// The Keychain fallback is the machine's own login only: the item is a single one for the whole
-// user, with nothing naming an account, so an added account that fell back to it would report the
-// machine's quota as its own. A slot with no file has no reading, and says so.
+// Each CLAUDE_CONFIG_DIR has its own Keychain item (claudeKeychainService), so an added account
+// falls back to that account's item rather than borrowing the machine's login.
 func claudeCredentialsJSONIn(configDir string) ([]byte, error) {
 	b, err := os.ReadFile(claudeCredentialsPathIn(configDir))
 	if err == nil {
 		return b, nil
 	}
-	if configDir == "" && runtime.GOOS == "darwin" {
-		if kb, kerr := keychainCredentials(context.Background(), claudeKeychainService("")); kerr == nil {
+	if claudeCredentialsUseKeychain {
+		if kb, kerr := keychainCredentials(context.Background(), claudeKeychainService(configDir)); kerr == nil {
 			return kb, nil
 		}
 	}
 	return nil, err
 }
+
+// A variable only so the Keychain branch can be covered on non-macOS builders.
+var claudeCredentialsUseKeychain = runtime.GOOS == "darwin"
 
 // claudeKeychainService names the macOS Keychain item Claude Code keeps a login's credentials in:
 // "Claude Code-credentials" for a CLI run with no CLAUDE_CONFIG_DIR, and for one run with it, the
@@ -592,7 +631,12 @@ func refreshClaudeToken(ctx context.Context, configDir string) error {
 	// login holding a spent one, so a runner shutting down or an account being removed lets it end.
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTokenRefreshTimeout)
 	defer cancel()
+	dir, err := privateProbeDir(claudeProbeDirName)
+	if err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(cctx, "claude", claudeTokenRefreshArgs...)
+	cmd.Dir = dir
 	cmd.Env = envWithAgent(nil)
 	if configDir != "" {
 		cmd.Env = envWithValue(cmd.Env, "CLAUDE_CONFIG_DIR", configDir)
@@ -916,18 +960,25 @@ func codexCreditsSnapshot(raw map[string]interface{}) *CreditsSnapshot {
 	}
 }
 
-func combinePlanUsage(claude, codex *PlanUsage) *PlanUsage {
-	if claude == nil {
-		return codex
+// combinePlanUsage is the heartbeat's planUsage. A lone Claude or Codex snapshot is the payload itself,
+// as it was before runners nested them; Kimi Code's and Cursor CLI's are only ever nested, under kimi
+// and cursor, where the control plane keeps their accounts (@orbit/shared PlanUsage.kimi, .cursor).
+func combinePlanUsage(claude, codex, kimi, cursor *PlanUsage) *PlanUsage {
+	if kimi == nil && cursor == nil {
+		if claude == nil {
+			return codex
+		}
+		if codex == nil {
+			return claude
+		}
 	}
-	if codex == nil {
-		return claude
+	out := &PlanUsage{Claude: claude, Codex: codex, Kimi: kimi, Cursor: cursor}
+	for _, u := range []*PlanUsage{claude, codex, kimi, cursor} {
+		if u != nil && u.FetchedAt > out.FetchedAt {
+			out.FetchedAt = u.FetchedAt
+		}
 	}
-	fetchedAt := claude.FetchedAt
-	if codex.FetchedAt > fetchedAt {
-		fetchedAt = codex.FetchedAt
-	}
-	return &PlanUsage{Claude: claude, Codex: codex, FetchedAt: fetchedAt}
+	return out
 }
 
 func numberValue(v interface{}) (float64, bool) {

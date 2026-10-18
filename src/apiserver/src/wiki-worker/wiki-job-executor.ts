@@ -5,27 +5,35 @@ import { PrismaService } from '../prisma/prisma.service';
 import { currentWikiExecutorSwitch, wikiExecutorClaimOwners } from '../wiki/wiki-executor-switch';
 import {
   claimWikiJobs,
+  endWikiJobAtRetryLimit,
+  endWikiJobsPastRetryLimit,
   failWikiJobAsContent,
   reclaimExpiredWikiJobs,
   releaseWikiJobLease,
   requeueWikiJobForInfra,
   succeedWikiJob,
   renewWikiJobLease,
+  wikiJobRetryLimitError,
   type ClaimedWikiJob,
 } from './wiki-jobs';
 import {
   enqueueWikiModelRequest,
+  wikiModelRequestAttempt,
   wikiModelRequestFailedOnWaitLimit,
   wikiModelRequestSha256,
   type WikiModelRequestCall,
   type WikiModelRequestRead,
 } from './wiki-model-queue';
 import { WIKI_MODEL_QUEUE_OPTIONS, WikiModelRequestQueue, WikiModelWaitCancelled, type WikiModelQueueOptions } from './wiki-model-queue.service';
+import { failAbandonedWikiRepoOps, WikiRepoOpWaitCancelled } from './wiki-repo-ops';
 import { runWikiSmokeJob } from './wiki-smoke-job';
 
-/** A job's failure whose fault is the work's: the job ends failed (§5.5 content). */
+/**
+ * A job's failure whose fault is the work's: the job ends failed (§5.5 content). A runner that got part of
+ * its work done says what in `report`, which the failed row keeps.
+ */
 export class WikiJobContentError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly report?: Record<string, unknown>) {
     super(message);
     this.name = 'WikiJobContentError';
   }
@@ -37,6 +45,29 @@ export class WikiJobInfraError extends Error {
     super(message);
     this.name = 'WikiJobInfraError';
   }
+}
+
+/**
+ * Not a failure: the job parked itself on a repository operation (contract `repoOps.waiting`) —
+ * `waitForWikiRepoOpAsJob` gave its lease up, waited, and put the row back in the queue — so this run of it
+ * is over and there is nothing left to settle. The next claim replays it, the operation's answer in hand.
+ */
+export class WikiJobParked extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WikiJobParked';
+  }
+}
+
+/**
+ * Whether an error is the worker stopping (design §5.4): a model call's or a repository operation's wait the
+ * shutdown cut short, or whatever a step ends with once the job's signal is aborted — the work's own verdict
+ * (WikiJobContentError) excepted. A loop that asks again, or rewords what went wrong, lets it through as it is:
+ * it is no failure to retry or to report, and the executor hands the job back to the queue for the next process.
+ */
+export function isWikiJobCancellation(error: unknown, signal?: AbortSignal): boolean {
+  if (error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled) return true;
+  return signal?.aborted === true && !(error instanceof WikiJobContentError);
 }
 
 /** What running one job is handed: its own row, its cancel, and the queue. */
@@ -59,13 +90,21 @@ export interface WikiJobContext {
 export type WikiJobRunner = (context: WikiJobContext) => Promise<Record<string, unknown> | void>;
 
 /**
- * The kinds this build runs, and what each is (contract `jobs.kinds`). A job of a kind that is not here —
- * a pipeline whose phase (P3–P8) has not landed — stays queued: the claim only takes what it can finish,
- * so an older worker is never handed work it would have to fail.
+ * The kinds a build runs with nothing but the job's own context, and what each is (contract `jobs.kinds`). A
+ * job of a kind that is not here — a pipeline whose phase (P3–P8) has not landed — stays queued: the claim
+ * only takes what it can finish, so an older worker is never handed work it would have to fail.
  */
 export const WIKI_JOB_RUNNERS: Record<string, WikiJobRunner> = {
   smoke: runWikiSmokeJob,
 };
+
+/**
+ * Where a worker puts the map its pipelines need: a kind that reaches the wiki's services and the System
+ * model's name (verify, and the phases after it) is built where those are, in the worker's own module, and
+ * given to the executor at this token. A worker started without it runs {@link WIKI_JOB_RUNNERS} alone —
+ * the specs' case, and the one every deployment has until a pipeline asks for more.
+ */
+export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
 
 /**
  * The wiki job worker (design §5.1): claims jobs of the kinds this build runs and runs each in this process,
@@ -74,16 +113,19 @@ export const WIKI_JOB_RUNNERS: Record<string, WikiJobRunner> = {
  * scheduler claims it when the model has room, and the answer wakes the job.
  *
  * ONE PASS: reclaim, claim, start.
+ *   - first, whatever the switch says: repository operations no runner will settle — their job ended without
+ *     them, or their claim went quiet long ago — are settled failed with the reason (`failAbandonedWikiRepoOps`).
  *   - reclaim: running jobs whose lease ran out go back to queued with the lost attempt counted — the
  *     worker that had them died. Their requests were let go the same way (their own sweep), so the job is
- *     re-run from the start and its pipeline re-uses the requests that already answered.
+ *     re-run from the start and its pipeline re-uses the requests that already answered. A job put back
+ *     at the retry limit (contract `jobs.retry.limit`) is ended here instead of claimed again.
  *   - claim: `claimWikiJobs` (wiki-jobs.ts) — priority first, a new lease generation, one job per space.
  *   - start: each claimed job runs concurrently; its lease is renewed while it runs.
  * Bootstrap runs a pass at once, so a worker that starts after a restart picks the queue up where it stands.
  *
  * WHAT STOPS IT CLAIMING: ORBIT_WIKI_EXECUTOR (nothing under `runner`, only the listed accounts under
- * `canary`) and SIGTERM — the loop stops, the jobs in flight are cancelled, each lets its lease out to now,
- * and the next process's sweep takes them over (design §5.4, plan A).
+ * `canary`) and SIGTERM — the loop stops, the jobs in flight are cancelled, each is handed back to the queue
+ * with nothing counted, and the next process's first pass claims them (design §5.4, plan A).
  */
 @Injectable()
 export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy {
@@ -101,6 +143,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     private readonly prisma: PrismaService,
     private readonly queue: WikiModelRequestQueue,
     @Optional() @Inject(WIKI_MODEL_QUEUE_OPTIONS) private readonly options: WikiModelQueueOptions = {},
+    @Optional() @Inject(WIKI_JOB_RUNNERS_TOKEN) private readonly runners: Record<string, WikiJobRunner> = WIKI_JOB_RUNNERS,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -109,7 +152,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     this.arm();
   }
 
-  /** SIGTERM (design §5.4, plan A): claim nothing more, cancel what runs, let its lease out to now. */
+  /** SIGTERM (design §5.4, plan A): claim nothing more, cancel what runs, hand it back to the queue. */
   async onModuleDestroy(): Promise<void> {
     this.loop = 'STOPPING';
     this.stopped = true;
@@ -150,20 +193,37 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
 
   /** Reclaim, claim, start — returns how many jobs this pass started. */
   async runOnce(): Promise<number> {
+    // Repository operations no runner will ever settle — their job ended without them, or their claim went quiet
+    // long ago — are ended first, whatever the switch says: they are the server's own leftovers (repoOps.abandoned).
+    await failAbandonedWikiRepoOps(this.prisma)
+      .then((ended) => {
+        if (ended > 0) this.log.warn(`${ended} abandoned repository operation(s) settled failed`);
+      })
+      .catch((error: unknown) => this.log.warn(`the repository operations' sweep failed: ${this.message(error)}`));
     const owners = wikiExecutorClaimOwners(currentWikiExecutorSwitch());
     if (owners !== null && owners.length === 0) return 0;
     await reclaimExpiredWikiJobs(this.prisma, WIKI_JOB.maxConcurrentPerWorker).catch((error: unknown) =>
       this.log.warn(`the job sweep failed: ${this.message(error)}`));
+    // A job the sweep, or a repository wait, put back at the retry limit is ended rather than claimed.
+    await endWikiJobsPastRetryLimit(this.prisma, owners)
+      .then((ended) => ended.forEach((id) => this.log.warn(`job ${id} reached the retry limit and is ended`)))
+      .catch((error: unknown) => this.log.warn(`the retry limit's pass failed: ${this.message(error)}`));
     if (this.stopped) return 0;
     const room = WIKI_JOB.maxConcurrentPerWorker - this.running.size;
     if (room <= 0) return 0;
     const claimed = await claimWikiJobs(this.prisma, {
       workerId: this.workerId,
-      kinds: Object.keys(WIKI_JOB_RUNNERS),
+      kinds: Object.keys(this.runners),
       owners,
       limit: room,
       leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
     });
+    if (this.stopped) {
+      // The stop came while the claim was on its way, and may have handed back a job this very claim then took. What it
+      // took is handed back unstarted: a job started now would get a cancel the stop has already gone past.
+      for (const job of claimed) await releaseWikiJobLease(this.prisma, { id: job.id, generation: job.leaseGeneration });
+      return 0;
+    }
     for (const job of claimed) this.start(job);
     return claimed.length;
   }
@@ -184,44 +244,73 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
   /** One job: its kind's runner, its lease renewed while it runs, and what its end leaves on the row. */
   private async run(job: ClaimedWikiJob, controller: AbortController): Promise<void> {
     const renewMs = this.options.renewMs ?? WIKI_JOB.renewSeconds * 1000;
+    let renewing: Promise<void> = Promise.resolve();
     const renew = setInterval(() => {
-      void renewWikiJobLease(this.prisma, {
+      renewing = renewWikiJobLease(this.prisma, {
         id: job.id, generation: job.leaseGeneration, leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
       }).then((held) => {
-        if (!held) this.log.warn(`job ${job.id} lost its lease while running: another worker has it`);
+        if (held) return;
+        // Gone for good: another worker took the job over, or its runner parked it on a repository
+        // operation (WikiJobParked). Either way there is nothing left of this lease to renew.
+        clearInterval(renew);
+        this.log.warn(`job ${job.id} is no longer running under this worker's lease: it was taken over or parked`);
       }).catch((error: unknown) => this.log.warn(`the lease renewal failed: ${this.message(error)}`));
     }, renewMs);
     renew.unref();
     try {
-      const runner = WIKI_JOB_RUNNERS[job.kind];
+      const runner = this.runners[job.kind];
       if (!runner) throw new WikiJobInfraError(`this build runs no '${job.kind}' jobs`);
       const report = await runner(this.context(job, controller));
       const settled = await succeedWikiJob(this.prisma, { id: job.id, generation: job.leaseGeneration, report: report ?? {} });
       if (settled) this.log.log(`job ${job.id} (${job.kind}) succeeded`);
       else this.log.warn(`job ${job.id} finished after its lease was taken over: its end is dropped`);
     } catch (error) {
-      await this.settleFailure(job, error);
+      // No renewal may land after the end is written. Every end clears the generation a renewal matches, so a late one
+      // would match nothing; the one in flight is still waited for, and then this attempt writes nothing more.
+      clearInterval(renew);
+      await renewing;
+      await this.settleFailure(job, error, controller.signal);
     } finally {
       clearInterval(renew);
     }
   }
 
-  /** What a failed job leaves: a requeue (the platform's), an end (the work's), or a lease out to now. */
-  private async settleFailure(job: ClaimedWikiJob, error: unknown): Promise<void> {
-    if (error instanceof WikiModelWaitCancelled) {
-      // SIGTERM: the job was cancelled with us. Let its lease out to now so the next process takes it over
-      // at once (design §5.4); its requests were let go the same way by the queue's own shutdown.
+  /** What a failed job leaves: a requeue (the platform's), an end (the work's), or a hand-back (the stop's). */
+  private async settleFailure(job: ClaimedWikiJob, error: unknown, signal: AbortSignal): Promise<void> {
+    if (error instanceof WikiJobParked) {
+      // Its row already says where it is (waiting, or queued again): this run settles nothing.
+      this.log.log(`job ${job.id} (${job.kind}): ${error.message}`);
+      return;
+    }
+    if (isWikiJobCancellation(error, signal)) {
+      // SIGTERM: the job was cancelled with us — a wait cut short, or what its pipeline ended with once stopped. Hand
+      // it back (design §5.4): queued at once with its attempts as they were, so the next process's first claim takes
+      // it in its space's order rather than after a backoff, and a deploy costs it no attempt (the owner's decision of
+      // 2026-10-09). Its requests were let go by the queue's own shutdown, and its replay meets them again.
       await releaseWikiJobLease(this.prisma, { id: job.id, generation: job.leaseGeneration });
       return;
     }
     const message = this.message(error);
     if (error instanceof WikiJobContentError) {
-      await failWikiJobAsContent(this.prisma, { id: job.id, generation: job.leaseGeneration, error: message });
+      await failWikiJobAsContent(this.prisma, { id: job.id, generation: job.leaseGeneration, error: message, report: error.report });
       this.log.warn(`job ${job.id} (${job.kind}) failed: ${message}`);
       return;
     }
     // Everything else — a WikiJobInfraError, or an error this build did not expect — is the platform's:
-    // the job is tried again rather than counted against the space's streak.
+    // the job is tried again rather than counted against the space's streak, up to the retry limit
+    // (contract `jobs.retry.limit`). An unexpected error, a failed assertion or a TypeError, gets the
+    // smaller limit: another attempt would only meet it again.
+    const unexpected = !(error instanceof WikiJobInfraError);
+    const attempts = job.attempts + 1;
+    if (attempts >= (unexpected ? WIKI_JOB.unexpectedMaxAttempts : WIKI_JOB.maxAttempts)) {
+      const ended = await endWikiJobAtRetryLimit(this.prisma, {
+        id: job.id,
+        from: { state: 'running', generation: job.leaseGeneration },
+        error: wikiJobRetryLimitError(attempts, message, unexpected),
+      });
+      if (ended) this.log.warn(`job ${job.id} (${job.kind}) failed ${attempts} times and is ended: ${message}`);
+      return;
+    }
     await requeueWikiJobForInfra(this.prisma, { id: job.id, generation: job.leaseGeneration, error: message });
     this.log.warn(`job ${job.id} (${job.kind}) will be tried again: ${message}`);
   }
@@ -248,6 +337,8 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     call: WikiModelRequestCall,
     signal: AbortSignal,
   ): Promise<WikiModelRequestRead> {
+    // A stopping worker asks the model nothing new (design §5.4): the call is the replay's to make, in the next process.
+    if (signal.aborted) throw new WikiModelWaitCancelled();
     const enqueued = await enqueueWikiModelRequest(this.prisma, {
       id: randomUUID(),
       jobId: job.id,
@@ -255,6 +346,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       spaceId: job.spaceId,
       step,
       unit,
+      attempt: await wikiModelRequestAttempt(this.prisma, { jobId: job.id, step, unit }),
       priority: job.priority,
       request: call,
     });

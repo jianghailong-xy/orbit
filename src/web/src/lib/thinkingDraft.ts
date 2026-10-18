@@ -16,8 +16,10 @@
  * historical rows would otherwise turn into a wall of blank "Thinking" rows (claude averages 23.8
  * blocks per turn). Making it survive a reload is the runner's job, not this one's.
  *
- * `thinkingMs` is likewise client-side only: how long the block took is knowable while it streams
- * and nowhere afterwards, since the deltas carry no clock into the log.
+ * `thinkingMs` is the runner's to state: it times the stretch while the deltas pass through it and
+ * writes the result onto the durable event (runner-go thinking_clock.go), which is what a reload
+ * reads. This page's own measurement stands in only for a runner from before that, and only until
+ * the page is reloaded.
  */
 export interface ThinkingPatch {
   text?: string;
@@ -25,7 +27,7 @@ export interface ThinkingPatch {
 }
 
 export function settleThinking(
-  durableText: unknown,
+  durable: { text?: unknown; thinkingMs?: unknown } | undefined,
   draft: string,
   startedAt: number | null,
   now: number,
@@ -33,7 +35,9 @@ export function settleThinking(
   const patch: ThinkingPatch = {};
   // Only when the provider left it empty — a provider that reported its reasoning is the
   // authority on it, and the draft may already hold the NEXT block's first chunks.
-  if (!durableText && draft) patch.text = draft;
+  if (!durable?.text && draft) patch.text = draft;
+  // The runner's figure is the one a reload shows, so the row reads the same before and after.
+  if (typeof durable?.thinkingMs === 'number') return patch;
   // A stretch that began before this page was open (a reload mid-turn) has no start to measure
   // from, so it reports no duration rather than a wrong one.
   if (startedAt !== null && now > startedAt) patch.thinkingMs = now - startedAt;

@@ -110,7 +110,10 @@ evidence.
   decided, undecidable, or whose dispatching session has ended is not delivered at all.
 - **Decision.** The dispatching session decides it with `task_evidence_decide` (CONFIRM, or
   SEND_BACK with a note). The decision door and its independence rule are unchanged: the run that
-  did the work still cannot decide it.
+  did the work still cannot decide it. A SEND_BACK's note is handed to the run that submitted the
+  revision as a platform turn of its own (`evidence-send-back:v1:<decisionId>`, delivered the way
+  the review is), so the next attempt learns what it has to show without anybody relaying it; the
+  decision, note included, is also on the revision in `task_evidence_list` for any session to read.
 - **Back to the owner.** While the dispatching session holds the revision, nobody else is asked: no
   card, no count. It holds it while the delivery turn exists, that session has not ended, and 30
   minutes have not passed since the delivery — read at read time, nothing scheduled. After that, or

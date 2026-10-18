@@ -125,6 +125,8 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
     assert.deepEqual(guards.rows, [
       { relation: 'model_provider', trigger: 'model_provider_dispatch_slug_guard' },
       { relation: 'provider_pool', trigger: 'provider_pool_dispatch_slug_guard' },
+      // 0415: a retired provider name holds its slug in the same namespace.
+      { relation: 'provider_slug_alias', trigger: 'provider_slug_alias_dispatch_slug_guard' },
     ]);
   });
 

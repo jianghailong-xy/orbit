@@ -7,10 +7,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { generateToken, hashPassword, sha256, verifyPassword } from '../common/crypto.util';
 import { MANAGED_RUNNER_SIGN_IN, type ManagedRunnerSignIn } from '../managed-runners/managed-runner-sign-in';
 import { PrismaService } from '../prisma/prisma.service';
+import { accountDisabled } from './disabled-accounts';
 import { PatService } from './pat.service';
 
 /** Refresh-token lifetime (sliding — each rotation issues a fresh one with a new window). */
@@ -38,6 +39,9 @@ export class AuthService {
     if (!user || !verifyPassword(password, user.passwordHash ?? NO_PASSWORD)) {
       throw new UnauthorizedException('invalid credentials');
     }
+    // Only past the password (docs/google-sign-in-design.md §5.5): that an account is disabled is said
+    // to whoever holds its password, and to nobody guessing one.
+    if (user.disabledAt) throw accountDisabled();
     return this.completeLogin(user);
   }
 
@@ -46,7 +50,8 @@ export class AuthService {
    * (docs/google-sign-in-design.md §9.2) — so they answer alike: the access token, the refresh token
    * and the user, whichever way the person signed in. What has to follow a sign-in, such as the managed
    * runner's provisioning intent (docs/managed-runner-design.md), goes here, after the tokens are
-   * issued. A refresh is not a sign-in and does not come through here.
+   * issued. A refresh is not a sign-in and does not come through here. Every sign-in starts a new
+   * login session (docs/push-login-session-design.md).
    */
   async completeLogin(user: { id: string; email: string; name: string }) {
     const issued = await this.tokenFor(user.id, user.email, user.name);
@@ -125,19 +130,34 @@ export class AuthService {
 
   /**
    * Swap a valid refresh token for a fresh access+refresh pair (rotation). The presented token
-   * is consumed atomically; replaying an already-consumed token signals theft, so the user's
-   * whole refresh-token family is revoked and the call fails (forcing a real re-login).
+   * is consumed atomically; replaying an already-consumed token signals theft, so the family it was
+   * rotated in — its login session — is revoked and the call fails (forcing a real re-login). The new
+   * pair stays in the presented token's login session; a token issued before sessions starts one.
    */
   async refresh(refreshToken: string) {
     const tokenHash = sha256(refreshToken);
-    const row = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
+    const row = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      include: { user: { select: { disabledAt: true } } },
+    });
     if (!row) throw new UnauthorizedException('invalid refresh token');
+    // A disabled account (docs/google-sign-in-design.md §5.5) is told so whatever became of the token:
+    // disabling it revoked every one, and a client presenting one is owed the reason, not a replay.
+    // `user` is a required relation, so a stored token always comes with one; the optional read is
+    // for stand-ins that answer with the token row alone, which the check after the claim still covers.
+    if (row.user?.disabledAt) throw accountDisabled();
     if (row.revokedAt) {
-      // A consumed/revoked token replayed → treat as theft: revoke every live token for the user.
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: row.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      // A consumed/revoked token replayed → treat as theft of its login session: revoke every live
+      // token of that session. The account's other sessions stand: revoking them is silent (their
+      // access tokens work on until they run out), and each one's next refresh would then be a replay
+      // that ended every other session in turn. A token from before sessions names none, so it is
+      // refused and revokes nothing.
+      if (row.loginSessionId) {
+        await this.prisma.refreshToken.updateMany({
+          where: { loginSessionId: row.loginSessionId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
       throw new UnauthorizedException('refresh token reuse detected');
     }
     if (row.expiresAt.getTime() <= Date.now()) {
@@ -152,7 +172,9 @@ export class AuthService {
     if (claimed.count !== 1) throw new UnauthorizedException('invalid refresh token');
     const user = await this.prisma.user.findUnique({ where: { id: row.userId } });
     if (!user) throw new UnauthorizedException('invalid refresh token');
-    return this.tokenFor(user.id, user.email, user.name);
+    // Disabled since the token was read.
+    if (user.disabledAt) throw accountDisabled();
+    return this.tokenFor(user.id, user.email, user.name, row.loginSessionId ?? undefined);
   }
 
   /** Revoke a refresh token (sign-out). Idempotent: an unknown/already-revoked token is a no-op. */
@@ -164,20 +186,25 @@ export class AuthService {
     return { success: true };
   }
 
-  private async tokenFor(userId: string, email: string, name: string) {
-    const accessToken = await this.jwt.signAsync({ sub: userId, email });
-    const refreshToken = await this.issueRefreshToken(userId);
+  /**
+   * The access token names its login session as `sid`, so a push registration made with it is
+   * tied to that session (docs/push-login-session-design.md). A new session unless one is continued.
+   */
+  private async tokenFor(userId: string, email: string, name: string, loginSessionId: string = randomUUID()) {
+    const accessToken = await this.jwt.signAsync({ sub: userId, email, sid: loginSessionId });
+    const refreshToken = await this.issueRefreshToken(userId, loginSessionId);
     return { accessToken, refreshToken, user: { id: userId, email, name } };
   }
 
   /** Mint a fresh opaque refresh token, persist only its hash, and return the plaintext (shown once). */
-  private async issueRefreshToken(userId: string): Promise<string> {
+  private async issueRefreshToken(userId: string, loginSessionId: string): Promise<string> {
     const token = generateToken(32);
     await this.prisma.refreshToken.create({
       data: {
         userId,
         tokenHash: sha256(token),
         expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+        loginSessionId,
       },
     });
     return token;

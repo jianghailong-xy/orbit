@@ -25,7 +25,7 @@ vi.mock('../components/ProjectDependencyGraph', async () => {
       createElement('div', { 'data-testid': 'project-dependency-graph' }),
   };
 });
-// Toasts need antd's App context, which this page is mounted without. Stubbed so a successful
+// Toasts need their viewport, which this page is mounted without. Stubbed so a successful
 // delete's confirmation is observable as a call rather than as a portal that has to be found.
 const toast = { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
@@ -101,8 +101,8 @@ const currentLocation = (): string | null =>
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   toast.success.mockReset();
-  // antd's responsive controls subscribe to breakpoints on mount and jsdom ships no matchMedia;
-  // "no breakpoint matches" is the desktop reading, and layout is not this file's subject.
+  // The page's breakpoint reads subscribe on mount and jsdom ships no matchMedia; "no breakpoint
+  // matches" is the desktop reading, and layout is not this file's subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -196,9 +196,15 @@ async function click(element: HTMLElement): Promise<void> {
 const deleteEntry = (): HTMLButtonElement | null =>
   container.querySelector<HTMLButtonElement>('button[aria-label*="Delete"]');
 
-/** The confirmation's own Delete, in the portal antd puts it in — never `container`. */
-const confirmButton = (): HTMLButtonElement | null =>
-  document.body.querySelector<HTMLButtonElement>('.ant-popconfirm .ant-btn-primary');
+/** The confirmation's own Delete, inside the question that asks it — a portal, never `container`. */
+const confirmButton = (): HTMLButtonElement | null => {
+  const question = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) =>
+    dialog.textContent?.includes(`Delete “${TITLE}”?`),
+  );
+  return [...(question?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+    (button) => button.textContent?.trim() === 'Delete',
+  ) ?? null;
+};
 
 // Each case mounts the WHOLE detail page through `act` on real timers, so it reads the suite's case
 // budget. Not a hang budget: a slow-render one.

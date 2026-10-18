@@ -160,11 +160,12 @@ final class SessionWatchingTests: XCTestCase {
         XCTAssertEqual(several.lineTargetWord, "2 tasks")
         // Counted once each, and a target nobody could read is only counted.
         XCTAssertEqual(several.lineParts.map(\.text), ["0/2 done"])
-        // Two watches over the same single target still read as a count: "one" is about the strip.
-        XCTAssertNil(summary([
+        // Two watches over the same single target name it: one target is left, however many watches
+        // wait on it (`WatchStripCopyParityTests`' fold cases, a task and its run session among them).
+        XCTAssertEqual(summary([
             F.watch(id: "W1", targets: [F.target("T1")]),
             F.watch(id: "W2", targets: [F.target("T1")]),
-        ])?.lineTarget)
+        ])?.lineTarget?.targetResourceId, "T1")
     }
 
     /// The list row's line, from the projection the strip already draws: a lone target by the name

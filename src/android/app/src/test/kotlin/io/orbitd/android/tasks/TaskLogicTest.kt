@@ -93,6 +93,20 @@ class TaskLogicTest {
             task(""","completionPolicy":"VERIFICATION_PASSED","verificationState":"RUNNING""""), true))
     }
 
+    @Test fun aRunThatIsTheTasksOnlyStartSaysNothingElseStartsIt() {
+        // Auto-run never picks up an OPEN task in no project that has no prerequisites, so the press is its only start.
+        assertEquals("Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.",
+            TaskDetailLogic.runNowHint(task(""","projectId":null,"runAt":null,"dependsOn":[]""")))
+        // A project or a prerequisite is something that can start it, and so is a schedule.
+        assertNull(TaskDetailLogic.runNowHint(task(""","projectId":"p","dependsOn":[]""")))
+        assertNull(TaskDetailLogic.runNowHint(task(""","dependsOn":[{"dependsOnTask":{"id":"a","status":"DONE"}}]""")))
+        assertNull(TaskDetailLogic.runNowHint(task(""","runAt":"2026-10-18T09:00:00.000Z","dependsOn":[]""")))
+        // A task that is not OPEN is waiting for no press, and a row without its prerequisites is told nothing new.
+        for (status in listOf("IN_PROGRESS", "DONE", "FAILED", "CANCELLED"))
+            assertNull(status, TaskDetailLogic.runNowHint(task(""","status":"$status","dependsOn":[]""")))
+        assertNull(TaskDetailLogic.runNowHint(task()))
+    }
+
     @Test fun ownerConfirmationIsOnePlaceToAnswer() {
         val owned = task(""","completionCriterion":"OWNER_CONFIRMED"""")
         assertEquals(OwnerPanelAction.Pointer("run"), OwnerConfirmations.panelAction(json("""{"waiting":{"sessionId":"run","requestId":"r"}}"""), owned))
@@ -128,6 +142,19 @@ class TaskLogicTest {
         assertEquals(listOf("Trigger coordinator.session_filed", "Session: untitled"), noticed[1].notes); assertEquals("session" to "s", noticed[1].link)
         assertEquals("Not reported by this server build.", noticed[2].text)
         assertEquals("Nothing is blocking where this work counts.", noticed[3].text)
+    }
+
+    /** A request to move this task reads as a move (iOS 779471b97, TaskDetailLogicTests): the task stays in its project until the
+     * owner answers, which a filing's "not filed anywhere" would deny; a filing and a dependency keep their words. */
+    @Test fun aMoveRequestIsReadAsAMove() {
+        fun notes(kind: String?, state: String) = TaskDetailLogic.attributionRows(json("""{"owning":null,"owningAbsentReason":"FILED_UNDER_NO_PROJECT",
+            "discovery":null,"crossing":{${kind?.let { "\"kind\":\"$it\"," } ?: ""}"state":"$state","from":{"projectId":"p1","title":"From","status":"OPEN"},
+            "to":{"projectId":"p2","title":"To","status":"OPEN"},"code":null,"requiredAction":null},"blocker":null}"""), ZoneOffset.UTC, Locale.US)[2].notes
+        assertEquals(listOf("the task stays in its project until you answer, and confirming moves it", "From → To"), notes("MOVE_TASK", "PENDING"))
+        assertEquals("the task has not moved: this yes was recorded without moving it", notes("MOVE_TASK", "APPROVED").first())
+        assertEquals("refusing is final for this request, and the task stays where it is", notes("MOVE_TASK", "DENIED").first())
+        assertEquals("the task was moved when this request was confirmed", notes("MOVE_TASK", "APPLIED").first())
+        for (kind in listOf("FILE_TASK", "DEPEND_ON_TASK", null)) assertEquals("the work is not filed anywhere until you answer", notes(kind, "PENDING").first())
     }
 
     @Test fun dependenciesShowTheComponentOrTheDirectEdgesUntilItArrives() {
@@ -189,6 +216,23 @@ class TaskLogicTest {
         assertEquals(listOf("w1"), live.map { it.text("id") }); assertEquals(1, ended)
     }
 
+    /** ModelRoutingLogicTests after iOS 9fb3ae6ee: with the account's switch off (the default) a run has no route, and what it ran on
+     * is its own row's — a pick it never took is not said; on, the applied pick fills in for a run not claimed yet. */
+    @Test fun aRunsRouteIsReadOnlyWhileTheAccountsSwitchIsOn() {
+        val routed = json("""{"id":"s1","route":{"level":"M","applied":true,"model":"claude-sonnet-5-5","effort":"medium"}}""")
+        val shadow = json("""{"id":"s2","model":"claude-opus-5-5","effort":"high","route":{"level":"L","applied":false,"model":"claude-sonnet-5-5"}}""")
+        val noTier = json("""{"id":"s3","route":{"level":"","applied":true,"model":"x"}}""")
+        assertNull(TaskDetailLogic.runRoute(routed, smartSelection = false))
+        assertNull(TaskDetailLogic.runRoute(shadow, smartSelection = false))
+        assertEquals("M", TaskDetailLogic.runRoute(routed, smartSelection = true)?.text("level"))
+        assertNull("a route with no tier routed nothing", TaskDetailLogic.runRoute(noTier, smartSelection = true))
+        val name: (String) -> String = { it }
+        assertNull("off: nothing the run's own row doesn't say", TaskDetailLogic.runModelLine(routed, smartSelection = false, modelLabel = name))
+        assertEquals("claude-sonnet-5-5 · medium", TaskDetailLogic.runModelLine(routed, smartSelection = true, modelLabel = name))
+        assertEquals("claude-opus-5-5 · high", TaskDetailLogic.runModelLine(shadow, smartSelection = false, modelLabel = name))
+        assertEquals("claude-opus-5-5 · high", TaskDetailLogic.runModelLine(shadow, smartSelection = true, modelLabel = name))
+    }
+
     @Test fun smallWordsAndNumbers() {
         assertEquals("512 B", TaskDetailLogic.humanSize(512)); assertEquals("2 KB", TaskDetailLogic.humanSize(2048)); assertEquals("1.5 MB", TaskDetailLogic.humanSize(1572864))
         assertTrue(TaskDetailLogic.folds("x".repeat(601))); assertTrue(TaskDetailLogic.folds((1..11).joinToString("\n"))); assertFalse(TaskDetailLogic.folds("short"))
@@ -204,5 +248,27 @@ class TaskLogicTest {
         assertEquals(TaskDetailCopy.scheduleHintUnreadable, TaskDetailLogic.scheduleHint("not a time"))
         assertEquals(listOf("ws1"), mentionedWorkspaceIds("hi @Ada", listOf(json("""{"id":"ws1","name":"ada"}"""), json("""{"id":"ws2","name":"Adam"}"""))))
         assertEquals(emptyList<String>(), mentionedWorkspaceIds("mail@Ada", listOf(json("""{"id":"ws1","name":"Ada"}"""))))
+    }
+
+    /** A task's run pins (board 6; docs/provider-engine-contract.md §1.2, §3.5): the Engine row pins an engine, keeping a pinned
+     * credential only where the new engine runs it; the Provider row pins a credential with the engine it runs on here, or takes
+     * it back to the engine's default; Assignee's takes every pin back. The model pin goes with every move. */
+    @Test fun theEnginePinComesFirstAndAProviderIsPinnedWithItsEngine() {
+        val deepSeek = listOf("claude", "opencode", "dsh")
+        assertEquals(TaskPin(TaskPin.Pin("dsh")), TaskPins.engine("dsh", null, null, emptyList()))
+        assertEquals("a DeepSeek key Harness runs stays pinned", TaskPin(TaskPin.Pin("dsh")), TaskPins.engine("dsh", "claude", "deepseek", deepSeek))
+        assertEquals("a GLM key Harness can't run gives way to the engine's default",
+            TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin(null)), TaskPins.engine("dsh", "claude", "glm", listOf("claude", "opencode")))
+        assertEquals(TaskPin(TaskPin.Pin(null), TaskPin.Pin(null)), TaskPins.engine(null, "dsh", "deepseek", deepSeek))
+        assertNull(TaskPins.engine("dsh", "dsh", "deepseek", deepSeek))
+        assertNull(TaskPins.engine(null, null, null, emptyList()))
+        assertEquals(TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin("deepseek-2")), TaskPins.provider("deepseek-2", "deepseek", "dsh"))
+        assertEquals("Engine default", TaskPin(provider = TaskPin.Pin(null)), TaskPins.provider(null, "deepseek-2", "dsh"))
+        assertNull(TaskPins.provider(null, null, "dsh"))
+        assertNull(TaskPins.provider("deepseek-2", "deepseek-2", "dsh"))
+        // On the wire: a pin left out stays, null takes it back, and the model always goes.
+        assertEquals(json("""{"engine":"dsh","provider":null,"model":null}"""), TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin(null)).request())
+        assertEquals(json("""{"engine":"dsh","model":null}"""), TaskPin(TaskPin.Pin("dsh")).request())
+        assertEquals(json("""{"provider":null,"model":null}"""), TaskPin(provider = TaskPin.Pin(null)).request())
     }
 }

@@ -16,7 +16,7 @@ import (
 )
 
 // slashRegistry caches the slash names each runtime itself registers. Claude learns them
-// from its `system`/`init` message; Kimi learns them from ACP's
+// from its `system`/`init` message; Kimi and Cursor CLI learn them from ACP's
 // `available_commands_update` notification.
 //
 // The on-disk scan (claude_assets.go) only knows `.claude/commands/*.md` and
@@ -30,12 +30,14 @@ import (
 // boots. A stale entry (skill deleted, CLI downgraded) only costs a pass-through — the CLI
 // answers "Unknown command: /x" in zero turns.
 type slashRegistry struct {
-	mu           sync.Mutex
-	commands     map[string]bool
-	skills       map[string]bool
-	kimiCommands map[string]bool
-	kimiSkills   map[string]bool
-	path         string
+	mu             sync.Mutex
+	commands       map[string]bool
+	skills         map[string]bool
+	kimiCommands   map[string]bool
+	kimiSkills     map[string]bool
+	cursorCommands map[string]bool
+	cursorSkills   map[string]bool
+	path           string
 }
 
 var slashReg = newSlashRegistry(filepath.Join(machineHome(), "slash-registry.json"))
@@ -43,17 +45,20 @@ var slashReg = newSlashRegistry(filepath.Join(machineHome(), "slash-registry.jso
 func newSlashRegistry(path string) *slashRegistry {
 	r := &slashRegistry{
 		commands: map[string]bool{}, skills: map[string]bool{},
-		kimiCommands: map[string]bool{}, kimiSkills: map[string]bool{}, path: path,
+		kimiCommands: map[string]bool{}, kimiSkills: map[string]bool{},
+		cursorCommands: map[string]bool{}, cursorSkills: map[string]bool{}, path: path,
 	}
 	r.load()
 	return r
 }
 
 type slashRegistryFile struct {
-	Commands     []string `json:"commands"`
-	Skills       []string `json:"skills"`
-	KimiCommands []string `json:"kimiCommands,omitempty"`
-	KimiSkills   []string `json:"kimiSkills,omitempty"`
+	Commands       []string `json:"commands"`
+	Skills         []string `json:"skills"`
+	KimiCommands   []string `json:"kimiCommands,omitempty"`
+	KimiSkills     []string `json:"kimiSkills,omitempty"`
+	CursorCommands []string `json:"cursorCommands,omitempty"`
+	CursorSkills   []string `json:"cursorSkills,omitempty"`
 }
 
 // learn records one CLI init handshake, returning whether anything was new. Names accumulate
@@ -65,6 +70,18 @@ func (r *slashRegistry) learn(commands, skills []string) bool {
 	return r.learnFor(providerClaude, commands, skills)
 }
 
+// setsFor is the provider's own pair of sets; callers hold the lock. Every runtime without a
+// registry of its own reads Claude's, the historical one.
+func (r *slashRegistry) setsFor(provider string) (commands, skills map[string]bool) {
+	switch provider {
+	case providerKimi:
+		return r.kimiCommands, r.kimiSkills
+	case providerCursor:
+		return r.cursorCommands, r.cursorSkills
+	}
+	return r.commands, r.skills
+}
+
 // learnFor keeps runtime registries separate. A command advertised by Kimi must never
 // make a Claude composer accept it (or vice versa), even when both runtimes share a runner.
 func (r *slashRegistry) learnFor(provider string, commands, skills []string) bool {
@@ -74,10 +91,7 @@ func (r *slashRegistry) learnFor(provider string, commands, skills []string) boo
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	commandSet, skillSet := r.commands, r.skills
-	if provider == providerKimi {
-		commandSet, skillSet = r.kimiCommands, r.kimiSkills
-	}
+	commandSet, skillSet := r.setsFor(provider)
 	changed := false
 	for _, n := range commands {
 		if !isSkill[n] {
@@ -107,10 +121,7 @@ func addSlashName(set map[string]bool, name string) bool {
 func (r *slashRegistry) emptyFor(provider string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	commandSet, skillSet := r.commands, r.skills
-	if provider == providerKimi {
-		commandSet, skillSet = r.kimiCommands, r.kimiSkills
-	}
+	commandSet, skillSet := r.setsFor(provider)
 	return len(commandSet) == 0 && len(skillSet) == 0
 }
 
@@ -125,10 +136,7 @@ func (r *slashRegistry) extras(scanned map[string]bool) (commands, skills []Slas
 func (r *slashRegistry) extrasFor(provider string, scanned map[string]bool) (commands, skills []SlashCommandInfo) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	commandSet, skillSet := r.commands, r.skills
-	if provider == providerKimi {
-		commandSet, skillSet = r.kimiCommands, r.kimiSkills
-	}
+	commandSet, skillSet := r.setsFor(provider)
 	collect := func(set map[string]bool, kind string) []SlashCommandInfo {
 		var names []string
 		for n := range set {
@@ -140,8 +148,8 @@ func (r *slashRegistry) extrasFor(provider string, scanned map[string]bool) (com
 		out := make([]SlashCommandInfo, 0, len(names))
 		for _, n := range names {
 			item := SlashCommandInfo{Name: n, Type: kind, Builtin: true}
-			if provider == providerKimi {
-				item.Provider = providerKimi
+			if provider == providerKimi || provider == providerCursor {
+				item.Provider = provider
 			}
 			out = append(out, item)
 		}
@@ -171,6 +179,12 @@ func (r *slashRegistry) load() {
 	for _, n := range f.KimiSkills {
 		addSlashName(r.kimiSkills, n)
 	}
+	for _, n := range f.CursorCommands {
+		addSlashName(r.cursorCommands, n)
+	}
+	for _, n := range f.CursorSkills {
+		addSlashName(r.cursorSkills, n)
+	}
 }
 
 // save persists the set; callers hold the lock. Best-effort — the registry re-learns from
@@ -179,6 +193,7 @@ func (r *slashRegistry) save() {
 	f := slashRegistryFile{
 		Commands: sortedKeys(r.commands), Skills: sortedKeys(r.skills),
 		KimiCommands: sortedKeys(r.kimiCommands), KimiSkills: sortedKeys(r.kimiSkills),
+		CursorCommands: sortedKeys(r.cursorCommands), CursorSkills: sortedKeys(r.cursorSkills),
 	}
 	data, err := json.Marshal(f)
 	if err != nil {
@@ -213,7 +228,9 @@ func slashAssetsForHeartbeat(roots []assetRoot) (commands, skills []SlashCommand
 	ec, es := slashReg.extras(scanned)
 	commands, skills = append(commands, ec...), append(skills, es...)
 	kc, ks := slashReg.extrasFor(providerKimi, nil)
-	return append(commands, kc...), append(skills, ks...)
+	commands, skills = append(commands, kc...), append(skills, ks...)
+	cc, cs := slashReg.extrasFor(providerCursor, nil)
+	return append(commands, cc...), append(skills, cs...)
 }
 
 // slashProbeTimeout bounds the throwaway CLI start-up below. The init handshake lands within a
@@ -230,11 +247,11 @@ const slashProbeTimeout = 60 * time.Second
 // process spawn per fresh machine, not one per restart. Retried on the caller's rescan tick
 // while still empty, because engines install on demand — `claude` is often not on PATH yet at
 // start-up. Best-effort throughout: a failure leaves the registry exactly as it was.
-func ensureClaudeSlashRegistry(ctx context.Context, workDir string) bool {
+func ensureClaudeSlashRegistry(ctx context.Context) bool {
 	if !slashReg.emptyFor(providerClaude) || !claudeCLIAvailable() {
 		return false
 	}
-	commands, skills, err := probeClaudeSlashAssets(ctx, workDir)
+	commands, skills, err := probeClaudeSlashAssets(ctx)
 	if err != nil {
 		logln("slash registry probe failed:", err)
 		return false
@@ -252,7 +269,17 @@ func ensureClaudeSlashRegistry(ctx context.Context, workDir string) bool {
 // prompt: with an empty stream-json stdin the CLI waits for a message and emits nothing at all,
 // so there is no handshake to read. `--no-session-persistence` keeps the throwaway out of the
 // user's `claude --resume` list.
-func probeClaudeSlashAssets(ctx context.Context, workDir string) (commands, skills []string, err error) {
+func probeClaudeSlashAssets(ctx context.Context) (commands, skills []string, err error) {
+	// Slash availability is cwd-scoped, but this probe runs in the runner's private probe directory
+	// rather than in the runner's own workDir — the directory `orbit register` ran in, ~/Desktop as
+	// often as not on a Mac — because Claude Code reads the whole tree below its working directory
+	// as it starts (see privateProbeDir). From an empty directory the handshake still lists the
+	// built-ins, plugin skills and the user's own ~/.claude assets; each agent's project assets are
+	// covered by the disk scan and learned from its sessions' own handshakes.
+	dir, err := privateProbeDir(claudeProbeDirName)
+	if err != nil {
+		return nil, nil, err
+	}
 	cctx, cancel := context.WithTimeout(ctx, slashProbeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "claude",
@@ -261,13 +288,7 @@ func probeClaudeSlashAssets(ctx context.Context, workDir string) (commands, skil
 		"--verbose",
 		"--no-session-persistence",
 	)
-	// Slash availability is cwd-scoped, so probe from the runner's own working dir — the same
-	// host-level root the disk scan uses. Agent-level assets are already covered by that scan.
-	if workDir != "" {
-		if _, statErr := os.Stat(workDir); statErr == nil {
-			cmd.Dir = workDir
-		}
-	}
+	cmd.Dir = dir
 	cmd.Env = envWithAgent(nil)
 	out, err := cmd.Output()
 	if err != nil {

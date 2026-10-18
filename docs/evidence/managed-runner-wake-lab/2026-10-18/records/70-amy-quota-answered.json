@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:48:46.476",
+    "ingested_at": "2026-10-18T01:48:46.638813+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 56,
+    "session_id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-QUOTA",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:48:46Z",
+      "kind": "text",
+      "messages": 17,
+      "n": 15,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T00:42:26.614",
+    "engine": "claude",
+    "id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-S1 hello from amy's first session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:48:46.864",
+      "client_turn_id": "d0f84989-70a1-4121-b561-2082fde296a8",
+      "content": "T06-AMY-QUOTA a message while the cluster refuses new Pods",
+      "created_at": "2026-10-18T01:47:59.405",
+      "delivered_at": "2026-10-18T01:48:46.349",
+      "id": "01a14cb1-be2d-771c-bbaf-eec82804c89d",
+      "kind": "message",
+      "seq": 6,
+      "status": "ANSWERED"
+    }
+  ]
+}

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -33,6 +34,10 @@ const (
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
+	// This runner's claude loop takes a `withdraw` turn: it asks the CLI to drop a steer it has
+	// not read yet and answers with what the CLI said (claude_withdraw.go). Without it the control
+	// plane refuses every withdrawal of a steer this runner holds, as it always has.
+	sessionClaudeSteerWithdrawV1 = "session-claude-steer-withdraw-v1"
 	// These runtimes expose an authoritative history-compaction boundary. The control plane may
 	// therefore attach full project-coordinator context once per engine/compaction epoch instead
 	// of spending it on every user message. Kimi/OpenCode intentionally do not claim this yet.
@@ -63,16 +68,18 @@ const (
 //
 // Built in init() rather than as a var initializer because the runtime table it reads holds
 // the session drivers, and those reach this header back through the transport: written as one
-// expression it is a package initialization cycle.
+// expression it is a package initialization cycle. Cursor CLI's account operations are declared only
+// where this runner keeps Cursor CLI accounts (cursorAccountCapabilities).
 var runnerCapabilitiesV1 string
 
 func init() {
-	runnerCapabilitiesV1 = strings.Join(append([]string{
+	runnerCapabilitiesV1 = strings.Join(append(append([]string{
 		sessionOrchestrationCredentialV1,
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		sessionCurrentWorkRoutingV1,
+		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,
@@ -89,10 +96,15 @@ func init() {
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
 		kimiLoginRegionCapabilityV1,
+		kimiAccountLoginCapabilityV1,
+		kimiAccountRemoveCapabilityV1,
+		kimiAccountMoveCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
-	}, declaredSteerCapabilities()...), ",")
+		wikiRepoOpReadCapabilityV1,
+		cursorKeyCheckCapabilityV1,
+	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 }
 
 type transportHTTPError struct {
@@ -233,6 +245,7 @@ func isLeaseOwnershipError(err error) bool {
 // request, so the heartbeat persists it as the provider:<name> capabilities the dsh gate also reads.
 // It states protocol support only: whether dsh is installed on this machine is its health report's
 // (dsh_health.go), and a session started without it fails with that report's repair, not as Claude.
+// Cursor CLI is added to it only while this runner can run its sessions (supportedProvidersHeader).
 const runnerSupportedProviders = "claude,codex,opencode,antigravity,dsh"
 
 func NewTransport(baseURL, token string) *Transport {
@@ -288,13 +301,15 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
 	req.Header.Set(runnerOSHeader, runtime.GOOS)
-	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
+	req.Header.Set("X-Orbit-Supported-Providers", supportedProvidersHeader())
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
 	req.Header.Set(runnerWriteContractDigestHeader, runnerWriteContractDigest)
 	req.Header.Set(runnerCLIVersionHeader, version)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		// A managed runner's credential is accepted only from the instance it was issued to.
+		setManagedInstanceHeaders(req.Header)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -601,6 +616,25 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 	return status, nil
 }
 
+// turnSuggestion asks the control plane for its guess at the person's next message after a
+// turn an engine without native suggestions finished (docs/prompt-suggestions-design.md §8
+// P2). One shot, deliberately not retried: the guess is worth something only while the person
+// is still looking at the answer it was predicted from, and the next turn asks again.
+func (t *Transport) turnSuggestion(ctx context.Context, sessionID, turnID string) (string, bool) {
+	var r struct {
+		Suggestion string `json:"suggestion"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/turns/"+turnID+"/suggestion", map[string]string{}, &r, 40*time.Second)
+	if err != nil {
+		return "", false
+	}
+	text := strings.TrimSpace(r.Suggestion)
+	if text == "" || utf8.RuneCountInString(text) > maxPromptSuggestionRunes {
+		return "", false
+	}
+	return text, true
+}
+
 // releaseTurnLeases expires any inbox leases held by an engine that was
 // silently recycled. The next cold process may then pull the turn immediately
 // instead of waiting for the normal lease deadline.
@@ -649,11 +683,24 @@ func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgres
 	return t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, nil, 15*time.Second)
 }
 
+// integrationJobRelease hands a claimed job back (contract §2.2 J-T11): released, it is queued for the
+// next heartbeat that asks for work. A 409 is a claim that had already moved on or a job already
+// written down; a 200 that did not release says what the job ended as instead.
+func (t *Transport) integrationJobRelease(ctx context.Context, jobID string, b IntegrationJobReleaseRequest) (*IntegrationJobReleaseResponse, error) {
+	var out IntegrationJobReleaseResponse
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/release", b, &out, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // integrationJobResult reports what a claimed job came to. The answer says whether the control
-// plane took it; a 409 means this process's claim had already moved on and it must stop.
-func (t *Transport) integrationJobResult(jobID string, b IntegrationJobResultRequest) (*IntegrationJobResultResponse, error) {
+// plane took it; a 409 means this process's claim had already moved on and it must stop. It takes a
+// context because the report is retried until it is settled (integration_result_spool.go): a runner
+// that is stopping abandons the send it is in, and the copy that waits on disk is sent by the next one.
+func (t *Transport) integrationJobResult(ctx context.Context, jobID string, b IntegrationJobResultRequest) (*IntegrationJobResultResponse, error) {
 	var out IntegrationJobResultResponse
-	if err := t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/result", b, &out, 30*time.Second); err != nil {
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/result", b, &out, 30*time.Second); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -666,7 +713,9 @@ func (t *Transport) wikiRepoOpProgress(opID string, b WikiRepoOpProgressRequest)
 }
 
 // wikiRepoOpFragment uploads one piece of a snapshot too large for one request body. Idempotent by its
-// ordinal, so a piece that has to be sent again is the same piece.
+// ordinal, so a piece that has to be sent again is the same piece. Deliberately no caller's context: a
+// send goes out while the runner is stopping too, and only this route's own timeout bounds it
+// (wiki_repo_op_retry.go).
 func (t *Transport) wikiRepoOpFragment(opID string, b WikiRepoOpFragmentRequest) (*WikiRepoOpFragmentResponse, error) {
 	var out WikiRepoOpFragmentResponse
 	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/fragments", b, &out, 60*time.Second); err != nil {
@@ -676,7 +725,8 @@ func (t *Transport) wikiRepoOpFragment(opID string, b WikiRepoOpFragmentRequest)
 }
 
 // wikiRepoOpResult reports what a claimed repository operation came to. The answer says whether the
-// control plane took it; a 409 means this process's claim had already moved on.
+// control plane took it; a 409 means this process's claim had already moved on. The fragment route's
+// no-context rule is this one's too, for the same reason.
 func (t *Transport) wikiRepoOpResult(opID string, b WikiRepoOpResultRequest) (*WikiRepoOpResultResponse, error) {
 	var out WikiRepoOpResultResponse
 	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/result", b, &out, wikiRepoOpResultTimeout); err != nil {
@@ -694,6 +744,25 @@ func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*Impo
 		return nil, err
 	}
 	return &out, nil
+}
+
+// sessionNaming reports the title an engine gave its session. Cosmetic and one-shot: a failure is
+// the caller's to log, and the session keeps the title it has.
+func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/naming", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheck reports what `agent models` answered when asked with the Cursor API key a session was
+// dispatched with (cursor_launch.go checkCursorSessionKey), which the control plane keeps on the key. The
+// key goes by its fingerprint only.
+func (t *Transport) cursorKeyCheck(sessionID string, b CursorKeyCheckReport) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/cursor-key-check", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheckResult answers a heartbeat-delivered CursorKeyCheckCommand: what Cursor said of the key,
+// by the check it answers and the key's fingerprint.
+func (t *Transport) cursorKeyCheckResult(b CursorKeyCheckResult) error {
+	return t.do(nil, "POST", "/runner/cursor-key-check-result", b, nil, 15*time.Second)
 }
 
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code
@@ -790,6 +859,7 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 	}
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		setManagedInstanceHeaders(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -873,6 +943,7 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	req.Header.Set("content-type", writer.FormDataContentType())
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		setManagedInstanceHeaders(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -956,6 +1027,10 @@ func taskCreateHeaders(agentID, sessionID string) map[string]string {
 }
 
 type SessionMetaResponse struct {
+	// Engine is the engine the session runs on, the one its conversation belongs to. Provider carries
+	// the same engine for an older orbit resume, and is the only one a control plane older than
+	// engines sends (resumeMetaFromServer).
+	Engine           string  `json:"engine,omitempty"`
 	Provider         string  `json:"provider,omitempty"`
 	SessionUUID      string  `json:"sessionUuid"`
 	RuntimeSessionID string  `json:"runtimeSessionId,omitempty"`
@@ -1899,13 +1974,15 @@ func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, e
 	return nil, lastErr
 }
 
-func (t *Transport) commentTask(id, agentID, bodyText string) (json.RawMessage, error) {
+// A comment names the session it was written from, so the control plane can record which run of
+// the task (and which attempt) it came from; with no session it is the author's alone.
+func (t *Transport) commentTask(id, agentID, sessionID, bodyText string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/comments",
-		map[string]string{"body": bodyText}, &out, taskOpTimeout, agentHeader(agentID))
+		map[string]string{"body": bodyText}, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
 	return out, err
 }
 
@@ -2328,6 +2405,22 @@ func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after strin
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route + "?" + values.Encode()
 	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
+// requestWikiVerification asks the server to verify the ops the calling session proposed in a space
+// (contract `reviewModes.verification.routes.request`, `servedBy`): what `orbit wiki verify` calls where
+// the list answered that this deployment verifies on the server, so the command waits for the verdict
+// instead of asking a model of the session's provider about it. One queued job per session and space, so
+// asking twice while one is queued is one job; the answer names it, and answers `servedBy: runner` with
+// no job where the server does not run for the account.
+func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications/request"
+	_, err := t.doWiki(http.MethodPost, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

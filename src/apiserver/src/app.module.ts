@@ -26,6 +26,7 @@ import { SharedModule } from './shared/shared.module';
 import { ShareLinksModule } from './share-links/share-links.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
+import { ProviderEngineMigrationModule } from './providers/provider-engine-migration.module';
 import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
 import { WatchDeliveryModule } from './watches/watch-delivery.module';
@@ -62,6 +63,8 @@ import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
     ShareLinksModule,
     PushModule,
     ProvidersModule,
+    // The provider/engine data migration, once per start, before the server listens (API server only).
+    ProviderEngineMigrationModule,
     OutcomeReconcilerHttpModule,
     WatchEvaluatorModule,
     WatchDeliveryModule,

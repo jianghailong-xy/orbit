@@ -89,35 +89,47 @@ private fun MarkdownNode(node: Node, open: (String) -> Unit) {
         }
         is HtmlBlock -> Text(node.literal, style = MaterialTheme.typography.bodyLarge)
         else -> {
-            // Split images out of inline prose so they remain visible, including images inside links.
-            val chunks = remember(node) { inlineChunks(node) }
+            // Split images out of inline prose so they remain visible, including images inside links,
+            // and a link to an image file the session can serve (a saved screenshot) as its file row.
+            val sessionId = LocalReaderResources.current?.sessionId
+            val chunks = remember(node, sessionId) { inlineChunks(node) { MarkdownFileRef.imageFile(it, sessionId) != null } }
             chunks.forEach { chunk ->
                 val image = chunk.singleOrNull() as? Image
                 val link = (chunk.singleOrNull() as? Link)?.takeIf { it.children().any { child -> child is Image } }
+                val file = (chunk.singleOrNull() as? Link)?.let { MarkdownFileRef.imageFile(it, sessionId) }
                 if (image != null) TranscriptImage(image.destination, plain(image), open)
                 else if (link != null) {
                     MarkdownNode(link, open)
                     TextButton(onClick = { open(link.destination) }) { Text("Open link") }
                 }
+                else if (file != null) ImageFileRow(file, open)
                 else Text(inlineNodes(chunk, open), style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
 }
 
-internal fun inlineChunks(node: Node): List<List<Node>> {
-    if (node.children().none { it is Image || it is Link && it.children().any { c -> c is Image } }) return listOf(listOf(node))
+internal fun inlineChunks(node: Node, isImageFile: (Link) -> Boolean = { false }): List<List<Node>> {
+    fun imageFile(child: Node) = child is Link && child.children().none { it is Image } && isImageFile(child)
+    if (node.children().none { it is Image || it is Link && it.children().any { c -> c is Image } || imageFile(it) }) return listOf(listOf(node))
     val result = mutableListOf<List<Node>>()
     var run = mutableListOf<Node>()
     fun flush() { if (run.isNotEmpty()) result.add(run); run = mutableListOf() }
     node.children().forEach { child ->
         if (child is Image) { flush(); result += listOf(child) }
         else if (child is Link && child.children().any { it is Image }) { flush(); result += listOf(child) }
+        else if (imageFile(child)) { flush(); result += listOf(child) }
         else run += child
     }
     flush()
-    return result
+    // Prose that is only the punctuation around a file row ("See [shot](…).") reads as a stray mark on its own line.
+    return result.filterIndexed { index, chunk ->
+        val besideFile = listOf(index - 1, index + 1).any { i -> result.getOrNull(i)?.singleOrNull()?.let(::imageFile) == true }
+        !besideFile || chunk.singleOrNull()?.let(::imageFile) == true || chunk.joinToString("") { plain(it) }.any { it !in PROSE_PUNCTUATION && !it.isWhitespace() }
+    }
 }
+
+private const val PROSE_PUNCTUATION = "，。；：、,.;:!?！？"
 
 private fun plain(node: Node): String = when (node) {
     is MarkdownLiteral -> node.literal

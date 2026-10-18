@@ -1,0 +1,3360 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "f502b294884dd57b9bc63aafd7c68eca80ca6555be48b017a70590d480052a3b"
+  },
+  "chromium-dark-desktop/pilot-account.png": {
+   "equal": true,
+   "sha256": "e10961ae855ff58bda33caf8f87f94890d40c4c32d500d176bf33fbab3c8d006"
+  },
+  "chromium-dark-desktop/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "d90c9b4d20bd97bb589e79d4fff7acf7ff19f9f8fc59955a0e6903655ebe8649"
+  },
+  "chromium-dark-desktop/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "b7e3831f83ff4253e1f221bd0e9168e3751eaef64eaa0f50ba4ff94add67b96e"
+  },
+  "chromium-dark-desktop/pilot-assignee-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "686a637b9405d6d1c8190ef73965b69d4dbf6e2ba884a2e4b03c505c7960f9d4",
+   "sha256Ref": "fd1d03815715dc6e94e01c8b790ec59a36c0f875ff99578fbd0c45a130817c8a"
+  },
+  "chromium-dark-desktop/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "27ec76ffcc9145a1cadf44446a01218af77b40daa06e1d7d91bd2e450c471cc5"
+  },
+  "chromium-dark-desktop/pilot-delete-confirm.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      635,
+      642
+     ],
+     "y": [
+      572,
+      579
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1252,
+      1259
+     ],
+     "y": [
+      572,
+      579
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 16,
+   "pixelsAtMost2": 16,
+   "sha256Del": "3281a3d8f762e7fc19668f61de15524ac6c7024f69b3bc15343abf6fd25a509c",
+   "sha256Ref": "ee24d9796d449217f732afcf855dbac6738830ee9cccca710390ec2b204f4410"
+  },
+  "chromium-dark-desktop/pilot-dependencies.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      175,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "7d5ec74214f4f037ea2906cf08749a6ca0f5206bff8561230a4d09155f9fc8ee",
+   "sha256Ref": "b880456e6d85c61224ad30c912e86bcfe8d69bf329b903de3c0e6877c24e2852"
+  },
+  "chromium-dark-desktop/pilot-dependency-list.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      175,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "e711612b20729b71724849fc5ef10166f4c9e4ad1a149399d616d0a1d1559207",
+   "sha256Ref": "8414a2164164d07a1d6ca4f5e958c6bc6f8fedee65eadf763f0019712e5b6e88"
+  },
+  "chromium-dark-desktop/pilot-dependency-view-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      175,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "799765b1d1a74d8d8d3ace197ee98c28644417d365114bbcd99696a30de14874",
+   "sha256Ref": "0662a211f4db9734ffca381cd917a64079ed550161cdbfe4cd92b458d964e125"
+  },
+  "chromium-dark-desktop/pilot-detail.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "6b406aec478bfe6d0f91882ce935a17e64606dcc160e331a46deeb9f01ed8618",
+   "sha256Ref": "c9929eab48955443c8729147d5450f076e5db374dfd047810d51d131156aafb8"
+  },
+  "chromium-dark-desktop/pilot-field-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "96c17235244e52b39cecb0b847c8659ee953d96235dbdcd399073671bf91874f",
+   "sha256Ref": "3ac383d419f7b47ec02e223b709338ef008ec24c1c7df21744ee76fd9750960b"
+  },
+  "chromium-dark-desktop/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "1e9e2a24a872d35321c30599e4a0d7d89ebbf6f505c1cccbeaa81f3d3ffaeb60"
+  },
+  "chromium-dark-desktop/pilot-list-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "ff89cacf44e7d4add5206ca2673133c227451c9a440b801532254d78b9f544f2",
+   "sha256Ref": "ef18701cea0261e627856952d53293f71305d6d6968978e9621880497dc41711"
+  },
+  "chromium-dark-desktop/pilot-list-search.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "e29d1b2a7248a343b38e3cf9a95b0103fc282eec012168ec9fcbd36f31117dd0",
+   "sha256Ref": "ca7ccea2dad102454c45abfc380ef576ce6a7c4f7674792dc0c36fc40fb00271"
+  },
+  "chromium-dark-desktop/pilot-model-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "b36020a869a16ea4a92ca46e3a757661e4f3aa734630a625ecc89561e15b63e6",
+   "sha256Ref": "ec894cf772088f173a29e0160eb0ff5191c067dc556b487db46acff02896036a"
+  },
+  "chromium-dark-desktop/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "a9abb1a596ad517692a96969db608d342b9e775332c66a04515f01b7aedf0ed1"
+  },
+  "chromium-dark-desktop/pilot-prerequisite-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      175,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "13599113145348d0e67bd936f4eafa2742bd04b6933badca87f5861bbdd91cdc",
+   "sha256Ref": "71f85c5ed4f0653ce9aaaa3da5b0fb3b62d1b8cb78283b852a2605775ebe757d"
+  },
+  "chromium-dark-desktop/pilot-provider-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "8f4de76114dd594b1e6510ce34cd1d5815a7bbedd14f43a675209cfbe08fae91",
+   "sha256Ref": "6aec37765d945a706d00cdc6f9e92bf886d3b2f56d71c7a7c2eeb87c61072bc3"
+  },
+  "chromium-dark-desktop/pilot-remove-confirm.png": {
+   "equal": true,
+   "sha256": "a2c109eaf5cb963e9d0653c57cd730d596ab005f614e48b550ed9bf96e257af6"
+  },
+  "chromium-dark-desktop/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "ef7cc182c06e968cfda226427aadeb057d4810f69c487640a028e919c2ac054a"
+  },
+  "chromium-dark-desktop/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "e1b181a884fb40a35d612018e51b7ae5b922158e1fbb947048ad62b30443285e"
+  },
+  "chromium-dark-desktop/pilot-run-hint.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      722,
+      722
+     ],
+     "y": [
+      358,
+      358
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      722,
+      723
+     ],
+     "y": [
+      377,
+      378
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      826,
+      827
+     ],
+     "y": [
+      378,
+      378
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      635,
+      642
+     ],
+     "y": [
+      572,
+      579
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1252,
+      1259
+     ],
+     "y": [
+      572,
+      579
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 22,
+   "pixelsAtMost2": 22,
+   "sha256Del": "8d081b6d848ce90031709969905253b491d5a3de785231e2f41964fa0471e102",
+   "sha256Ref": "ed23bb519f3701ae12ee23d34453f3047c862ab9f81c08b1b39f151de9d0e3dd"
+  },
+  "chromium-dark-desktop/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "2881d06bec17325ae1181ed9974c22698822eb1cfd4c0729e34d50d0101c8f80"
+  },
+  "chromium-dark-desktop/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "430edcd1b11e11a090f5794760d7d2cabb19b364a96e006d6dde6b53bae0fe99"
+  },
+  "chromium-dark-desktop/pilot-share-error.png": {
+   "equal": true,
+   "sha256": "ba5111c4236e2da585cd53643b017e592767e510d2f0ead0c600530256890595"
+  },
+  "chromium-dark-desktop/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "14f1f99a1989dad13677fe90693f6a58ae59c15bddfc209e3cdc146f4f560397"
+  },
+  "chromium-dark-desktop/pilot-share-loading.png": {
+   "equal": true,
+   "sha256": "f40fd46b8618c0d176766648b771120bf2f0d0aa09450bb9ba241ce4e1d168e5"
+  },
+  "chromium-dark-desktop/pilot-share-private.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      175,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "3a6f8bc4acd00e2abdbf8a3a7c8180fec3ef2c26ee24101b1d3da8d3e2895106",
+   "sha256Ref": "403db15e386b907ad4acb260c7ef167465c6d4f2f4a8d607e03412c562215910"
+  },
+  "chromium-dark-desktop/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "1cc84daa48929f343edfdc0830b4d1d69a2bb162e8379b7343236d813880788d"
+  },
+  "chromium-dark-desktop/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "84bdd6c952dedfc00986ad8fe07f23a3b1db196e530b14feb26f0af0c733bdce"
+  },
+  "chromium-dark-desktop/pilot-suggested-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "5b078aa780207588c84e08fa7d142d91cad560fb33ffd08165573d1b246781dd",
+   "sha256Ref": "74a9bdbb8d16e40b2cf530fca4a6e97dddfb0ca17d9d0e837957dcf51d9f6136"
+  },
+  "chromium-dark-phone/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "0b6f2c7a5a944d0ee5674dd7be593464c7520e0ec9aabb307e670d43821b662f"
+  },
+  "chromium-dark-phone/pilot-account.png": {
+   "equal": true,
+   "sha256": "498c161ce43f6a832f9dde6cbf86143579f8dd8ecda74dd77267dd1d4cb0b81e"
+  },
+  "chromium-dark-phone/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "a5582423b9a3925fda93dbc5f48ec581b740cb0110ab452fa86b847e35dbe836"
+  },
+  "chromium-dark-phone/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "d1d4bdd8b66145211045f5e3f510a6f5165f990a75fd3b21afb7684aeb7f6353"
+  },
+  "chromium-dark-phone/pilot-assignee-open.png": {
+   "equal": true,
+   "sha256": "5f7770f3569d5e8f668ead6cdecc31bbd9cfcd0293501ebe639e45edef205184"
+  },
+  "chromium-dark-phone/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "d3a9c8d2842b49b46cb57ff0ed2587cb7ba64288b0245d245768ae85c14a9c9d"
+  },
+  "chromium-dark-phone/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "083cd66aa4ab39ab3bf2a55f2db6fdab34e95eae4622010feead69179ee5928b"
+  },
+  "chromium-dark-phone/pilot-dependencies.png": {
+   "equal": true,
+   "sha256": "b9267fb88fdbd5c081ab47e4d9699394434d9680277769d378992d117f63f8f8"
+  },
+  "chromium-dark-phone/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "14dec8fc5d1f2a3fd13a26c020ecf95dc8c6ce5771e3fc43f59082fee69f3343"
+  },
+  "chromium-dark-phone/pilot-dependency-view-hover.png": {
+   "equal": true,
+   "sha256": "da1b65f8a881d07dc27c8544f76fe5b701b64291b48a663e74ea3f739cb87526"
+  },
+  "chromium-dark-phone/pilot-detail.png": {
+   "equal": true,
+   "sha256": "a02dc671116fdf8f7aaced8c703a7da237467cd009203c1ec8ba104f05149593"
+  },
+  "chromium-dark-phone/pilot-field-hover.png": {
+   "equal": true,
+   "sha256": "c83ac3397b41faefc628911b91ef20129d76be907ba29b80d1e36919228619f7"
+  },
+  "chromium-dark-phone/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "aecf191f052939fb90d5ff4375fb733d4a6714dc1347b228167780746bfecf39"
+  },
+  "chromium-dark-phone/pilot-list-open.png": {
+   "equal": true,
+   "sha256": "3ce942cb69c588803af67605a304555b48e49267a261370e3f8712c8e8c5583a"
+  },
+  "chromium-dark-phone/pilot-list-search.png": {
+   "equal": true,
+   "sha256": "ebb66dbff8a8ef0516a084681953a540b27606d8e23538440c029dc384080980"
+  },
+  "chromium-dark-phone/pilot-model-open.png": {
+   "equal": true,
+   "sha256": "61a4c1f84235742dbc2871bc8a400e0199b98ba5bd6aa4e1e28a0666ae30a28c"
+  },
+  "chromium-dark-phone/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "e7ff12087f5e11c64ed72743460f157c527a3f49ada69acb0de2231a963bb9fb"
+  },
+  "chromium-dark-phone/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "e80651cec3ded370c6cdbfa3de00fc9097484ce602495065c122f6fe2a8f4f60"
+  },
+  "chromium-dark-phone/pilot-provider-open.png": {
+   "equal": true,
+   "sha256": "c15dc8a1336bbcc1a11295ac493c6e20e764c50037a282d65ef36b11d189b63d"
+  },
+  "chromium-dark-phone/pilot-remove-confirm.png": {
+   "equal": true,
+   "sha256": "df2a30691828c32b90930cc45c3ec051d581804095c9d650b407e86894798d8b"
+  },
+  "chromium-dark-phone/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "7d2234943fb11b0b8296c63acd1ac433b34c51aa09864c10dd523e9643d4723d"
+  },
+  "chromium-dark-phone/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "67a20bee86ba10a813b52dca3cfbe13491dbb8cae2b74e009ffddf8f47d238a1"
+  },
+  "chromium-dark-phone/pilot-run-hint.png": {
+   "equal": true,
+   "sha256": "4c58c14f242196bafb6fb2e2f631f038a8b8244946e14dd6336812279ccfb549"
+  },
+  "chromium-dark-phone/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "38d645bc9dd235d8744357a5814efc09c1633b90667801e7a6a31ee31700893a"
+  },
+  "chromium-dark-phone/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "0d5ae91c39492ab442cf29344ed46a3a92755990e562a29f9f4822722dde2a60"
+  },
+  "chromium-dark-phone/pilot-share-error.png": {
+   "equal": true,
+   "sha256": "fa80271b3bb684d0624f1c4ae435bbb266cdc90116e428149565bbfa5c61c1ba"
+  },
+  "chromium-dark-phone/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "a08254379f4d9df579dfd60b847775972d20e6c4a05c6f9017d9c061735d7c1f"
+  },
+  "chromium-dark-phone/pilot-share-loading.png": {
+   "equal": true,
+   "sha256": "6e83b7f73a1f06c3c82ab1a9b159ddf287eec604fa771cee381f167347920e6e"
+  },
+  "chromium-dark-phone/pilot-share-private.png": {
+   "equal": true,
+   "sha256": "07fba2c77b99544a9d01311a658bfdb64e6e5dff016d32528cea7d0232e60e2a"
+  },
+  "chromium-dark-phone/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "02f436b7b33efe7ac7e15620d6d043df40706a154eeaac60754ecf44ef725e78"
+  },
+  "chromium-dark-phone/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "ff8411eed80d0ae5a8b840f3de23504856196543da2cfefa1edd339b0cc80414"
+  },
+  "chromium-dark-phone/pilot-suggested-open.png": {
+   "equal": true,
+   "sha256": "90d98074f7b257438d8a754c102d706ec8554ee27a5aabe1e4be040f9e54a7b9"
+  },
+  "chromium-light-desktop/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "507b33ad9040f8b091d7e78b1b4d821c975c2ee6311fc1eb39de22c37b6c4c48"
+  },
+  "chromium-light-desktop/pilot-account.png": {
+   "equal": true,
+   "sha256": "a74af47d05e7a893a9ca55a1b73d366108e7b73d313fa66724de35282e16b3eb"
+  },
+  "chromium-light-desktop/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "7353860273f0f8c1c19850ddfe770beb67265dab0ff628099d5a23ad6b670933"
+  },
+  "chromium-light-desktop/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "d7e677c8848575dc3121d0a1f03499a26a7a6c08e2895508137a4148fe1bd4a7"
+  },
+  "chromium-light-desktop/pilot-assignee-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "3a505e37c061e30cebed58c0ab90d4bfa9e64ddea0a13d2994d073395ebb4349",
+   "sha256Ref": "7d5f9e9bac8431a372b45763be734379d87fa4ff4f223e7f696b8ab6f41e2935"
+  },
+  "chromium-light-desktop/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "57bd2dcce6a8a7b441b34c4e61d33c98f8f543004ef78240705eb8d412f1fd29"
+  },
+  "chromium-light-desktop/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "18d2ab41a6223b1050fad6b6dc85d73b81d199d9df3fdb47d56e49d32e8b3bae"
+  },
+  "chromium-light-desktop/pilot-dependencies.png": {
+   "equal": true,
+   "sha256": "d4cec96b620ea4f42c359e0d57d0a4ec942937f126508de9ce1a4aad06c91b4b"
+  },
+  "chromium-light-desktop/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "8b804d0eac284f38ca17a63da99904e27be8e459febf6fe3e52946f3a459cd2f"
+  },
+  "chromium-light-desktop/pilot-dependency-view-hover.png": {
+   "equal": true,
+   "sha256": "ba4f0b7cf0dc21a87e2e153c6d7efe896e89badaecf698697dab5707b080b7df"
+  },
+  "chromium-light-desktop/pilot-detail.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "4195041a36c33a7a27b62218b661a6a733d352e0a399794f2b0d289434edb760",
+   "sha256Ref": "b137f9d51a5c2165eabe9caa74e92779bd750b5a09afa9ee6c6323ef86b35e18"
+  },
+  "chromium-light-desktop/pilot-field-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "57c7b16ba13aa7ba354a8bc1131fe11ef48a2d06710adc67ccb5556eea564b1d",
+   "sha256Ref": "1232b8b561a410a6f80f579e29de91e73067beb14b1da30ce634d47d6c08c930"
+  },
+  "chromium-light-desktop/pilot-inputs.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      174,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 5,
+   "pixelsAtMost2": 5,
+   "sha256Del": "33c1044ac2df28a49ca70132789b98684beb834b218dc123fb3c868e824accfc",
+   "sha256Ref": "ad3537a4e2e3964dc9bfcfba2b5a81b5013cdb4ef37a6f3d278355f3a242bc19"
+  },
+  "chromium-light-desktop/pilot-list-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "ac655cb008bbda1b2dd40c0f2c5faced941d3a1da6dd8e86f8e4d9daf6e7d9f0",
+   "sha256Ref": "9f9b2f22d79664261d34952bddf6f88318d3ae99f572b7c36ac518e5648efb3d"
+  },
+  "chromium-light-desktop/pilot-list-search.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "79fa95bf55160042e156c9088856aab1401f29c018d691a9989cae7f1bc65847",
+   "sha256Ref": "79aa016ecffbca76f5f2e1ca48cbd8cdd4fbcdae6cdcf660d012f7176b2dba4e"
+  },
+  "chromium-light-desktop/pilot-model-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "b2ccbe1d505c1ed6319093a309cb038e00a85aa9d79a11ef4d63f0f2ce8b296f",
+   "sha256Ref": "be1a46349d17ea2f49ede92287177de26d2b8d05c82e091796d6421b27bf3947"
+  },
+  "chromium-light-desktop/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "71d16918cc0919ddee039a01cb11bb724dd2db3658c65d0758eb2c818c7dff9a"
+  },
+  "chromium-light-desktop/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "61040497e0ecaca8ce8cd14f85447966169da34ab08b0e99ec6b7b12563804fb"
+  },
+  "chromium-light-desktop/pilot-provider-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "3da9ecdb1bf15510eaaaecd38cb1876cb2a88700b21d97eff40233284abec212",
+   "sha256Ref": "4034088c45fe9c22a9afc1669e9641e1840fc08db6ab5de015ae35164a95517c"
+  },
+  "chromium-light-desktop/pilot-remove-confirm.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      620,
+      622
+     ],
+     "y": [
+      567,
+      568
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1272,
+      1274
+     ],
+     "y": [
+      567,
+      568
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "f9bd91acdb90a87bd1907eff1fe1c132b98aff9a48a5062f3cad883457251382",
+   "sha256Ref": "76d4dea53c636c5da082e9c845fe1c1ce08873b7e206f6fd413d1b6420f184ca"
+  },
+  "chromium-light-desktop/pilot-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1033,
+      1034
+     ],
+     "y": [
+      21,
+      23
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      1029,
+      1034
+     ],
+     "y": [
+      44,
+      48
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      927,
+      929
+     ],
+     "y": [
+      48,
+      48
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 15,
+   "pixelsAtMost2": 15,
+   "sha256Del": "0a5046b934613266751bdf5ccdc2d5b153b77c0204db6c917c89aa110f52c31a",
+   "sha256Ref": "5132f1d836143f78d58a64afb31888b329b9cbe8311cc27bcd4dc897d0762f66"
+  },
+  "chromium-light-desktop/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "5355233a68feed7621cd48dec6bd5dd5133a1a794846c5091987489fbc88f132"
+  },
+  "chromium-light-desktop/pilot-run-hint.png": {
+   "equal": true,
+   "sha256": "1cd7bb2987cd7fadf1e0d566796a53bfa60fd5250564b24ef4f5f970dfb80544"
+  },
+  "chromium-light-desktop/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "94b6ed2a5949cc3441116347069af6880799bd55fad615e52410f5de103647ab"
+  },
+  "chromium-light-desktop/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "8c34d9ed5b4ac7344eb95c2005f8255848dae221e7a686e6df88ffbc62fa9aee"
+  },
+  "chromium-light-desktop/pilot-share-error.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 37474,
+     "x": [
+      352,
+      927
+     ],
+     "y": [
+      81,
+      288
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 51,
+     "x": [
+      376,
+      406
+     ],
+     "y": [
+      82,
+      87
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 20,
+     "x": [
+      1060,
+      1062
+     ],
+     "y": [
+      715,
+      736
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 37545,
+   "pixelsAtMost2": 37545,
+   "sha256Del": "3dbf69b4a63c4012763d2def0e8f4e2720ac5741151877ce3221b8055e426c4d",
+   "sha256Ref": "40361aa167bd966d35646eddce14fdef3d36fc026c1ad297e84d9c92758c8bea"
+  },
+  "chromium-light-desktop/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "84cb5f8dd40119b34bfb73062827cc3751e0d85a0053a64595d93576b1f9f0f1"
+  },
+  "chromium-light-desktop/pilot-share-loading.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 37567,
+     "x": [
+      352,
+      927
+     ],
+     "y": [
+      81,
+      290
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 51,
+     "x": [
+      376,
+      406
+     ],
+     "y": [
+      82,
+      87
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      174,
+      176
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 20,
+     "x": [
+      1060,
+      1062
+     ],
+     "y": [
+      715,
+      736
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 37641,
+   "pixelsAtMost2": 37641,
+   "sha256Del": "60a18a6f51a7a666c98c8d7197c0889f27005583b695a2533f5322ffb6c80e7c",
+   "sha256Ref": "ddaaafaac013cd5ab1ff565ec7f1a6a7fdf755303916f82a012c70bb530cd097"
+  },
+  "chromium-light-desktop/pilot-share-private.png": {
+   "equal": true,
+   "sha256": "0244578d8403a5d1b86fd3db0ec182bf45d5316ce3a58e92bf3bb96d691bfbb5"
+  },
+  "chromium-light-desktop/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "36fd5fb060a8962f874cd6f924e74264c1f1a80db9d890db1b9ae7caf816729d"
+  },
+  "chromium-light-desktop/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "0308e6790e985cb9d761ee57b2cc69893728bd0a4f205cd904e07229387c23c0"
+  },
+  "chromium-light-desktop/pilot-suggested-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      635,
+      636
+     ],
+     "y": [
+      595,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1258,
+      1259
+     ],
+     "y": [
+      595,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 9,
+   "pixelsAtMost2": 9,
+   "sha256Del": "e89a04fed7b5821a11db106cc7a524d71cbac84a4dba90502033f9c8bc8b3ef6",
+   "sha256Ref": "b55748a9b4f4425db259245aa786500692d8a63c0a5870dcff887779bbeeeefc"
+  },
+  "chromium-light-phone/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "f17cd50d64d753c5569b48a4dd4fe0635d05e044adf4431adf44616cddb5eec7"
+  },
+  "chromium-light-phone/pilot-account.png": {
+   "equal": true,
+   "sha256": "20f4412fc23ed11e67e18ca0ab8be7998fed9f08c4c00e6ad838224eb39e079f"
+  },
+  "chromium-light-phone/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "33c06b9d9482cda58dbf66de41e3e65f09779db6859cdb35f8da02318e6b249a"
+  },
+  "chromium-light-phone/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "6a41367817a5d3d02218a9fdc0f0bdc9f10d3f1fbb901e0b239b81905a9183ab"
+  },
+  "chromium-light-phone/pilot-assignee-open.png": {
+   "equal": true,
+   "sha256": "c88e488ba5b5f703422e4adc18cbab9a4fa546524c3ae498f584dfb39e784256"
+  },
+  "chromium-light-phone/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "c11366f83eaee383a86936b3ccd1869c2638c1178413fc5ac2c5d757f50c7cf9"
+  },
+  "chromium-light-phone/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "01a263c29fd978a095a26ffb3ec0dc92c92cf164e2c5f259a662f58a6e33352e"
+  },
+  "chromium-light-phone/pilot-dependencies.png": {
+   "equal": true,
+   "sha256": "e2c692c51c4ddd67b6f42f2717ec9bf20f9cd9a9ae8c46ab7bf070298d6b37fd"
+  },
+  "chromium-light-phone/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "1560f6e1ad2aaf4d53f75ec759fb66e05cada0ad80a1d02c7b1853548626732d"
+  },
+  "chromium-light-phone/pilot-dependency-view-hover.png": {
+   "equal": true,
+   "sha256": "f7b504065bd1c368b1b58f976977568cc6a3cf50619cb064f7371fb2fc507246"
+  },
+  "chromium-light-phone/pilot-detail.png": {
+   "equal": true,
+   "sha256": "2e08675c6d65d6a15539866a1e7f1563845f0e00d617720c55733966604af866"
+  },
+  "chromium-light-phone/pilot-field-hover.png": {
+   "equal": true,
+   "sha256": "44a245a87940ff7eb77d0f539cdb8734ab00ef39f4f38f78aaacd1b573ccc23c"
+  },
+  "chromium-light-phone/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "e236eacdbc35ec95953ce53664e448c0f5dc98678dc004101b798c592d8b4b41"
+  },
+  "chromium-light-phone/pilot-list-open.png": {
+   "equal": true,
+   "sha256": "05eec844dfe4c40b462662c61998b6d01dee0025af4720031833246af1316ba3"
+  },
+  "chromium-light-phone/pilot-list-search.png": {
+   "equal": true,
+   "sha256": "25b5e0d8e623d8555c2f0fdd2dc6ec17012dca38f6a81b7b1d80c9de013b30f3"
+  },
+  "chromium-light-phone/pilot-model-open.png": {
+   "equal": true,
+   "sha256": "7d9affbb1ebd8612a9e51d51e6e31a3a82b8ffd0d684081d32baf4f260b824ec"
+  },
+  "chromium-light-phone/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "9825b5c14a7451ee49965a99600f8281f6558aefa2e6a89463c44140ac34f87b"
+  },
+  "chromium-light-phone/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "e7695cfd41a69f327b951287060550b6364bd7c983ebdb1ef35dc6499a2d055a"
+  },
+  "chromium-light-phone/pilot-provider-open.png": {
+   "equal": true,
+   "sha256": "45c4732d202fb12039bb799887d9a0b6e8d732119c9f69b6e50edcce11b2a826"
+  },
+  "chromium-light-phone/pilot-remove-confirm.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      388,
+      389
+     ],
+     "y": [
+      475,
+      477
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      388,
+      389
+     ],
+     "y": [
+      727,
+      729
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      6,
+      7
+     ],
+     "y": [
+      733,
+      733
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 11,
+   "pixelsAtMost2": 11,
+   "sha256Del": "4f1f26f93dcb46ecde043d165949e5f150639fcb8ca848c91eec09ec7cf36758",
+   "sha256Ref": "4777d7296f4d077ba81425cbcf0cf2bd3937b757ace4a3d6a67a69360c637cda"
+  },
+  "chromium-light-phone/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "19d70493ece34856fa75a9f1a6d7027096627153fbd7cd56cb006b3a1f60b824"
+  },
+  "chromium-light-phone/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "6a846fd1a09400c6cd51cb60c77fc0dda3f79871687682b3676f9718485b47d1"
+  },
+  "chromium-light-phone/pilot-run-hint.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      368,
+      369
+     ],
+     "y": [
+      403,
+      405
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      366,
+      369
+     ],
+     "y": [
+      428,
+      431
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      107,
+      109
+     ],
+     "y": [
+      430,
+      431
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 20,
+   "pixelsAtMost2": 20,
+   "sha256Del": "36353a495aa9f0406d92cc456de2973d8e911431a7f22f89a71c8e129dbff60d",
+   "sha256Ref": "73d5409e73bb5a46322c741b67ee6a55145026cc5bfff19af21d18eddcfd84bf"
+  },
+  "chromium-light-phone/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "3e9ad2d96674ebc98f090b71728f7517c22452dcfeb8eeae96b316b969cb41f7"
+  },
+  "chromium-light-phone/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "917c0c492944165677c574af4234877748ed857b4ffac57bb242cd7d77bb1051"
+  },
+  "chromium-light-phone/pilot-share-error.png": {
+   "equal": true,
+   "sha256": "0a87246c8fb873df1c05f80cf58504eb274c286dfc15511f29dc9fc16f79f656"
+  },
+  "chromium-light-phone/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "1ee65608b07d783ff1176e49204b5af4b528c665b9f4981bbd3fb376caac6a2d"
+  },
+  "chromium-light-phone/pilot-share-loading.png": {
+   "equal": true,
+   "sha256": "20e99430bf6b1f992bd862e5c860219fc0af1d769a08247ddc0e78104a38acec"
+  },
+  "chromium-light-phone/pilot-share-private.png": {
+   "equal": true,
+   "sha256": "51ae80d8deb26a87e7539400343e3e5ee88ccb50aa01a68ea458280fb38ce5fd"
+  },
+  "chromium-light-phone/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "6176c5b9999c6475cab89e34c97c52bb77ad9b2d29479d996f399918d6594d6b"
+  },
+  "chromium-light-phone/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "16ade06a41f6ad702076e8615735c36159f3b6c71f5ed99e097585da1743749c"
+  },
+  "chromium-light-phone/pilot-suggested-open.png": {
+   "equal": true,
+   "sha256": "8093224a9cf2e8c4e7e8c1f576356c125f051ab7eab55a5114ad0512dd809ab3"
+  },
+  "webkit-dark-desktop/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "2fb07a0697442b9adb475915631bb1aa3d8750446e91d99d0ec695458fdaf5a0"
+  },
+  "webkit-dark-desktop/pilot-account.png": {
+   "equal": true,
+   "sha256": "c0e3e7c87fcb7dfa3a4b1d9c5c661dca3651bd368dc33cc136d2f3be93c463fa"
+  },
+  "webkit-dark-desktop/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "bc1820264d93911d02d688d7336d598c48f3704f861202657356f95fe01c0b73"
+  },
+  "webkit-dark-desktop/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "c2ec1a11c4232b0c0ee820799e7f8f188c10534ce56c37cff0a463030de80fab"
+  },
+  "webkit-dark-desktop/pilot-assignee-open.png": {
+   "equal": true,
+   "sha256": "8e8dde376edb99da97d6362c6ac6c6810f6849d0294e193a9ac4dd1a92fb5a1d"
+  },
+  "webkit-dark-desktop/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "e26d3458c27d72e5ed764ea7a68e1c6f43f7cf3c0acf3d26e33e28bfabdf01c7"
+  },
+  "webkit-dark-desktop/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "2e20629ebc7391a21503a9220f702999c5fa97d8419b0df04a9bbefaa01815cd"
+  },
+  "webkit-dark-desktop/pilot-dependencies.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 46,
+     "pixels": 24,
+     "x": [
+      828,
+      830
+     ],
+     "y": [
+      337,
+      358
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 21,
+     "x": [
+      1056,
+      1058
+     ],
+     "y": [
+      337,
+      357
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 46,
+   "pixels": 45,
+   "pixelsAtMost2": 22,
+   "sha256Del": "f5fadb6d3a0913a9874f9fb81553e5a6627df9c47772f459ca3056a0bb9e2053",
+   "sha256Ref": "c9ea74bbced8c5e77f6cbecde82d55411dfc8027330e7edaf19253e988be7970"
+  },
+  "webkit-dark-desktop/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "16df0e16034e35e0097205ba8231fb8fd588871fd7b6b9d03b166d5be6b6829d"
+  },
+  "webkit-dark-desktop/pilot-dependency-view-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 46,
+     "pixels": 24,
+     "x": [
+      828,
+      830
+     ],
+     "y": [
+      337,
+      358
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 21,
+     "x": [
+      1056,
+      1058
+     ],
+     "y": [
+      337,
+      357
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 46,
+   "pixels": 45,
+   "pixelsAtMost2": 22,
+   "sha256Del": "1ff62a5f869bbed45ce77590c6107bb96dd1770684cdcf61b038e142e3d7a71b",
+   "sha256Ref": "3af05f22ef14fd462e232143d3da4966ad011811cd32f0f0896540f867e66187"
+  },
+  "webkit-dark-desktop/pilot-detail.png": {
+   "equal": true,
+   "sha256": "d2f5d5b62fab0969b00de18d13b85a6e0615073b76588eb85f14cfe789d357af"
+  },
+  "webkit-dark-desktop/pilot-field-hover.png": {
+   "equal": true,
+   "sha256": "16646959ef947de4feb70fb8f1b7cbc41cbf6de8e298d092167ffca2bcb76fd5"
+  },
+  "webkit-dark-desktop/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "cc4d20edcb0a7d66ee0869df8bcfec011a8d3016663a7e1540088a42395fc2a9"
+  },
+  "webkit-dark-desktop/pilot-list-open.png": {
+   "equal": true,
+   "sha256": "fe6efb02696dad7e96255e1bf4495b2ae789f907a8a1f6e694c840fc78397442"
+  },
+  "webkit-dark-desktop/pilot-list-search.png": {
+   "equal": true,
+   "sha256": "9df0ab06b1f877e63ec1bd63e587fc54c4928eb0c952e73f465845fd4d3c30fb"
+  },
+  "webkit-dark-desktop/pilot-model-open.png": {
+   "equal": true,
+   "sha256": "e47a96321840035df68820e2d07d26d2e0fb0aceb28e6ae9cc556d5c3593ebbf"
+  },
+  "webkit-dark-desktop/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "1cc4a19e8f2047516d2a7ef1d8a74ab5ac7ae6a50cdc80d672160fdd8a3eeb6c"
+  },
+  "webkit-dark-desktop/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "92d2f9f572187c810a13c0e37b8fcdeff84472ca859ffc47c5fa91f968a75696"
+  },
+  "webkit-dark-desktop/pilot-provider-open.png": {
+   "equal": true,
+   "sha256": "1caf847797f7626de18102d186973d62939755ad8e73d0e73c1361e81b2f420c"
+  },
+  "webkit-dark-desktop/pilot-remove-confirm.png": {
+   "equal": true,
+   "sha256": "5bed3f7205d5b575e82ea6f4fad64f72206bc56579c9286a4d723dca00d8cdc1"
+  },
+  "webkit-dark-desktop/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "0a4364786b9696c80b5f133f2c7cb5f52a8435ca87cf5238626ceac1f700a92e"
+  },
+  "webkit-dark-desktop/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "ba41b7536104dee27bbf8a4114dd47feca646175d4e6534dc2d8bb1bd7536bda"
+  },
+  "webkit-dark-desktop/pilot-run-hint.png": {
+   "equal": true,
+   "sha256": "2faba031ab6ea1b3952c3529f3fcb22907b49b3a8928f69bedc19117995a01e4"
+  },
+  "webkit-dark-desktop/pilot-share-access-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 6,
+     "pixels": 3,
+     "x": [
+      1057,
+      1058
+     ],
+     "y": [
+      736,
+      737
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 6,
+   "pixels": 3,
+   "pixelsAtMost2": 2,
+   "sha256Del": "446bb1860f8bbe4bbd29913a4965b4d701af0ae1e04124d211cb11b7227fdec1",
+   "sha256Ref": "947b2f216ce3945932cd04cfbb4e4bf85a1cf2ddfa8560cb8b29e831bb6fbadb"
+  },
+  "webkit-dark-desktop/pilot-share-conversations.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 6,
+     "pixels": 3,
+     "x": [
+      1057,
+      1058
+     ],
+     "y": [
+      736,
+      737
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 6,
+   "pixels": 3,
+   "pixelsAtMost2": 2,
+   "sha256Del": "532047f16c0812ea24524ffc0f6cd65f2bf5a8e6647d025c31b68a71b80e8fbc",
+   "sha256Ref": "2eeb51e5c91385d843d7ee20db3c8c0af13e5b5140781a3b8cd3c954995678ec"
+  },
+  "webkit-dark-desktop/pilot-share-error.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1056,
+      1056
+     ],
+     "y": [
+      718,
+      718
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1058,
+      1058
+     ],
+     "y": [
+      735,
+      736
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "48c92114485aa454245cd43a4778e7a3eae63c2d5afbb5f028635d7db5900418",
+   "sha256Ref": "b6dbece2807d34e55bb75ca1623ebe1a44b44ead39e19e2bc4627c6acf3c1601"
+  },
+  "webkit-dark-desktop/pilot-share-expiry-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 6,
+     "pixels": 3,
+     "x": [
+      1057,
+      1058
+     ],
+     "y": [
+      736,
+      737
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 6,
+   "pixels": 3,
+   "pixelsAtMost2": 2,
+   "sha256Del": "8f69282ff5fff0a71098b9d0153cc8ed542cfd7b06f1183c8044b51a5e5a8c7f",
+   "sha256Ref": "5f79ded362b5eb65dc416b7fc41b3c595b7ee997fb9526bdcdc6e3c87dde483d"
+  },
+  "webkit-dark-desktop/pilot-share-loading.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1056,
+      1056
+     ],
+     "y": [
+      718,
+      718
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1058,
+      1058
+     ],
+     "y": [
+      735,
+      736
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "ed95628dae7c8858ac10dee65ad9df4430024b6d11efffe9b8e3c9374e1638fe",
+   "sha256Ref": "a7d267502d809211ce524a9f2653435388198c40d9bf195d08b56a549f1baee5"
+  },
+  "webkit-dark-desktop/pilot-share-private.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 6,
+     "pixels": 3,
+     "x": [
+      1057,
+      1058
+     ],
+     "y": [
+      736,
+      737
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 6,
+   "pixels": 3,
+   "pixelsAtMost2": 2,
+   "sha256Del": "b4f5f60858ddf8b7c1564d6e4150c737dcf012be2975409cd3652eabcf7cc4ad",
+   "sha256Ref": "e719649eb4f4e96fa4f061060d4e0238844827cd16c21ab530910a9b792b99b6"
+  },
+  "webkit-dark-desktop/pilot-share-public.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 6,
+     "pixels": 3,
+     "x": [
+      1057,
+      1058
+     ],
+     "y": [
+      736,
+      737
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 6,
+   "pixels": 3,
+   "pixelsAtMost2": 2,
+   "sha256Del": "870ce5072eb5400083dcea4e95e50ae09e399b85c0444ec96f26ad6d29dd5980",
+   "sha256Ref": "9653305a5d41f3704b013eeece35669eb46d20fe69bbc0dcf72ea8bb08397557"
+  },
+  "webkit-dark-desktop/pilot-share-turn-off.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 6,
+     "pixels": 3,
+     "x": [
+      1057,
+      1058
+     ],
+     "y": [
+      736,
+      737
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 6,
+   "pixels": 3,
+   "pixelsAtMost2": 2,
+   "sha256Del": "7c540857aacb5c67e62c26eea60f0c060ed32b9a1c6599071319f87b2c6cc392",
+   "sha256Ref": "06bc9dcfd938982e174a4196875415a75a472f0cda1f885a4dacb364c1d7972e"
+  },
+  "webkit-dark-desktop/pilot-suggested-open.png": {
+   "equal": true,
+   "sha256": "4e56fc6acd3a851d768ebc81db9f9fabc9b597b8d45235e3a6d3c44d0c26346c"
+  },
+  "webkit-dark-phone/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "5f045638339549b0070f4d2a89758fd43e2f9524841b896c747c7281d2181a6e"
+  },
+  "webkit-dark-phone/pilot-account.png": {
+   "equal": true,
+   "sha256": "d10027bd319bdbe090b35e243b3acd692c2d1c3cffe8fa42bd28fbba50a9acd8"
+  },
+  "webkit-dark-phone/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "0a71360b730730c28d856284bb25e31dc66b8fe2cb8facc7fc263a6be6a04f4c"
+  },
+  "webkit-dark-phone/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "c532940148d7c339dfe254deb0bd339629b514983de2473645a3b2612b14e9b7"
+  },
+  "webkit-dark-phone/pilot-assignee-open.png": {
+   "equal": true,
+   "sha256": "4469b64d50d6df9af2d85900f3d14ede87e353492716ef4f5d100def915e5ff8"
+  },
+  "webkit-dark-phone/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "948108fb7823eba9ba8a96c7fd11fc6882bfe5a3961aa184b1ff6841599803db"
+  },
+  "webkit-dark-phone/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "4070b3c1e67ac176c3c9c2eb2fad9ea433fc8aa45db1ae28051deae8fc8ad8a0"
+  },
+  "webkit-dark-phone/pilot-dependencies.png": {
+   "equal": true,
+   "sha256": "7cc53e9a6ff25c6e72ae47a142b14933eef6b9d23f69e3606365509c5bf3d7d6"
+  },
+  "webkit-dark-phone/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "428be238d9129e51062869c77bfc124a65286f61db069239226705409403b599"
+  },
+  "webkit-dark-phone/pilot-dependency-view-hover.png": {
+   "equal": true,
+   "sha256": "a39828eda0d49ba85ad0289e135c2988d113320bf9e554ba214faf59920daff6"
+  },
+  "webkit-dark-phone/pilot-detail.png": {
+   "equal": true,
+   "sha256": "bc51727a8be5b1611d5fbecdf7fb3346c54155bd997ff0354894eb2a8c627162"
+  },
+  "webkit-dark-phone/pilot-field-hover.png": {
+   "equal": true,
+   "sha256": "d3ffd46356b50da70134cd01029939e6dacd14600119cab77c428c3181ef549f"
+  },
+  "webkit-dark-phone/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "d3940dd68b2bc43c3dfb4490c4e8ea6ebd2717b3e5262b53f25f77c315ab54a7"
+  },
+  "webkit-dark-phone/pilot-list-open.png": {
+   "equal": true,
+   "sha256": "5350dbd59f76318ae9f31d94adc191f36d3cf56dd925662fa9c2e3cc2bf49239"
+  },
+  "webkit-dark-phone/pilot-list-search.png": {
+   "equal": true,
+   "sha256": "b803deaf1f08fbdac77ab65d45f12798ad0a95fd010dc8c8ebf31f230e2cf2a2"
+  },
+  "webkit-dark-phone/pilot-model-open.png": {
+   "equal": true,
+   "sha256": "a0108b94ad38c63b85a1f5a2b93a5585fd89f0697b255fa611a5a69f1c9a2582"
+  },
+  "webkit-dark-phone/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "710147b5e3d81340b2537420156a13cb09bf0329e5808f73d69da058317e6ecf"
+  },
+  "webkit-dark-phone/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "c20af8f81fa6de49976ed807218bf395fee1eaca64f81b73099cfd3f41af193b"
+  },
+  "webkit-dark-phone/pilot-provider-open.png": {
+   "equal": true,
+   "sha256": "72b0484b408f12c3ec3e3464056d3975418e91fbceebda38385e81975b54abb4"
+  },
+  "webkit-dark-phone/pilot-remove-confirm.png": {
+   "equal": true,
+   "sha256": "ad5650a42aea9a5a923beb41bba6e4fbb0f86c62d11973cb7419a94c661a0dc7"
+  },
+  "webkit-dark-phone/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "f9ac5a931b16227bd891411c5d68dbe56325d2e5e2ee30f0251b772636738099"
+  },
+  "webkit-dark-phone/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "e61f4967d130d7cf3982ab6097daf66dbd4cc3f6f0b1c7d1a2e77a0f9129bee5"
+  },
+  "webkit-dark-phone/pilot-run-hint.png": {
+   "equal": true,
+   "sha256": "d8cef29d2f67e5c8b592d5be48886afc41189a06c6d533a6c5fdcce34ae5151c"
+  },
+  "webkit-dark-phone/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "aefcffb767dc6571ab8b4e78dbeb149a35fca7ce0730364b5240901a82045109"
+  },
+  "webkit-dark-phone/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "b9f8716e28fad5eb79c5d2991a1bd84c303b6782fb1a80c0931e059457d26359"
+  },
+  "webkit-dark-phone/pilot-share-error.png": {
+   "equal": true,
+   "sha256": "7828e4799759ec3ba3b588fffd4d06f637a77275e924f269d0f36e35d923c798"
+  },
+  "webkit-dark-phone/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "0442194024ed4b59a5f428061424979888b63cf71546d6620a8a5290c952a3a5"
+  },
+  "webkit-dark-phone/pilot-share-loading.png": {
+   "equal": true,
+   "sha256": "cda479f77841d4c36c29fea223fe5f30cba7d6420d52c0e9e16eb86cef71aac8"
+  },
+  "webkit-dark-phone/pilot-share-private.png": {
+   "equal": true,
+   "sha256": "260133901e42511ebaf60b96a8210249017bc3f7717767e764d5c6d57720e954"
+  },
+  "webkit-dark-phone/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "63977acce2bbed98f36cc636fbe1c67a16dc6d3fe7a83661e769ace18171f23a"
+  },
+  "webkit-dark-phone/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "c2c2eda69c4bff59ad060b029e0797ecc7b0de8f26c605703d686f139a73ccd1"
+  },
+  "webkit-dark-phone/pilot-suggested-open.png": {
+   "equal": true,
+   "sha256": "7003aedf3c01ec7e8e07d793ed9accc4c34340ce2041a3db58ed809df3ccd5bd"
+  },
+  "webkit-light-desktop/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "1bab57c32e8afacc556a90992c693df0921d7377ce49760d1fba8e546820bc4b"
+  },
+  "webkit-light-desktop/pilot-account.png": {
+   "equal": true,
+   "sha256": "c8831dcac75714a7628eee33e5cbd8619c327a5c796ed08c8fb1f0a91585ff8f"
+  },
+  "webkit-light-desktop/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "af33e0779d8355770dbde607b2c9ece74e65e961b8d2620753689fb2af242b4b"
+  },
+  "webkit-light-desktop/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "6cf73a7d4d048a1cd4e8f12602c46016795cf227e84c802a1c25285fcd54669e"
+  },
+  "webkit-light-desktop/pilot-assignee-open.png": {
+   "equal": true,
+   "sha256": "79c56282e4261300d7113a5a12cb9a0bfe6947130d8010d0eba9d0742c926155"
+  },
+  "webkit-light-desktop/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "df0ee0cd1975950cb0a44f2ea3be58c9f2767496d561f45fccc6068a72f0f75d"
+  },
+  "webkit-light-desktop/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "d600be2546af8b266fa8bc61ca4bb32930ef0850a25cfbc2232bf540f746b9d7"
+  },
+  "webkit-light-desktop/pilot-dependencies.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 20,
+     "x": [
+      1056,
+      1058
+     ],
+     "y": [
+      337,
+      356
+     ]
+    },
+    {
+     "maxChannelDiff": 8,
+     "pixels": 65,
+     "x": [
+      936,
+      950
+     ],
+     "y": [
+      356,
+      377
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 8,
+   "pixels": 85,
+   "pixelsAtMost2": 46,
+   "sha256Del": "2b2bc91ca263be795a2eb3721df1b87099e08eca842dafe7131df526a2366afb",
+   "sha256Ref": "275446a957d6093a51a082a6f1cfda5fef32dd762fea41f2aeeb467d4533c52f"
+  },
+  "webkit-light-desktop/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "d22273f7c826011d437217afb5a732debc48cd63af3c1095ff2e807688baa6c9"
+  },
+  "webkit-light-desktop/pilot-dependency-view-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 20,
+     "x": [
+      1056,
+      1058
+     ],
+     "y": [
+      337,
+      356
+     ]
+    },
+    {
+     "maxChannelDiff": 8,
+     "pixels": 65,
+     "x": [
+      936,
+      950
+     ],
+     "y": [
+      356,
+      377
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 8,
+   "pixels": 85,
+   "pixelsAtMost2": 46,
+   "sha256Del": "c91b06ac4da3467b45045484e257c2396a04263fe266de03cf3edf40df62ee71",
+   "sha256Ref": "15bb2bacc22659e53493a5ecc192ff4a098fa31b9717ebe46fe9cae725512055"
+  },
+  "webkit-light-desktop/pilot-detail.png": {
+   "equal": true,
+   "sha256": "beb76520888181ccf0ace73f4d3e88c0d88d3d886d3891d2b55224f6216c7a4e"
+  },
+  "webkit-light-desktop/pilot-field-hover.png": {
+   "equal": true,
+   "sha256": "dcb9cc890db8eee24bfde038f167435dda0d8fd48cc48cee3a1d94c382a8ec14"
+  },
+  "webkit-light-desktop/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "2eb8198d2810b61c156ac7272c7dfb7e66129772205549527e0c8eebb6c58437"
+  },
+  "webkit-light-desktop/pilot-list-open.png": {
+   "equal": true,
+   "sha256": "c4ebb36f69e6efccf59d41059194a25aafe4b4bf42b2af0e55fda039cc03d20a"
+  },
+  "webkit-light-desktop/pilot-list-search.png": {
+   "equal": true,
+   "sha256": "9e6fd6b34a5dbf331955a1c995aa49933653d93f0dcc43d092825c3e8d89e723"
+  },
+  "webkit-light-desktop/pilot-model-open.png": {
+   "equal": true,
+   "sha256": "5e2dc46bbeffa1b48309d846894e5733908108da984ce684be55b0d3017b305f"
+  },
+  "webkit-light-desktop/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "92540194e9d688ffd6fb5f739c0ac784d349b937dd3f3f75f1aeee9b0f270fbb"
+  },
+  "webkit-light-desktop/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "ef8c6d6ca1ff5a88d487488e856be4316fe2e37607b668c3a5332ab14238dedf"
+  },
+  "webkit-light-desktop/pilot-provider-open.png": {
+   "equal": true,
+   "sha256": "c1e540fd5bf80ac4ebce143ad63c1618355102f3ad605c1b1689a78c53490e0c"
+  },
+  "webkit-light-desktop/pilot-remove-confirm.png": {
+   "equal": true,
+   "sha256": "1410c3091c093eb2c2a665abacb6606e38a5018da366acecaa0b532891584827"
+  },
+  "webkit-light-desktop/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "df3f3341e8d548c68a893b670c6cb7829cbd5efcdd2bf50e64a83342da40afa2"
+  },
+  "webkit-light-desktop/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "3085d8e596f53211633572a4561d825f28f92af59a3c0b7ac07321ba7d956522"
+  },
+  "webkit-light-desktop/pilot-run-hint.png": {
+   "equal": true,
+   "sha256": "7e41bec496a895e4d55f4051c67e6c473d8f291d41af8da318218a766336833d"
+  },
+  "webkit-light-desktop/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "89b3b6d8b81716d3f1c628bdaa2edec0dcd31ffb387f39e824ba00a94b579cf4"
+  },
+  "webkit-light-desktop/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "854b3b7ece85e24d02d1ade54388607321604e2b39c6dcd9b7d257ff20b70d2d"
+  },
+  "webkit-light-desktop/pilot-share-error.png": {
+   "equal": true,
+   "sha256": "fb17899cebd007d5bf99004e1fada04be936f5e08c337801860db11e64f308f9"
+  },
+  "webkit-light-desktop/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "624d9a43c738eec6aa9be471b260d80bc1dacf4f28e20936924ab00423b8253f"
+  },
+  "webkit-light-desktop/pilot-share-loading.png": {
+   "equal": true,
+   "sha256": "6ec95477a480e4f48b384a759ffbdaff89b35188d5fd17bf632a0159016f628f"
+  },
+  "webkit-light-desktop/pilot-share-private.png": {
+   "equal": true,
+   "sha256": "028688160faeb4707d40d48f54c5a21fba145e0c8948aac7156fe28afc363b04"
+  },
+  "webkit-light-desktop/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "955263289ac054cf006da20b937e93ba2defd6065e262e9e96eafe780d081dce"
+  },
+  "webkit-light-desktop/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "c9b4861baa08ee9e5012f10c33f55b24ee3f4d6f8b09c94d301302949a6ae9e2"
+  },
+  "webkit-light-desktop/pilot-suggested-open.png": {
+   "equal": true,
+   "sha256": "a960b26fd553497ffdf87b9295aa8f41301344358ec6d99a1aeccad518ee7c2b"
+  },
+  "webkit-light-phone/pilot-account-open.png": {
+   "equal": true,
+   "sha256": "999598791bef174f072f4b0fe3c7d55442f4258928c7af3305469dcc244a92ef"
+  },
+  "webkit-light-phone/pilot-account.png": {
+   "equal": true,
+   "sha256": "be8def5ced414b00a94584b043b4cf53e6fa8397e4a5551a4b62ccf7f6900f47"
+  },
+  "webkit-light-phone/pilot-antigravity-account-open.png": {
+   "equal": true,
+   "sha256": "b74561974f60ca94952c2a481c2addd9734fffcea7c92579159c99ec2be87d4e"
+  },
+  "webkit-light-phone/pilot-antigravity-account.png": {
+   "equal": true,
+   "sha256": "f02a8095c64c3bc0d170e6c82cdd94153158d63d677d1a6b73b94c39606e8fd2"
+  },
+  "webkit-light-phone/pilot-assignee-open.png": {
+   "equal": true,
+   "sha256": "a6ecf9e4a3a9248182650be6565c698a24da5b4b5256e3ab7e69c66d27138645"
+  },
+  "webkit-light-phone/pilot-comment-mention.png": {
+   "equal": true,
+   "sha256": "fee7c5934cbfa22231a0b1b22180cf6064d95c2d90819029de13c937890e9af3"
+  },
+  "webkit-light-phone/pilot-delete-confirm.png": {
+   "equal": true,
+   "sha256": "ebbd0e57fab2ed36cac46f57f652d0b67ff3f93e01e5ec8ec05eb40f71f00311"
+  },
+  "webkit-light-phone/pilot-dependencies.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 13,
+     "x": [
+      190,
+      195
+     ],
+     "y": [
+      438,
+      450
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 40,
+     "x": [
+      187,
+      194
+     ],
+     "y": [
+      514,
+      545
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 53,
+   "pixelsAtMost2": 53,
+   "sha256Del": "0eaf6bc803cadc1bf8ee62a6ed952a4ad5492f229240599e1dcbcaff9de8690c",
+   "sha256Ref": "1042f9469625b7d10cc10572e4eab1ab1d10ffa23cc515af4885cd2b597c3c60"
+  },
+  "webkit-light-phone/pilot-dependency-list.png": {
+   "equal": true,
+   "sha256": "db8125072ce1c65138124647a748581ca11697c3a0bb5821ad211b4ea733c2a4"
+  },
+  "webkit-light-phone/pilot-dependency-view-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 13,
+     "x": [
+      190,
+      195
+     ],
+     "y": [
+      438,
+      450
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 40,
+     "x": [
+      187,
+      194
+     ],
+     "y": [
+      514,
+      545
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 53,
+   "pixelsAtMost2": 53,
+   "sha256Del": "48072f7db096c9d595431a32add6b535eb743a5ae0c4acd3417ad6facd374d36",
+   "sha256Ref": "73e12d02455e7d8ee96817f19b57d58755e65a3cc84c97cb037aaf0af6d0d650"
+  },
+  "webkit-light-phone/pilot-detail.png": {
+   "equal": true,
+   "sha256": "f911391ec2a1d441f4c7ba305e3bc6864786cb8085ff7d1e1b7122398de5c4c4"
+  },
+  "webkit-light-phone/pilot-field-hover.png": {
+   "equal": true,
+   "sha256": "23507564500d06bbb32901f56a757751da7742e897a6b177af74e34d18836ef6"
+  },
+  "webkit-light-phone/pilot-inputs.png": {
+   "equal": true,
+   "sha256": "030e33ebb2cb19bb5080da0a02c3c0107f3b53134fa9495e86402e118dd2d5a8"
+  },
+  "webkit-light-phone/pilot-list-open.png": {
+   "equal": true,
+   "sha256": "c2ea38df186c9674816304bb173bee9c81e8443ba6be1b70e4591ed415a32de5"
+  },
+  "webkit-light-phone/pilot-list-search.png": {
+   "equal": true,
+   "sha256": "73043fe74b3d403a244fa2be50208db2455bf784a2f5808e65ab9760df7b62c3"
+  },
+  "webkit-light-phone/pilot-model-open.png": {
+   "equal": true,
+   "sha256": "a130226527c37aba151f56b4aca1a240b68fd687db8422b5ae16aae9f9d2c06a"
+  },
+  "webkit-light-phone/pilot-p0-share-focused.png": {
+   "equal": true,
+   "sha256": "5f42dab3118083f874a9cd4f2fd8d1b694d66fa65fcab5473e48dc920955ab28"
+  },
+  "webkit-light-phone/pilot-prerequisite-open.png": {
+   "equal": true,
+   "sha256": "a98dd1374e88515beda3f70a17d5325891c89fdb2d4bf15a430ea0db1bc5e5d5"
+  },
+  "webkit-light-phone/pilot-provider-open.png": {
+   "equal": true,
+   "sha256": "1329a810d0556030118f297dfaf5e01b41e3967c9d877ed0535fdbd75391b2bd"
+  },
+  "webkit-light-phone/pilot-remove-confirm.png": {
+   "equal": true,
+   "sha256": "138b87612fda5b5efc1ae80447b69ac25de266295f74408455f2b14d2d25c105"
+  },
+  "webkit-light-phone/pilot-reopen-refused.png": {
+   "equal": true,
+   "sha256": "1069f6422c528c2b4584d4890b43ec008f14effc6431d50e6101c8882772dd28"
+  },
+  "webkit-light-phone/pilot-reopen.png": {
+   "equal": true,
+   "sha256": "77ea8925647476e723880c106721732876b6a8c8698c023b5028ba403a4e96ab"
+  },
+  "webkit-light-phone/pilot-run-hint.png": {
+   "equal": true,
+   "sha256": "32d22e2a4c454571b347e0f4fdf9792fffda27b6f43e489edcec9c2b9fee053f"
+  },
+  "webkit-light-phone/pilot-share-access-menu.png": {
+   "equal": true,
+   "sha256": "3ddcf750a46417e7750d17f22eec62f7844a09c4681cfe8d213ca8059c6ce0ef"
+  },
+  "webkit-light-phone/pilot-share-conversations.png": {
+   "equal": true,
+   "sha256": "d86f0b19771ce040a9a4e01f6a5a852e11331fca55ed8c79aa2f17996531760e"
+  },
+  "webkit-light-phone/pilot-share-error.png": {
+   "equal": true,
+   "sha256": "24b3d9b180bab9bab990f55980fcad0521ae21e674baa31ad054a6839e6bc902"
+  },
+  "webkit-light-phone/pilot-share-expiry-open.png": {
+   "equal": true,
+   "sha256": "620b918421e0cbfc22889491947184e8723553212b81d28e8195db2860f2e8d3"
+  },
+  "webkit-light-phone/pilot-share-loading.png": {
+   "equal": true,
+   "sha256": "1d51044fe57dde18aa0e47814f281f9344cf29db23589dccc5eb4e9be46ad159"
+  },
+  "webkit-light-phone/pilot-share-private.png": {
+   "equal": true,
+   "sha256": "3d2bcb7e01f5266d6ff25f139791bce336b33c13b55415d43f9511ad7784130b"
+  },
+  "webkit-light-phone/pilot-share-public.png": {
+   "equal": true,
+   "sha256": "7f69fe3aefb941a2e25fef12c8c3a74a7af3e6cb2deb4fe43b82588909165560"
+  },
+  "webkit-light-phone/pilot-share-turn-off.png": {
+   "equal": true,
+   "sha256": "7cdf3495a760ed0c4fdf764f13457bd9e91e8834a10bc85cd5a80a53242b460d"
+  },
+  "webkit-light-phone/pilot-suggested-open.png": {
+   "equal": true,
+   "sha256": "56bca5743daadfc8a0f995204cf2c7711a7e7f5d32f0b2967aa2c998b8ea2a2d"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/pilot-account": {},
+  "chromium-dark-desktop/pilot-account-open": {},
+  "chromium-dark-desktop/pilot-antigravity-account": {},
+  "chromium-dark-desktop/pilot-antigravity-account-open": {},
+  "chromium-dark-desktop/pilot-assignee-open": {},
+  "chromium-dark-desktop/pilot-comment-mention": {},
+  "chromium-dark-desktop/pilot-delete-confirm": {},
+  "chromium-dark-desktop/pilot-dependencies": {},
+  "chromium-dark-desktop/pilot-dependency-list": {},
+  "chromium-dark-desktop/pilot-dependency-view-hover": {},
+  "chromium-dark-desktop/pilot-detail": {},
+  "chromium-dark-desktop/pilot-field-hover": {},
+  "chromium-dark-desktop/pilot-inputs": {},
+  "chromium-dark-desktop/pilot-list-open": {},
+  "chromium-dark-desktop/pilot-list-search": {},
+  "chromium-dark-desktop/pilot-model-open": {},
+  "chromium-dark-desktop/pilot-p0-share-focused": {},
+  "chromium-dark-desktop/pilot-prerequisite-open": {},
+  "chromium-dark-desktop/pilot-provider-open": {},
+  "chromium-dark-desktop/pilot-remove-confirm": {},
+  "chromium-dark-desktop/pilot-reopen": {},
+  "chromium-dark-desktop/pilot-reopen-refused": {},
+  "chromium-dark-desktop/pilot-run-hint": {},
+  "chromium-dark-desktop/pilot-share-access-menu": {},
+  "chromium-dark-desktop/pilot-share-conversations": {},
+  "chromium-dark-desktop/pilot-share-error": {},
+  "chromium-dark-desktop/pilot-share-expiry-open": {},
+  "chromium-dark-desktop/pilot-share-loading": {},
+  "chromium-dark-desktop/pilot-share-private": {},
+  "chromium-dark-desktop/pilot-share-public": {},
+  "chromium-dark-desktop/pilot-share-turn-off": {},
+  "chromium-dark-desktop/pilot-suggested-open": {},
+  "chromium-dark-phone/pilot-account": {},
+  "chromium-dark-phone/pilot-account-open": {},
+  "chromium-dark-phone/pilot-antigravity-account": {},
+  "chromium-dark-phone/pilot-antigravity-account-open": {},
+  "chromium-dark-phone/pilot-assignee-open": {},
+  "chromium-dark-phone/pilot-comment-mention": {},
+  "chromium-dark-phone/pilot-delete-confirm": {},
+  "chromium-dark-phone/pilot-dependencies": {},
+  "chromium-dark-phone/pilot-dependency-list": {},
+  "chromium-dark-phone/pilot-dependency-view-hover": {},
+  "chromium-dark-phone/pilot-detail": {},
+  "chromium-dark-phone/pilot-field-hover": {},
+  "chromium-dark-phone/pilot-inputs": {},
+  "chromium-dark-phone/pilot-list-open": {},
+  "chromium-dark-phone/pilot-list-search": {},
+  "chromium-dark-phone/pilot-model-open": {},
+  "chromium-dark-phone/pilot-p0-share-focused": {},
+  "chromium-dark-phone/pilot-prerequisite-open": {},
+  "chromium-dark-phone/pilot-provider-open": {},
+  "chromium-dark-phone/pilot-remove-confirm": {},
+  "chromium-dark-phone/pilot-reopen": {},
+  "chromium-dark-phone/pilot-reopen-refused": {},
+  "chromium-dark-phone/pilot-run-hint": {},
+  "chromium-dark-phone/pilot-share-access-menu": {},
+  "chromium-dark-phone/pilot-share-conversations": {},
+  "chromium-dark-phone/pilot-share-error": {},
+  "chromium-dark-phone/pilot-share-expiry-open": {},
+  "chromium-dark-phone/pilot-share-loading": {},
+  "chromium-dark-phone/pilot-share-private": {},
+  "chromium-dark-phone/pilot-share-public": {},
+  "chromium-dark-phone/pilot-share-turn-off": {},
+  "chromium-dark-phone/pilot-suggested-open": {},
+  "chromium-light-desktop/pilot-account": {},
+  "chromium-light-desktop/pilot-account-open": {},
+  "chromium-light-desktop/pilot-antigravity-account": {},
+  "chromium-light-desktop/pilot-antigravity-account-open": {},
+  "chromium-light-desktop/pilot-assignee-open": {},
+  "chromium-light-desktop/pilot-comment-mention": {},
+  "chromium-light-desktop/pilot-delete-confirm": {},
+  "chromium-light-desktop/pilot-dependencies": {},
+  "chromium-light-desktop/pilot-dependency-list": {},
+  "chromium-light-desktop/pilot-dependency-view-hover": {},
+  "chromium-light-desktop/pilot-detail": {},
+  "chromium-light-desktop/pilot-field-hover": {},
+  "chromium-light-desktop/pilot-inputs": {},
+  "chromium-light-desktop/pilot-list-open": {},
+  "chromium-light-desktop/pilot-list-search": {},
+  "chromium-light-desktop/pilot-model-open": {},
+  "chromium-light-desktop/pilot-p0-share-focused": {},
+  "chromium-light-desktop/pilot-prerequisite-open": {},
+  "chromium-light-desktop/pilot-provider-open": {},
+  "chromium-light-desktop/pilot-remove-confirm": {},
+  "chromium-light-desktop/pilot-reopen": {},
+  "chromium-light-desktop/pilot-reopen-refused": {},
+  "chromium-light-desktop/pilot-run-hint": {},
+  "chromium-light-desktop/pilot-share-access-menu": {},
+  "chromium-light-desktop/pilot-share-conversations": {},
+  "chromium-light-desktop/pilot-share-error": {},
+  "chromium-light-desktop/pilot-share-expiry-open": {},
+  "chromium-light-desktop/pilot-share-loading": {},
+  "chromium-light-desktop/pilot-share-private": {},
+  "chromium-light-desktop/pilot-share-public": {},
+  "chromium-light-desktop/pilot-share-turn-off": {},
+  "chromium-light-desktop/pilot-suggested-open": {},
+  "chromium-light-phone/pilot-account": {},
+  "chromium-light-phone/pilot-account-open": {},
+  "chromium-light-phone/pilot-antigravity-account": {},
+  "chromium-light-phone/pilot-antigravity-account-open": {},
+  "chromium-light-phone/pilot-assignee-open": {},
+  "chromium-light-phone/pilot-comment-mention": {},
+  "chromium-light-phone/pilot-delete-confirm": {},
+  "chromium-light-phone/pilot-dependencies": {},
+  "chromium-light-phone/pilot-dependency-list": {},
+  "chromium-light-phone/pilot-dependency-view-hover": {},
+  "chromium-light-phone/pilot-detail": {},
+  "chromium-light-phone/pilot-field-hover": {},
+  "chromium-light-phone/pilot-inputs": {},
+  "chromium-light-phone/pilot-list-open": {},
+  "chromium-light-phone/pilot-list-search": {},
+  "chromium-light-phone/pilot-model-open": {},
+  "chromium-light-phone/pilot-p0-share-focused": {},
+  "chromium-light-phone/pilot-prerequisite-open": {},
+  "chromium-light-phone/pilot-provider-open": {},
+  "chromium-light-phone/pilot-remove-confirm": {},
+  "chromium-light-phone/pilot-reopen": {},
+  "chromium-light-phone/pilot-reopen-refused": {},
+  "chromium-light-phone/pilot-run-hint": {},
+  "chromium-light-phone/pilot-share-access-menu": {},
+  "chromium-light-phone/pilot-share-conversations": {},
+  "chromium-light-phone/pilot-share-error": {},
+  "chromium-light-phone/pilot-share-expiry-open": {},
+  "chromium-light-phone/pilot-share-loading": {},
+  "chromium-light-phone/pilot-share-private": {},
+  "chromium-light-phone/pilot-share-public": {},
+  "chromium-light-phone/pilot-share-turn-off": {},
+  "chromium-light-phone/pilot-suggested-open": {},
+  "webkit-dark-desktop/pilot-account": {},
+  "webkit-dark-desktop/pilot-account-open": {},
+  "webkit-dark-desktop/pilot-antigravity-account": {},
+  "webkit-dark-desktop/pilot-antigravity-account-open": {},
+  "webkit-dark-desktop/pilot-assignee-open": {},
+  "webkit-dark-desktop/pilot-comment-mention": {},
+  "webkit-dark-desktop/pilot-delete-confirm": {},
+  "webkit-dark-desktop/pilot-dependencies": {},
+  "webkit-dark-desktop/pilot-dependency-list": {},
+  "webkit-dark-desktop/pilot-dependency-view-hover": {},
+  "webkit-dark-desktop/pilot-detail": {},
+  "webkit-dark-desktop/pilot-field-hover": {},
+  "webkit-dark-desktop/pilot-inputs": {},
+  "webkit-dark-desktop/pilot-list-open": {},
+  "webkit-dark-desktop/pilot-list-search": {},
+  "webkit-dark-desktop/pilot-model-open": {},
+  "webkit-dark-desktop/pilot-p0-share-focused": {},
+  "webkit-dark-desktop/pilot-prerequisite-open": {},
+  "webkit-dark-desktop/pilot-provider-open": {},
+  "webkit-dark-desktop/pilot-remove-confirm": {},
+  "webkit-dark-desktop/pilot-reopen": {},
+  "webkit-dark-desktop/pilot-reopen-refused": {},
+  "webkit-dark-desktop/pilot-run-hint": {},
+  "webkit-dark-desktop/pilot-share-access-menu": {},
+  "webkit-dark-desktop/pilot-share-conversations": {},
+  "webkit-dark-desktop/pilot-share-error": {},
+  "webkit-dark-desktop/pilot-share-expiry-open": {},
+  "webkit-dark-desktop/pilot-share-loading": {},
+  "webkit-dark-desktop/pilot-share-private": {},
+  "webkit-dark-desktop/pilot-share-public": {},
+  "webkit-dark-desktop/pilot-share-turn-off": {},
+  "webkit-dark-desktop/pilot-suggested-open": {},
+  "webkit-dark-phone/pilot-account": {},
+  "webkit-dark-phone/pilot-account-open": {},
+  "webkit-dark-phone/pilot-antigravity-account": {},
+  "webkit-dark-phone/pilot-antigravity-account-open": {},
+  "webkit-dark-phone/pilot-assignee-open": {},
+  "webkit-dark-phone/pilot-comment-mention": {},
+  "webkit-dark-phone/pilot-delete-confirm": {},
+  "webkit-dark-phone/pilot-dependencies": {},
+  "webkit-dark-phone/pilot-dependency-list": {},
+  "webkit-dark-phone/pilot-dependency-view-hover": {},
+  "webkit-dark-phone/pilot-detail": {},
+  "webkit-dark-phone/pilot-field-hover": {},
+  "webkit-dark-phone/pilot-inputs": {},
+  "webkit-dark-phone/pilot-list-open": {},
+  "webkit-dark-phone/pilot-list-search": {},
+  "webkit-dark-phone/pilot-model-open": {},
+  "webkit-dark-phone/pilot-p0-share-focused": {},
+  "webkit-dark-phone/pilot-prerequisite-open": {},
+  "webkit-dark-phone/pilot-provider-open": {},
+  "webkit-dark-phone/pilot-remove-confirm": {},
+  "webkit-dark-phone/pilot-reopen": {},
+  "webkit-dark-phone/pilot-reopen-refused": {},
+  "webkit-dark-phone/pilot-run-hint": {},
+  "webkit-dark-phone/pilot-share-access-menu": {},
+  "webkit-dark-phone/pilot-share-conversations": {},
+  "webkit-dark-phone/pilot-share-error": {},
+  "webkit-dark-phone/pilot-share-expiry-open": {},
+  "webkit-dark-phone/pilot-share-loading": {},
+  "webkit-dark-phone/pilot-share-private": {},
+  "webkit-dark-phone/pilot-share-public": {},
+  "webkit-dark-phone/pilot-share-turn-off": {},
+  "webkit-dark-phone/pilot-suggested-open": {},
+  "webkit-light-desktop/pilot-account": {},
+  "webkit-light-desktop/pilot-account-open": {},
+  "webkit-light-desktop/pilot-antigravity-account": {},
+  "webkit-light-desktop/pilot-antigravity-account-open": {},
+  "webkit-light-desktop/pilot-assignee-open": {},
+  "webkit-light-desktop/pilot-comment-mention": {},
+  "webkit-light-desktop/pilot-delete-confirm": {},
+  "webkit-light-desktop/pilot-dependencies": {},
+  "webkit-light-desktop/pilot-dependency-list": {},
+  "webkit-light-desktop/pilot-dependency-view-hover": {},
+  "webkit-light-desktop/pilot-detail": {},
+  "webkit-light-desktop/pilot-field-hover": {},
+  "webkit-light-desktop/pilot-inputs": {},
+  "webkit-light-desktop/pilot-list-open": {},
+  "webkit-light-desktop/pilot-list-search": {},
+  "webkit-light-desktop/pilot-model-open": {},
+  "webkit-light-desktop/pilot-p0-share-focused": {},
+  "webkit-light-desktop/pilot-prerequisite-open": {},
+  "webkit-light-desktop/pilot-provider-open": {},
+  "webkit-light-desktop/pilot-remove-confirm": {},
+  "webkit-light-desktop/pilot-reopen": {},
+  "webkit-light-desktop/pilot-reopen-refused": {},
+  "webkit-light-desktop/pilot-run-hint": {},
+  "webkit-light-desktop/pilot-share-access-menu": {},
+  "webkit-light-desktop/pilot-share-conversations": {},
+  "webkit-light-desktop/pilot-share-error": {},
+  "webkit-light-desktop/pilot-share-expiry-open": {},
+  "webkit-light-desktop/pilot-share-loading": {},
+  "webkit-light-desktop/pilot-share-private": {},
+  "webkit-light-desktop/pilot-share-public": {},
+  "webkit-light-desktop/pilot-share-turn-off": {},
+  "webkit-light-desktop/pilot-suggested-open": {},
+  "webkit-light-phone/pilot-account": {},
+  "webkit-light-phone/pilot-account-open": {},
+  "webkit-light-phone/pilot-antigravity-account": {},
+  "webkit-light-phone/pilot-antigravity-account-open": {},
+  "webkit-light-phone/pilot-assignee-open": {},
+  "webkit-light-phone/pilot-comment-mention": {},
+  "webkit-light-phone/pilot-delete-confirm": {},
+  "webkit-light-phone/pilot-dependencies": {},
+  "webkit-light-phone/pilot-dependency-list": {},
+  "webkit-light-phone/pilot-dependency-view-hover": {},
+  "webkit-light-phone/pilot-detail": {},
+  "webkit-light-phone/pilot-field-hover": {},
+  "webkit-light-phone/pilot-inputs": {},
+  "webkit-light-phone/pilot-list-open": {},
+  "webkit-light-phone/pilot-list-search": {},
+  "webkit-light-phone/pilot-model-open": {},
+  "webkit-light-phone/pilot-p0-share-focused": {},
+  "webkit-light-phone/pilot-prerequisite-open": {},
+  "webkit-light-phone/pilot-provider-open": {},
+  "webkit-light-phone/pilot-remove-confirm": {},
+  "webkit-light-phone/pilot-reopen": {},
+  "webkit-light-phone/pilot-reopen-refused": {},
+  "webkit-light-phone/pilot-run-hint": {},
+  "webkit-light-phone/pilot-share-access-menu": {},
+  "webkit-light-phone/pilot-share-conversations": {},
+  "webkit-light-phone/pilot-share-error": {},
+  "webkit-light-phone/pilot-share-expiry-open": {},
+  "webkit-light-phone/pilot-share-loading": {},
+  "webkit-light-phone/pilot-share-private": {},
+  "webkit-light-phone/pilot-share-public": {},
+  "webkit-light-phone/pilot-share-turn-off": {},
+  "webkit-light-phone/pilot-suggested-open": {}
+ },
+ "tests": {
+  "chromium-dark-desktop :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: record pilot performance": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P0 share dialog, focused alike \u203a same element focused before the shot": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: record pilot performance": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {
+  "chromium-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"listId\":\"2zwQZ2hd93IvLb59t6pdq\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "list pick Later"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"listId\":\"2zwQZ2hd93IvLb59t6pdq\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "list pick Later"
+     },
+     "step": "list pick Later"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "L \u00b7 Opus 5.5 \u00b7 high",
+       "role": "combobox"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"modelHint\":\"L\",\"modelHintReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "suggested pick L"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"modelHint\":\"L\",\"modelHintReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "suggested pick L"
+     },
+     "step": "suggested pick L"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "chromium-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "chromium-dark-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "chromium-dark-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "chromium-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "L \u00b7 Opus 5.5 \u00b7 high",
+       "role": "combobox"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"modelHint\":\"L\",\"modelHintReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "suggested pick L"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"modelHint\":\"L\",\"modelHintReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "suggested pick L"
+     },
+     "step": "suggested pick L"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "chromium-dark-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "chromium-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "chromium-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "chromium-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "chromium-light-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "chromium-light-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "chromium-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [
+       {
+        "name": "Opus 5.5",
+        "selected": true
+       },
+       {
+        "name": "Sonnet 5.5",
+        "selected": false
+       },
+       {
+        "name": "Haiku 4.5",
+        "selected": false
+       }
+      ],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "step": "model pick Sonnet"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "chromium-light-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "chromium-light-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "chromium-light-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "chromium-light-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "chromium-light-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "chromium-light-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "equal": true
+  },
+  "chromium-light-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "chromium-light-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "chromium-light-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "chromium-light-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "webkit-dark-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "webkit-dark-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "webkit-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "webkit-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "equal": true
+  },
+  "webkit-dark-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "webkit-dark-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "webkit-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "webkit-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": {
+   "equal": true
+  },
+  "webkit-light-desktop :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "webkit-light-desktop :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "webkit-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": {
+   "equal": true
+  },
+  "webkit-light-desktop :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "webkit-light-desktop :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "webkit-light-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "webkit-light-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  },
+  "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Share task"
+      ],
+      "focus": {
+       "name": "Access",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W/share"
+       }
+      ],
+      "step": "turned off"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Share task"
+      ],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W/share"
+       }
+      ],
+      "step": "turned off"
+     },
+     "step": "turned off"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: share dialog pilot \u203a loading and a read that failed": {
+   "equal": true
+  },
+  "webkit-light-phone :: task detail pilot \u203a a failed upload says so and leaves the list as it was": {
+   "equal": true
+  },
+  "webkit-light-phone :: task detail pilot \u203a dependencies, inputs and comments": {
+   "equal": true
+  },
+  "webkit-light-phone :: task detail pilot \u203a fields, pickers and the panel header": {
+   "equal": true
+  },
+  "webkit-light-phone :: task detail pilot \u203a files dropped on Add file are each uploaded": {
+   "equal": true
+  },
+  "webkit-light-phone :: task detail pilot \u203a reopening a stopped task, refused and then backed out of": {
+   "equal": true
+  },
+  "webkit-light-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": {
+   "equal": true
+  },
+  "webkit-light-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": {
+   "equal": true
+  }
+ }
+}

@@ -1,0 +1,43 @@
+[
+ {
+  "group": "task panel and settings",
+  "change": [
+   "A16"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-599-dialog.png",
+   "chromium-dark-desktop/breakpoint-601-dialog.png",
+   "chromium-dark-desktop/task-action-focus.png",
+   "chromium-dark-desktop/task-action-hover.png",
+   "chromium-dark-desktop/task-detail.png",
+   "chromium-dark-phone/task-action-focus.png",
+   "chromium-dark-phone/task-action-hover.png",
+   "chromium-dark-phone/task-detail.png",
+   "chromium-light-desktop/breakpoint-599-dialog.png",
+   "chromium-light-desktop/breakpoint-601-dialog.png",
+   "chromium-light-desktop/task-action-focus.png",
+   "chromium-light-desktop/task-action-hover.png",
+   "chromium-light-desktop/task-detail.png",
+   "chromium-light-phone/task-action-focus.png",
+   "chromium-light-phone/task-action-hover.png",
+   "chromium-light-phone/task-detail.png",
+   "webkit-dark-desktop/task-action-focus.png",
+   "webkit-dark-desktop/task-action-hover.png",
+   "webkit-dark-desktop/task-detail.png",
+   "webkit-light-desktop/task-action-focus.png",
+   "webkit-light-desktop/task-action-hover.png",
+   "webkit-light-desktop/task-detail.png",
+   "webkit-light-phone/task-action-focus.png",
+   "webkit-light-phone/task-action-hover.png",
+   "webkit-light-phone/task-detail.png"
+  ],
+  "mainCommits": [
+   "3a3c58c1f",
+   "e69765706"
+  ],
+  "projectLine": [
+   "2fcd654d8"
+  ],
+  "generatedFrom": "full-e69765706"
+ }
+]

@@ -404,7 +404,7 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 ### 6.3 语义腿的实现（阶段 2）
 
 **embedding 由谁算**
-- owner 在 Providers 里配置一个 **Embedding provider**，使用 OpenAI 兼容的 `/v1/embeddings`：可以是本地的 Ollama 或 TEI 跑 bge-m3 这类多语种模型（完全离线），也可以是云端的 OpenAI、Voyage、Jina、Qwen。
+- owner 在 Infrastructure 页的 API keys 里（原 Providers 页）配置一个 **Embedding provider**，使用 OpenAI 兼容的 `/v1/embeddings`：可以是本地的 Ollama 或 TEI 跑 bge-m3 这类多语种模型（完全离线），也可以是云端的 OpenAI、Voyage、Jina、Qwen。
 - 这与 BYOK 一致：数据是否出站由 owner 自己选择。
 - 没有配置就关闭语义腿，UI 上显示 `Semantic search off`。
 

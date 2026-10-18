@@ -1,0 +1,19 @@
+{
+ "label": "fix-antd-first-2",
+ "step": "antd-first",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "FIRST_FRAME_RESULTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/fix-antd-first-2/results node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/overlay-first-frame/antd-first-frame.config.mjs",
+ "commit": "c7ddf671d882e93d45531e2b63405c6a04ddfde1",
+ "webChanges": [
+  "M src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+  " M src/web/ui-migration/choices-first-frame.browser.mjs"
+ ],
+ "webDiffSha256": "2218f956b7c1586f0ef44aa3f3650b36147980131f4aad51cedb581bfad3281e",
+ "startedAt": "2026-10-08T11:27:01Z",
+ "endedAt": "2026-10-08T11:36:50+00:00",
+ "loadAverage": {
+  "start": "32.79 29.29 27.48",
+  "end": "25.66 28.05 27.92"
+ },
+ "exitCode": 0
+}

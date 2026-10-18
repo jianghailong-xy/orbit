@@ -15,10 +15,20 @@ class SettingsLogicTest {
         assertEquals("25 active", settingsSharedLinksValue(25))
         assertEquals("orbit.example.com", settingsInstanceName("https://orbit.example.com/"))
         assertEquals("10.0.2.2:3000", settingsInstanceName("http://10.0.2.2:3000/orbit/"))
-        assertEquals("Sign out of orbit.example.com?", settingsSignOutTitle("orbit.example.com"))
-        assertEquals("Sign out?", settingsSignOutTitle(null))
+        assertEquals("Sign out?", SETTINGS_SIGN_OUT_TITLE)
         assertEquals(listOf("Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass"), personalPermissions.map { it.second })
         assertEquals("Share task", settingsTitle("share", "TASK:abc"))
+    }
+
+    /** UserPreferences.smartModelSelection: on only for an explicit true; absent, or anything but a boolean, is off. */
+    @Test fun smartModelSelectionIsOnOnlyForAnExplicitTrue() {
+        fun prefs(json: String) = Json.parseToJsonElement(json).jsonObject
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":true}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":false}""")))
+        assertFalse(smartModelSelection(prefs("""{"theme":"dark"}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":"true"}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":1}""")))
+        assertFalse(smartModelSelection(null))
     }
 
     @Test fun profileSavesThePhotoFirstThenTheNameOnlyWhenEitherChanged() {
@@ -29,15 +39,22 @@ class SettingsLogicTest {
         assertTrue(profileSteps("Ada", "Ada", ProfilePhoto.Unchanged).isEmpty())
     }
 
-    @Test fun workspaceEffortOffersTheRuntimesVocabulary() {
+    /** The workspace form's efforts are its next session's engine's (contract §2.3): never the provider slug's — a workspace on a
+     * DeepSeek key under Harness offers Harness's levels, the same key under Claude Code Claude Code's. */
+    @Test fun workspaceEffortOffersTheEnginesVocabulary() {
         assertEquals(listOf("", "low", "medium", "high", "xhigh", "max", "ultra"), WorkspaceEffort.options("claude", null))
-        assertEquals(listOf("", "low", "medium", "high", "xhigh", "max", "ultra"), WorkspaceEffort.options("anthropic-2", null))
         val runner = buildJsonObject {
             put("runtimeDefaultModels", buildJsonObject { put("codex", "gpt-5") })
             put("modelCatalog", buildJsonObject { put("codex", buildJsonArray { add(buildJsonObject { put("value", "gpt-5"); put("reasoningLevels", buildJsonArray { add("low"); add("high") }) }) }) })
         }
         assertEquals(listOf("", "low", "high"), WorkspaceEffort.options("codex", runner))
         assertEquals(listOf("", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"), WorkspaceEffort.options("codex", null))
+        assertEquals("Harness's levels are its ACP catalogue's alone", listOf(""), WorkspaceEffort.options("dsh", null))
+        val harness = buildJsonObject {
+            put("runtimeDefaultModels", buildJsonObject { put("dsh", "deepseek-v4-pro") })
+            put("modelCatalog", buildJsonObject { put("dsh", buildJsonArray { add(buildJsonObject { put("value", "deepseek-v4-pro"); put("reasoningLevels", buildJsonArray { add("high"); add("max") }) }) }) })
+        }
+        assertEquals(listOf("", "high", "max"), WorkspaceEffort.options("dsh", harness))
         assertEquals("high", WorkspaceEffort.normalize("medium", "kimi"))
         assertEquals("high", WorkspaceEffort.normalize("max", "antigravity"))
         assertEquals("xHigh", WorkspaceEffort.label("xhigh"))
@@ -71,5 +88,67 @@ class SettingsLogicTest {
         assertFalse(sharingLayerEnabled("PROJECT", "conversations", buildJsonObject { put("taskPages", false) }))
         assertTrue(sharingLayerEnabled("PROJECT", "conversations", JsonObject(emptyMap())))
         assertEquals("Sep 30", ShareCopy.shortDate("2026-09-30T23:00:00Z", ZoneOffset.UTC))
+    }
+
+    /** A wiki space's link (iOS 2ba6765d9, SharePanelTests / SharedLinksList): its own path, the kinds the list asks for, the
+     * word "Wiki" and no status, and its two layers — Documents always, Footnotes off until it is turned on, its risk said
+     * only then. */
+    @Test fun aWikiLinkIsSharedAndListedAsIosSaysIt() {
+        assertEquals("wiki/spaces/w1/share", sharingPath("WIKI", "w1"))
+        assertEquals("SESSION,TASK,PROJECT,WIKI", sharingKinds.joinToString(","))
+        assertEquals("Share wiki", ShareCopy.title("WIKI"))
+        assertEquals("Share wiki", io.orbitd.android.taskprojects.SharePanelCopy.title(io.orbitd.android.taskprojects.ShareRootKind.WIKI))
+        assertEquals("Anyone with the link can view — no sign-in. They can’t change anything.", ShareCopy.publicDetail("WIKI"))
+        assertEquals("Wiki", ShareCopy.kindWord("WIKI"))
+        fun link(state: String, reason: String? = null) = buildJsonObject {
+            put("kind", "WIKI"); put("state", state); reason?.let { put("stateReason", it) }; put("revokedAt", "2026-10-07T12:00:00Z")
+            put("root", buildJsonObject { put("id", "w1"); put("title", "orbit"); put("slug", "orbit") })
+        }
+        assertEquals("A wiki has no status", "Wiki", ShareCopy.whereLine(link("ACTIVE")))
+        assertTrue(ShareCopy.whereLine(link("ENDED", "TURNED_OFF")).startsWith("Wiki · Turned off "))
+
+        val counts = buildJsonObject { put("documents", 12); put("footnotes", 486) }
+        val off = ShareCopy.layers("WIKI", buildJsonObject { put("footnotes", false) }, counts)
+        assertEquals(listOf("Documents", "Footnotes"), off.map { it.name })
+        assertEquals(listOf("12 documents", "486 footnotes"), off.map { it.count })
+        assertEquals(listOf(null, "footnotes"), off.map { it.key })
+        assertEquals(listOf(true, false), off.map { it.on })
+        assertEquals("Documents is always included", listOf(false, true), off.map { it.editable })
+        assertEquals(listOf(false, false), off.map { it.warns })
+        assertEquals(listOf(false, false), off.map { it.nested })
+        assertEquals("The wiki’s home and every document written so far", off[0].detail)
+        assertEquals("The quotes and code each sentence cites, with file paths and lines. Can include command output and file contents.", off[1].detail)
+        val on = ShareCopy.layers("WIKI", buildJsonObject { put("footnotes", true) }, counts)
+        assertEquals(listOf(true, true), on.map { it.on })
+        assertEquals(listOf(false, true), on.map { it.warns })
+        assertEquals("1 document", ShareCopy.layers("WIKI", JsonObject(emptyMap()), buildJsonObject { put("documents", 1) })[0].count)
+        assertEquals("No count before the read", listOf(null, null), ShareCopy.layers("WIKI", JsonObject(emptyMap()), null).map { it.count })
+    }
+
+    /** The API keys list (board 1 ③④): under each key's default model, every engine it runs on — the server's `engines`, its default
+     * first — a Claude subscription token saying why Claude Code is its only one; the keys of one vendor together, a Harness key's
+     * with DeepSeek's. A key's page says what turning it off stops (board 2). */
+    @Test fun eachKeySaysTheEnginesItRunsOn() {
+        fun key(json: String) = Json.parseToJsonElement(json).jsonObject
+        val deepSeek = key("""{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],
+            "defaultModel":"deepseek-v4-pro","models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}]}""")
+        val harness = key("""{"slug":"deepseek-2","label":"DeepSeek 2","runtime":"dsh","presetSlug":"deepseek-harness","engines":["dsh","claude","opencode"],"defaultModel":""}""")
+        val max = key("""{"slug":"claude-max","label":"Claude Max","runtime":"claude","presetSlug":"anthropic","engines":["claude"]}""")
+        val glm = key("""{"slug":"glm","label":"Z.AI (GLM)","runtime":"claude","presetSlug":"glm","engines":["claude","opencode"]}""")
+        val gemini = key("""{"slug":"gemini","label":"Gemini","runtime":"antigravity","presetSlug":"gemini","engines":["antigravity","opencode"]}""")
+        val older = key("""{"slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai","runsOnOpenCode":true}""")
+        assertEquals("Claude Code · OpenCode · DeepSeek Harness", KeyEngines.line(deepSeek))
+        assertEquals("DeepSeek Harness · Claude Code · OpenCode", KeyEngines.line(harness))
+        assertEquals("Claude Code · subscription token", KeyEngines.line(max))
+        assertEquals("Antigravity CLI · OpenCode", KeyEngines.line(gemini))
+        assertEquals("a payload from before `engines` reads as its protocol's", "Codex · OpenCode", KeyEngines.line(older))
+        assertNull(KeyEngines.line(key("""{"slug":"odd","runtime":"opencode","engines":[]}""")))
+        assertEquals("DeepSeek V4 Pro", providerKeyLine(deepSeek))
+        assertNull("where a key runs is the engines line's to say", providerKeyLine(harness))
+        assertEquals(listOf("deepseek", "deepseek-2", "glm", "claude-max", "gemini"), KeyEngines.byVendor(listOf(deepSeek, glm, harness, max, gemini)).map { it.str("slug") })
+        assertEquals("Anthropic-compatible", KeyEngines.protocol("claude")); assertEquals("OpenAI-compatible", KeyEngines.protocol("codex"))
+        assertEquals("Adding or changing a key happens on the web. Turning it off there stops it on Claude Code, OpenCode and DeepSeek Harness.",
+            KeyEngines.footer(listOf("Claude Code", "OpenCode", "DeepSeek Harness")))
+        assertEquals("Adding or changing a key happens on the web. Turning it off there stops it on Claude Code.", KeyEngines.footer(listOf("Claude Code")))
     }
 }

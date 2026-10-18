@@ -1,0 +1,185 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "name": "Add contributing guide",
+        "plan": "# Add a CONTRIBUTING.md\n\nThe repo at [README.md](README.md) currently contains only the heading “P5c probe repository” and has no commits yet. There is no existing contribution process to match.\n\nAdd [CONTRIBUTING.md](CONTRIBUTING.md) at the repository root with a short guide that covers:\n\n- How to propose a change: open an issue or a pull request against `master`.\n- What to include: a brief description of the change and why it is needed.\n- Scope: keep edits limited to the files required for the change.\n\nNo other files need to change."
+      },
+      "toolName": "ExitPlanMode",
+      "toolUseId": "call-<UUID_4>-2\nfc_<UUID_5>_0",
+      "withdrawn": false
+    }
+  ],
+  "checks": [
+    {
+      "name": "plan-mode-entered",
+      "pass": true,
+      "detail": "set_mode [\"plan\"]"
+    },
+    {
+      "name": "command-refused-unasked",
+      "pass": true,
+      "detail": "plan-cmd.txt absent"
+    },
+    {
+      "name": "edit-not-written",
+      "pass": true,
+      "detail": "plan-edit.txt absent"
+    },
+    {
+      "name": "command-answered-reject-once",
+      "pass": true,
+      "detail": "requests []"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "Plan mode blocks file and shell changes, so I’ll skip those writes and look at the repo only enough to draft a short plan for adding `CONTRIBUTING.md`.\n\nThe repository only has a short README. I’ll submit a plan for a `CONTRIBUTING.md` that matches that scope.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "pattern": "*"
+        },
+        "name": "Find `*`"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-1\nfc_<UUID_3>_1",
+        "input": {
+          "file_path": "<RUN>/work/README.md"
+        },
+        "name": "Read"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "{\"totalFiles\":1,\"truncated\":false}",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "# P5c probe repository\n",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_1"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-2\nfc_<UUID_5>_0",
+        "input": {
+          "plan": "# Add a CONTRIBUTING.md\n\nThe repo at [README.md](README.md) currently contains only the heading “P5c probe repository” and has no commits yet. There is no existing contribution process to match.\n\nAdd [CONTRIBUTING.md](CONTRIBUTING.md) at the repository root with a short guide that covers:\n\n- How to propose a change: open an issue or a pull request against `master`.\n- What to include: a brief description of the change and why it is needed.\n- Scope: keep edits limited to the files required for the change.\n\nNo other files need to change."
+        },
+        "name": "ExitPlanMode"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "id": "cursor-plan-turn-1-1",
+        "input": {
+          "entries": [
+            {
+              "content": "Create CONTRIBUTING.md at the repo root with a short contribution guide",
+              "priority": "medium",
+              "status": "pending"
+            }
+          ]
+        },
+        "name": "plan"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "- [ ] Create CONTRIBUTING.md at the repo root with a short contribution guide",
+        "isError": false,
+        "toolUseId": "cursor-plan-turn-1-1"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "Plan saved to file://<RUN>/session/home/.cursor/plans/Add%20contributing%20guide-a166664e.plan.md",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-2\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "createPlanAnswers": [
+      "accepted"
+    ],
+    "planCards": 1
+  },
+  "mode": "plan",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server",
+    "<CLI>/rg --files --case-sensitive --iglob **/* --iglob !**/.git --sortr modified --no-config --color=never --hidden --follow -- ."
+  ],
+  "prompts": [
+    8
+  ],
+  "scenario": "plan",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

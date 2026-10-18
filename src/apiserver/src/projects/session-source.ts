@@ -618,5 +618,5 @@ function refusalReason(detail: Record<string, unknown> | undefined): string {
     const said = detail?.[key];
     if (typeof said === 'string' && said.trim().length > 0) return said.trim();
   }
-  return 'runner 没有给出原话（只报了拒绝码）。';
+  return 'The runner gave no words of its own (it reported only the refusal code).';
 }

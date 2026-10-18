@@ -42,13 +42,73 @@ internal object WikiShell {
     @Volatile var watchState = "ACTIVE"
     /** A pause answered 409 with this message, as for a watch that already ended. */
     @Volatile var pauseRefusal: String? = null
+    /** The server has the wiki off for this account: every wiki route answers 404 WIKI_DISABLED. */
+    @Volatile var wikiDisabled = false
+    /** `GET /wiki/spaces` as the server lists the spaces. */
+    @Volatile var spaces: String = WikiFixtures.spaces
+    /** Every entry of the space, which `GET …/entries` answers as `WikiService.listEntries` does. */
+    @Volatile var entries: List<JsonObject> = fixtureEntries()
+    /** `GET /wiki/review` before any decide. */
+    @Volatile var reviewQueue: String = WikiFixtures.review
+    /** `GET /wiki/spaces/:id/plan` by space id; a space with none answers 404, as a server from before the plan. */
+    @Volatile var plans: Map<String, String> = emptyMap()
+    /** `GET /workspaces`: the directory's workspaces. */
+    @Volatile var workspaces: String = "[]"
+    /** `GET /wiki/spaces/:id/docs` (the shared fixture's directory read unless set), answered with [docsStatus]. */
+    @Volatile var docs: String? = null
+    @Volatile var docsStatus: Int = 200
+    /** `GET /wiki/spaces/:id/articles`; none answers 404, as a server from before the articles. */
+    @Volatile var articles: String? = null
+    /** Each space's public link by space id, as `GET /wiki/spaces/:id/share` answers it; a space with none answers `link: null`. */
+    val shares = ConcurrentHashMap<String, JsonObject>()
+    /** The share writes, in order: `PUT <space> <body>`, `DELETE <space>`. */
+    val shareWrites = CopyOnWriteArrayList<String>()
     @Volatile private var frames = Channel<String>(Channel.UNLIMITED)
     @Volatile private var opened = 0
 
     fun reset() {
         calls.clear(); ended.clear(); gates.clear(); decided.clear()
         decision = "accepted"; watchState = "ACTIVE"; pauseRefusal = null
+        wikiDisabled = false; spaces = WikiFixtures.spaces; entries = fixtureEntries(); reviewQueue = WikiFixtures.review
+        plans = emptyMap(); workspaces = "[]"; docs = null; docsStatus = 200; articles = null
+        shares.clear(); shareWrites.clear()
         frames = Channel(Channel.UNLIMITED); opened = 0
+    }
+
+    /** A space's link as the server's owner view answers it (share-links.service.ts): kind WIKI, the space for its root —
+     * a slug, no status — and its one layer, Footnotes, off unless chosen. */
+    fun wikiLink(space: String, footnotes: Boolean = false) = buildJsonObject {
+        put("id", "L-$space"); put("token", "wiki-token-$space"); put("kind", "WIKI"); put("state", "ACTIVE"); put("stateReason", JsonNull)
+        put("root", buildJsonObject { put("id", space); put("title", if (space == SPACE) "orbit" else "wikova"); put("slug", if (space == SPACE) "orbit" else "wikova") })
+        put("include", buildJsonObject { put("footnotes", footnotes) }); put("expiresAt", JsonNull); put("viewCount", 0); put("lastViewedAt", JsonNull)
+    }
+
+    /** `GET | PUT | DELETE /wiki/spaces/:id/share`: the read is `{link, counts}`; a PUT opens the link with the defaults or changes
+     * the layer it names, and answers the link; DELETE turns it off. */
+    private fun share(space: String, method: String, body: String?): ApiResponse = when (method) {
+        "PUT" -> {
+            shareWrites += "PUT $space $body"
+            val chosen = Wire.json.parseToJsonElement(body!!).jsonObject["include"] as? JsonObject
+            val before = shares[space] ?: wikiLink(space)
+            val link = JsonObject(before + ("include" to JsonObject(before.getValue("include").jsonObject + chosen.orEmpty())))
+            shares[space] = link
+            ok(link.toString())
+        }
+        "DELETE" -> { shareWrites += "DELETE $space"; shares.remove(space); ok("{}") }
+        else -> ok("""{"link":${shares[space] ?: "null"},"counts":{"documents":12,"footnotes":486}}""")
+    }
+
+    private fun fixtureEntries() = Wire.json.parseToJsonElement(WikiFixtures.entries).jsonArray.map { it.jsonObject }
+
+    /** `WikiService.listEntries`: of the `kind` and `status` asked, newest recorded first, between 1 and 200 (50 unasked). */
+    fun listEntries(store: List<JsonObject>, query: List<Pair<String, String>>): String {
+        fun asked(key: String) = query.firstOrNull { it.first == key }?.second
+        fun field(entry: JsonObject, key: String) = (entry[key] as? JsonPrimitive)?.contentOrNull
+        val limit = (asked("limit")?.toIntOrNull() ?: 50).coerceIn(1, 200)
+        return JsonArray(store.filter { entry -> asked("kind").let { it == null || field(entry, "kind") == it } &&
+            asked("status").let { it == null || field(entry, "status") == it } }
+            .sortedWith(compareByDescending<JsonObject> { field(it, "recordedAt") ?: "" }.thenByDescending { field(it, "id") ?: "" })
+            .take(limit)).toString()
     }
 
     /** Hold the next `METHOD path` until the gate is completed. */
@@ -66,13 +126,13 @@ internal object WikiShell {
     private fun user() = """{"id":"u1","email":"owner@a12.test","name":"Owner"}"""
     private fun otherSpace() = WikiFixtures.space.replace(SPACE, OTHER_SPACE).replace("\"orbit\"", "\"wikova\"")
         .replace("\"Orbit\"", "\"Wikova\"")
-    private fun review(): String = JsonArray(Wire.json.parseToJsonElement(WikiFixtures.review).jsonArray.map { changeset ->
+    private fun review(): String = JsonArray(Wire.json.parseToJsonElement(reviewQueue).jsonArray.map { changeset ->
         val ops = changeset.jsonObject.getValue("ops").jsonArray.filter { it.jsonObject.getValue("id").jsonPrimitive.content !in decided }
         JsonObject(changeset.jsonObject + ("ops" to JsonArray(ops)))
     }).toString()
     /** A decide's answer: the changeset as it now stands, the answered op carrying what was recorded for it. */
     private fun decidedChangeset(changeset: String, opId: String): String {
-        val row = Wire.json.parseToJsonElement(WikiFixtures.review).jsonArray.map { it.jsonObject }
+        val row = Wire.json.parseToJsonElement(reviewQueue).jsonArray.map { it.jsonObject }
             .firstOrNull { it.getValue("id").jsonPrimitive.content == changeset } ?: return "{}"
         val ops = row.getValue("ops").jsonArray.map { op ->
             if (op.jsonObject.getValue("id").jsonPrimitive.content != opId) op
@@ -81,7 +141,7 @@ internal object WikiShell {
         return JsonObject(row + ("ops" to JsonArray(ops))).toString()
     }
     private fun watch() = WatchFixture.json(id = WATCH, state = watchState, action = "NOTIFY_USER", observer = null).toString()
-    private val docs = wikiDocsFixture().obj("docs")
+    private val docsFixture = wikiDocsFixture().obj("docs")
 
     val transport = HttpTransport { request ->
         val api = request.api
@@ -111,15 +171,22 @@ internal object WikiShell {
         return when {
             path == "auth/logout" -> ok("{}")
             path == "users/me" -> ok(user())
-            path == "wiki/spaces" -> ok(WikiFixtures.spaces)
+            wikiDisabled && path.startsWith("wiki/") -> status(404,
+                """{"code":"WIKI_DISABLED","message":"The Orbit wiki is not on for this account on this Orbit server (ORBIT_WIKI=canary), so nothing was read from it or written to it."}""")
+            path == "wiki/spaces" -> ok(spaces)
             path == "wiki/spaces/$SPACE" && method == "PATCH" -> ok(WikiFixtures.space)
             path == "wiki/spaces/$SPACE" -> ok(WikiFixtures.space)
             path == "wiki/spaces/$OTHER_SPACE" -> ok(otherSpace())
-            path.endsWith("/entries") && path.startsWith("wiki/spaces/") -> ok(WikiFixtures.entries)
+            path.endsWith("/entries") && path.startsWith("wiki/spaces/") -> ok(listEntries(entries, api.query))
+            path.startsWith("wiki/spaces/") && path.endsWith("/plan") -> plans[api.path[2]]?.let(::ok) ?: plans[path.split('/')[2]]?.let(::ok)
+                ?: status(404, """{"message":"not found"}""")
+            path == "workspaces" -> ok(workspaces)
             path.endsWith("/timeline") -> ok(WikiFixtures.timeline)
-            path.endsWith("/docs") -> ok(docs.obj("directory").obj("read").toString())
-            path.endsWith("/docs/$DOC") -> ok(docs.obj("doc").obj("read").toString())
-            path.endsWith("/doc-index") -> ok(buildJsonObject { put("plan", docs.obj("directory").obj("read").obj("plan")); put("items", docs.obj("index").arr("items")) }.toString())
+            path.endsWith("/docs") -> status(docsStatus, if (docsStatus == 200) docs ?: docsFixture.obj("directory").obj("read").toString() else """{"message":"unavailable"}""")
+            path.endsWith("/articles") && articles != null -> ok(articles!!)
+            path.startsWith("wiki/spaces/") && path.endsWith("/share") -> share(path.split('/')[2], method, api.body?.decodeToString())
+            path.endsWith("/docs/$DOC") -> ok(docsFixture.obj("doc").obj("read").toString())
+            path.endsWith("/doc-index") -> ok(buildJsonObject { put("plan", docsFixture.obj("directory").obj("read").obj("plan")); put("items", docsFixture.obj("index").arr("items")) }.toString())
             path == "wiki/spaces/$SPACE/changesets" -> ok("""{"changesetId":"34UDCsOwnerEdit000009","ops":[{"seq":0,"status":"applied","entryId":"$ENTRY","revision":5}]}""")
             path == "wiki/entries/$ENTRY" -> ok(WikiFixtures.entryDetail)
             path == "wiki/review" -> ok(review())

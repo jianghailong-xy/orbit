@@ -42,6 +42,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
 import { type Tenant, type TenantRequest } from './tenant-isolation-cases';
 import {
@@ -206,6 +207,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // landing of the project's task, and `project_integration_job_task_inflight_key` allows one live
     // LAND_TASK a task (0281 J3) — the two were the same task until this line, which made this spec red
     // before it ran a single case (a4c1b1f8f).
+    // Nothing either census holds is lost by it: each still stands up a landing of its own. The first
+    // half's queued job stays on the project's task, where its Retry case names it. The two cases here
+    // name this job by its id and its claim (lease owner, generation), never by its task, and the task
+    // is made as `projectTaskId` is, OPEN in the same project. And it is returned with the rest
+    // (`landingTaskId`), so a write naming it is still one of A's to the write trap.
     const landingTaskId = await task('task whose landing the machine holds', { projectId: of.projectId });
     await db.projectIntegrationJob.create({
       data: {
@@ -258,17 +264,31 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     ];
 
     // ── the project's coordinator's items ──
+    // Failures of a task of their own, which nothing is attempting. A failure is owed only while no
+    // attempt at its task is in flight (`openItemOwed`, since 2e8169a0d), and the first half's fixture
+    // has one in flight at `projectTaskId`: its attempt session. Hung on that task, both items were owed
+    // by nobody from the moment they were made, and the escalation tick's backstop closed them a minute
+    // after the apiserver started — a write of A's the trap pinned on whichever request was in flight,
+    // or on none when the fixtures took longer than that minute. Returned with the rest
+    // (`failedTaskId`), as `landingTaskId` is, so a write naming it is still one of A's to the trap.
+    const failedTaskId = await task('task whose failure the coordinator holds', { projectId: of.projectId });
     const coordinatorItem = (title: string) =>
       db.projectOpenItem.create({
         data: {
           projectId: of.projectId, ownerId, kind: 'TASK_FAILED', state: 'OPEN', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT',
-          taskId: of.projectTaskId, dedupeKey: `TF:${of.projectTaskId}:${randomUUID()}`, title,
+          taskId: failedTaskId, dedupeKey: `TF:${failedTaskId}:${randomUUID()}`, title,
           payload: { how: 'RUN_FAILED', chain: { failuresInChain: 1, limit: 3 } }, waitingSince: new Date(), assignedAt: new Date(),
         } as never,
         select: { id: true },
       });
     const coordinatorItemId = (await coordinatorItem('Task failed, for the census to resolve')).id;
     const handOverItemId = (await coordinatorItem('Task failed, for the census to hand over')).id;
+    // Asked here rather than left to the clock, which answers it only once the trap is set, and only
+    // when the fixtures were quicker than its minute.
+    assert.deepEqual(
+      [...await openItemsNoLongerOwed(db, [coordinatorItemId, handOverItemId])], [],
+      'an item nobody owes is closed by the backstop on its next tick, mid-census',
+    );
 
     // ── a watch the calling session observes, providers by slug, a task in the list ──
     const watchId = idOf(
@@ -326,6 +346,10 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       update: { state: 'made', taskId: maintenanceTaskId, madeAt: new Date(), heldReason: null, heldAt: null },
       create: { id: wikiPlanJobId, spaceId: of.wikiSpaceId, ownerId, kind: 'draft', trigger: 'owner', state: 'made', taskId: maintenanceTaskId, madeAt: new Date() },
     });
+    const wikiImportJobId = randomUUID();
+    await db.wikiJob.create({
+      data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
+    });
     const confirmedDoc = await db.wikiPlanDoc.findFirstOrThrow({ where: { ownerId, slug: of.wikiDocSlug, plan: { status: 'confirmed' } }, select: { id: true } });
     await db.wikiPlanSection.create({
       data: {
@@ -370,12 +394,12 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
-      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId,
+      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
-      deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, watchId, verifierTaskId, verifiedTaskId,
+      deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
       confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, wikiMaintainerSessionId,
-      wikiPlanJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
+      wikiPlanJobId, wikiImportJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,
     };

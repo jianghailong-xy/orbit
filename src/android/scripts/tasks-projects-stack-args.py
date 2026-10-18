@@ -36,6 +36,25 @@ compact = {
 for key in ('startAsked', 'startOwn'):
     if key in seed['projects']:
         compact['projects'][key] = {'id': seed['projects'][key]['id'], 'title': seed['projects'][key]['title']}
+# A11c: what the owner answers (seed-close.mjs) and the landing that stopped reporting (seed-stuck.mjs), when seeded.
+for key, fields in (('closeAsked', ('coordinatorSessionId',)), ('closeDecline', ('coordinatorSessionId',)), ('crossFrom', ()),
+                    ('crossTo', ('moves',)), ('runQueue', ('taskId',)), ('landingStuck', ('taskId', 'jobId'))):
+    if key in seed['projects']:
+        row = seed['projects'][key]
+        compact['projects'][key] = {'id': row['id'], 'title': row['title'], **{field: row[field] for field in fields}}
+# A08c: the batch-create and merge-check cards seed-a08c.mjs filed through the runner's doors, when seeded.
+if 'a08c' in seed:
+    row = seed['a08c']
+    compact['a08c'] = {'sessionId': row['sessionId'], 'projectId': row['projectId'], 'projectTitle': row['projectTitle'],
+                       'batch': {'approvalId': row['batch']['approvalId'], 'taskCount': row['batch']['preview'].get('taskCount'),
+                                 'titles': [t['title'] for t in row['batch']['tasks']]},
+                       'merge': {'approvalId': row['merge']['approvalId'], 'proposed': row['merge']['input']['mergeCheckCommand']}}
+# A07c: the keys, pool, runner, workspace and sessions a07c-stack.mjs seeded (ids and names only), when seeded.
+if 'a07c' in seed:
+    compact['a07c'] = seed['a07c']
+# A07d: the DeepSeek key, the two Harness runners, the workspace and the sessions a07d-stack.mjs seeded (ids and names only).
+if 'a07d' in seed:
+    compact['a07d'] = seed['a07d']
 b64 = lambda text: base64.b64encode(text.encode()).decode()
 lines = {
     'a11Seed': json.dumps(compact, ensure_ascii=False, separators=(',', ':')),

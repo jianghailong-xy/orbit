@@ -14,6 +14,14 @@
 // service given the System model's address and key. The stack is therefore six services: the five
 // survivors, which every guard below still holds exactly as before, and this one, whose whole definition
 // is pinned by (l) below. Any other addition is still what (a) and (c) exist to refuse.
+//
+// On 2026-10-17 the account owner decided that a new deployment runs managed runners on this host's Docker
+// (project 34ZteKCnYMpKY46f63Leb, second phase): root Compose may carry what the Docker backend needs, its
+// services in a Compose profile that is off by default and that a fresh install switches on, and nothing of
+// Kubernetes, Rook, Ceph or CSI. That is one more service, docker-channel — the restricted Docker channel,
+// the only holder of the Docker socket — whose whole definition (m) pins, and four lines of the apiserver's,
+// pinned with the wiki executor switch below. An existing deployment's .env names neither, so it runs the
+// same six services as before, its apiserver with the switch off.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -46,10 +54,20 @@ const CONFIGURATION_SHA = '0022dd5f9f8c6b3dae4f0a625509e2b48ef24c37';
 // approved configuration and gateway keeps the removal baseline. No FCM prefix is exempted.
 const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 
+// e223d8ee adds exactly one postgres directive after CONFIGURATION_SHA, shm_size: "256m", and the six
+// comment lines that explain it: Docker's default 64MB /dev/shm made a manual VACUUM die with ENOSPC on
+// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. Postgres alone
+// is compared with this pin; every other service keeps the pin it had. New settings still require an
+// explicit review.
+const POSTGRES_CONFIGURATION_SHA = 'e223d8eede64cb71bb6efa5cf712b96f3b3af79b';
+
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
 const WIKI_WORKER = 'wiki-worker';
-const APPROVED_ADDITIONS = [WIKI_WORKER];
+// Decided by the account owner on 2026-10-17 (see the top of this file): started only under its profile.
+const DOCKER_CHANNEL = 'docker-channel';
+const MANAGED_RUNNERS_PROFILE = 'managed-runners-docker';
+const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL];
 const REMOVED_SERVICES = [
   'watchdog', 'outcome-coordinator', 'outcome-coordinator-secondary', 'executable-dead-man',
 ];
@@ -62,6 +80,7 @@ const current = readFileSync(path.join(repo, COMPOSE), 'utf8');
 const baseline = git('show', `${BASELINE_SHA}:${COMPOSE}`);
 const configuration = git('show', `${CONFIGURATION_SHA}:${COMPOSE}`);
 const survivingConfiguration = git('show', `${SURVIVING_CONFIGURATION_SHA}:${COMPOSE}`);
+const postgresConfiguration = git('show', `${POSTGRES_CONFIGURATION_SHA}:${COMPOSE}`);
 
 /**
  * Split a Compose document into its top-level `services:` blocks, in file order. Blank lines and
@@ -105,6 +124,8 @@ const configurationServices = new Map(
   [...services(configuration)].map(([name, block]) => [name, withoutLogging(block)]));
 const survivingConfigurationServices = new Map(
   [...services(survivingConfiguration)].map(([name, block]) => [name, withoutLogging(block)]));
+const postgresConfigurationServices = new Map(
+  [...services(postgresConfiguration)].map(([name, block]) => [name, withoutLogging(block)]));
 
 test('the baseline commit really is the nine-service stack this change removes from', () => {
   assert.deepEqual([...baselineServices.keys()],
@@ -116,9 +137,9 @@ test('the approved configuration commits still have exactly the five surviving s
   assert.deepEqual([...survivingConfigurationServices.keys()], EXPECTED_SERVICES);
 });
 
-test('(a) Compose declares exactly the five surviving services and the wiki worker', () => {
+test('(a) Compose declares exactly the five surviving services, the wiki worker and the Docker channel', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 6);
+  assert.equal(currentServices.size, 7);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -138,19 +159,24 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
   const alwaysOn = (blocks) => [...blocks]
     .filter(([, block]) => /^\s+restart: unless-stopped$/m.test(block))
     .map(([name]) => name);
-  // No resident process beyond the ones the five surviving services already ran, and the wiki worker:
-  // a resident process too (restart: unless-stopped), which is what the owner approved.
+  // No resident process beyond the ones the five surviving services already ran, the wiki worker and
+  // the Docker channel: resident processes too (restart: unless-stopped), which is what the owner approved.
   assert.deepEqual(alwaysOn(currentServices).sort(),
     [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)), ...APPROVED_ADDITIONS].sort());
   // No one-shot substitute: nothing may declare a run-once profile or a restart policy that
-  // re-runs a job, and no service may be introduced solely to be `docker compose run`.
-  assert.doesNotMatch(current, /^\s+profiles:/m);
+  // re-runs a job, and no service may be introduced solely to be `docker compose run`. The one
+  // profile is the Docker channel's, which keeps it off where a deployment's .env does not name it.
+  const profiled = [...currentServices]
+    .filter(([, block]) => /^\s+profiles:/m.test(block))
+    .map(([name, block]) => [name, block.match(/^\s+profiles:.*$/gm)]);
+  assert.deepEqual(profiled, [[DOCKER_CHANNEL, [`    profiles: [${MANAGED_RUNNERS_PROFILE}]`]]]);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 1);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
 
 test('(i) the postgres service definition matches the approved configuration, byte for byte', () => {
-  assert.equal(currentServices.get('postgres'), configurationServices.get('postgres'));
+  assert.equal(currentServices.get('postgres'), postgresConfigurationServices.get('postgres'));
   // The bind mount whose relative path once served production an empty database.
   assert.match(currentServices.get('postgres'), /- \.\/data\/postgres:\/var\/lib\/postgresql\/data/);
 });
@@ -199,10 +225,33 @@ function directivesNotInBaseline(block, baselineBlock) {
 // repository holds no mention of that identifier outside the migration that dropped it, and it
 // cannot tell a READER of the flag from prose about its removal — which is exactly why it carves
 // out the migration's own comment. Naming it here put main's only red on the board.
+//
+// The exceptions are two approved blocks of the apiserver's. They are listed here as directives — comments
+// explaining them do not count — so a line added anywhere else still turns this red exactly as it did before.
+const APPROVED_APISERVER_BLOCKS = [
+  // The wiki executor switch (docs/wiki-server-execution-design.md §2.1 and §10, P3, 2026-10-08): two
+  // variables the apiserver and the wiki worker both read, defaulting to the path that has always run.
+  [
+    '      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"',
+    '      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"',
+  ],
+  // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
+  // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
+  // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
+  // existing deployment gains nothing on its disk.
+  [
+    '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
+    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
+    '    volumes:',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
+  ],
+];
+const APPROVED_APISERVER_ADDITIONS = APPROVED_APISERVER_BLOCKS.flat();
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
   for (const name of ['pgbackup', 'apiserver', 'web']) {
     assert.deepEqual(
-      directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)), [],
+      directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
+      name === 'apiserver' ? APPROVED_APISERVER_ADDITIONS : [],
       `${name} declares something the baseline did not: adding to a surviving service is forbidden`);
   }
 });
@@ -222,11 +271,34 @@ function withoutService(source, name) {
   return [...lines.slice(0, from), ...lines.slice(to)].join('\n');
 }
 
-// The sidecar removal stays subtraction. The wiki worker the owner added on 2026-10-07 is a service of
-// its own, whose every line (l) pins; it is set aside here, so that a line added anywhere else still
-// turns this red exactly as it did before that decision.
+/**
+ * `source` without the approved additions to a surviving service and the comment blocks that introduce
+ * them, the way `withoutService` sets the wiki worker aside: (k) proves what the SIDECAR REMOVAL did, and
+ * a pinned addition explained by five lines of prose must not move that proof by six. Each block is set
+ * aside on its own, and holds exactly its pinned directives, so everything else in the file still weighs
+ * in: a line added anywhere unapproved still turns this red.
+ */
+function withoutApprovedAdditions(source) {
+  let lines = source.split('\n');
+  for (const block of APPROVED_APISERVER_BLOCKS) {
+    const first = lines.indexOf(block[0]);
+    assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
+    const last = lines.indexOf(block[block.length - 1], first);
+    assert.ok(last >= first, `docker-compose.yml no longer ends the approved block with ${block[block.length - 1].trim()}`);
+    assert.deepEqual(directives(lines.slice(first, last + 1).join('\n')), block);
+    let from = first;
+    while (from > 0 && /^\s*#/.test(lines[from - 1])) from -= 1;
+    lines = [...lines.slice(0, from), ...lines.slice(last + 1)];
+  }
+  return lines.join('\n');
+}
+
+// The sidecar removal stays subtraction. The wiki worker the owner added on 2026-10-07 and the Docker
+// channel of 2026-10-17 are services of their own, whose every line (l) and (m) pin, and the apiserver's
+// approved blocks are pinned beside them; all are set aside here, so that a line added anywhere else still
+// turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
-  const rest = withoutService(current, WIKI_WORKER);
+  const rest = withoutApprovedAdditions(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL));
   const scratch = mkdtempSync(path.join(tmpdir(), 'compose-topology-'));
   try {
     writeFileSync(path.join(scratch, 'baseline.yml'), baseline);
@@ -241,14 +313,20 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
     rmSync(scratch, { recursive: true, force: true });
   }
   assert.ok(rest.split('\n').length < baseline.split('\n').length);
-  // And only the wiki worker was set aside: every other service reads exactly as it does in the file.
-  assert.deepEqual(services(rest), new Map([...services(current)].filter(([name]) => name !== WIKI_WORKER)));
+  // And only the two approved services and the approved additions were set aside: every other service —
+  // the apiserver's own added lines are what the test above pins, line by line — reads exactly as it does in
+  // the file, so this test cannot pass by quietly rewriting something else.
+  assert.deepEqual(
+    new Map([...services(rest)].filter(([name]) => name !== 'apiserver')),
+    new Map([...services(current)].filter(([name]) => !['apiserver', ...APPROVED_ADDITIONS].includes(name))));
 });
 
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
 // directive of it in order: the apiserver's image with the worker's entry point, no port, no mount, no
 // build of its own, no migration — it waits for the apiserver, which applies them — and the System
-// model's four variables. Changing any of it is a new decision, made here.
+// model's four variables. Changing any of it is a new decision, made here. The executor switch's two
+// variables joined it on 2026-10-08 (P3, §2.1): the same pair the apiserver reads, so the process that
+// queues a job and the one that runs it decide the same about an account, defaulting to runner.
 test('(l) the wiki worker is exactly the service the owner approved on 2026-10-07', () => {
   assert.deepEqual(directives(currentServices.get(WIKI_WORKER)), [
     '  wiki-worker:',
@@ -263,6 +341,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
     '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"',
     '      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"',
     '      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"',
+    '      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"',
+    '      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"',
     '    depends_on:',
     '      apiserver:',
     '        condition: service_healthy',
@@ -277,4 +357,54 @@ test('(l) the System model\'s address and key are given to the wiki worker and t
   }
   // None of them is a name an agent session carries: Compose prefers the shell's environment to .env.
   assert.doesNotMatch(directives(currentServices.get(WIKI_WORKER)).join('\n'), /ANTHROPIC_/);
+});
+
+// The definition the owner's decision of 2026-10-17 allows (see the top of this file), every directive of it in
+// order: the restricted Docker channel built from its own Dockerfile, under the one profile a fresh install switches
+// on, with no network, no port and two mounts — the Docker socket, which no other service is given, and the managed
+// runners' directory it shares with the apiserver. Changing any of it is a new decision, made here.
+//
+// Amended on 2026-10-17 for task D8 (34hXCWEWAgHqtrxZsMBOh) of the same project, filed from D5's finding that the
+// storage budget measured the disk under the managed runners' directory instead of the one Docker's volumes live on:
+// a third mount, an anonymous volume, read-only, which Docker keeps beside every runner's data volume, and the command
+// naming it to the channel as the disk to measure. The channel gains no write access and no view of Docker's data
+// root, and nothing is declared outside this service, so a deployment without the profile has nothing new.
+test('(m) the Docker channel is exactly the service the owner allowed on 2026-10-17, off unless its profile is on', () => {
+  assert.deepEqual(directives(currentServices.get(DOCKER_CHANNEL)), [
+    '  docker-channel:',
+    `    profiles: [${MANAGED_RUNNERS_PROFILE}]`,
+    '    build:',
+    '      context: .',
+    '      dockerfile: deploy/managed-runner/docker-channel/Dockerfile',
+    '    image: orbit-docker-channel:local',
+    '    container_name: orbit-docker-channel',
+    '    restart: unless-stopped',
+    '    network_mode: none',
+    '    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
+    '    volumes:',
+    '      - /var/run/docker.sock:/var/run/docker.sock',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"',
+    '      - type: volume',
+    '        target: /var/lib/orbit-docker-volumes',
+    '        read_only: true',
+    '    healthcheck:',
+    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-managed-runners/channel.sock\')"]',
+    '      interval: 5s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 10s',
+  ]);
+});
+
+test('(m) Docker\'s socket is given to the Docker channel and to no other service', () => {
+  for (const [name, block] of currentServices) {
+    const given = directives(block).filter((line) => line.includes('docker.sock'));
+    assert.deepEqual(given, name === DOCKER_CHANNEL ? ['      - /var/run/docker.sock:/var/run/docker.sock'] : [],
+      `${name} is given the Docker socket`);
+  }
+});
+
+test('(m) Compose names nothing of Kubernetes, Rook, Ceph or CSI', () => {
+  assert.doesNotMatch(directives(current).join('\n'),
+    /kube|rook|ceph|\bcsi\b|deploy\/managed-runner\/(?!docker-channel\/)|runner-pod|pod-admission|managed-runner-lab/i);
 });

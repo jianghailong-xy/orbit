@@ -1,9 +1,14 @@
 import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, Modal, Tag, Typography } from 'antd';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
 import { sourceRefusalWhy } from '../lib/sourceRefusal';
+import { Alert } from './ui/Alert';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Textarea } from './ui/Textarea';
+import './ui/Typography.css';
 
 /**
  * The Blockers card on the project page (mock 6, docs/mocks/project-progress/): every open
@@ -57,7 +62,8 @@ export interface ProjectBlockers {
 
 interface Headline {
   tag: string;
-  color: string;
+  /** The tag's colour, as a Badge tone. */
+  color: 'gold' | 'red' | 'blue' | 'default';
   title: string;
 }
 
@@ -331,7 +337,7 @@ function BlockerRow({
     <li className="project-blockers-row">
       <div className="project-blockers-main">
         <div className="project-blockers-headline">
-          <Tag color={headline.color}>{headline.tag}</Tag>
+          <Badge tone={headline.color}>{headline.tag}</Badge>
           <span>{headline.title}</span>
         </div>
         {/* What the refusal was, in the sentence the session card over the refused conversation
@@ -389,7 +395,7 @@ function BlockerRow({
         <time className="project-blockers-age" dateTime={blocker.firstSeenAt}>
           {sinceLabel(blocker.firstSeenAt, now)}
         </time>
-        <Button size="small" type={prompt ? 'primary' : 'default'} onClick={onResolve}>
+        <Button size="small" variant={prompt ? 'primary' : 'default'} onClick={onResolve}>
           {prompt ? 'Review…' : 'Resolve…'}
         </Button>
       </div>
@@ -438,11 +444,12 @@ function ResolveBlockerDialog({
   const criterionVisible = blocker ? showsCriterion(blocker) : false;
 
   return (
-    <Modal
+    <Dialog
+      className="project-blockers-dialog"
       open={blocker !== null}
       title={prompt ? 'Review this blocker' : 'Resolve this blocker'}
       closable={false}
-      onCancel={cancel}
+      onClose={cancel}
       footer={
         <div className="project-blockers-dialog-foot">
           <span className="project-blockers-dialog-note">Accepting records your name and note</span>
@@ -450,7 +457,7 @@ function ResolveBlockerDialog({
             {prompt?.keepLabel ?? 'Cancel'}
           </Button>
           <Button
-            type="primary"
+            variant="primary"
             disabled={trimmed === ''}
             loading={resolve.isPending}
             onClick={() => {
@@ -494,7 +501,7 @@ function ResolveBlockerDialog({
           <label className="project-blockers-dialog-label" htmlFor={fieldId}>
             {prompt ? 'What did you verify?' : 'Why is it no longer blocking?'}
           </label>
-          <Input.TextArea
+          <Textarea
             id={fieldId}
             value={reason}
             maxLength={2000}
@@ -504,15 +511,14 @@ function ResolveBlockerDialog({
           {resolve.isError ? (
             <Alert
               type="error"
-              showIcon
               style={{ marginTop: 10 }}
-              message="That resolution was not recorded"
+              title="That resolution was not recorded"
               description={resolve.error instanceof Error ? resolve.error.message : undefined}
             />
           ) : null}
         </>
       ) : null}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -536,18 +542,17 @@ export function ProjectBlockersCard({
       {/* The same heading the run queue below wears, because these two are one reading — what is
           standing in the way, then what can be started. Plain, unboxed, level four: the graph,
           the chain strip and the queue beside it are all sections of this zone, not cards. */}
-      <Typography.Title className="project-blockers-heading" level={4} style={{ marginBottom: 8 }}>
+      <h4 className="project-blockers-heading orbit-typography" style={{ marginBottom: 8 }}>
         <span className="project-blockers-heading-label">Blockers</span>
-        <Typography.Text
-          className="project-blockers-summary"
-          type="secondary"
+        <span
+          className="project-blockers-summary orbit-typography orbit-typography-secondary"
           style={{ fontSize: 12, fontWeight: 400 }}
           title={`${open.length} open`}
         >
           {' '}
           {`${open.length} open`}
-        </Typography.Text>
-      </Typography.Title>
+        </span>
+      </h4>
       <ul className="project-blockers-list">
         {open.map((blocker) => (
           <BlockerRow

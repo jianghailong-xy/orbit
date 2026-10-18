@@ -1,0 +1,374 @@
+{
+ "tests": 180,
+ "steps": 912,
+ "semantic": [
+  {
+   "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+   "step": "person menu",
+   "delta": {
+    "menus": [
+     [],
+     [
+      [
+       {
+        "text": "Remove from pool",
+        "disabled": false
+       }
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-phone :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+   "step": "person menu",
+   "delta": {
+    "menus": [
+     [],
+     [
+      [
+       {
+        "text": "Remove from pool",
+        "disabled": false
+       }
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+   "step": "person menu",
+   "delta": {
+    "menus": [
+     [],
+     [
+      [
+       {
+        "text": "Remove from pool",
+        "disabled": false
+       }
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+   "step": "person menu",
+   "delta": {
+    "menus": [
+     [],
+     [
+      [
+       {
+        "text": "Remove from pool",
+        "disabled": false
+       }
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+   "step": "person menu",
+   "delta": {
+    "menus": [
+     [],
+     [
+      [
+       {
+        "text": "Remove from pool",
+        "disabled": false
+       }
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "step": "menu",
+   "delta": {
+    "menus": [
+     [],
+     [
+      [
+       {
+        "text": "Rename",
+        "disabled": false
+       },
+       {
+        "text": "Rotate token",
+        "disabled": false
+       },
+       {
+        "text": "Delete",
+        "disabled": false
+       }
+      ]
+     ]
+    ]
+   }
+  }
+ ],
+ "presentation": {
+  "focus": 334,
+  "dialogs": 120
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account",
+    "step": "delete asked",
+    "ref": {
+     "role": "button",
+     "name": "Delete pool"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Delete Claude accounts?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account",
+    "step": "add account",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Add account to Claude accounts"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account",
+    "step": "add account closed",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Add account"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "person menu",
+    "ref": {
+     "role": "button",
+     "name": "Manage Lin Wei"
+    },
+    "del": {
+     "role": "menu",
+     "name": "Remove from pool"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "just mine asked",
+    "ref": {
+     "role": "button",
+     "name": "Make it just mine"
+    },
+    "del": {
+     "role": "button",
+     "name": "Cancel"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "just mine cancelled",
+    "ref": {
+     "role": "input",
+     "name": "Just me"
+    },
+    "del": {
+     "role": "radio",
+     "name": "Just me"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "shared",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Add people"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "replace key",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Replace lin-proj"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "sign-out asked",
+    "ref": {
+     "role": "button",
+     "name": "Sign out reviewer@example.test"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Sign out reviewer@example.test?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+    "step": "leave asked",
+    "ref": {
+     "role": "button",
+     "name": "Leave pool"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Leave Team keys?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in",
+    "step": "which kind",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Add an account to My Codex"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in",
+    "step": "add a key: consent",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Add a key to My Codex"
+    }
+   }
+  ],
+  "dialogs": [
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account",
+    "step": "delete asked",
+    "ref": [],
+    "del": [
+     "Delete Claude accounts?Its accounts stay as they are — only the pool goes.CancelOK"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "just mine asked",
+    "ref": [
+     "Make My Codex just yours?Make My Codex just yours?Lin Wei loses it at once, and their sessions on it stop. lin-proj leav"
+    ],
+    "del": [
+     "Make My Codex just yours?Lin Wei loses it at once, and their sessions on it stop. lin-proj leaves with Lin Wei, because "
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "share",
+    "ref": [
+     "Share My CodexEmails of their Orbit accountszhang@example.testzhang@example.testThey see My Codex on their Providers pag"
+    ],
+    "del": [
+     "Share My CodexEmails of their Orbit accountszhang@example.test​They see My Codex on their Providers page and in the sess"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions",
+    "step": "sign-out asked",
+    "ref": [],
+    "del": [
+     "Sign out reviewer@example.test?Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+    "step": "leave asked",
+    "ref": [],
+    "del": [
+     "Leave Team keys?Your keys leave with you.CancelLeave"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 a runner’s page › its menus, a workspace’s settings and the discard question",
+    "step": "discard asked",
+    "ref": [
+     "Discard unsaved changes?Discard unsaved changes?This workspace's edits haven't been saved yet.Keep editingDiscard"
+    ],
+    "del": [
+     "Discard unsaved changes?This workspace's edits haven't been saved yet.Keep editingDiscard"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 providers › engines: an account menu, its remove question and the pause dialog",
+    "step": "remove asked",
+    "ref": [],
+    "del": [
+     "Remove Work?Its sign-in is deleted from Studio Mac. Workspaces set to this account run on Default.CancelRemove"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+    "step": "delete asked",
+    "ref": [],
+    "del": [
+     "Delete Lab gateway?CancelOK"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+    "step": "rotate asked",
+    "ref": [
+     "Rotate token for “Studio”?Rotate token for “Studio”?This immediately invalidates the runner’s current credential. The ru"
+    ],
+    "del": [
+     "Rotate token for “Studio”?This immediately invalidates the runner’s current credential. The runner will go offline until"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+    "step": "delete asked",
+    "ref": [
+     "Delete “old-laptop”?Delete “old-laptop”?This removes the runner from your account. Re-register the machine to add it bac"
+    ],
+    "del": [
+     "Delete “old-laptop”?This removes the runner from your account. Re-register the machine to add it back.CancelDelete"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 users › adding a user: with a password, and Google only",
+    "step": "enter in the email field",
+    "ref": [
+     "Add userGoogle sign-in onlyA one-time password is generated and shown once after creating.CancelCreate"
+    ],
+    "del": [
+     "Add userGoogle sign-in onlyA one-time password is generated and shown once after creating.CancelCreateCreated new@exampl"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.2 users › adding a user: with a password, and Google only",
+    "step": "created with a one-time password",
+    "ref": [
+     "Created second@example.testCreated second@example.testShare this one-time password:tidal-orbit-4821OK"
+    ],
+    "del": [
+     "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+    ]
+   }
+  ]
+ }
+}

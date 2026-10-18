@@ -88,15 +88,21 @@ class WikiWatchTalkBackTest {
 
     // MARK: the pages
 
-    /** The home from its link, then Review from its banner by double tap: Accept, by double tap, records one decision. */
+    /** The home from its link, Activity from the bar and Review from Activity's banner, each by double tap: Accept, by double
+     * tap, records one decision. */
     @Test fun homeAndReview() = journey("home", { "orbit://wiki/${it.string("space")}" }) {
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         page("home", steps = 30)
         touch("home", "wiki-bar-contents", "Contents")
+        touch("home", "wiki-bar-activity", "Activity")
         touch("home", "wiki-bar-settings", "Settings")
         touch("home", "wiki-space-picker", "The codebase this wiki describes")
         touch("home", "wiki-search", null)
-        activate("home", "wiki-review-banner", "proposals to review")
+        activate("home", "wiki-bar-activity", "Activity")
+        awaitTag("wiki-status-line")
+        log("double tap on Activity -> Activity opened")
+        page("activity", steps = 30)
+        activate("activity", "wiki-review-banner", "proposals to review")
         awaitTag("wiki-review-page")
         log("double tap on the banner -> Review opened")
         page("review", steps = 30)
@@ -109,10 +115,26 @@ class WikiWatchTalkBackTest {
         readBack("review", "double tap on Accept -> one POST …/decide {action: accept}", since)
     }
 
+    /** A12f (iOS 2ba6765d9): the bar's globe, on a space with a link open, is read as "Share…" and "Live link"; its double tap
+     * opens Share wiki, which TalkBack reads through — Access, the link, the space's Documents and its Footnotes with their
+     * risk sentence. */
+    @Test fun share() = journey("share", { "orbit://wiki/${it.string("space")}" }, control = """{"share":true}""") {
+        awaitTag("wiki-home-line")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("wiki-bar-share") and hasStateDescription("Live link")).fetchSemanticsNodes().isNotEmpty() }
+        touch("home", "wiki-bar-share", "Share…")?.let { (node, _) ->
+            if (!spoken(node).contains("Live link")) problem("home: TalkBack reads the globe without \"Live link\"", "it reads \"${spoken(node)}\"")
+        }
+        activate("home", "wiki-bar-share", "Live link")
+        awaitTag("share-sheet")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("486 footnotes", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        log("double tap on Share -> Share wiki opened")
+        page("share", steps = 30, fromTop = true)
+    }
+
     /** Wiki settings from the home's gear by double tap: a review mode and the spot-check switch, each by double tap, are
      * written, and TalkBack reads the switch's new state. */
     @Test fun settings() = journey("settings", { "orbit://wiki/${it.string("space")}" }) {
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         activate("home", "wiki-bar-settings", "Settings")
         awaitTag("wiki-settings-page")
         log("double tap on Settings -> Wiki settings opened")
@@ -150,7 +172,7 @@ class WikiWatchTalkBackTest {
     /** Contents by double tap, the confirmed plan's document by double tap; a footnote's row opens its sheet, whose button
      * opens the session at the quoted record. */
     @Test fun documentAndFootnote() = journey("doc", { "orbit://wiki/${it.string("space")}" }) { ids ->
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         activate("home", "wiki-bar-contents", "Contents")
         awaitTag("wiki-contents-sheet")
         log("double tap on Contents -> the Contents sheet opened")
@@ -178,7 +200,7 @@ class WikiWatchTalkBackTest {
     /** Contents by double tap, then the plan, its draft waiting: Confirm plan, by double tap, confirms it once. */
     @Test fun plan() = journey("plan", { "orbit://wiki/${it.string("space")}" }) {
         http("/__control", """{"draft":"v2"}""")
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         activate("home", "wiki-bar-contents", "Contents")
         awaitTag("wiki-contents-sheet")
         activate("contents", "wiki-contents-plan", "Plan")
@@ -211,20 +233,21 @@ class WikiWatchTalkBackTest {
         log("double tap on the watch's row -> its record opened")
     }
 
-    /** A session's Watching strip: its line, by double tap, opens what the session waits on; a target, by double tap,
-     * opens the task's page over the session. The rest of the session page is not this check's: only the strip is judged. */
-    @Test fun sessionWatchingStrip() = journey("strip", { "orbit-session:${it.string("session")}" }) { ids ->
-        awaitTag("session-watches")
-        page("strip", steps = 6, from = "watch-strip-line", within = "session-watches")
-        activate("strip", "watch-strip-line", "Watching")
-        awaitTag("watch-strip-list")
-        log("double tap on the Watching line -> the list opened")
-        page("strip-open", steps = 6, from = "watch-strip-line", within = "session-watches")
-        val since = activate("strip-open", "watch-strip-target:${ids.string("watch")}:${ids.string("task")}", "A12 watched task")
+    /** A session's wait on a task, which since A08-6 is a row of its Tasks card (a wait on tasks alone draws no Watching strip):
+     * the card's line, by double tap, opens its rows; the task's row, by double tap, opens the task's page over the session. The
+     * rest of the session page is not this check's: only the card is judged. */
+    @Test fun sessionTasksCard() = journey("tasks-card", { "orbit-session:${it.string("session")}" }) { ids ->
+        awaitTag("session-tasks")
+        page("tasks-card", steps = 6, from = "session-tasks:line", within = "session-tasks")
+        activate("tasks-card", "session-tasks:line", "Tasks")
+        awaitTag("session-tasks:list")
+        log("double tap on the Tasks line -> its rows opened")
+        page("tasks-card-open", steps = 6, from = "session-tasks:line", within = "session-tasks")
+        val since = activate("tasks-card-open", "created-task:${ids.string("task")}", "A12 watched task")
         compose.waitUntil(15_000) { journal().any { it.string("method") == "GET" && it.string("path").startsWith("/api/tasks/${ids.string("task")}") } }
-        readBack("strip-open", "double tap on the target -> the task's page opened over the session (GET /api/tasks/…)", since)
+        readBack("tasks-card-open", "double tap on the task's row -> the task's page opened over the session (GET /api/tasks/…)", since)
         back()
-        awaitTag("session-watches")
+        awaitTag("session-tasks")
     }
 
     // MARK: the lazy-list control
@@ -315,9 +338,11 @@ class WikiWatchTalkBackTest {
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
     /** A cold start from [target]'s link with TalkBack on, then [block]. The report, the problems and the journal are kept
-     * whatever happens; the problems fail the journey once its Activity is gone. */
-    private fun journey(name: String, target: (JsonObject) -> String, block: (JsonObject) -> Unit) {
+     * whatever happens; the problems fail the journey once its Activity is gone. [control] is what the server holds for the
+     * journey, set before the app reads anything. */
+    private fun journey(name: String, target: (JsonObject) -> String, control: String? = null, block: (JsonObject) -> Unit) {
         http("/__control", """{"reset":true}""")
+        if (control != null) http("/__control", control)
         val ids = http("/__ids")
         instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
         File(output, "talkback-$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\n" +

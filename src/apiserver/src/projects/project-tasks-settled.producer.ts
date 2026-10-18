@@ -18,7 +18,9 @@ import {
 } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { criterionKeyOf } from './project-acceptance';
-import { LANDING_SERVING_WORK_SELECT, criterionLanding, readLandingBranches } from './project-criterion-landing';
+import {
+  LANDING_SERVING_WORK_SELECT, criterionLanding, readLandingBranches, readLandingJobsByTask,
+} from './project-criterion-landing';
 import { landingInFlight, readProjectFinish } from './project-looks-finished';
 import { criterionCoverage } from './wake-disposition';
 
@@ -298,10 +300,21 @@ export class ProjectTasksSettledProducer {
       // The branches this project's receipts count on, off its own binding.
       readLandingBranches(this.prisma, projectId),
     ]);
-    const landed = new Map(
-      criterionLanding(definitions, branches).map((answer) => [answer.definitionId, answer.landing]),
+    // The line's answers about these branches, beside the tasks rather than below them: 0423 made
+    // `task_id` a history reference, so there is no relation for Prisma to nest.
+    const jobs = await readLandingJobsByTask(
+      this.prisma, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
     );
-    return definitions.map((definition) => ({
+    const serving = definitions.map((definition) => ({
+      ...definition,
+      servingTasks: definition.servingTasks.map((task) => ({
+        ...task, integrationJobs: jobs.get(task.id) ?? [],
+      })),
+    }));
+    const landed = new Map(
+      criterionLanding(serving, branches).map((answer) => [answer.definitionId, answer.landing]),
+    );
+    return serving.map((definition) => ({
       key: criterionKeyOf(definition.id),
       text: definition.text,
       satisfied: criterionCoverage(

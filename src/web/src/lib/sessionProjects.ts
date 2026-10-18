@@ -9,8 +9,9 @@ import {
   type SessionProjectMembership,
 } from '@orbit/shared';
 import type { SessionFolder } from '../api';
-import { JOB_PHASES, JOB_WORDS } from '../components/ProjectPanoramaHeader';
+import { JOB_PHASES, JOB_WORDS, jobPhases, jobWords } from '../components/ProjectPanoramaHeader';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
+import { DEFAULT_MAIN_BRANCH, mainBranchName, runLineMain } from './projectStart';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
 import type { GroupableSession } from './sessionGrouping';
@@ -84,8 +85,13 @@ export const SESSION_PROJECT_COPY = {
   // A project nobody has started, and its start row (docs/mocks/project-start-sessions-page).
   pageNotStarted: (tasks: number) => `Not started · ${tasks} ${tasks === 1 ? 'task' : 'tasks'}`,
   startAsked: (ago: string) => `asked ${ago}`,
-  startSuggestion: (settings: Pick<ProjectStartSettings, 'line' | 'automatic' | 'maxConcurrentTasks'>) =>
-    `${settings.line === 'MAIN' ? 'Directly into main' : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,
+  /** Directly into the main branch the start opens with (`startMainBranch`), or the suggestion's own
+   *  where no integration read is at hand. */
+  startSuggestion: (
+    settings: Pick<ProjectStartSettings, 'line' | 'automatic' | 'maxConcurrentTasks' | 'upstreamRef'>,
+    main: string = mainBranchName(settings.upstreamRef),
+  ) =>
+    `${settings.line === 'MAIN' ? runLineMain(main) : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,
   startReview: 'Review and start',
   startNotAsked: 'The coordinator hasn’t asked yet',
   startHint: 'Opens the start card: the criteria, the plan and how it runs.',
@@ -100,22 +106,42 @@ export const SESSION_PROJECT_COORDINATOR_COPY: Record<CoordinatorLeadKind, strin
   DELIVERY_REVIEW: 'Reviewing a delivery',
 };
 
+/** A runner that has stopped reporting, in this row's own scale: "no report for 11m", or
+ *  "no report yet" for a claim nothing has come back from. The same fact the project page's row
+ *  states as `LANDING_NO_REPORT`, and never a verdict about the work — a timeout is the job's own,
+ *  and the server words it in the landing's `blockingReason`. OrbitKit: `SessionProjectCopy.landingSilentWord`. */
+export function landingSilentWord(minutes: number | null): string {
+  return minutes === null ? 'no report yet' : `no report for ${minutes}m`;
+}
+
 /** The project page's landing line, shortened for a row that is not redrawn every second:
  *  "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Null when nothing is in
- *  flight; a server that sends only the count gets "Landing · N jobs". */
+ *  flight; a server that sends only the count gets "Landing · N jobs".
+ *
+ *  A job whose runner has stopped reporting says so in the state slot — "no report for 11m", or
+ *  "no report yet" for one that has never reported (`LANDING_NO_REPORT`, the same claim lease the
+ *  project page's row reads it with). That is a fact about the REPORTS: this line never calls a
+ *  silent job a timed-out one, because a timeout is the job's own verdict and lives in the server's
+ *  `blockingReason` (`LandTaskStatus` prints it as it is). OrbitKit's `SessionProjectCopy.landingLine`
+ *  is this line's other half. A merge and a sync name `main`, the project's main branch. */
 export function sessionProjectLandingLine(
   integration: ProjectListIntegration | null | undefined,
   now: number,
+  main: string = DEFAULT_MAIN_BRANCH,
 ): SessionProjectLine | null {
   const count = integration?.activeJobCount ?? 0;
   const job = integration?.inFlight;
   if (!job) return count > 0 ? { text: `Landing · ${count} ${count === 1 ? 'job' : 'jobs'}`, tone: 'queued' } : null;
   const heartbeat = Date.parse(job.heartbeatAt ?? '');
-  const running = job.state === 'RUNNING' && !(now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
-  const word = (job.kind && JOB_WORDS[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
-  const state = job.state === 'RUNNING'
-    ? (job.phase && JOB_PHASES[job.phase as keyof typeof JOB_PHASES]) || 'running'
-    : 'queued';
+  const reported = Number.isFinite(heartbeat);
+  // The runner has gone quiet — the same claim lease the project page's landing row reads the same
+  // fact with (`LANDING_NO_REPORT`): how long it has been silent, never a verdict about the work.
+  const silent = job.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
+  const running = job.state === 'RUNNING' && !silent;
+  const word = (job.kind && jobWords(main)[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
+  const state = job.state !== 'RUNNING' ? 'queued'
+    : silent ? landingSilentWord(reported ? Math.max(0, Math.floor((now - heartbeat) / 60_000)) : null)
+      : (job.phase && jobPhases(main)[job.phase as keyof typeof JOB_PHASES]) || 'running';
   return {
     text: [count > 1 ? `${word} ${count} jobs` : word, state, elapsedLabel(job.startedAt, now),
       count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
@@ -212,7 +238,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       }
       return a.id.localeCompare(b.id);
     });
-    const landing = sessionProjectLandingLine(summary?.integration, opts.now ?? Date.now());
+    const landing = sessionProjectLandingLine(
+      summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
     let line: SessionProjectLine;
     let target: SessionProjectRow<T>['target'];
     if (coordinatorLine?.tone === 'approval') {

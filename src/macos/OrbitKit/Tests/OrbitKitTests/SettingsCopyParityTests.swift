@@ -2,17 +2,20 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Providers
-/// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList` and `ProvidersOverview` carry
-/// those pages' words over to the phone (and Access tokens' to the Mac's form too), and nothing in
-/// either build notices a word changed at one end only — so each one is looked up in the web source
-/// it came from. A missing counterpart is a FAILURE, never an `XCTSkip`.
+/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Infrastructure
+/// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList`, `ProvidersOverview` and
+/// `Infrastructure` carry those pages' words over to the phone (and Access tokens' and
+/// Infrastructure's to the Mac too), and nothing in either build notices a word changed at one end
+/// only — so each one is looked up in the web source it came from. A missing counterpart is a
+/// FAILURE, never an `XCTSkip`.
 ///
 /// Deliberately not compared: the group headers of Settings' list (Sessions, Machines & models,
 /// Preferences, Account), which regroup the web's cards for a phone; "Default permission", the
 /// web's "Default permission mode" shortened to leave its row room for a value; and the words only a
 /// phone has to say — this device's own switch, the alerts that are always sent, the card shown
-/// while alerts are off, and the sign-out confirmation.
+/// while alerts are off, the sign-out confirmation, and Infrastructure's "Needs you" heading, its
+/// row's "1 needs you" and a machine's "1 engine signed out" (03-ios.png's own; the web draws Needs
+/// attention with no heading, and its machine card no such count).
 final class SettingsCopyParityTests: XCTestCase {
 
     private static let settings = "src/web/src/pages/SettingsPage.tsx"
@@ -21,9 +24,11 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
-    private static let providers = "src/web/src/pages/ProvidersPage.tsx"
+    private static let infrastructure = "src/web/src/pages/InfrastructurePage.tsx"
+    private static let overview = "src/web/src/components/InfrastructureOverview.tsx"
     private static let engines = "src/web/src/components/RunnerEngines.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
+    private static let engineNames = "src/shared/src/providerEngines.ts"
 
     private enum ParityError: Error, CustomStringConvertible {
         case missing(String)
@@ -97,6 +102,17 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
     }
 
+    /// Session recaps (0418): the Session defaults card's switch, with its label and hint — the same
+    /// three words on the web page, the phone and (via `SettingsCopyParityTest`) the Android list.
+    func testSessionRecapsSaysWhatTheWebPageSays() throws {
+        let page = try web(Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.sessionRecaps)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.sessionRecapsHint)\"", in: Self.settings)
+        assertSays(page, "checked={prefs.recaps ?? true}", in: Self.settings)
+        assertSays(page, "save.mutate({ recaps: v })", in: Self.settings)
+        XCTAssertEqual(SettingsHome.title(.recaps), SettingsCopy.sessionRecaps)
+    }
+
     /// The edit-profile card's field is called what the web Profile page calls the same value.
     func testTheNameFieldSaysWhatTheProfilePageSays() throws {
         assertSays(try web(Self.profile), ">\(SettingsCopy.nameLabel)</div>", in: Self.profile)
@@ -116,8 +132,8 @@ final class SettingsCopyParityTests: XCTestCase {
         for label in [SettingsCopy.currentPassword, SettingsCopy.newPassword, SettingsCopy.confirmPassword] {
             assertSays(page, "label=\"\(label)\"", in: Self.profile)
         }
-        assertSays(page, "message: '\(SettingsCopy.passwordRule)'", in: Self.profile)
-        assertSays(page, "new Error('\(SettingsCopy.passwordsDoNotMatch)')", in: Self.profile)
+        assertSays(page, "? null : '\(SettingsCopy.passwordRule)'", in: Self.profile)
+        assertSays(page, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.profile)
         assertSays(page, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.profile)
         assertSays(page, "> \(SettingsCopy.changePassword) </Button>", in: Self.profile)
     }
@@ -170,7 +186,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(table, "title={`\(AccessTokensList.revokeTitle(token).replacingOccurrences(of: "NAME", with: "${token.name}"))`}",
                    in: Self.accessTokenTable)
         assertSays(table, "description=\"\(AccessTokensList.revokeDetail)\"", in: Self.accessTokenTable)
-        assertSays(table, "okText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
+        assertSays(table, "confirmText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
         assertSays(table, AccessTokensList.hint(token).replacingOccurrences(of: "HINT", with: "{token.tokenHint}"),
                    in: Self.accessTokenTable)
         assertSays(table, "return '\(AccessTokensList.workspacesLine(token))'", in: Self.accessTokenTable)
@@ -199,25 +215,112 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
     }
 
-    /// Providers: the web page's three groups, their lines, and a runner card's summary.
-    func testProvidersSayWhatTheWebPageSays() throws {
-        let engines = try web(Self.engines)
-        assertSays(engines, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.engines)
-        assertSays(engines, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.engines)
-        assertSays(engines, "return '\(ProvidersOverview.runnerSummary(try runner(engines: nil)))'", in: Self.engines)
-        assertSays(engines, "'All signed in' : `${ready} of ${engines.length} signed in`", in: Self.engines)
+    /// Infrastructure: the web page's line under its title — Machines & models' footer here — its
+    /// Machines, API keys and Account pools sections, their lines, and a key switched off.
+    func testInfrastructuresSectionsSayWhatTheWebPageSays() throws {
+        let page = try web(Self.infrastructure)
+        assertSays(page, "> \(Infrastructure.subtitle) </div>", in: Self.infrastructure)
+        XCTAssertEqual(SettingsHome.footer(.machines), Infrastructure.subtitle)
+        assertSays(page, "<h3>\(Infrastructure.machines)</h3>", in: Self.infrastructure)
+        assertSays(page, "re-sec-sub\"> \(Infrastructure.machinesDetail)", in: Self.infrastructure)
+        assertSays(page, "{machines.length} machine{machines.length === 1 ? '' : 's'} · {busySlots} / {allSlots} slots busy",
+                   in: Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.infrastructure)
+        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.infrastructure)
+        assertSays(page, "{p.enabled ? 'Enabled' : '\(Infrastructure.disabled)'}", in: Self.infrastructure)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)
         assertSays(pools, "re-sec-sub\"> \(ProvidersOverview.accountPoolsDetail)", in: Self.pools)
-
-        let page = try web(Self.providers)
-        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.providers)
-        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.providers)
-        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.providers)
     }
 
-    private func runner(engines: String?) throws -> Runner {
+    /// A machine's line: the slots the web card's head counts, and the summary its folded card gives
+    /// (`summaryOf`), word for word.
+    func testAMachinesLineSaysWhatTheWebCardSays() throws {
+        let engines = try web(Self.engines)
+        assertSays(engines, "busy && `${active} / ${max} running`", in: Self.engines)
+        XCTAssertEqual(Infrastructure.running(active: 2, max: 4), "2 / 4 running")
+        assertSays(engines, "return updating ? 'Update failed' : 'Install failed';", in: Self.engines)
+        assertSays(engines, "return updating ? 'Updating…' : 'Installing…';", in: Self.engines)
+        assertSays(engines, "if (!runner.engines) return '\(Infrastructure.summary(try runner(nil)))';", in: Self.engines)
+        assertSays(engines, "return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;",
+                   in: Self.engines)
+        assertSays(engines, "return ready === engines.length ? 'All signed in' : `${ready} of ${engines.length} signed in`;",
+                   in: Self.engines)
+        let all = #"[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"},{"engine":"kimi","installed":true,"auth":"yes"}]"#
+        XCTAssertEqual(Infrastructure.summary(try runner(all)), "All signed in")
+    }
+
+    /// Needs you: each line and what it means, and the press at its end — the web's `NeedsAttention`.
+    func testNeedsYouSaysWhatTheWebSays() throws {
+        let overview = try web(Self.overview)
+        assertSays(overview, "<b>{ENGINE_CLI_NAMES[engine as AgentProvider]}</b> is signed out on <b>{machineName(runner)}</b>",
+                   in: Self.overview)
+        XCTAssertEqual(Infrastructure.signedOutLine(engine: .codex, machine: "Mac Studio"), "Codex is signed out on Mac Studio")
+        XCTAssertEqual(Infrastructure.signedOutLine(engine: .antigravity, machine: "HPC"), "Antigravity CLI is signed out on HPC")
+        assertSays(overview, "<span className=\"infra-attn-sub\"> · \(Infrastructure.signedOutDetail)</span>", in: Self.overview)
+        assertSays(overview, "<b>{machineName(runner)}</b> is offline", in: Self.overview)
+        XCTAssertEqual(Infrastructure.offlineLine(machine: "ThinkPad"), "ThinkPad is offline")
+        assertSays(overview, "{runner.lastHeartbeatAt ? `Last seen ${ago(runner.lastHeartbeatAt, now)}` : 'Never checked in'}",
+                   in: Self.overview)
+        assertSays(overview, "{' · its subscriptions are unavailable until it’s back'}", in: Self.overview)
+        XCTAssertEqual(Infrastructure.offlineDetail(lastHeartbeatAt: nil, nowMs: 0),
+                       "Never checked in · its subscriptions are unavailable until it’s back")
+        assertSays(overview, "<b>{pool.label}</b> is unavailable", in: Self.overview)
+        XCTAssertEqual(Infrastructure.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
+        assertSays(overview, "<span className=\"infra-attn-sub\"> · {pool.unavailable} · no session can start on it</span>",
+                   in: Self.overview)
+        XCTAssertEqual(Infrastructure.poolDetail(reason: "No account can run"),
+                       "No account can run · no session can start on it")
+        assertSays(overview, "> \(Infrastructure.signIn) </Button>", in: Self.overview)
+        assertSays(overview, "<Button size=\"small\">\(Infrastructure.details)</Button>", in: Self.overview)
+        assertSays(overview, "<Button size=\"small\">\(Infrastructure.manage)</Button>", in: Self.overview)
+        // The machine named as the web names it: its alias, else its own name.
+        assertSays(overview, "const machineName = (runner: Runner) => runner.displayName || runner.name;", in: Self.overview)
+    }
+
+    /// What your agents can run on: its heading and line, each card's state, its sources' names and how
+    /// they are joined, and what an engine with none says — the web's `EngineOverview`.
+    func testWhatYourAgentsCanRunOnSaysWhatTheWebSays() throws {
+        let overview = try web(Self.overview)
+        assertSays(overview, "<h3>\(Infrastructure.enginesTitle)</h3>", in: Self.overview)
+        assertSays(overview, "<span className=\"re-sec-sub\">\(Infrastructure.enginesDetail)</span>", in: Self.overview)
+        assertSays(overview, "{ready ? '\(Infrastructure.ready)' : '\(Infrastructure.notSetUp)'}", in: Self.overview)
+        assertSays(overview,
+                   "<b>{engine === AgentProvider.OPENCODE ? '\(Infrastructure.ownSignIn)' : '\(Infrastructure.subscription)'}</b> · {machines.join(', ')}",
+                   in: Self.overview)
+        XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.machinesLabel),
+                       ["Subscription", "Subscription", "Subscription", "Subscription", "Own sign-in", "Subscription"])
+        assertSays(overview, "logins > 1 ? `${machineName(runner)} ×${logins}` : machineName(runner)", in: Self.overview)
+        assertSays(overview, "<b>\(Infrastructure.apiKey)</b> ·{' '}", in: Self.overview)
+        assertSays(overview, "{index > 0 && ', '}", in: Self.overview)
+        assertSays(overview, "<b>\(Infrastructure.pool)</b> · {enginePools.map((pool) => pool.label).join(', ')}",
+                   in: Self.overview)
+        assertSays(overview, "\(Infrastructure.nothingCanPay) <Link to={installOn(engine)}>\(Infrastructure.installOnAMachine)</Link>",
+                   in: Self.overview)
+        // Every engine a session can run on, a card each in the pickers' order, by its CLI's name — the
+        // shared table every list on the page names them by.
+        assertSays(overview, "{ALL_ENGINES.map((engine) => {", in: Self.overview)
+        assertSays(overview, "<div className=\"infra-engine-name\"> {ENGINE_CLI_NAMES[engine]}", in: Self.overview)
+        let shared = try web(Self.engineNames)
+        assertSays(shared, "export const ALL_ENGINES: readonly AgentProvider[] = [ "
+                       + ProviderEngines.names.map { "AgentProvider.\($0.engine.uppercased())," }.joined(separator: " "),
+                   in: Self.engineNames)
+        assertSays(shared, ProviderEngines.names.map { "[AgentProvider.\($0.engine.uppercased())]: '\($0.name)'," }
+                       .joined(separator: " "),
+                   in: Self.engineNames)
+        XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.name),
+                       ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
+        // A machine's sign-in names the engines it signs in as the web's sign-in does.
+        let names = LoginEngine.allCases.map { "\($0.rawValue): '\($0.displayName)'" }.joined(separator: ", ")
+        assertSays(try web("src/web/src/components/RunnerSignIn.tsx"), names, in: "src/web/src/components/RunnerSignIn.tsx")
+        // A key keeps the name its owner gave it — a Gemini key's too — under every engine it runs on.
+        assertSays(overview, "{index > 0 && ', '} {key.label}", in: Self.overview)
+        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini")
+    }
+
+    private func runner(_ engines: String?) throws -> Runner {
         let json = engines.map { #"{"id":"r","name":"r","online":true,"engines":\#($0)}"# }
             ?? #"{"id":"r","name":"r","online":true}"#
         return try JSONDecoder().decode(Runner.self, from: Data(json.utf8))

@@ -26,6 +26,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
+| Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Diagnose database conflicts, or deploy and roll back the code that handles them | [PostgreSQL conflict runbook](postgres-conflict-runbook.md) |
 | Understand project direction | [Project maturity and brand roadmap](project-maturity.md) |
 
@@ -53,6 +54,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   boundaries.
 - [Postgres backup and restore](postgres-backup-restore.md) — base backups, WAL archiving, point-in-time
   recovery, and restore verification.
+- [Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) — each
+  account's data volume backed up, checked and restored, and what to do on a volume over its limit, a full disk, a
+  container over its memory, a channel or apiserver outage, and a host restart or power loss.
 - [PostgreSQL conflict runbook](postgres-conflict-runbook.md) — the transaction-conflict counters and where to
   read them, how to tell an injected fault from absorbed contention, a lock-order defect, a database resource
   fault and an unretried path, alert thresholds, PostgreSQL log correlation, and the deploy, mixed-schema,
@@ -67,6 +71,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   per-user Ceph RBD storage, lifecycle, fencing, client status, and isolated test prerequisites.
 - [Interactive runner sessions](interactive-claude-runner-design.md) — the original long-lived session design.
 - [Session lifecycle](session-lifecycle-design.md) — run state, lifecycle state, and task state.
+- [Suggested replies](prompt-suggestions-design.md) — Claude Code's guess at the next message after a turn,
+  how it reaches the transcript, and where the clients offer it.
 - [Realtime control-plane stream](realtime-control-plane-stream.md) — user-level SSE events and replay.
 - [Watch contract](watch-contract.md) — the frozen domain and product semantics for persistent cross-Session
   and cross-Task watching: the versioned typed predicate, the Watch/Match/Delivery state machines, why

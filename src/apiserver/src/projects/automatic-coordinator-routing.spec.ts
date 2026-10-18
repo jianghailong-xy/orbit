@@ -27,8 +27,10 @@ import {
 
 test('a reading about the ruler is the owner’s blocker; a reading about the landing is the '
   + 'coordinator’s review', () => {
+  // An argued exemption is a task's reason for keeping its own completion criterion: how that task
+  // is judged, not the project's ruler (`blocker-disposition.ts`, BLOCKER_DECISION).
   assert.deepEqual(BLOCKER_REASONS.map((reason) => [reason, blockerRoute(reason)]), [
-    ['CRITERION_EXEMPTION_ARGUED', 'OWNER_BLOCKER'],
+    ['CRITERION_EXEMPTION_ARGUED', 'EXCEPTION_ITEM'],
     ['ACCEPTANCE_STANDARD_MOVED', 'OWNER_BLOCKER'],
     ['OUTSIDE_DECLARED_SCOPE', 'EXCEPTION_ITEM'],
     ['MERGE_REFUSED_BY_GIT', 'EXCEPTION_ITEM'],
@@ -97,16 +99,18 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     payload: reviewPayload,
   });
   for (const want of [
-    '机械的范围告警', 'src/runner-go/worktree.go', 'src/shared/src/project-done.ts',
-    'src/apiserver/src/projects/project-owner-done.pg.spec.ts', '接受范围', 'open_item_resolve',
-    '退回', 'task_reopen', '取代', 'supersedesTaskId', '重跑落地', 'integration_retry',
-    'exceptionEscalationSeconds', '不要为它 ask_owner', 'Automatic',
+    'mechanical scope warning', 'src/runner-go/worktree.go', 'src/shared/src/project-done.ts',
+    'src/apiserver/src/projects/project-owner-done.pg.spec.ts', 'Accept the scope', 'open_item_resolve',
+    'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'Rerun the landing', 'integration_retry',
+    'once you take it up it stays yours', 'do not put it to the account owner as one', 'Automatic',
   ]) {
     assert.ok(message.includes(want), `the review message does not say ${JSON.stringify(want)}`);
   }
-  assert.ok(!message.includes('合并到 main'), 'a review is not an order to merge');
+  // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
+  assert.ok(!message.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
+  assert.ok(!message.includes('merge into main'), 'a review is not an order to merge');
   // The rerun door is offered for what it accepts: a conflict is never rerun.
-  assert.match(message, /冲突不能重跑/);
+  assert.match(message, /a conflict cannot be rerun/);
 
   const refused = openItemMessage({
     id: itemId,
@@ -116,11 +120,11 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     taskId: randomUUID(),
     payload: { reason: 'MERGE_REFUSED_BY_GIT', paths: ['src/a.ts'], declaredPaths: [] },
   });
-  for (const want of ['git 拒绝了合并', 'src/a.ts', 'merge_receipt', 'task_reopen', 'supersedesTaskId',
-    '不要原样重跑']) {
+  for (const want of ['git refused the merge', 'src/a.ts', 'merge_receipt', 'task_reopen', 'supersedesTaskId',
+    'Do not rerun it as it stands']) {
     assert.ok(refused.includes(want), `the refused-merge message does not say ${JSON.stringify(want)}`);
   }
-  assert.ok(!refused.includes('重跑落地：'), 'a refused merge was offered a rerun the door refuses');
+  assert.ok(!refused.includes('Rerun the landing:'), 'a refused merge was offered a rerun the door refuses');
 
   const many = openItemMessage({
     id: itemId,
@@ -130,7 +134,47 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     taskId: randomUUID(),
     payload: { ...reviewPayload, paths: Array.from({ length: 45 }, (_, i) => `src/file-${i}.ts`) },
   });
-  assert.ok(many.includes('另有 5 个'), 'a long path list is not cut at a size a turn can carry');
+  assert.ok(many.includes('and 5 more'), 'a long path list is not cut at a size a turn can carry');
+});
+
+test('an argued exemption is the coordinator’s review: it quotes the reason, offers the doors that '
+  + 'judge it, and leaves a change to the ruler with the owner', () => {
+  const argument = '判据 2 要求先复现修复前的 500，再证明修复后的行为——一条命令的退出码判定不了。';
+  const payload = {
+    reason: 'CRITERION_EXEMPTION_ARGUED', paths: [], declaredPaths: [], criterionKey: 'crit-2', argument,
+  };
+  const message = openItemMessage({
+    id: randomUUID(),
+    kind: 'DELIVERY_REVIEW',
+    title: 'Kept the judgment method Orbit questioned: T2',
+    projectId: randomUUID(),
+    taskId: randomUUID(),
+    payload,
+  });
+  for (const want of [
+    argument, 'Orbit questioned it', 'does not judge whether it holds', 'Accept the reason', 'open_item_resolve',
+    'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'the evidence it was judged on',
+    'or its work lands', 'do not put it to the account owner as one',
+    'that would be changing the acceptance criteria',
+  ]) {
+    assert.ok(message.includes(want), `the exemption review does not say ${JSON.stringify(want)}`);
+  }
+  assert.ok(!message.includes('Rerun the landing'), 'an argued exemption was offered a landing rerun');
+  assert.ok(!message.includes('ask_owner'), 'the review named an owner door its cell does not have');
+  assert.ok(!message.includes('a delivery that claims a criterion does not apply'),
+    'the review still calls an argued exemption the owner’s blocker');
+
+  const task = { id: 'task-2', title: 'T2' };
+  assert.deepEqual(openItemFacts('DELIVERY_REVIEW', payload, task)?.review, {
+    reason: 'CRITERION_EXEMPTION_ARGUED',
+    declaredPaths: [],
+    argument,
+  });
+  assert.equal(deliveryReviewDetailLine(payload), `Its reason: ${argument}`);
+  assert.equal(deliveryReviewDetailLine({ ...payload, argument: `${'x'.repeat(200)}\n\ny` }),
+    `Its reason: ${'x'.repeat(160)}…`);
+  // Nothing to quote is nothing to draw, not an empty quotation.
+  assert.equal(deliveryReviewDetailLine({ ...payload, argument: undefined }), '');
 });
 
 test('a classified landing failure reaches its coordinator as its own decision, with the rerun '
@@ -152,12 +196,19 @@ test('a classified landing failure reaches its coordinator as its own decision, 
       generation: 1,
     },
   });
-  for (const want of ['失败分类：CHECK_FAILED', 'integration_retry', 'task_reopen', 'fixesOpenItemId',
-    '这类落地去留由你判，不拿去问账号所有者']) {
+  for (const want of ['Failure class: CHECK_FAILED', 'integration_retry', 'task_reopen', 'fixesOpenItemId',
+    'Whether such a landing goes ahead is yours to judge, not a question for the account owner']) {
     assert.ok(message.includes(want), `the failed-landing message does not say ${JSON.stringify(want)}`);
   }
   assert.ok(!message.includes('supersedesTaskId'), 'a DONE landing must not suggest a successor field');
-  assert.ok(!message.includes('ask_owner'), 'a failed landing was put to the owner');
+  // The landing is never the owner's question. What ask_owner is offered for (revision 13) is a
+  // trade-off only the owner can make while the coordinator handles it — and then the item stays
+  // the coordinator's; it is handed over only for what the owner has to do in person.
+  assert.equal(message.split('ask_owner').length - 1, 1, 'ask_owner is offered once, for one thing');
+  assert.match(message, /a trade-off only the account owner can decide \(skipping or changing the merge check, for example\), ask with ask_owner/);
+  assert.match(message, /the item stays with you/);
+  assert.match(message, /Only what the account owner must handle in person \(their device, account or keys\) is handed to them, with open_item_hand_over/);
+  assert.ok(!message.includes('If you cannot judge or handle it'), 'a failed landing is still handed over by default');
 });
 
 test('a delivery review reads back as the rows its card draws and one line under its title', () => {

@@ -477,7 +477,12 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
 
   /** Each refused pool, and what its refusal has to say. */
   const refusedPools = [
-    { pool: empty, says: [/the account pool "Nothing in it" has no accounts in it/] },
+    {
+      pool: empty,
+      says: [
+        /the account pool "Nothing in it" has no accounts in it — add one under Account pools on Infrastructure, or pick another provider/,
+      ],
+    },
     {
       pool: unusable,
       says: [
@@ -485,6 +490,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
         /Refused key: key refused/,
         /Metered since: Metered API key — no 5-hour window/,
         /Switched off: disabled/,
+        /\) — fix one under Account pools on Infrastructure, or pick another provider/,
       ],
     },
   ];

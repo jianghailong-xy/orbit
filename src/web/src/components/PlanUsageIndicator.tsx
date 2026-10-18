@@ -1,4 +1,3 @@
-import { Popover } from 'antd';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { PlanUsageSnapshot } from '@orbit/shared';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
@@ -8,6 +7,7 @@ import {
   useCodexResetCredit,
   type CodexResetContext,
 } from './CodexResetCredit';
+import { Popover } from './ui/Popover';
 
 const fmtReset = (d?: string): string =>
   d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -38,10 +38,7 @@ export function PlanUsageIndicator({
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  // Opened by a press rather than a hover: focus follows into the popover as it would into any
-  // dialog. A hover never pulls focus out of what the user is typing in.
-  const focusOnOpen = useRef(false);
-  const credit = useCodexResetCredit(reset, open, () => panel.current?.focus());
+  const credit = useCodexResetCredit(reset, open, () => panel.current);
   // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first.
   const primary = bindingPlanUsageRow(rows);
   if (!primary) return null;
@@ -68,12 +65,11 @@ export function PlanUsageIndicator({
     items[event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at + 1) % items.length].focus();
   };
 
+  // The popover itself is the dialog, named by its "Plan usage" title; focus lands on this body.
   const pop = (
     <div
       ref={panel}
       className={`cu-pop${reset ? ' cu-pop-reset' : ''}`}
-      role="dialog"
-      aria-label="Plan usage"
       tabIndex={-1}
       onKeyDown={onPanelKeyDown}
     >
@@ -110,42 +106,38 @@ export function PlanUsageIndicator({
   return (
     <>
       <Popover
-        content={pop}
         title="Plan usage"
-        placement="topRight"
-        // On a phone the composer drops its spacer and this pill sits mid-row, where the popover fits
-        // against neither of its edges. antd's corner placements only flip, which leaves it hanging
-        // off the screen (and Chrome then widens the whole page to fit it), so shift it back in.
-        align={{ overflow: { adjustX: true, adjustY: true, shiftX: true } }}
-        trigger={['hover', 'click']}
+        side="top"
+        align="end"
+        // A hover shows it and leaves focus in what the user is typing in; a press opens it as a
+        // dialog, focus following into its body. On a phone the composer drops its spacer and this
+        // pill sits mid-row, where the popover fits against neither of its edges: it slides back
+        // inside the screen rather than hang off it, flush to its edge as the replaced popover slid.
+        collisionPadding={0}
+        openOnHover
+        initialFocus={panel}
         // The confirmation is a modal over this popover: pressing inside it is not leaving the popover.
         open={open || credit.confirmOpen}
         onOpenChange={(next) => {
           if (!next && credit.confirmOpen) return;
           setOpen(next);
         }}
-        afterOpenChange={(visible) => {
-          if (visible && focusOnOpen.current) panel.current?.focus();
-          focusOnOpen.current = false;
-        }}
+        trigger={
+          <button
+            ref={trigger}
+            type="button"
+            className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
+            aria-label={`Plan usage ${primary.percent}%${primary.remaining ? ' left' : ''}${credit.busy ? ', reset in progress' : ''}`}
+          >
+            <span className="composer-usage-bar">
+              <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
+            </span>
+            <span className="composer-usage-pct">{primary.percent}%{primary.remaining ? ' left' : ''}</span>
+            {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}
+          </button>
+        }
       >
-        <button
-          ref={trigger}
-          type="button"
-          className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
-          aria-label={`Plan usage ${primary.percent}%${primary.remaining ? ' left' : ''}${credit.busy ? ', reset in progress' : ''}`}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          onClick={() => {
-            focusOnOpen.current = !open;
-          }}
-        >
-          <span className="composer-usage-bar">
-            <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
-          </span>
-          <span className="composer-usage-pct">{primary.percent}%{primary.remaining ? ' left' : ''}</span>
-          {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}
-        </button>
+        {pop}
       </Popover>
       {reset && <CodexResetConfirm state={credit} usagePercent={primary.percent} />}
     </>

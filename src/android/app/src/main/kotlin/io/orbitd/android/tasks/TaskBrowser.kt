@@ -30,6 +30,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.directory.orderedWorkspaceRows
 import io.orbitd.android.navigation.*
 import io.orbitd.android.taskprojects.RefreshNudge
 import io.orbitd.android.taskprojects.canWrite
@@ -336,7 +337,7 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
             text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(TaskListCopy.batchMessage(action, ids.size))
                 if (action == TaskBatchAction.ASSIGN) {
-                    workspaces.forEach { workspace -> TextButton(onClick = { finish(workspace.text("id")) }, enabled = connected) { Text(workspace.text("name") ?: "Workspace") } }
+                    orderedWorkspaceRows(workspaces).forEach { workspace -> TextButton(onClick = { finish(workspace.text("id")) }, enabled = connected) { Text(workspace.text("name") ?: "Workspace") } }
                     TextButton(onClick = { finish(null) }, enabled = connected) { Text(TaskListCopy.unassigned) }
                 }
             } },

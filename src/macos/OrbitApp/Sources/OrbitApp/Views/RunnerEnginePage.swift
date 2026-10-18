@@ -89,6 +89,13 @@ private struct RunnerEngineContent: View {
                 dshSection(offline: offline)
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
+            } else if let login = RunnerPageFormat.loginEngine(engine) {
+                installSection(Infrastructure.rowKind(Infrastructure.engineHealth(runner, login), install: runner.install,
+                                                      engine: login),
+                               installable: Infrastructure.installable(runner, login), offline: offline)
+            } else if engine == "opencode" {
+                installSection(Infrastructure.rowKind(health, install: runner.install, slug: engine),
+                               installable: Infrastructure.installsOpenCode(runner), offline: offline)
             }
             updateSection(offline: offline)
         }
@@ -124,13 +131,13 @@ private struct RunnerEngineContent: View {
 
     // MARK: sections
 
-    /// DeepSeek Harness has no sign-in here: every session runs on the configured API key it was
-    /// started with. What this machine decides is whether it can start Harness at all — and the one
-    /// fix that happens here is installing the pinned CLI (web parity: Providers' Harness row).
+    /// DeepSeek Harness has no sign-in here: every session runs on the DeepSeek key it was started with.
+    /// What this machine decides is whether it can start Harness at all — and the one fix that happens
+    /// here is installing the pinned CLI (web parity: DeepSeek Harness's machine rows on Infrastructure).
     @ViewBuilder private func dshSection(offline: Bool) -> some View {
         let state = DshRuntime.state(of: runner)
         Section {
-            Text(state.label ?? "Ready · sessions use the DeepSeek Harness API key they were started with")
+            Text(state.label ?? DshRuntime.readyLine)
                 .foregroundStyle(state == .ready ? Color.secondary : RunnerInk.amber)
             if let hint = state.hint {
                 Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
@@ -147,6 +154,29 @@ private struct RunnerEngineContent: View {
             }
             if runner.install?.engine == "dsh", let message = runner.install?.message, !message.isEmpty {
                 Text(message).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+        }
+    }
+
+    /// An engine the machine doesn't have — a sign-in engine, or OpenCode — installed from here as the
+    /// web's engine row installs it: Install, or Retry after an install that failed, and the relay's own
+    /// words while it runs. Nothing for an Antigravity this runner can't run at all (`installable`).
+    @ViewBuilder private func installSection(_ kind: Infrastructure.RowKind, installable: Bool,
+                                             offline: Bool) -> some View {
+        if kind == .installing || installable {
+            Section {
+                if kind == .installing {
+                    Text("Installing…")
+                        .foregroundStyle(Color.secondary)
+                } else {
+                    Button(kind == .installFailed ? "Retry" : "Install \(RunnerPageFormat.engineName(engine))") { install() }
+                        .disabled(offline || runner.install?.inFlight == true)
+                }
+                if runner.install?.engine == engine, let message = runner.install?.message, !message.isEmpty {
+                    Text(message)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                }
             }
         }
     }
@@ -211,7 +241,7 @@ private struct RunnerEngineContent: View {
                     .foregroundStyle(Color.secondary)
             }
         } header: {
-            RunnerSectionHeader(RunnerPageFormat.keepsAccounts(engine) ? "Accounts" : "Sign-In")
+            RunnerSectionHeader(RunnerPageFormat.accountsTitle(runner, engine: engine))
         } footer: {
             if engine == "antigravity" && RunnerPageFormat.antigravityCanSignIn(runner) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -233,7 +263,8 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    /// Update Engines Now updates every CLI on the machine, this one with them.
+    /// Update Engines Now updates every CLI on the machine, this one with them. DeepSeek Harness's footer
+    /// says it has no sign-in rather than where sign-ins live.
     @ViewBuilder private func updateSection(offline: Bool) -> some View {
         Section {
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
@@ -244,7 +275,8 @@ private struct RunnerEngineContent: View {
                     .foregroundStyle(Color.secondary)
             }
         } footer: {
-            Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
+            Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER
+                 : engine == "dsh" ? DshRuntime.enginePageFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
         }
     }
 
@@ -261,13 +293,23 @@ private struct RunnerEngineContent: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(line.name)
-                        .font(.headline)
+                    HStack(spacing: 4) {
+                        Text(line.name)
+                            .font(.headline)
+                        // Where Automatic starts the next session — the account pools' mark for the same
+                        // thing (web `AccountName`).
+                        if RunnerPageFormat.marksNext(runner, engine: engine, account: line.id, now: now) {
+                            PoolChip(text: SharedPoolPage.nextChip)
+                        }
+                    }
                     if let subtitle = line.subtitle {
+                        // What doesn't fit goes from the middle: a Kimi account's site leads the line,
+                        // and the directory's last part is what tells two accounts apart.
                         Text(subtitle)
                             .font(.orbitLabel)
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
                 Spacer(minLength: 8)
@@ -288,7 +330,10 @@ private struct RunnerEngineContent: View {
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
             } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine) {
-                Text(RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA)
+                // Kimi only: a read that held no window at all is a plan with no quota limit, said so —
+                // not the failed-or-never-ran read's "No quota reported" (web QuotaCell).
+                Text(RunnerPageFormat.accountNoQuotaLimit(runner, engine: engine, account: line.id)
+                     ? RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA_LIMIT : RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA)
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
             }
@@ -627,6 +672,14 @@ private struct RunnerEngineContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
+        }
+    }
+
+    private func install() {
+        let id = runner.id
+        let slug = engine
+        Task {
+            if let failure = await runners.installEngine(id, engine: slug) { show(failure) }
         }
     }
 

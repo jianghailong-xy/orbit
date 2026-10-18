@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:00:03.559",
+    "ingested_at": "2026-10-18T02:00:03.733127+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 28,
+    "session_id": "01a14cb5-38bd-769d-8c0b-9059299860e7",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-BEN-W2",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T02:00:03Z",
+      "kind": "text",
+      "messages": 8,
+      "n": 24,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T01:51:47.389",
+    "engine": "claude",
+    "id": "01a14cb5-38bd-769d-8c0b-9059299860e7",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-BEN-S1 ben's first session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T02:00:03.788",
+      "client_turn_id": "88d29b53-0248-4828-a69d-ed9c49089e45",
+      "content": "T06-BEN-W2 wake ben before the disable",
+      "created_at": "2026-10-18T02:00:01.096",
+      "delivered_at": "2026-10-18T02:00:03.437",
+      "id": "01a14cbc-c148-7464-8ea4-b94516f348c9",
+      "kind": "message",
+      "seq": 3,
+      "status": "ANSWERED"
+    }
+  ]
+}

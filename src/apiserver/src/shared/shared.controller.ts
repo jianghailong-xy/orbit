@@ -92,20 +92,19 @@ export class SharedController {
   }
 
   /** A page of the shared transcript: the newest `limit` (≤ 500, default 200) events, or those
-   *  just older than `before`; `maxPayload` trims bulky tool bodies and marks them `truncated`. */
+   *  just older than `before`; `maxPayload` trims bulky tool bodies and marks them `truncated`.
+   *  With `after`, what the session has added since that seq instead, and its header as it stands
+   *  now (SessionsService.getSharedEventsAfter) — the read a page following a live session makes. */
   @Get(':token/events')
   async events(
     @Param('token') token: string,
     @Query('before') before?: string,
+    @Query('after') after?: string,
     @Query('limit') limit?: string,
     @Query('maxPayload') maxPayload?: string,
   ) {
     const link = await this.sessionLink(token);
-    const page = await this.sessions.getSharedEventPage(link.sessionId, {
-      before: num(before),
-      limit: num(limit),
-      maxPayload: parseMaxPayload(maxPayload),
-    });
+    const page = await this.pageOf(link.sessionId, { before, after, limit, maxPayload });
     return { ...page, events: shown(link, page.events) };
   }
 
@@ -149,16 +148,13 @@ export class SharedController {
     @Param('token') token: string,
     @Param('sessionId', PublicIdPipe) sessionId: string,
     @Query('before') before?: string,
+    @Query('after') after?: string,
     @Query('limit') limit?: string,
     @Query('maxPayload') maxPayload?: string,
   ) {
     const link = await this.links.resolve(token);
     await this.links.openConversation(link, sessionId);
-    const page = await this.sessions.getSharedEventPage(sessionId, {
-      before: num(before),
-      limit: num(limit),
-      maxPayload: parseMaxPayload(maxPayload),
-    });
+    const page = await this.pageOf(sessionId, { before, after, limit, maxPayload });
     return { ...page, events: shown(link, page.events) };
   }
 
@@ -202,6 +198,20 @@ export class SharedController {
     const link = await this.sessionLink(token);
     const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForShared(link.sessionId, artifactPath);
     return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
+  }
+
+  /** One page of a conversation the link opens, as both events routes read it: what came after
+   *  `after` when it is given, as the owner's `events/page` reads it; else the page before `before`,
+   *  or the tail. */
+  private pageOf(
+    sessionId: string,
+    query: { before?: string; after?: string; limit?: string; maxPayload?: string },
+  ) {
+    const opts = { limit: num(query.limit), maxPayload: parseMaxPayload(query.maxPayload) };
+    const after = num(query.after);
+    return after !== undefined
+      ? this.sessions.getSharedEventsAfter(sessionId, { ...opts, after })
+      : this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
   }
 
   /** The transcript routes serve a session root only; on any other link they are not there. */

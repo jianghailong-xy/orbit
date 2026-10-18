@@ -1,0 +1,27 @@
+{
+ "label": "ref-404c-pilot-2",
+ "step": "pilot",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/ref",
+ "command": "cd src/web && P32_SNAPSHOTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/ref-404c-pilot-2/shots P32_OUTPUT=/mnt/data/tmp/overlay-first-frame-34brok/runs/ref-404c-pilot-2/results npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all",
+ "commit": "aa162207c1bd1353224d62e38634dc21f9707e78",
+ "webChanges": [
+  "M src/web/src/components/ui/Combobox.tsx",
+  " M src/web/src/components/ui/Floating.ts",
+  " M src/web/src/components/ui/Menu.tsx",
+  " M src/web/src/components/ui/MultiSelect.tsx",
+  " M src/web/src/components/ui/Overlay.tsx",
+  " M src/web/src/components/ui/Popconfirm.tsx",
+  " M src/web/src/components/ui/Popover.tsx",
+  " M src/web/src/components/ui/README.md",
+  " M src/web/src/components/ui/Select.tsx",
+  " M src/web/src/components/ui/Tooltip.tsx"
+ ],
+ "webDiffSha256": "e344fb1940fc8bc16b4819846bb7ca31597804ebab372e31f06072e48aa58daa",
+ "startedAt": "2026-10-08T18:42:34Z",
+ "endedAt": "2026-10-08T18:46:17+00:00",
+ "loadAverage": {
+  "start": "14.45 11.75 12.32",
+  "end": "11.73 11.86 12.22"
+ },
+ "exitCode": 0
+}

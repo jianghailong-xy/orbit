@@ -3,19 +3,22 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- In-app updates hand verified GitHub release APKs to PackageInstaller. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <queries>
         <!-- Browsers that can show Google sign-in in a Custom Tab. -->
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>
     </queries>
+    <!-- Cleartext to any host, so a self-hosted http:// address signs in as on iOS: the account owner's decision of 2026-10-15 (card 34g6JcZwpKTUcwc5WvuVx). -->
     <application
         android:name=".OrbitApplication"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Orbit">
@@ -30,6 +33,7 @@
             android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/attachment_paths" />
         </provider>
+        <receiver android:name=".update.UpdateInstallReceiver" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { AppstoreOutlined, PushpinOutlined, RightOutlined, SortAscendingOutlined } from '@ant-design/icons';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiDocRow } from './WikiDocList';
 import { WikiDot, WikiOpChip, WikiTrustBadge } from './WikiMarks';
+import { Button } from './ui/Button';
 import { wikiArticlesQuery, wikiDocsQuery, wikiEntriesOfKindQuery } from '../lib/queries';
 import type { WikiChangeset, WikiChangesetOp, WikiEntry, WikiSpaceRow, WikiSpaceWithUsage, WikiTimelineItem } from '../lib/wiki';
 import {
@@ -396,7 +396,7 @@ export function ReviewCard({
             </div>
           ))}
           <div className="wk-rv-foot">
-            <Button type="primary" size="small" onClick={() => navigate('/wiki/review')}>
+            <Button variant="primary" size="small" onClick={() => navigate('/wiki/review')}>
               {WIKI_REVIEW_TITLE}
             </Button>
             {oldest && <span className="hint">{wikiOldest(relTime(oldest))}</span>}

@@ -46,6 +46,8 @@ function serviceOn(current: {
   /** The identity the session declares. A configured (BYOK) slug takes providerBuiltin: false. */
   provider?: string;
   providerBuiltin?: boolean;
+  /** The engine it runs on, when the case records one. */
+  engine?: string;
   /** The one configured row `provider` names, or may be switched onto — or none. */
   modelProvider?: Record<string, unknown>;
 }) {
@@ -201,6 +203,7 @@ test('a provider switch that re-resolves the model is a re-spawn, effort and all
   process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
   const { service, turns } = serviceOn({
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),
@@ -236,6 +239,7 @@ test('a provider switch that re-resolves the model says nothing to the engine it
   // since resolveProviderSwitch refuses to move a session across runtimes.
   const { service, turns } = serviceOn({
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),
@@ -269,6 +273,7 @@ test('a provider switch that keeps the model still speaks to the running engine'
   // without a switch.
   const { service, turns } = serviceOn({
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),
@@ -351,21 +356,25 @@ const deepseekKey = () => {
   };
 };
 
-test('an opencode session moved onto a configured key has its environment rebuilt', async () => {
+test('an opencode session moved onto a configured key is stored as that key on OpenCode, its environment rebuilt', async () => {
   const { service, turns } = serviceOn({ provider: 'opencode', model: 'anthropic/claude-opus-5', modelProvider: deepseekKey() });
 
+  // The old spelling — the key named in the model — is written in the new form (docs/provider-engine-contract.md
+  // §3.3): the key is the provider, the model its bare id, and the engine stays OpenCode.
   await service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-v4-pro' });
 
   assert.deepEqual(turns.map((t) => t.kind), ['reload']);
   const content = JSON.parse(turns[0].content ?? '{}');
-  assert.equal(content.model, 'orbit-deepseek/deepseek-v4-pro');
-  assert.equal(content.provider, 'opencode');
+  assert.equal(content.model, 'deepseek-v4-pro');
+  assert.equal(content.provider, 'deepseek');
 });
 
-test("an opencode session moving between one key's models keeps its environment", async () => {
-  const { service, turns } = serviceOn({ provider: 'opencode', model: 'orbit-deepseek/deepseek-v4-pro', modelProvider: deepseekKey() });
+test("an opencode session on a key moving between that key's models keeps its environment", async () => {
+  const { service, turns } = serviceOn({
+    provider: 'deepseek', providerBuiltin: false, engine: 'opencode', model: 'deepseek-v4-pro', modelProvider: deepseekKey(),
+  });
 
-  await service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-flash' });
+  await service.updateConfig(OWNER, ID, { model: 'deepseek-flash' });
 
   assert.equal(JSON.parse(turns[0].content ?? '{}').provider, undefined);
 });
@@ -441,6 +450,7 @@ test('a configured provider borrowing the claude runtime is told, not re-spawned
     providerBuiltin: false,
     model: 'byok-large',
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),

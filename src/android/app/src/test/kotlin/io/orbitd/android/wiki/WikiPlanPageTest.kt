@@ -44,16 +44,17 @@ class WikiPlanPageTest {
 
     /** The plan page for one of the fixture's states, read the way the screen reads it. */
     private fun page(name: String, busy: Boolean = false, refused: Map<String, List<WikiPlanGateError>> = emptyMap(),
-        versions: List<WikiPlanLogic.VersionRow> = emptyList()) {
+        versions: List<WikiPlanLogic.VersionRow> = emptyList(), server: Boolean = false) {
         val state = WikiPlanFixture.state(name)
         val shown = WikiPlanLogic.defaultShown(state)
         val failed = WikiPlanLogic.failedJob(state)
         val inForce = shown?.status == WikiPlanLogic.ShownStatus.CONFIRMED && state.confirmed?.version == shown.version
         val card = WikiPlanLogic.jobCard(state.job, WikiPlanFixture.now, WikiPlanFixture.online(name),
-            if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null, inForce, if (state.confirmed != null) WikiPlanFixture.directory else null)
+            if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null, inForce, if (state.confirmed != null) WikiPlanFixture.directory else null,
+            serverExecutes = server)
         show {
             WikiPlanPage(route, state, shown, shown?.let { WikiPlanLogic.base(it, state) }, versions, card, if (state.confirmed != null) 3 to 5 else null,
-                "orbit · wikova", "local-vllm", WikiPlanFixture.now, busy, refused, actions)
+                "orbit · wikova", "local-vllm", WikiPlanFixture.now, busy, refused, serverExecutes = server, actions = actions)
         }
     }
     private fun scrollTo(tag: String) = compose.onNodeWithTag("wiki-plan-page").performScrollToNode(hasTestTag(tag))
@@ -157,6 +158,20 @@ class WikiPlanPageTest {
         compose.onAllNodesWithTag("wiki-plan-version-menu").assertCountEquals(0)
         compose.onNodeWithTag("wiki-plan-draft").assertIsEnabled().performClick()
         assertEquals(listOf("draft"), calls)
+    }
+
+    /** While the server drafts the plan every sentence that names a drafter says the System model — the empty page's
+     * body and note, and the drafting job's card; under runner it is the provider, word for word (P9). */
+    @Test fun thePlanNamesTheSystemModelWhileTheServerDrafts() {
+        page("none", server = true)
+        says("wiki-plan-empty", WikiPlanCopy.emptyText("local-vllm", serverExecutes = true),
+            WikiPlanCopy.emptyNote("orbit · wikova", "local-vllm", serverExecutes = true))
+        compose.onNodeWithText(WikiPlanCopy.emptyText("local-vllm", serverExecutes = true)).assertExists()
+        page("noneDrafting", server = true)
+        says("wiki-plan-job", WikiPlanCopy.drafterServer)
+        // Runner: what the page always said.
+        page("none")
+        says("wiki-plan-empty", WikiPlanCopy.emptyText("local-vllm"), WikiPlanCopy.emptyNote("orbit · wikova", "local-vllm"))
     }
 
     @Test fun theChangesProposedAreAcceptedEditedOrRejected() {

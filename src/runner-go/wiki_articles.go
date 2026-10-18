@@ -60,7 +60,9 @@ var wikiArticlesDescription = wikiArticlesPrecondition + " This is a Wiki mainte
 	"from the entries alone, and writes the topic's articles, which the server keeps only as far as their footnotes " +
 	"name the topic's entries. It stops at the first 401 from the model's endpoint, and exits non-zero when any " +
 	"topic it took up was left unwritten. Any session but a maintenance run of the space is refused " +
-	"WIKI_NOT_MAINTENANCE_SESSION."
+	"WIKI_NOT_MAINTENANCE_SESSION. For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or " +
+	"canary with the account on its list) the server answers WIKI_SERVER_EXECUTES: its wiki worker writes the " +
+	"articles, so this asks no model, says so and exits 0."
 
 // wikiArticleSystemPrompt is the whole system prompt the clean call carries (the demo's): the rest is
 // in the prompt, one article or one name at a time.
@@ -241,6 +243,9 @@ type wikiArticlesSummary struct {
 	Usage     wikiModelUsage         `json:"usage"`
 	Stats     wikiArticleStats       `json:"stats"`
 	Stopped   string                 `json:"stopped,omitempty"`
+	// ServerExecutes is a run the server answered WIKI_SERVER_EXECUTES: the account's articles are the server's
+	// wiki worker's to write, so this one asked no model and wrote nothing.
+	ServerExecutes bool `json:"serverExecutes,omitempty"`
 }
 
 // wikiArticlesTopicRun is one topic the run took up.
@@ -317,6 +322,10 @@ type wikiArticlesRun struct {
 func runWikiArticles(t *Transport, sessionID, spaceID, only, model string, progress io.Writer) (summary wikiArticlesSummary, err error) {
 	summary = wikiArticlesSummary{SpaceID: spaceID, Topics: []wikiArticlesTopicRun{}}
 	raw, err := t.planWikiArticles(sessionID, spaceID)
+	if wikiServerExecutes(err) {
+		summary.ServerExecutes = true
+		return summary, nil
+	}
 	if err != nil {
 		return summary, wikiArticlesCallError(spaceID, "", err)
 	}
@@ -373,6 +382,11 @@ func runWikiArticles(t *Transport, sessionID, spaceID, only, model string, progr
 	}()
 	for _, slug := range targets {
 		result, stop := run.topic(slug)
+		if errors.Is(stop, errWikiServerExecutes) {
+			// The switch gave the account to the server while this ran: what is left is the server's to write.
+			summary.ServerExecutes = true
+			return summary, nil
+		}
 		summary.Topics = append(summary.Topics, result)
 		switch result.Outcome {
 		case "written":
@@ -413,6 +427,9 @@ func (r *wikiArticlesRun) topic(slug string) (wikiArticlesTopicRun, error) {
 		return result
 	}
 	raw, err := r.t.wikiArticleInput(r.sessionID, r.spaceID, slug)
+	if wikiServerExecutes(err) {
+		return result, errWikiServerExecutes
+	}
 	if err != nil {
 		return fail(wikiArticlesCallError(r.spaceID, slug, err).Error()), nil
 	}
@@ -434,6 +451,9 @@ func (r *wikiArticlesRun) topic(slug string) (wikiArticlesTopicRun, error) {
 	}
 	body := wikiArticleWrite{EntrySetSha256: input.EntrySetSha256, Ref: r.ref, Model: r.cfg.model, Articles: parts}
 	raw, err = r.t.writeWikiArticles(r.sessionID, r.spaceID, slug, body)
+	if wikiServerExecutes(err) {
+		return result, errWikiServerExecutes
+	}
 	if err != nil {
 		return fail(wikiArticlesCallError(r.spaceID, slug, err).Error()), nil
 	}
@@ -508,7 +528,7 @@ func (r *wikiArticlesRun) compose(input wikiArticleInput) ([]wikiArticlePart, er
 	var lines []string
 	var top []wikiArticleEntry
 	for i, group := range groups {
-		lines = append(lines, fmt.Sprintf("- %s（%d 条）", names[i], len(group)))
+		lines = append(lines, fmt.Sprintf("- %s (%s)", names[i], wikiCount(len(group), "entry", "entries")))
 		members := pickEntries(entries, group)
 		for j := 0; j < 2 && j < len(members); j++ {
 			top = append(top, members[j])
@@ -618,12 +638,14 @@ func (r *wikiArticlesRun) name(topicTitle string, members []wikiArticleEntry, ta
 		}
 		titles = append(titles, "- "+cutRunes(entry.Title, 60))
 	}
-	prompt := fmt.Sprintf("下面是 wiki 里「%s」主题下归在同一组的条目标题：\n%s\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。",
+	prompt := fmt.Sprintf("Below are the titles of the entries filed in one group under the wiki topic \"%s\":\n%s\n\n"+
+		"Give this group a short English subheading (at most 14 characters; code names may stay) that sums up what they have in common.",
 		topicTitle, strings.Join(titles, "\n"))
 	if len(taken) > 0 {
-		prompt += "\n同一主题的其他组已经叫：" + strings.Join(taken, "、") + "。起一个和它们都不同的名字，说出这组独有的内容，不要只换个说法。"
+		prompt += "\nThe topic's other groups are already called: " + strings.Join(taken, ", ") + ". Give this one a name different from all of them that says what " +
+			"only this group covers, not just another way of saying one of theirs."
 	}
-	text, err := r.ask(prompt + "只输出这个小标题。")
+	text, err := r.ask(prompt + " Output only the subheading.")
 	if err != nil {
 		var auth *wikiArticleAuthError
 		if errors.As(err, &auth) {
@@ -731,13 +753,13 @@ func wikiArticlePrompt(kind, topicTitle, title string, fed []wikiArticleEntry, s
 		return fmt.Sprintf(`Write the overview of the wiki topic "%s". The topic is split into these sub-articles:
 %s
 
-Using ONLY the numbered entries below (the most important ones of each sub-article), write in Chinese:
+Using ONLY the numbered entries below (the most important ones of each sub-article), write in English:
 - first line: "# " + the topic title
 - two or three short paragraphs that tell a reader what this topic covers and point out its most important rules and traps.
 Rules:
 - EVERY sentence must end with one or more footnote markers such as [2] or [2][5], the numbers of the entries it is based on. A sentence without a marker will be deleted.
 - State only what the entries say; do not invent facts, versions, dates, numbers or paths.
-- LENGTH: 450-750 Chinese characters in total, 6-9 sentences. Anything past %d characters is cut off.
+- LENGTH: 450-750 characters in total, 6-9 sentences. Anything past %d characters is cut off.
 Output only the Markdown.
 
 ENTRIES:
@@ -749,16 +771,16 @@ ENTRIES:
 	}
 	return fmt.Sprintf(`Write a wiki article titled "%s"%s, using ONLY the numbered knowledge entries below.
 
-Format (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):
+Format (Markdown, in English; keep code identifiers, paths and commands verbatim in backticks):
 - first line: "# " + a concise article title
 - a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps
-- then 2-4 sections "## heading" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)
+- then 2-4 sections "## heading" of 2-3 sentences each that group the knowledge (for example Conventions / Decisions / Common pitfalls / Practices / Concepts — choose what fits)
 Rules:
 - EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.
 - State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.
 - Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.
-- Mark a trap that an entry says is fixed as 已修.
-- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past %d characters is cut off.
+- Mark a trap that an entry says is fixed as (fixed).
+- LENGTH: 450-800 characters in total, 8-11 sentences, one point per sentence. Anything past %d characters is cut off.
 Output only the Markdown article.
 
 ENTRIES:
@@ -907,7 +929,7 @@ func wikiArticleFallbackName(members []wikiArticleEntry) string {
 	if len(members) > 0 {
 		return cutRunes(members[0].Title, 14)
 	}
-	return "其他"
+	return "Other"
 }
 
 // ── Grouping: a big topic's subtopics, by code ──────────────────────────────────────────────────
@@ -1291,6 +1313,21 @@ func wikiArticlesCallError(spaceID, slug string, err error) error {
 // wikiArticleStaleCode is the refusal only the articles' write gives (contract `refusals`).
 const wikiArticleStaleCode = "WIKI_ARTICLE_STALE"
 
+// wikiServerExecutesCode is the runner door's answer for an account the Orbit server runs the wiki for
+// (contract `refusals`, `articles.serverExecution`, `plan.jobs.server.door`): the server's wiki worker writes the
+// articles and drafts the plan with the deployment's System model, and no session's provider is asked. A plan
+// draft or revision meets it at its first call, before it has asked any model anything.
+const wikiServerExecutesCode = "WIKI_SERVER_EXECUTES"
+
+// errWikiServerExecutes stops a run whose topic the server answered WIKI_SERVER_EXECUTES for.
+var errWikiServerExecutes = errors.New(wikiServerExecutesCode)
+
+// wikiServerExecutes reports a call the server answered WIKI_SERVER_EXECUTES.
+func wikiServerExecutes(err error) bool {
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr) && httpErr.code() == wikiServerExecutesCode
+}
+
 // ── The command ─────────────────────────────────────────────────────────────────────────────────
 
 func cliWikiArticles(args []string, out io.Writer, ctx cliOrchestrationContext) error {
@@ -1336,6 +1373,9 @@ func cliWikiArticles(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	if runErr != nil {
 		return runErr
 	}
+	if summary.ServerExecutes {
+		return nil
+	}
 	if summary.Failed > 0 {
 		return fmt.Errorf("%s left unwritten: the next run tries again", wikiCount(summary.Failed, "topic was", "topics were"))
 	}
@@ -1343,6 +1383,10 @@ func cliWikiArticles(args []string, out io.Writer, ctx cliOrchestrationContext) 
 }
 
 func describeWikiArticlesSummary(s wikiArticlesSummary) string {
+	if s.ServerExecutes {
+		return fmt.Sprintf("The Orbit server writes the articles of space %s (%s): its wiki worker writes them after a "+
+			"maintenance run, with the deployment's System model. Nothing was asked of this session's model.", s.SpaceID, wikiServerExecutesCode)
+	}
 	if len(s.Topics) == 0 {
 		return fmt.Sprintf("No topic of space %s has entries its articles were not written from: nothing to write.", s.SpaceID)
 	}

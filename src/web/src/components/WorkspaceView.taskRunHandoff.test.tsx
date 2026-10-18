@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -227,12 +226,10 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${DEAD_PUBLIC}`]}>
-            <AntApp>
-              <Probe />
-              <Routes>
-                <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
-              </Routes>
-            </AntApp>
+            <Probe />
+            <Routes>
+              <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -343,7 +340,7 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     });
     const providerRow = (): HTMLElement | undefined =>
       Array.from(
-        document.querySelectorAll<HTMLElement>('.composer-model-menu .ant-dropdown-menu-submenu-title'),
+        document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"][aria-haspopup="menu"]'),
       ).find((el) => el.textContent?.includes('Provider'));
     await act(async () => {
       await vi.waitFor(() => expect(providerRow()).toBeDefined(), { timeout: 20_000, interval: 20 });
@@ -351,12 +348,10 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       providerRow()!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
-    // rc-menu names each row after its key (`data-menu-id` ends in it), which is how the provider
-    // rows are told apart from the model rows that can carry the same words.
+    // The rows of the level the Provider row opened, which is how the provider rows are told apart
+    // from the model rows that can carry the same words.
     const providerOptions = (): HTMLElement[] =>
-      Array.from(document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')).filter((el) =>
-        el.getAttribute('data-menu-id')?.includes('provider:'),
-      );
+      Array.from(document.querySelectorAll<HTMLElement>('[role="menu"][data-nested] [role="menuitem"]'));
     await act(async () => {
       await vi.waitFor(() => expect(providerOptions().length).toBeGreaterThan(1), {
         timeout: 20_000,
@@ -388,10 +383,9 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       await vi.waitFor(() => expect(providerNote()).not.toBe(''), { timeout: 20_000, interval: 20 });
     });
+    // By the credentials' names, and "uses": the engine stays, only the credential moves (board 5 ②).
     const note = providerNote();
-    expect(note).toContain('deepseek');
-    expect(note).toContain('claude');
-    expect(note.toLowerCase()).toContain('next');
+    expect(note).toBe('The turn in flight finishes on Claude Code. Your next one uses DeepSeek.');
     // It is not a four-second flash: nothing removes it while the pick stands.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 4_500));
@@ -416,7 +410,8 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       await vi.waitFor(() => expect(providerNote()).not.toBe(''), { timeout: 20_000, interval: 20 });
     });
-    await pickProvider('Claude');
+    // The runner's own Claude sign-in, by the account it runs on.
+    await pickProvider('Default');
     expect(providerNote()).toBe('');
 
     await type('继续干活');

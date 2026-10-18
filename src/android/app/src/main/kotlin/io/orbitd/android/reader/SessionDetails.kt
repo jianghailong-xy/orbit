@@ -1,13 +1,17 @@
 package io.orbitd.android.reader
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -20,6 +24,7 @@ import kotlinx.serialization.json.*
 @Composable
 internal fun SessionDetails(session: SessionState?, api: DirectoryApi, open: (String) -> Unit, close: () -> Unit) {
     val detail = session?.snapshot?.detail ?: return
+    val activity = LocalTaskActivity.current
     var diff by remember { mutableStateOf(false) }
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(16.dp)) {
@@ -48,12 +53,30 @@ internal fun SessionDetails(session: SessionState?, api: DirectoryApi, open: (St
                 if (background.isEmpty()) item { Text("No background jobs") }
                 items(background, key = { it.string("toolUseId") ?: it.string("shellId") ?: it.string("id").orEmpty() }) { job ->
                     Column {
-                        Text(job.string("description") ?: job.string("command") ?: "Background job")
+                        // An async agent or a workflow rather than a shell: named by kind, and opening to its progress.
+                        val kind = job.string("kind").takeIf { it == "agent" || it == "workflow" }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            kind?.let { Text(if (it == "workflow") "Workflow" else "Agent", Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 5.dp, vertical = 1.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall) }
+                            Text(job.string("description") ?: job.string("command") ?: "Background job")
+                        }
                         Text(job.string("status") ?: "No end reported", style = MaterialTheme.typography.bodySmall)
-                        val live = session.transcript.backgroundOutputs[job.string("toolUseId")]
-                            ?: session.transcript.backgroundOutputs[job.string("shellId")]
-                        val output = live?.string("content") ?: live?.string("output") ?: live?.string("chunk") ?: live?.string("text") ?: job.string("latestOutput")
-                        output?.let { CodeText(it) }
+                        if (kind != null) {
+                            val progress = activity?.progress(job.string("toolUseId")) ?: TaskProgress.from(job["progress"])
+                            // Where a running workflow is, or what a running agent is on — the row's second line.
+                            if (job.string("status") == "running") progress?.let(TaskProgressCopy::trayLine)?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            var open by rememberSaveable(job.string("toolUseId")) { mutableStateOf(false) }
+                            TextButton(onClick = { open = !open }) { Text(if (open) "Hide progress" else "Show progress") }
+                            if (open) if (progress != null) TaskProgressView(progress)
+                                else Text("No progress reported yet.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            val live = session.transcript.backgroundOutputs[job.string("toolUseId")]
+                                ?: session.transcript.backgroundOutputs[job.string("shellId")]
+                            val output = live?.string("content") ?: live?.string("output") ?: live?.string("chunk") ?: live?.string("text") ?: job.string("latestOutput")
+                            output?.let { CodeText(it) }
+                        }
                     }
                 }
             }

@@ -89,6 +89,9 @@ test('(c) the whole repository is free of references to the dropped table and co
   for (const file of files) {
     // Migrations are append-only history: 0210 must still be able to CREATE what 0225 drops.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     // This spec and its sibling are where the absence is asserted, so they must name it.
     if (file.includes('startup-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
@@ -121,6 +124,9 @@ test('(c) the rollout gate has no residual reference either', () => {
   for (const file of files) {
     // 0225's own comment says which flag it is removing; that is the record, not a reader of it.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     if (file.includes('startup-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
     let source: string;
@@ -166,8 +172,11 @@ test('(h) no compose service, no resident process, and the files it lived in shr
   // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
   // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
   // test/compose-topology.test.mjs (l) pins its whole definition.
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
   assert.deepEqual(services, [
-    'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'pg-socket',
+    'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'pg-socket',
   ], 'the removal must not have added a service');
 
   const apiPackage = JSON.parse(read('src/apiserver/package.json')) as {

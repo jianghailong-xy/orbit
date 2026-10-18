@@ -1,0 +1,1757 @@
+argv: npx playwright test --config ui-migration/playwright.config.mjs
+tree: /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base
+head: 951882866f3227a8bd5c1040ba544fa1e08bf661
+uncommitted:
+load: 25.09 30.41 28.00 15/3628 997540
+mem: 5158M available
+disk: / 8746M available, TMPDIR /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/tmp
+started: 2026-10-10T05:08:53Z
+
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 112 tests using 1 worker
+
+  ✘    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (2.2s)
+  ✓    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✓    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.0s)
+  ✓    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (909ms)
+  ✘    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (1.5s)
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (612ms)
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.4s)
+  ✓    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (862ms)
+  ✘    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (933ms)
+  ✓   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (984ms)
+  ✘   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (1.2s)
+  ✓   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (19.3s)
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (622ms)
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.8s)
+  ✓   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.4s)
+  ✓   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.5s)
+  ✘   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (1.5s)
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.4s)
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.4s)
+  ✓   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.4s)
+  ✘   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (2.0s)
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✘   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (1.0s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (636ms)
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+  ✘   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (2.5s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (4.2s)
+  ✓   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.7s)
+  ✓   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (826ms)
+  ✘   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (1.5s)
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (2.0s)
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.5s)
+  ✓   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (776ms)
+  ✘   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (930ms)
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+  ✘   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (1.1s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (562ms)
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.6s)
+  ✓   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (854ms)
+  ✓   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (845ms)
+  ✘   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (1.1s)
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (585ms)
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (1.9s)
+  ✓   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (818ms)
+  ✘   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (657ms)
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (996ms)
+  ✘   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (971ms)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (554ms)
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  ✘   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (2.4s)
+  ✓   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.3s)
+  ✓   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✘   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (1.5s)
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (754ms)
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.6s)
+  ✓   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+  ✘   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✘   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (1.4s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (938ms)
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.1s)
+  ✓   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✘   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (1.5s)
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (710ms)
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.2s)
+  ✓   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.2s)
+  ✘   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (897ms)
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+  ✘   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (1.3s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (818ms)
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.3s)
+  ✘   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (2.1s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+  ✓   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.5s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.4s)
+  ✘   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.0s)
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (779ms)
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.4s)
+  ✓   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.1s)
+  ✘   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+  ✓   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+  ✘   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (1.5s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (898ms)
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+  ✓  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.3s)
+  ✘  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (1.4s)
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (676ms)
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.3s)
+  ✓  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+  ✘  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (938ms)
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+  ✘  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (1.2s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (913ms)
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+
+
+  1) [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      3037 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: breakpoint-599-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(breakpoint-599-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 3037 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 3037 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/breakpoints.browser.mjs:18:7
+
+    attachment #1: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-desktop/breakpoint-599-dialog.png
+    Received: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-599-dialog-actual.png
+    Diff:     .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-599-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/attachments/computed-styles-and-timings-8010bbe8da862580be70bd613bc39b0186a05d85.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      11716 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 11716 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 11716 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-desktop/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/attachments/computed-styles-and-timings-669ee57e845928ee46f43f2a9fdd9bd1e7464788.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      12620 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 12620 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 12620 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-desktop/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/attachments/computed-styles-and-timings-e097532ef3c44166a3614af2687de7964d1dbe6a.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      5149 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 5149 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 5149 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-desktop/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/attachments/computed-styles-and-timings-dc082288b72e12508801bcc03542cab20deb632b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      5285 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 5285 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 5285 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-phone/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-chromium-light-phone/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-chromium-light-phone/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-c16e2056cd9a9d3efe79c8e77f472ecb577a32ed.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-chromium-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2363 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2363 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2363 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-phone/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/attachments/computed-styles-and-timings-29178be2a49aec02d252a95135fcf128c5146226.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      5154 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 5154 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 5154 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-light-phone/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-chromium-light-phone/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-chromium-light-phone/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-light-phone/attachments/computed-styles-and-timings-41a6a25718ad7396024e282940fba57755a42f04.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-chromium-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2569 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: breakpoint-599-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(breakpoint-599-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2569 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2569 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/breakpoints.browser.mjs:18:7
+
+    attachment #1: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-desktop/breakpoint-599-dialog.png
+    Received: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-599-dialog-actual.png
+    Diff:     .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-599-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/attachments/computed-styles-and-timings-75d15e637d164fd2f64f9a122034876355ef204c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      10844 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 10844 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 10844 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-desktop/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-e210a6bf93f9a9e349cf917fba69ca46990fccfb.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      13478 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 13478 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 13478 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-desktop/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/attachments/computed-styles-and-timings-a2120af22403bd5841ee93b93d9d8c5dcbb5e9a2.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4970 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4970 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4970 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-desktop/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/attachments/computed-styles-and-timings-2de69b99d744cf2e65f7ecc44c65745b14bfca4b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4823 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4823 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4823 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-phone/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/attachments/computed-styles-and-timings-51565f58084ccb0aba5fb0490795a0d01a8b2a63.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2522 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2522 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2522 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-phone/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/attachments/computed-styles-and-timings-4f3975694270137ad6e4046aa8cad921a66d42b3.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4955 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4955 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4955 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/chromium-dark-phone/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/attachments/computed-styles-and-timings-d7499fff7c277b5e9bd5e9e9a7e6e7c34754d7b1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2768 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: breakpoint-599-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(breakpoint-599-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2768 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2768 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/breakpoints.browser.mjs:18:7
+
+    attachment #1: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-desktop/breakpoint-599-dialog.png
+    Received: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-599-dialog-actual.png
+    Diff:     .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-599-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/attachments/computed-styles-and-timings-cb568ea2187ce0826d83ae11742603ebb44dfa31.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      11318 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 11318 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 11318 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-desktop/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/attachments/computed-styles-and-timings-7fab7ee78f6e59437158b9a4bbb9d6b2b30d2b2f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ───────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      12691 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 12691 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 12691 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-desktop/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-e6f6bc8e8dbc48f40376e7f89f33028d8442694d.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      5019 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 5019 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 5019 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-desktop/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/attachments/computed-styles-and-timings-c22638689550fd21822a9b9bedc7a956dc9d79ef.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4810 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4810 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4810 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-phone/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-webkit-light-phone/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-webkit-light-phone/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-light-phone/attachments/computed-styles-and-timings-a6bac522f15d5280da2653ceab8c7f739e2eb247.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2421 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2421 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2421 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-phone/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/attachments/computed-styles-and-timings-0f292c333ff25cbe6e814703240d0cb64394ad42.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ──────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      5062 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 5062 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 5062 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-phone/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-webkit-light-phone/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-webkit-light-phone/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-light-phone/attachments/computed-styles-and-timings-1c6dc04d02ecb5588b1d0c0dcd382cd213eab47d.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  22) [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2333 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: breakpoint-599-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(breakpoint-599-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2333 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2333 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/breakpoints.browser.mjs:18:7
+
+    attachment #1: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-desktop/breakpoint-599-dialog.png
+    Received: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-599-dialog-actual.png
+    Diff:     .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-599-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/attachments/computed-styles-and-timings-891c1973a89808e16904eb320fe756968a301eda.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  23) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      10460 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 10460 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 10460 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-desktop/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/attachments/computed-styles-and-timings-10b2471939f57f19b9db4c3d6c4a2640b60dbe9f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  24) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      13435 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 13435 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 13435 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-desktop/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-b4907b96db1cba2608d496d711c5936fb535d9d9.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  25) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4710 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4710 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4710 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-desktop/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/attachments/computed-styles-and-timings-c3c51363f30264e12f22491b4c3d73434aa46614.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  26) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4321 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: task-detail.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-detail.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4321 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4321 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:10:3)
+
+    attachment #1: task-detail (image/png) ─────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-phone/task-detail.png
+    Received: .ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/task-detail-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/task-detail-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/attachments/computed-styles-and-timings-f40f67126b35eedd8ad6284381002eb48c45474a.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-task-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  27) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      2553 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: settings.png
+
+    Call log:
+      - Expect "toHaveScreenshot(settings.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 2553 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 2553 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/page-scenarios.mjs:99:3)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-phone/settings.png
+    Received: .ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/settings-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/settings-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-3b2bdfe0323ba9ece7b40fddca54b1e1e82ff6bc.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  28) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      4723 pixels (ratio 0.02 of all image pixels) are different.
+
+      Snapshot: session-idle.png
+
+    Call log:
+      - Expect "toHaveScreenshot(session-idle.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 4723 pixels (ratio 0.02 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 4723 pixels (ratio 0.02 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/harness.mjs:38:26)
+        at sessionScenarios (/mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/base/src/web/ui-migration/session-scenarios.mjs:11:3)
+
+    attachment #1: session-idle (image/png) ────────────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-phone/session-idle.png
+    Received: .ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/session-idle-actual.png
+    Diff:     .ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/session-idle-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/attachments/computed-styles-and-timings-aa09498e04a82fb0bf6278da7e94869e16db53d1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-session-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  28 failed
+    [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ───────────────────────
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ──────────────────────────
+    [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────────
+    [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ──────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings ───────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────────
+    [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────────
+  11 skipped
+  73 passed (3.3m)
+exit=1
+load: 17.31 27.11 27.45 12/3775 1038499
+ended: 2026-10-10T05:12:14Z

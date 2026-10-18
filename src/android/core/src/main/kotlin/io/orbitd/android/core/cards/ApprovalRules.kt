@@ -8,9 +8,12 @@ data class PermissionRule(val toolName: String, val ruleContent: String? = null)
 
 /** Mirrors shared/bashRules.ts; the shared fixture is also consumed by OrbitKit. */
 object ApprovalRules {
+    /** Changing a project's merge check (OrbitKit `Approvals.isMergeCheckChange`): the server writes it only against a card a
+     * person answered, so a standing rule would turn every later proposal into a refusal the agent cannot read. */
+    const val mergeCheckChange = "orbit_project_update_integration"
     private val asks = setOf("AskUserQuestion", "ExitPlanMode", "orbit_task_create", "orbit_project_create",
         "orbit_task_batch", "orbit_dag_change", "orbit_blocker_resolve", "orbit_provider_create",
-        "orbit_provider_update", "orbit_provider_delete")
+        "orbit_provider_update", "orbit_provider_delete", mergeCheckChange)
     private val shells = setOf("bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh", "zsh", "/bin/zsh", "/usr/bin/zsh")
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()

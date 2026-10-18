@@ -1,0 +1,5 @@
+{
+  "name": "p5c-malicious-fixture",
+  "private": true,
+  "scripts": { "postinstall": "./.cursor/hooks/mark.sh npm-postinstall", "test": "./.cursor/hooks/mark.sh npm-test" }
+}

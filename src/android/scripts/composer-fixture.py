@@ -21,11 +21,13 @@ class State:
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
         self.rejectTurnOnce=False; self.rejectTurnStatus=409
+        # A07c scenarios: fields over the session, the runner, the account's providers/pools, the retry door's answer.
+        self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
             'permissionMode':'default','effort':'high','capabilities':{'canSend':self.status!='FAILED','canResume':self.status=='FAILED','canComplete':True},
-            **({'projectId':PROJECT} if self.discussion else {}),**self.config}
+            **({'projectId':PROJECT} if self.discussion else {}),**self.extraDetail,**self.config}
     def stats(self):
         return {'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
             'turns':self.turns,'attachments':{k:{a:b for a,b in v.items() if a!='bytes'} for k,v in self.attachments.items()},
@@ -57,8 +59,14 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/__control':
             with state.lock:
                 if body.get('reset'): state.reset()
-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus']:
+                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
+                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows']:
                     if k in body: setattr(state,k,body[k])
+                # Files a scenario's transcript links to, served as the attachments the app downloads.
+                for key,f in body.get('files',{}).items():
+                    data=f['text'].encode()
+                    state.attachments[key]={'name':f['name'],'mime':f['mime'],'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),
+                        'sessionId':SESSION,'bytes':data,'references':[]}
             return self.reply({'ok':True})
         if path in ['/api/auth/login','/api/auth/refresh']:
             if path.endswith('refresh'): state.rotation+=1; state.expired=False
@@ -115,7 +123,19 @@ class Handler(BaseHTTPRequestHandler):
             turn=path.split('/')[-1]; state.controls.append({'action':'withdraw','turnId':turn})
             state.turns={k:v for k,v in state.turns.items() if v['turnId']!=turn}; return self.reply({'ok':True})
         if path.endswith('/retry-message') or path.endswith('/auto-retry'):
-            state.controls.append({'action':path.split('/')[-1],'method':method}); return self.reply({'turnId':'retry-turn'})
+            state.controls.append({'action':path.split('/')[-1],'method':method,'body':body})
+            # The armed retry is the session's: turning it off clears it, putting it back arms it at the moment sent.
+            if path.endswith('/auto-retry'): state.extraDetail={**state.extraDetail,'retryAt':body.get('retryAt') if method=='POST' else None}
+            return self.reply({'turnId':'retry-turn'})
+        if path==f'/api/runners/{RUNNER}/install':
+            state.controls.append({'action':'install','method':method,'body':body})
+            state.runnerExtra={**state.runnerExtra,'install':{'status':'installing','engine':body.get('engine'),'mode':'install'}}
+            return self.reply({'status':'pending','engine':body.get('engine'),'mode':'install'})
+        if path==f'/api/runners/{RUNNER}/codex-rate-limit-reset':
+            state.controls.append({'action':'codex-rate-limit-reset','method':method,'body':body})
+            return self.reply({'replayed':False,'operation':{'id':'a07c-reset-1','runnerId':RUNNER,'clientRequestId':body.get('clientRequestId'),
+                'accountFingerprint':body.get('accountFingerprint'),'status':'PENDING','consumeState':'PENDING','refreshState':'PENDING',
+                'createdAt':'2026-10-09T00:00:00Z','updatedAt':'2026-10-09T00:00:00Z'}})
         return self.reply({'message':'unsupported path'},404)
     def do_GET(self):
         url=urlparse(self.path); path=url.path
@@ -142,16 +162,22 @@ class Handler(BaseHTTPRequestHandler):
         if path==f'/api/sessions/{CREATED}': return self.reply({**state.detail(),'id':CREATED,'title':'Created conversation'})
         if path.endswith('/events/page'): return self.reply({'events':state.rows[-200:],'hasMore':False})
         if path.endswith('/turns'): return self.reply([{'id':v['turnId'],'turnId':v['turnId'],'content':v['request']['content'],'kind':v['kind']} for v in state.turns.values() if v['kind']!='steer'])
-        if path.endswith('/retry-message'): return self.reply({'text':'last failed message'})
+        if path.endswith('/retry-message'): return self.reply(state.retryMessage)
+        if path==f'/api/runners/{RUNNER}/codex-rate-limit-reset': return self.reply({'active':None,'latest':None})
+        if path.startswith(f'/api/runners/{RUNNER}/codex-rate-limit-reset/'): return self.reply({'id':'a07c-reset-1','runnerId':RUNNER,
+            'clientRequestId':'x','accountFingerprint':'x','status':'PENDING','consumeState':'PENDING','refreshState':'PENDING',
+            'createdAt':'2026-10-09T00:00:00Z','updatedAt':'2026-10-09T00:00:00Z'})
+        if path=='/api/providers/pools': return self.reply(state.pools)
         if path.startswith('/api/attachments/'):
             att=state.attachments.get(path.split('/')[-1])
             if att: state.downloads.append({'path':path,'sha256':att['sha256']})
             return self.reply(att['bytes'],mime=att['mime']) if att else self.reply({},404)
-        if path=='/api/runners': return self.reply([{'id':RUNNER,'name':'Fixture runner','online':True,'runsAsRoot':False,'capabilities':['codex-account-move/v1'],
+        if path=='/api/runners': return self.reply([{**{'id':RUNNER,'name':'Fixture runner','online':True,'runsAsRoot':False,'capabilities':['codex-account-move/v1'],
             'planUsage':{'codex':{'primary':{'utilization':23},'secondary':{'utilization':42},'fetchedAt':'2026-10-04T00:00:00Z','accounts':{'1a2b3c4d':{'primary':{'utilization':71}}}},'claude':{'primary':{'utilization':11}}},
             'modelCatalog':{'codex':[{'value':'fixture-model','label':'Fixture One','reasoningLevels':['low','high'],'serviceTiers':['priority'],'permissionModes':['default','plan']},{'value':'fixture-model-2','label':'Fixture Two'}],'claude':[{'value':'claude-model','label':'Claude model'}]},
-            'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'1a2b3c4d','name':'Second account','auth':'yes'},{'id':'deadbeef','name':'Expired account','auth':'no'}]}, {'engine':'claude','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'abcd1234','name':'Claude account','auth':'yes'}]}]}])
-        if path=='/api/providers': return self.reply([{'slug':'custom-codex','label':'Custom account','runtime':'codex','models':[{'value':'custom-model','label':'Custom model'}]}])
+            'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'1a2b3c4d','name':'Second account','auth':'yes'},{'id':'deadbeef','name':'Expired account','auth':'no'}]}, {'engine':'claude','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'abcd1234','name':'Claude account','auth':'yes'}]}]},**state.runnerExtra}])
+        if path=='/api/providers': return self.reply(state.providers if state.providers is not None else
+            [{'slug':'custom-codex','label':'Custom account','runtime':'codex','models':[{'value':'custom-model','label':'Custom model'}]}])
         if path==f'/api/projects/{PROJECT}': return self.reply({'id':PROJECT,'title':'Composer discussion','acceptanceCriteriaItems':[{'ordinal':0,'text':'Keep the discussion draft'}]})
         if path==f'/api/projects/{PROJECT}/acceptance/confirmation': return self.reply({'state':'UNCONFIRMED','currentVersion':{'digest':'fixture-criteria-seal'}})
         if path.endswith('/confirmation-under-review'): return self.reply(None)

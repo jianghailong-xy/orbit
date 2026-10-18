@@ -1,0 +1,40 @@
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetCompose]' passed (32.574 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test01OffUnsetSession]' passed (28.626 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseCompose]' passed (29.163 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test02OffFalseSession]' passed (27.969 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingCompose]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingCompose]' passed (28.933 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingSession]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test03OffMissingSession]' passed (28.174 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test04WenFirstSessionOffered]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test04WenFirstSessionOffered]' passed (52.403 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test05WenPreparingAnswered]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test05WenPreparingAnswered]' passed (117.849 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test06WenSleepWake]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test06WenSleepWake]' passed (103.732 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test07WenRestartsFailedRetried]' started.
+    t =   159.55s Added attachment named '07b-failed-stopped-too-often'
+    t =   258.54s Added attachment named 'verdict-07-wen-restarts-failed-retried.json'
+Test Case '-[T07MacProbeUITests.ReplayTests test07WenRestartsFailedRetried]' passed (259.662 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test08NiaFirstSession]' started.
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:25: error: -[T07MacProbeUITests.ReplayTests test08NiaFirstSession] : failed - 08-nia-first-session-01: "DeepSeek" never showed in 90.0 s
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ProbeCase.swift:70: error: -[T07MacProbeUITests.ReplayTests test08NiaFirstSession] : XCTAssertTrue failed - 08-nia-first-session: the app sent what the scene does not hold: [["request": POST /api/sessions, "what": key fields differ, "fields": {
+Test Case '-[T07MacProbeUITests.ReplayTests test08NiaFirstSession]' failed (243.101 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test09NiaSleepWake]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test09NiaSleepWake]' passed (117.449 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' started.
+    t =   164.41s Added attachment named '10b-failed-kept-running-out-of-memory'
+Test Case '-[T07MacProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' passed (188.350 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test11NiaQuotaWait]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test11NiaQuotaWait]' passed (113.923 seconds).
+Test Suite 'ReplayTests' failed at 2026-10-18 06:50:34.030.
+	 Executed 14 tests, with 2 failures (0 unexpected) in 1371.908 (1371.917) seconds
+Test Suite 'T07MacProbeUITests.xctest' failed at 2026-10-18 06:50:34.032.
+	 Executed 14 tests, with 2 failures (0 unexpected) in 1371.908 (1371.920) seconds
+Test Suite 'All tests' failed at 2026-10-18 06:50:34.033.
+	 Executed 14 tests, with 2 failures (0 unexpected) in 1371.908 (1371.921) seconds
+** TEST FAILED **

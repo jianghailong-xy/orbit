@@ -1,0 +1,1353 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+   "scopeHash": "db56e87f36222ba363d3aa0ce28244e330e7fec17e2d09ea69089b9525879f21"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P5.3": 97,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p53": [
+   {
+    "path": "src/web/src/components/ApprovalPanel.stale.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ApprovalPanel.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceConsole.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.codexAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.commitResultMessage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.composerMenu.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.coordinatorChat.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.evidenceHandoff.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.jumpToStart.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.loginPool.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.managedRunner.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.modelControl.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.modelRouting.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.neverStarted.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.openItemDelivery.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.pinnedFold.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.poolAccount.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.projectIntent.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.promotionPlacement.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.promptSuggestion.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.queuedTurnWake.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.recapRow.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.retryAttachments.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.retryMessage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.retrySessionMessage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.scrollToBottom.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.sessionDeepLink.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.sessionFolders.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.sessionMenu.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.sessionMessageQueue.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.sessionSwipe.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.settlementPointer.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.shareEntry.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.statusGlyph.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.stickyWake.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.streamOrder.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.taskRunHandoff.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.taskStartWaiting.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.watchingRow.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 3121,
+    "kind": "ant-class",
+    "text": ".session-col .ant-segmented {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6180,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-attach-btn.ant-btn,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6181,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-send.ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6188,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-attach-btn.ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6192,
+    "kind": "antd-reference",
+    "text": "/* A Send with nothing to send is a quiet grey disc, not antd's outlined ghost: the circle keeps"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6194,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-send.ant-btn:disabled {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6201,
+    "kind": "antd-reference",
+    "text": "antd tints a text button's label on hover, so the colour is pinned through :hover too. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6202,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-shell-btn.ant-btn,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6203,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-shell-btn.ant-btn:hover {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6208,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-shell-btn.ant-btn:hover {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6222,
+    "kind": "ant-class",
+    "text": ".composer-field textarea.ant-input,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6245,
+    "kind": "ant-class",
+    "text": ".composer-field textarea.ant-input,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6254,
+    "kind": "antd-reference",
+    "text": "too, with no mirror behind it to draw it instead. Give it back its own colour (antd's placeholder"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6256,
+    "kind": "ant-class",
+    "text": ".composer-field textarea.ant-input::placeholder,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6260,
+    "kind": "ant-class",
+    "text": ".composer-field textarea.ant-input::selection,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6265,
+    "kind": "antd-reference",
+    "text": "/* antd 6 gives `variant=\"borderless\"` inputs their own brand-coloured `:focus-visible` outline"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6266,
+    "kind": "antd-reference",
+    "text": "(antd 5 set `outline: none` there). Inside the composer that paints a second blue ring around"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6269,
+    "kind": "ant-class",
+    "text": ".composer-field textarea.ant-input:focus-visible,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6398,
+    "kind": "ant-class",
+    "text": ".composer-box-shell .composer-field textarea.ant-input,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6406,
+    "kind": "ant-class",
+    "text": ".composer-box textarea.ant-input,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6413,
+    "kind": "antd-reference",
+    "text": "selectors because antd may hand `className` to the textarea itself or to a wrapper; the"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6414,
+    "kind": "antd-reference",
+    "text": "`.composer-box` prefix keeps this above antd's own `.ant-input` colour. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6414,
+    "kind": "ant-class",
+    "text": "`.composer-box` prefix keeps this above antd's own `.ant-input` colour. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6513,
+    "kind": "antd-reference",
+    "text": "/* One quiet text size for the toolbar's words. AntD's borderless Selects otherwise render"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6516,
+    "kind": "antd-reference",
+    "text": "(non-editable) shade is left to AntD so a read-only control still reads as read-only. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6517,
+    "kind": "ant-class",
+    "text": ".composer-toolbar .ant-select-content-has-value,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6518,
+    "kind": "ant-class",
+    "text": ".composer-toolbar .ant-select-placeholder {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6521,
+    "kind": "ant-class",
+    "text": ".composer-toolbar .ant-select:not(.ant-select-disabled) .ant-select-content-has-value {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6546,
+    "kind": "ant-class",
+    "text": ".composer-model-chip.ant-dropdown-open {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6571,
+    "kind": "ant-class",
+    "text": ".composer-model-menu.ant-dropdown-menu {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6578,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu-item.composer-engine-title,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6579,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu-item.composer-engine-title:hover {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6618,
+    "kind": "ant-class",
+    "text": ".composer-model-chip.is-smart.ant-dropdown-open {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6724,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-attach-btn.ant-btn,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6725,
+    "kind": "ant-class",
+    "text": ".composer-box .composer-send.ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6753,
+    "kind": "ant-class",
+    "text": ".composer-toolbar > .ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6762,
+    "kind": "ant-class",
+    "text": ".composer-pill-workspace .ant-select {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6770,
+    "kind": "antd-reference",
+    "text": "WorkspaceView.composerMenu.test.tsx so it cannot drift back to antd's defaults."
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6771,
+    "kind": "antd-reference",
+    "text": "Desktop keeps antd's density on purpose: that menu is a pointer menu at the foot of a pane,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6773,
+    "kind": "ant-class",
+    "text": ".composer-attach-menu.ant-dropdown-menu {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6787,
+    "kind": "ant-class",
+    "text": ".composer-attach-menu .ant-dropdown-menu-item {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6794,
+    "kind": "antd-reference",
+    "text": "/* antd leaves this to the row it draws; a native menu row is one line, always. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6799,
+    "kind": "ant-class",
+    "text": ".composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6804,
+    "kind": "antd-reference",
+    "text": "so an unavailable one keeps antd's dimmed colour instead of reading as enabled. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6805,
+    "kind": "ant-class",
+    "text": ".composer-attach-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled)"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6806,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu-item-icon {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6809,
+    "kind": "ant-class",
+    "text": ".composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon + span {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6813,
+    "kind": "antd-reference",
+    "text": "the line itself drawn as the background antd already uses so no border has to be undone. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 6814,
+    "kind": "ant-class",
+    "text": ".composer-attach-menu .ant-dropdown-menu-item-divider {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 7059,
+    "kind": "ant-class",
+    "text": "/* Ant Design's Image wraps the <img> in a .ant-image div; make it fill the chip"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 7061,
+    "kind": "ant-class",
+    "text": ".composer-attach .ant-image {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 7074,
+    "kind": "ant-class",
+    "text": ".composer-attach .ant-image-cover {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17926,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17931,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17954,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu-item.composer-account-row .scope-menu-row {"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+   "scopeHash": "476293060f72fa323fd35f9a3c05bc40b7217bf11655af3537dd7f74acc2d0bb"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p53": []
+ },
+ "counts": {
+  "scannedFiles": [
+   791,
+   791
+  ],
+  "productionFiles": [
+   389,
+   389
+  ],
+  "testFiles": [
+   400,
+   400
+  ],
+  "antdProductionFiles": [
+   11,
+   9
+  ],
+  "antdTestFiles": [
+   42,
+   3
+  ],
+  "antSelectorTestFiles": [
+   9,
+   0
+  ],
+  "antClassTestFiles": [
+   9,
+   0
+  ],
+  "iconProductionFiles": [
+   114,
+   114
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   214,
+   178
+  ],
+  "retirementBlockingFiles": [
+   79,
+   37
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   105,
+   10
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   102,
+   9
+  ],
+  "antd-reference": [
+   147,
+   84
+  ],
+  "icon-class": [
+   88,
+   88
+  ],
+  "icon-reference": [
+   125,
+   125
+  ],
+  "imperative-confirm": [
+   9,
+   3
+  ],
+  "imperative-feedback": [
+   220,
+   220
+  ],
+  "internal-ref": [
+   4,
+   1
+  ],
+  "provider": [
+   53,
+   13
+  ],
+  "rc-support": [
+   243,
+   237
+  ],
+  "ref-focus": [
+   24,
+   24
+  ],
+  "theme": [
+   1,
+   1
+  ],
+  "use-app": [
+   3,
+   2
+  ]
+ },
+ "files": {
+  "src/web/src/components/ApprovalPanel.stale.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ApprovalPanel.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceConsole.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Result",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.codexAccount.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 6,
+     "ant-selector": 6,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.commitResultMessage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.composerMenu.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 13,
+     "ant-selector": 12,
+     "antd-reference": 4,
+     "icon-class": 2,
+     "icon-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 2,
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.coordinatorChat.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.evidenceHandoff.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.jumpToStart.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.loginPool.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.managedRunner.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.modelControl.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "icon-class": 2,
+     "provider": 2,
+     "rc-support": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 2
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.modelRouting.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 2,
+     "provider": 1,
+     "rc-support": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.neverStarted.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.openItemDelivery.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.pinnedFold.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.poolAccount.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.projectIntent.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.promotionPlacement.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.promptSuggestion.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.queuedTurnWake.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.recapRow.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.retryAttachments.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.retryMessage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.retrySessionMessage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.scrollToBottom.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionDeepLink.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionFolders.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 7,
+     "ant-selector": 7,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionMenu.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 8,
+     "ant-selector": 8,
+     "antd-reference": 1,
+     "provider": 1,
+     "rc-support": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionMessageQueue.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionSwipe.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.settlementPointer.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.shareEntry.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 10,
+     "ant-selector": 9,
+     "antd-reference": 2,
+     "icon-class": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 1
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.statusGlyph.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-class": 14
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 14
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.stickyWake.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.streamOrder.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.taskRunHandoff.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "provider": 1,
+     "rc-support": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.taskStartWaiting.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Dropdown",
+     "Image",
+     "Input",
+     "MenuProps",
+     "Popover",
+     "Select",
+     "Spin",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 2,
+     "imperative-confirm": 6,
+     "imperative-feedback": 41,
+     "internal-ref": 3,
+     "rc-support": 1,
+     "ref-focus": 15,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 2,
+     "imperative-feedback": 41,
+     "ref-focus": 15
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.watchingRow.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-class": 4,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 4
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 45,
+     "ant-selector": 45,
+     "antd-reference": 19,
+     "icon-class": 30
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 5,
+     "icon-class": 30
+    }
+   }
+  }
+ }
+}

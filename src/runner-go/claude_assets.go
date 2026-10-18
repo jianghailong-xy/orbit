@@ -7,10 +7,9 @@ import (
 )
 
 // assetRoot is one base dir to scan for slash assets, tagged with the agent that owns
-// it. agentID is empty for host-level roots (the runner's default dir and the user's
-// global ~/.claude), which every agent shares; a non-empty agentID scopes a project's
-// assets to that agent so the web composer can filter `/` autocomplete to the session's
-// agent.
+// it. agentID is empty for a host-level root (the user's global ~/.claude), which
+// every agent shares; a non-empty agentID scopes a project's assets to that agent so
+// the web composer can filter `/` autocomplete to the session's agent.
 type assetRoot struct {
 	base    string
 	agentID string
@@ -22,11 +21,11 @@ type assetRoot struct {
 // host-level, shared by all agents). The result feeds the web composer's `/`
 // autocomplete, which scopes the menu to host assets + the session's agent.
 //
-// Dedup is per scope, host-first: host-level names (~/.claude + the runner's default
-// dir) collapse by name and shadow the agents — a name found at host level is visible
-// to everyone, so it's emitted once and not re-tagged per agent. A name absent from
-// host is kept once per agent that has it, so two agents sharing a project skill name
-// (e.g. a dev and a prod checkout of the same repo) each surface their own scoped copy.
+// Dedup is per scope, host-first: host-level names (~/.claude) collapse by name and
+// shadow the agents — a name found at host level is visible to everyone, so it's
+// emitted once and not re-tagged per agent. A name absent from host is kept once per
+// agent that has it, so two agents sharing a project skill name (e.g. a dev and a prod
+// checkout of the same repo) each surface their own scoped copy.
 func scanSlashAssets(roots []assetRoot) (commands, skills []SlashCommandInfo) {
 	var scan []assetRoot
 	seenRoot := map[string]bool{}
@@ -47,8 +46,8 @@ func scanSlashAssets(roots []assetRoot) (commands, skills []SlashCommandInfo) {
 		seenRoot[key] = true
 		scan = append(scan, assetRoot{base: dir, agentID: agentID})
 	}
-	// All host-level roots (the user's ~/.claude + the runner's default dir) before any
-	// agent's, so host names are fully known and can shadow agents in the scoped dedup.
+	// All host-level roots (the user's ~/.claude, and any root given without an agent) before
+	// any agent's, so host names are fully known and can shadow agents in the scoped dedup.
 	addRoot(userHome(), "")
 	for _, r := range roots {
 		if r.agentID == "" {

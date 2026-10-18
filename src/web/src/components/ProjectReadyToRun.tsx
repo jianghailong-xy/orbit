@@ -7,7 +7,6 @@ import {
   PlayCircleOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Alert, Button, Popconfirm, Spin, Tag, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
@@ -19,6 +18,12 @@ import {
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { useToast } from '../lib/toast';
+import { Alert } from './ui/Alert';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Popconfirm } from './ui/Popconfirm';
+import { Spinner } from './ui/Spinner';
+import './ui/Typography.css';
 
 type RunToast = Pick<ReturnType<typeof useToast>, 'success' | 'error'>;
 
@@ -126,35 +131,32 @@ export function ProjectReadyToRun({
 
   return (
     <section aria-labelledby="project-ready-to-run-heading" style={{ marginBottom: 24 }}>
-      <Typography.Title
-        className="project-ready-heading"
+      <h4
+        className="project-ready-heading orbit-typography"
         id="project-ready-to-run-heading"
-        level={4}
         style={{ marginBottom: 8 }}
       >
         <span className="project-ready-heading-label">Run queue</span>
         {summary ? (
-          <Typography.Text
-            className="project-ready-summary"
-            type="secondary"
+          <span
+            className="project-ready-summary orbit-typography orbit-typography-secondary"
             style={{ fontSize: 12, fontWeight: 400 }}
             title={summary}
           >
             {' '}
             {summary}
-          </Typography.Text>
+          </span>
         ) : null}
-      </Typography.Title>
+      </h4>
 
       {ready.isLoading ? (
         <div style={{ padding: 32, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       ) : ready.isError ? (
         <Alert
           type="error"
-          showIcon
-          message="Run queue could not be read"
+          title="Run queue could not be read"
           description={ready.error instanceof Error ? ready.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => void ready.refetch()}>
@@ -168,17 +170,16 @@ export function ProjectReadyToRun({
             <Alert
               style={{ marginBottom: 12 }}
               type="warning"
-              showIcon
-              message="Impact ranking not computed"
+              title="Impact ranking not computed"
               description={`This project has more than ${data.impactTruncated.maxTasks} unfinished tasks, so tasks are shown without downstream impact ranking.`}
             />
           ) : null}
 
           {items.length === 0 ? (
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            <div className="orbit-typography orbit-typography-secondary" style={{ marginBottom: 0 }}>
               No tasks are ready, running, or otherwise ready inside a paused task list. A task
               appears here when its prerequisites are complete and it has an assigned workspace.
-            </Typography.Paragraph>
+            </div>
           ) : (
             <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {items.map((item) => (
@@ -194,9 +195,9 @@ export function ProjectReadyToRun({
           )}
 
           {items.length > 0 ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <span className="orbit-typography orbit-typography-secondary" style={{ fontSize: 12 }}>
               {queueHelp(data.readyCount, activeCount, pausedCount)}
-            </Typography.Text>
+            </span>
           ) : null}
         </>
       ) : null}
@@ -301,8 +302,8 @@ function ReadyTaskRow({
         >
           {item.title}
         </div>
-        <Typography.Text
-          type="secondary"
+        <span
+          className="orbit-typography orbit-typography-secondary"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
         >
           {runState === 'RUNNING' ? (
@@ -329,21 +330,20 @@ function ReadyTaskRow({
               Prerequisites complete
             </>
           )}
-        </Typography.Text>
+        </span>
       </div>
 
-      <Typography.Text
-        className="project-ready-impact"
-        type="secondary"
+      <span
+        className="project-ready-impact orbit-typography orbit-typography-secondary"
         style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
       >
         {impact}
-      </Typography.Text>
+      </span>
 
       {runState === 'READY' ? (
         <Button
           className="project-ready-action"
-          type="primary"
+          variant="primary"
           icon={<PlayCircleOutlined />}
           loading={run.isPending}
           disabled={run.isPending}
@@ -356,25 +356,26 @@ function ReadyTaskRow({
         <Popconfirm
           title={`Resume “${item.pausedList.title}”?`}
           description={resumeDescription(item)}
-          okText="Resume list"
+          confirmText="Resume list"
           cancelText="Cancel"
-          okButtonProps={{ loading: resumingListId === item.pausedList.id }}
+          confirmLoading={resumingListId === item.pausedList.id}
           onConfirm={() => onResumeList(item.pausedList!.id)}
-        >
-          <Button
-            className="project-ready-action"
-            icon={<PlayCircleOutlined />}
-            loading={resumingListId === item.pausedList.id}
-            disabled={resumingListId !== null}
-            aria-label={`Resume list ${item.pausedList.title} for ${item.title}`}
-          >
-            Resume list
-          </Button>
-        </Popconfirm>
+          trigger={
+            <Button
+              className="project-ready-action"
+              icon={<PlayCircleOutlined />}
+              loading={resumingListId === item.pausedList.id}
+              disabled={resumingListId !== null}
+              aria-label={`Resume list ${item.pausedList.title} for ${item.title}`}
+            >
+              Resume list
+            </Button>
+          }
+        />
       ) : (runState === 'RUNNING' || runState === 'QUEUED') && item.sessionId ? (
         <Button
           className="project-ready-action"
-          type="link"
+          variant="link"
           icon={<ArrowRightOutlined />}
           aria-label={`Open session for ${item.title}`}
           onClick={() => navigate(`/sessions/${encodeId(item.sessionId!)}`)}
@@ -382,10 +383,10 @@ function ReadyTaskRow({
           Open session
         </Button>
       ) : (
-        <Tag
+        <Badge
           className="project-ready-action"
-          color={
-            runState === 'RUNNING' ? 'processing' : runState === 'PAUSED' ? 'warning' : 'default'
+          tone={
+            runState === 'RUNNING' ? 'info' : runState === 'PAUSED' ? 'warning' : 'default'
           }
           icon={
             runState === 'RUNNING' ? (
@@ -400,7 +401,7 @@ function ReadyTaskRow({
           style={{ marginInlineEnd: 0 }}
         >
           {runState === 'RUNNING' ? 'Running' : runState === 'PAUSED' ? 'Paused' : 'Queued'}
-        </Tag>
+        </Badge>
       )}
     </li>
   );

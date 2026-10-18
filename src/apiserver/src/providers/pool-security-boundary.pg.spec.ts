@@ -54,7 +54,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { BadRequestException, Module, RequestMethod, ValidationPipe } from '@nestjs/common';
+import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -572,13 +572,14 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     assert.equal(claimed.sessionId, sessionId);
     return claimed;
   }
+  /** One poll of the runner's inbox. */
+  const dequeue = (runnerApi as unknown as {
+    dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
+      { kind: string; env?: Record<string, string> } | null
+    >;
+  }).dequeueTurn.bind(runnerApi);
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(sessionId: string, runnerId: string) {
-    const dequeue = (runnerApi as unknown as {
-      dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
-        { kind: string; env?: Record<string, string> } | null
-      >;
-    }).dequeueTurn.bind(runnerApi);
     for (let polls = 0; polls < 4; polls += 1) {
       const turn = await dequeue(sessionId, runnerId, null);
       assert.ok(turn, 'the inbox handed out nothing');
@@ -812,14 +813,16 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
         status: 'PENDING',
       },
     });
-    // Nothing of his holds the slug, so the reload is refused rather than re-spawned on the Claude default:
-    // his runner is handed nothing, and the reload is not given out.
-    await assert.rejects(dequeueReload(onHers, at.runnerId), (e: unknown) => e instanceof BadRequestException);
+    // Nothing of his holds the slug, so the reload is not re-spawned on the Claude default: his runner is
+    // handed nothing — the reload is answered without being given out — and the session says why, in the
+    // words the claim holds it with.
+    assert.equal(await dequeue(onHers, at.runnerId, null), null, 'his runner was handed the reload');
     assert.deepEqual(
       await db.conversationTurn.findUniqueOrThrow({ where: { id: queuedReload.id }, select: { status: true, deliveredAt: true } }),
-      { status: 'PENDING', deliveredAt: null },
+      { status: 'ANSWERED', deliveredAt: null },
     );
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: onHers } })).error, PROVIDER_UNAVAILABLE_ERROR);
   });
 
   await t.test("(E) a person added to a pool of one's own ChatGPT accounts runs on its account too — a person's token, no login token of theirs, the gateway reaching the ChatGPT backend on that account; the owner's same three as the positive control", async () => {
@@ -1001,6 +1004,10 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'GET', 'providers/mine/:id/balance', { id: deepseekId }, undefined, 404);
     await ask(alice, 'GET', 'providers/mine/:id/balance', { id: pub(personal) }, undefined, 400);
     await ask(alice, 'GET', 'providers/mine/:id/balance', { id: sharedId }, undefined, 404);
+    // What uses her key, per engine (the read before a key is turned off): hers alone, and no key in it.
+    await ask(alice, 'GET', 'providers/mine/:id/usage', { id: deepseekId }, undefined, 200);
+    await ask(bob, 'GET', 'providers/mine/:id/usage', { id: deepseekId }, undefined, 404);
+    await ask(alice, 'GET', 'providers/mine/:id/usage', { id: sharedId }, undefined, 404);
     assert.deepEqual(
       { ok: balance.json.ok, total: balance.json.balances?.[0]?.totalBalance },
       { ok: true, total: '110.00' },
@@ -1262,6 +1269,8 @@ exec sleep 300
       // members, which a Codex pool has none of.
       await ask(bearer, 'GET', 'providers/mine/:id/key', at, undefined, 404);
       await ask(bearer, 'GET', 'providers/mine/:id/balance', at, undefined, 404);
+      await ask(bearer, 'GET', 'providers/mine/:id/usage', at, undefined, 404);
+      await ask(bearer, 'POST', 'providers/mine/:id/key-check', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
@@ -1270,6 +1279,11 @@ exec sleep 300
       await ask(bearer, 'DELETE', 'admin/providers/:id', at, undefined, 403);
       await ask(runner, 'PATCH', 'runner/providers/:slug', { slug: pool.slug }, { label: 'Renamed' }, 404);
       await ask(runner, 'DELETE', 'runner/providers/:slug', { slug: pool.slug }, undefined, 404);
+      // A runner's answer about the Cursor key a session of its own runs on, about no session of theirs:
+      // refused before anything is read.
+      await ask(runner, 'POST', 'runner/sessions/:id/cursor-key-check', { id: randomUUID() }, { state: 'VALID', keyFingerprint: '0123456789abcdef' }, 403);
+      // A runner's answer to a Cursor key check nobody handed it: it settles nothing.
+      await ask(runner, 'POST', 'runner/cursor-key-check-result', {}, { checkId: '0'.repeat(32), state: 'VALID', keyFingerprint: '0123456789abcdef' }, 200);
 
       // What each of them makes of their own.
       await ask(bearer, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);

@@ -148,6 +148,7 @@ struct WikiPlanScreen: View {
                 .task {
                     await wiki.loadPlan()
                     await wiki.loadDocsDirectory()
+                    await wiki.loadSystemModel()
                     if let version = address.version { await wiki.loadPlanVersion(version) }
                 }
                 .refreshable { await wiki.loadPlan() }
@@ -213,14 +214,16 @@ struct WikiPlanScreen: View {
         let failed = WikiPlanLogic.failedJob(state)
         let inForce = shown?.status == .confirmed && state.confirmed?.version == shown?.version
         let online = model.wikiMaintenanceRunnerOnline
-        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online, failed: shown?.status == .failed ? failed : nil,
+        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online, serverExecutes: wiki.serverExecutes,
+                                         failed: shown?.status == .failed ? failed : nil,
                                          inForce: inForce, directory: wiki.docsDirectory)
         let rows = WikiPlanLogic.versionRows(wiki.planVersions, failed: failed.map { job -> (version: Int, at: String?) in
             (WikiPlanLogic.nextVersion(state), job.endedAt)
         })
         return WikiPlanPage(state: state, shown: shown, base: shown.flatMap { WikiPlanLogic.base(of: $0, in: state) }, versions: rows,
                             jobCard: card, written: written(wiki), whereItRuns: model.wikiMaintenanceWhere,
-                            provider: model.wikiMaintenanceProvider, busy: wiki.busy, refused: refused, actions: actions(wiki))
+                            provider: model.wikiMaintenanceProvider, serverExecutes: wiki.serverExecutes,
+                            busy: wiki.busy, refused: refused, actions: actions(wiki))
     }
 
     /// The version asked for, as the web's page reads it: none is the one shown first; a failed draft's
@@ -338,7 +341,8 @@ struct WikiPlanScreen: View {
         WikiPlanRedraftSheet(note: WikiPlanCopy.redraftNote(provider: model.wikiMaintenanceProvider,
                                                             from: newest.map { version -> (version: Int, inForce: Bool) in
                                                                 (version.version, version.status == .confirmed)
-                                                            }),
+                                                            },
+                                                            serverExecutes: wiki.serverExecutes),
                              protectedDocs: protected) { words in await redraft(wiki, words, failure: WikiCopy.planRedraftFailed) }
     }
 

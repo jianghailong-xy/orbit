@@ -1,0 +1,10 @@
+Line the run printed when it assembled the expected screenshots (src/web/ui-migration/expected-screenshots.mjs):
+  P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+And the same counts recomputed from .ui-migration-results/expected-screenshots/sources.json (252 entries):
+   {'p0-drift': 165, 'p0.2': 44, 'accepted': 43} total 252
+   accepted entries cite decisions: ['34Za39ACSBoCkYKc80Md8', '34Za39Do3N6tkmIMP0GBP', '34Za39Ov1yysHZaYL6wgJ', '34cBi0yt6bFcSmbJFgDPj']
+   accepted entries documents: ['p3.2/README.md', 'p4.1/README.md', 'p5.3/README.md', 'webkit-scroll-lock/README.md']
+
+Nothing was updated or added this run: no --update-snapshots flag (config: updateSnapshots: 'none'), no .png written under p0.2/, reference/ or accepted/. git status of those directories after the run:
+  (empty)

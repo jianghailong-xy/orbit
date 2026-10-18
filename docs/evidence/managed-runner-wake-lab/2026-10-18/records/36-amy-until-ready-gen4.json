@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-18T01:07:42.284+00:00",
+  "changes": [
+    [
+      "2026-10-18T01:07:30.877+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 5,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 4,
+        "management_state": "STARTING",
+        "pod": "b926933c",
+        "reason": null,
+        "revision": 59
+      }
+    ],
+    [
+      "2026-10-18T01:07:42.284+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 5,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 4,
+        "management_state": "READY",
+        "pod": "b926933c",
+        "reason": null,
+        "revision": 60
+      }
+    ]
+  ],
+  "owner": "amy",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

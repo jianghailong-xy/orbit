@@ -23,6 +23,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastHost
 
 /** The plan's screen over a real store and an in-memory server (iOS `WikiPlanScreen`): what it reads, the requests each
  * write makes on the owner's door, and what the owner is told — a toast, the refusal alert, the gate's errors on a card. */
@@ -37,7 +39,7 @@ class WikiPlanScreenTest {
     private val writes = mutableMapOf<String, Pair<Int, String>>()
     private val rig = WikiTestRig { request -> answer(request) }
 
-    @Before fun quiet() { WikiToast.text = null }
+    @Before fun quiet() { OrbitToasts.clear() }
 
     private fun answer(request: ApiRequest): Pair<Int, String>? {
         val path = request.path.joinToString("/")
@@ -58,7 +60,7 @@ class WikiPlanScreenTest {
         // The shell's bar: the actions the page binds to its route (Contents, Edit).
         compose.activityRule.scenario.onActivity { it.setContent { OrbitTheme { Box {
             Column { Row { PageBar.Actions(route, this) }; WikiPlanScreen(store, route, DirectoryData(), nav) }
-            WikiToast.Host()
+            ToastHost({}, {}, {})
         } } } }
         compose.waitForIdle()
     }
@@ -79,7 +81,7 @@ class WikiPlanScreenTest {
         compose.onNodeWithTag("wiki-plan-confirm").performClick()
         compose.waitForIdle()
         assertEquals(listOf("POST /api/wiki/spaces/sp1/plan/versions/2/confirm"), writes())
-        assertEquals(WikiPlanCopy.confirmed(2), WikiToast.text)
+        assertEquals(WikiPlanCopy.confirmed(2), OrbitToasts.feed.value.transient?.message)
         // A version asked for by number gives way to the page's own once it is confirmed.
         assertEquals(OrbitRoute(Destination.WIKI_PLAN), navigation.current)
     }
@@ -91,11 +93,12 @@ class WikiPlanScreenTest {
         screen(OrbitRoute(Destination.WIKI_PLAN))
         compose.onNodeWithTag("wiki-plan-confirm").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(WikiCopy.refused).assertExists()
+        // The alert names what failed, as iOS's does (d625d9809); the gate's errors are under it.
+        compose.onNodeWithText("Couldn't confirm the plan").assertExists()
         compose.onNodeWithText("plan.docs the plan has 3 documents; it must have 20 to 35\nplan.docs[0].sections[1].sources.code[0] no such file").assertExists()
         compose.onNodeWithTag("wiki-refusal-ok").performClick()
-        compose.onAllNodesWithText(WikiCopy.refused).assertCountEquals(0)
-        assertNull(WikiToast.text)
+        compose.onAllNodesWithText("Couldn't confirm the plan").assertCountEquals(0)
+        assertNull(OrbitToasts.feed.value.transient)
     }
 
     @Test fun acceptWithNoDraftWaitingConfirmsTheDraftItMade() {
@@ -108,7 +111,7 @@ class WikiPlanScreenTest {
         compose.waitForIdle()
         assertEquals(listOf("POST /api/wiki/plan-proposals/pp2/decide", "POST /api/wiki/spaces/sp1/plan/versions/2/confirm"), writes())
         assertEquals(buildJsonObject { put("action", "accept") }, rig.body(rig.requests.first { it.method != HttpMethod.GET }))
-        assertEquals(WikiPlanCopy.confirmed(2), WikiToast.text)
+        assertEquals(WikiPlanCopy.confirmed(2), OrbitToasts.feed.value.transient?.message)
     }
 
     @Test fun anAcceptanceTheGateRefusedKeepsTheChangeWithItsErrors() {
@@ -123,7 +126,7 @@ class WikiPlanScreenTest {
         scrollTo("wiki-plan-change-refused:pp1")
         assertTrue(compose.onAllNodes(hasAnyAncestor(hasTestTag("wiki-plan-change-refused:pp1")) and hasText("plan.docs[1] session-runtime is protected"),
             useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-        assertNull(WikiToast.text)
+        assertNull(OrbitToasts.feed.value.transient)
     }
 
     @Test fun editAcceptsOnlyAndOpensTheDocumentToEdit() {
@@ -134,7 +137,7 @@ class WikiPlanScreenTest {
         compose.onNodeWithTag("wiki-plan-edit:pp1").performClick()
         compose.waitForIdle()
         assertEquals(listOf("POST /api/wiki/plan-proposals/pp1/decide"), writes())
-        assertEquals(WikiPlanCopy.changeAdded(2), WikiToast.text)
+        assertEquals(WikiPlanCopy.changeAdded(2), OrbitToasts.feed.value.transient?.message)
         compose.onNodeWithTag("wiki-plan-edit-sheet").assertExists()
         compose.onNodeWithText(WikiPlanCopy.editTitle("2.1")).assertExists()
     }
@@ -147,7 +150,7 @@ class WikiPlanScreenTest {
         compose.waitForIdle()
         assertEquals(listOf("POST /api/wiki/plan-proposals/pp2/decide"), writes())
         assertEquals(buildJsonObject { put("action", "reject") }, rig.body(rig.requests.first { it.method != HttpMethod.GET }))
-        assertEquals(WikiPlanCopy.changeRejected, WikiToast.text)
+        assertEquals(WikiPlanCopy.changeRejected, OrbitToasts.feed.value.transient?.message)
     }
 
     @Test fun redraftSendsTheOwnersWordsAndSaysTheDraftIsOnItsWay() {
@@ -162,7 +165,7 @@ class WikiPlanScreenTest {
         compose.waitForIdle()
         assertEquals(listOf("POST /api/wiki/spaces/sp1/plan/redraft"), writes())
         assertEquals(buildJsonObject { put("instructions", "merge the session documents") }, rig.body(rig.requests.first { it.method != HttpMethod.GET }))
-        assertEquals(WikiPlanCopy.redraftAsked, WikiToast.text)
+        assertEquals(WikiPlanCopy.redraftAsked, OrbitToasts.feed.value.transient?.message)
         compose.onAllNodesWithTag("wiki-plan-redraft-sheet").assertCountEquals(0)
     }
 
@@ -191,7 +194,7 @@ class WikiPlanScreenTest {
         assertEquals("agent-tests", body.fstr("docSlug"))
         assertEquals("测试与依赖", body.fobj("doc").fstr("title"))
         assertFalse(body.toString(), body.toString().contains("\"position\""))
-        assertEquals(WikiPlanCopy.draftSaved(3), WikiToast.text)
+        assertEquals(WikiPlanCopy.draftSaved(3), OrbitToasts.feed.value.transient?.message)
         compose.onAllNodesWithTag("wiki-plan-edit-sheet").assertCountEquals(0)
     }
 

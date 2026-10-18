@@ -38,6 +38,11 @@ const TASK_ID = randomUUID();
 /** The other group's row: an open question this reader is the one to clear, and which no decision
  *  can be recorded about until they do. */
 const WAITING_ON_YOU_TASK_ID = randomUUID();
+/** A revision waiting for this coordinator while it is paused, and one that waited and was then
+ *  delivered to it — the two groups only the coordinator's own conversation is read. */
+const WAITING_ON_COORDINATOR_TASK_ID = randomUUID();
+const SENT_TO_COORDINATOR_TASK_ID = randomUUID();
+const PROJECT_ID = randomUUID();
 const SESSION_ID = randomUUID();
 
 /** Anything `TasksController` was asked to look up. Must stay empty: the two paths below belong to
@@ -87,6 +92,28 @@ const evidenceService = {
         requiredAction: 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
       },
       independence: { independent: ownerId === OWNER_ID, disqualification: null, requiredAction: null },
+    }],
+    waitingOnCoordinator: [{
+      taskId: WAITING_ON_COORDINATOR_TASK_ID,
+      title: 'the queue a paused coordinator gets when it is back',
+      status: 'IN_PROGRESS',
+      projectId: PROJECT_ID,
+      criterion: { key: 'a-criterion-key', text: 'the rail is derived from the facts' },
+      evidenceRevision: '1',
+      submittedAt: new Date('2026-09-04T11:00:00.000Z'),
+      ageSeconds: 3_600,
+      claim: 'the revision waited for the coordinator',
+      gaps: [],
+      citations: [],
+      decidability: { decidable: true, refusal: null, requiredAction: null },
+      independence: { independent: true, disqualification: null, requiredAction: null },
+    }],
+    sentToCoordinator: [{
+      taskId: SENT_TO_COORDINATOR_TASK_ID,
+      title: 'the revision handed over when the coordinator came back',
+      projectId: PROJECT_ID,
+      evidenceRevision: '3',
+      deliveredAt: new Date('2026-09-04T11:30:00.000Z'),
     }],
   }),
   decide: async (...args: unknown[]) => {
@@ -143,6 +170,10 @@ test('GET /api/tasks/evidence-decisions/pending reaches the queue and not the ta
       decidingSessionId?: string;
       pending?: Array<{ taskId?: string; gaps?: string[] }>;
       waitingOnYou?: Array<{ taskId?: string; decidability?: { decidable?: boolean } }>;
+      waitingOnCoordinator?: Array<{ taskId?: string; projectId?: string; submittedAt?: string }>;
+      sentToCoordinator?: Array<{
+        taskId?: string; title?: string; projectId?: string; evidenceRevision?: string; deliveredAt?: string;
+      }>;
     };
 
     assert.equal(response.status, 200);
@@ -161,6 +192,23 @@ test('GET /api/tasks/evidence-decisions/pending reaches the queue and not the ta
     assert.equal(body.waitingOnYou?.[0].taskId, uuidToBase62(WAITING_ON_YOU_TASK_ID));
     assert.equal(body.waitingOnYou?.[0].decidability?.decidable, false);
     // And it is not counted into the number the rail leads with.
+    assert.equal(body.count, 1);
+
+    // The two groups the coordinator's conversation is read with cross the same door, their ids in
+    // the public spelling under the same field names — the waiting card's "Decide it myself" posts
+    // that task id back to the decision door, and the sent line links it — and neither is counted.
+    assert.deepEqual(body.waitingOnCoordinator?.map((row) => [row.taskId, row.projectId, row.submittedAt]), [
+      [uuidToBase62(WAITING_ON_COORDINATOR_TASK_ID), uuidToBase62(PROJECT_ID), '2026-09-04T11:00:00.000Z'],
+    ]);
+    assert.deepEqual(body.sentToCoordinator?.map((row) => [
+      row.taskId, row.title, row.projectId, row.evidenceRevision, row.deliveredAt,
+    ]), [[
+      uuidToBase62(SENT_TO_COORDINATOR_TASK_ID),
+      'the revision handed over when the coordinator came back',
+      uuidToBase62(PROJECT_ID),
+      '3',
+      '2026-09-04T11:30:00.000Z',
+    ]]);
     assert.equal(body.count, 1);
   });
 

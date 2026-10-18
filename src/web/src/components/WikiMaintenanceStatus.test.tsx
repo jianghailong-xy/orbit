@@ -91,8 +91,9 @@ describe('Activity’s status line', () => {
   for (const one of shared.cases) {
     it(`says the fixture’s line: ${one.name}`, () => {
       const row = statusRow(paint(one.health));
-      // The dot is drawn, not written: the line's `● ` is the coloured dot before the look's words.
-      expect(phoneText(row)).toBe(one.line.replace('● ', ''));
+      // The dot is drawn, not written: each `● ` of the line is the coloured dot before the look's words, or before
+      // the server's reason (P9).
+      expect(phoneText(row)).toBe(one.line.replaceAll('● ', ''));
       // The desktop's line: the review count after the entries, then the same.
       expect(row).toContain(`<b>${shared.space.pendingOps}</b> to review`);
     });
@@ -117,6 +118,25 @@ describe('Activity’s status line', () => {
     const failing = shared.cases.find((one) => one.health.maintenance.lastRun?.sessionId && one.health.maintenance.look === 'failing')!;
     const row = statusRow(paint(failing.health));
     expect(row).toMatch(new RegExp(`<a class="wk-maint-link" href="/sessions/${failing.health.maintenance.lastRun!.sessionId}"[^>]*>View run</a>`, 'u'));
+  });
+
+  it('says the server\'s reason with its own dot, amber while it comes back by itself and red when somebody has to act', () => {
+    const reasons = shared.cases.filter((one) => one.health.executor?.serverExecutes && /System model|worker|runner/u.test(one.text));
+    expect(reasons.length).toBeGreaterThanOrEqual(6);
+    const unreachable = statusRow(paint(shared.cases.find((one) => one.text.includes('System model unreachable'))!.health));
+    expect(unreachable).toContain('<span class="wk-maint wk-maint--warn"><span class="wk-maint-dot" aria-hidden="true"></span><b>System model unreachable</b></span>');
+    const refused = statusRow(paint(shared.cases.find((one) => one.text.includes('System model refused the key'))!.health));
+    expect(refused).toContain('<span class="wk-maint wk-maint--error"><span class="wk-maint-dot" aria-hidden="true"></span><b>System model refused the key</b></span>');
+    // Under runner the line says nothing of the server, whatever the runner is doing.
+    const runner = shared.cases.find((one) => one.health.executor && !one.health.executor.serverExecutes)!;
+    expect(statusRow(paint(runner.health))).not.toMatch(/System model|runner to come online|Upgrade the runner/u);
+  });
+
+  it('leads View run of a run the server\'s job made to its row on Activity, which has no session to open', () => {
+    const failing = shared.cases.find((one) => one.health.maintenance.lastRun?.jobId && one.health.maintenance.look === 'failing')!;
+    const row = statusRow(paint(failing.health));
+    expect(row).toMatch(new RegExp(`<a class="wk-maint-link" href="/wiki/${shared.space.slug}/activity\\?run=${failing.health.maintenance.lastRun!.jobId}"[^>]*>View run</a>`, 'u'));
+    expect(row).not.toContain('/sessions/');
   });
 
   it('counts every active entry the health read says, and says nothing of maintenance before it is in', () => {
