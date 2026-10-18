@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-18T04:04:29.108+00:00",
+  "owner": "amy",
+  "turns": [
+    {
+      "answered_at": "2026-10-18T03:57:56.99",
+      "client_turn": "initial-01a14d28-86e3-77",
+      "content": "T06B-AMY-S1 the first session, sent while the runner sleeps",
+      "created_at": "2026-10-18T03:57:56.239",
+      "delivered_at": "2026-10-18T03:57:56.621",
+      "kind": "message",
+      "seq": 1,
+      "session": "01a14d28",
+      "status": "ANSWERED"
+    }
+  ]
+}

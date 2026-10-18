@@ -189,6 +189,10 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   },
   KUBERNETES_FORBIDDEN: { message: 'The cluster refused the manager. An operator has to check its permissions; then it can be retried.', retryable: true },
   KUBERNETES_REJECTED: { message: 'The cluster rejected a managed runner object. An operator has to check the environment; then it can be retried.', retryable: true },
+  KUBERNETES_QUOTA_EXCEEDED: {
+    message: "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+    retryable: false,
+  },
   PVC_CONFLICT: { message: "A data volume under this runner's name is not the recorded one, so nothing was replaced. An operator has to review it.", retryable: false },
   PVC_MISSING: { message: "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.", retryable: false },
   PVC_RESTORED: { message: "This runner's data volume is back as it was recorded. A retry starts the runner on it.", retryable: true },
@@ -255,6 +259,9 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     retryable: false,
   },
 };
+
+/** The waits for room (`waitForRoom`): a create the environment's cap refused, made again once there is room. */
+const ROOM_WAITS: ReadonlySet<string> = new Set(['CONTAINER_LIMIT', 'KUBERNETES_QUOTA_EXCEEDED']);
 
 export function managedRunnerReason(code: string): ManagedRunnerReason {
   const known = REASONS[code];
@@ -495,6 +502,7 @@ export class ManagedRunnerManager {
         if (OBSERVING_STATES.has(current.managementState)) return this.unanswered(current, error);
         return failure.unreachable ? this.unreachable(current, error) : this.backoff(current, error);
       }
+      if (failure?.waitForRoom) return this.waitForRoom(current, failure.code, failure.detail);
       if (failure) {
         this.log.warn(`managed runner ${mapping.id}: ${failure.log}`);
         return this.fail(current, failure.code, failure.detail);
@@ -631,7 +639,7 @@ export class ManagedRunnerManager {
 
   private async provisioning(start: ManagedRunner): Promise<Step> {
     const { mapping, volume } = await this.ensureVolume(start);
-    if (!mapping.pvcUid) return { next: await this.commit(mapping, { pvcUid: volume.uid, ...this.settled(mapping) }) };
+    if (!mapping.pvcUid) return { next: await this.commit(mapping, { pvcUid: volume.uid, ...this.settled(mapping), ...this.roomMade(mapping) }) };
     if (!volume.boundTo) return this.waitWithin(mapping);
 
     const backing = await this.backend.readBacking(volume);
@@ -655,6 +663,7 @@ export class ManagedRunnerManager {
         stateEnteredAt: this.now(),
         lastError: this.restartReason(issued.mapping),
         ...this.settled(issued.mapping),
+        ...this.roomMade(issued.mapping),
       }),
     };
   }
@@ -687,14 +696,10 @@ export class ManagedRunnerManager {
       } catch (error) {
         // Refused for a holder that came after the look above, with nothing made: the same wait.
         if (error instanceof ManagedVolumeHeld) return this.volumeInUse(begun, error.detail, { resourceOperationState: 'COMPLETED' });
-        if (error instanceof ManagedInstanceLimit) return this.instanceLimit(begun, error.detail);
+        if (error instanceof ManagedInstanceLimit) return this.waitForRoom(begun, 'CONTAINER_LIMIT', error.detail);
         throw error;
       }
-      // Made after a wait for room: the startup deadline runs from now.
-      const roomMade = (begun.lastError as { code?: unknown } | null)?.code === 'CONTAINER_LIMIT'
-        ? { lastError: Prisma.DbNull, nextAttemptAt: null, startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000) }
-        : {};
-      return { next: await this.recordInstance(begun, instance, roomMade) };
+      return { next: await this.recordInstance(begun, instance, this.roomMade(begun)) };
     }
     if (mapping.podUid && instance.uid !== mapping.podUid) {
       return this.fence(mapping, 'POD_REPLACED', this.replacedUnproven(mapping, instance));
@@ -1433,7 +1438,7 @@ export class ManagedRunnerManager {
       async (tx) => {
         const { count } = await tx.managedRunner.updateMany({
           where: { id: mapping.id, revision: mapping.revision, leaseHolder: this.holder },
-          data: { revision: { increment: 1 }, leaseExpiresAt: this.leaseUntil(now), ...this.settled(mapping) },
+          data: { revision: { increment: 1 }, leaseExpiresAt: this.leaseUntil(now), ...this.settled(mapping), ...this.roomMade(mapping) },
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash } });
@@ -1531,23 +1536,37 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The backend made no instance because it is at its cap on instances (the Docker channel's
-   * `maxContainers`). The budget keeps the pool below that cap, so this is a container the pool does
-   * not count or a cap lowered under running runners: STARTING waits for room as it does for a held
-   * volume, spending no attempt, with no startup deadline running, and asks again after
-   * `capacityRetrySeconds`. Once the instance is made, the deadline runs from then.
+   * The backend made nothing because the environment is at a cap on what it holds: the Docker
+   * channel's `maxContainers` (CONTAINER_LIMIT), or a namespace ResourceQuota on Kubernetes
+   * (KUBERNETES_QUOTA_EXCEEDED), which can refuse the volume, the credential or the instance. The
+   * budget is meant to stay below such a cap, so this is something the pool does not count or a cap set
+   * below the budget: room comes back by itself when another runner's instance is removed, or when an
+   * operator raises the cap. So it waits as it does for a held volume — no attempt spent, no startup
+   * deadline running — and asks again after `capacityRetrySeconds`. Once the create goes through, the
+   * wait ends (`roomMade`) and the deadline runs from then.
    */
-  private async instanceLimit(mapping: ManagedRunner, detail: string): Promise<Step> {
-    if ((mapping.lastError as { code?: unknown } | null)?.code !== 'CONTAINER_LIMIT') {
-      this.log.warn(`managed runner ${mapping.id}: CONTAINER_LIMIT: ${detail}; it is started once there is room`);
+  private async waitForRoom(mapping: ManagedRunner, code: string, detail: string): Promise<Step> {
+    if ((mapping.lastError as { code?: unknown } | null)?.code !== code) {
+      this.log.warn(`managed runner ${mapping.id}: ${code}: ${detail}; it is started once there is room`);
     }
     await this.commit(mapping, {
       resourceOperationState: 'COMPLETED',
-      lastError: { ...managedRunnerReason('CONTAINER_LIMIT'), detail },
+      lastError: { ...managedRunnerReason(code), detail },
       startupDeadlineAt: null,
       nextAttemptAt: new Date(this.now().getTime() + this.profile.lifecycle.capacityRetrySeconds * 1000),
     });
     return { done: 'WAITING' };
+  }
+
+  /** A create a wait for room held back has gone through: the wait's reason goes and the startup deadline runs from now. */
+  private roomMade(mapping: ManagedRunner): Prisma.ManagedRunnerUpdateManyMutationInput {
+    const code = (mapping.lastError as { code?: unknown } | null)?.code;
+    if (typeof code !== 'string' || !ROOM_WAITS.has(code)) return {};
+    return {
+      lastError: Prisma.DbNull,
+      nextAttemptAt: null,
+      startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
+    };
   }
 
   /** Keep waiting, unless the startup deadline has passed. */

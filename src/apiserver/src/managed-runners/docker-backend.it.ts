@@ -23,7 +23,8 @@
  *   (7) a "host restart": runner killed mid-write, channel killed, manager stopped; all back: it
  *       recovers by itself;
  *   (8) the manager restarted mid-wake, (9) the channel down during a wake;
- *   (10) capacity: the third runner waits, and starts once a slot is given back;
+ *   (10) capacity: the third runner waits, and starts once a slot is given back; its owner's first session,
+ *        on her own model key, is queued while it waits and claimed by her runner once it is up;
  *   (11) a volume over its disk limit: its container is stopped, and the restart is refused on it.
  * Throughout: never two containers on one volume (sampled), never a Docker socket in this process.
  */
@@ -250,6 +251,8 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
     DATABASE_URL: url,
     JWT_SECRET,
+    // An owner's model key is stored encrypted (case 10's first session).
+    PROVIDER_SECRET_KEY: randomBytes(32).toString('hex'),
     ORBIT_MANAGED_RUNNERS_ENABLED: 'true',
     ORBIT_MANAGED_RUNNERS_PROFILE: profilePath,
   };
@@ -758,6 +761,20 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     assert.equal((await pool()).pods_reserved, 2);
     watched.set(waiting.runnerId, waiting.pvcName);
     note('(10) third runner waiting', { reason: reason.reason.code, poolReserved: await pool() });
+    // Its first session while it waits, never having reported its engines (T06b): on carol's own model key it
+    // is queued, not refused MODEL_UNAVAILABLE, and her runner takes it once it is up. Nothing named: the
+    // default of a workspace whose runner was never ready is that key.
+    const key = await api('POST', '/api/providers/mine', carol.token,
+      { label: 'carol own key', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: PLACEHOLDER_KEY });
+    assert.equal(key.status, 201, key.text);
+    const [workspace] = (await api('GET', '/api/workspaces', carol.token)).json;
+    assert.deepEqual([workspace.lastProvider, workspace.lastEngine, workspace.providerBuiltin], [key.json.slug, 'claude', false]);
+    const queuedAt = new Date();
+    const first = await api('POST', '/api/sessions', carol.token, { workspaceId: workspace.id, prompt: 'the first session, while it waits', title: 'first' });
+    assert.equal(first.status, 201, `refused while waiting for capacity: ${first.text}`);
+    assert.deepEqual([first.json.status, first.json.provider, first.json.engine], ['PENDING', key.json.slug, 'claude']);
+    assert.equal((await mappingOf(carol)).managementState, 'WAITING_CAPACITY');
+    note('(10) first session queued while waiting', { status: first.status, session: first.json.status, provider: first.json.provider, engine: first.json.engine });
 
     const bobAsleep = await putToSleep(bob);
     const c1 = await until('carol\'s container recorded', async () => {
@@ -787,6 +804,8 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     const c = await stateIs(carol, 'READY', 1, 900_000);
     assert.ok((await pool()).pods_reserved <= 2);
     note('(10) third runner started after a release', { bobSleptAt: bobAsleep.stateEnteredAt, liveWhenCarolWasCreated: liveAtCarol.length, carolReadyAt: c.stateEnteredAt, poolReserved: await pool() });
+    // The session that waited is claimed by her runner (the network reaches no model, so it is ended then).
+    note('(10) first session claimed once READY', await claimedThenEnded(carol, toUuid(first.json.id), queuedAt));
   });
 
   // ── (11) ────────────────────────────────────────────────────────────────────────────────────

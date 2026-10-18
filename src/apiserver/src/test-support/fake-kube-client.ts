@@ -101,6 +101,13 @@ export class FakeKubeCluster {
   kubeletReportsDeletions = true;
   /** The validating admission webhook Pod creates and updates pass through; none until installed. */
   admission?: FakeAdmissionWebhook;
+  /**
+   * A ResourceQuota in the namespace: object counts, enforced on every create (dry runs included) after
+   * the webhook, as the API server orders its admission. A create that would pass a count is refused 403
+   * "exceeded quota", nothing stored. Pods in a terminal phase do not count, as Kubernetes does not
+   * count them. None until set.
+   */
+  resourceQuota?: { name: string; hard: Partial<Record<'pods' | 'persistentvolumeclaims' | 'secrets', number>> };
   private readonly stores: Record<Kind, Map<string, KubeObject>> = {
     persistentvolumeclaims: new Map(),
     secrets: new Map(),
@@ -286,6 +293,23 @@ export class FakeKubeCluster {
     return fault;
   }
 
+  /** The ResourceQuota's admission of one more object of `kind`, in the words the API server refuses with. */
+  private enforceQuota(kind: Kind, name: string): void {
+    const quota = this.resourceQuota;
+    const hard = quota && kind !== 'configmaps' ? quota.hard[kind] : undefined;
+    if (hard === undefined) return;
+    const counted = [...this.stores[kind].values()].filter((object) => {
+      const phase = kind === 'pods' ? (object as unknown as Pod).status?.phase : undefined;
+      return phase !== 'Succeeded' && phase !== 'Failed';
+    });
+    if (counted.length + 1 <= hard) return;
+    throw new KubeApiError(
+      403,
+      'Forbidden',
+      `${kind} "${name}" is forbidden: exceeded quota: ${quota!.name}, requested: ${kind}=1, used: ${kind}=${counted.length}, limited: ${kind}=${hard}`,
+    );
+  }
+
   private store<T extends KubeObject>(kind: Kind, object: T): T {
     object.metadata.uid ??= randomUUID();
     object.metadata.namespace ??= this.namespace;
@@ -436,12 +460,14 @@ export class FakeKubeCluster {
           // Admission runs and answers; nothing is stored, and no fault meant for a create applies.
           this.calls.push({ op: 'dryRunCreate', kind, name: object.metadata.name });
           if (kind === 'pods') await this.admit('CREATE', clone(object) as unknown as Pod, null, username, true);
+          this.enforceQuota(kind, object.metadata.name);
           return clone(object);
         }
         this.calls.push({ op: 'create', kind, name: object.metadata.name });
         const fault = this.fault('create', kind);
         if (fault?.mode === 'timeout') throw new KubeAmbiguousError(`injected timeout before ${kind} ${object.metadata.name} committed`);
         if (kind === 'pods') await this.admit('CREATE', clone(object) as unknown as Pod, null, username, false);
+        this.enforceQuota(kind, object.metadata.name);
         if (objects.has(object.metadata.name)) {
           throw new KubeApiError(409, 'AlreadyExists', `${kind} "${object.metadata.name}" already exists`);
         }

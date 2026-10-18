@@ -315,6 +315,17 @@ test('KubernetesBackend proves the admission guard before a Pod, and words failu
     retryable: false, code: 'KUBERNETES_FORBIDDEN', detail: 'HTTP 403 Forbidden', log: 'Kubernetes answered 403 Forbidden: pods is forbidden',
   });
   assert.equal((backend.failure(new KubeApiError(401, '', 'who are you')) as { code: string }).code, 'KUBERNETES_FORBIDDEN');
+  // A ResourceQuota's refusal (T06 saw this one on k3s) is a wait for room, not a permission problem.
+  const quota = 'POST pods mr-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585: pods "mr-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585" is forbidden: '
+    + 'exceeded quota: t06-no-pods, requested: pods=1, used: pods=1, limited: pods=0';
+  assert.deepEqual(backend.failure(new KubeApiError(403, 'Forbidden', quota)), {
+    retryable: false,
+    waitForRoom: true,
+    code: 'KUBERNETES_QUOTA_EXCEEDED',
+    detail: 'exceeded quota: t06-no-pods, requested: pods=1, used: pods=1, limited: pods=0',
+    log: `Kubernetes answered 403 Forbidden: ${quota}`,
+  });
+  assert.equal((backend.failure(new KubeApiError(422, 'Invalid', quota)) as { code: string }).code, 'KUBERNETES_REJECTED', 'only a 403 is the quota\'s');
   assert.deepEqual(backend.failure(new KubeApiError(422, '', 'invalid')), {
     retryable: false, code: 'KUBERNETES_REJECTED', detail: 'HTTP 422', log: 'Kubernetes answered 422 : invalid',
   });

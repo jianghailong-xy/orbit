@@ -403,6 +403,35 @@ python3 scripts/managed-runner/lab/single-writer.py admission remove            
 | Disabled accounts | A waiting mapping went to sleep with nothing made; a running one drained and slept 37–39 s after the disable, its PVC kept; demand while disabled was recorded and woke nothing; enabled again, the waiting work woke it on the same PVC and runner row. |
 | Switch unset and `false` | Messages, Run Now, held wakeups, run times and an armed retry: no mapping, pool or namespace change and no connection to the gate for 330 s each; owner writes `404 MANAGED_RUNNER_DISABLED`; a running instance kept serving as any runner and was never drained; a self-managed runner's dispatch worked. On again, the waiting work woke the runner. |
 
+## Wake and capacity follow-ups (T06b)
+
+Recorded 2026-10-18 by task T06b: three of T06's findings, fixed and checked on the lab's real k3s with a budget of one
+runner. The records are in [the evidence](evidence/managed-runner-wake-followups/2026-10-18/README.md). The owner's
+DeepSeek key file still did not exist, so the sessions ran on fake-model.py as a DeepSeek-preset key, which is not a model.
+The runner image was rebuilt from the task's commit (deploy/managed-runner/image unchanged, plus the lab CA layer) and
+imported into the guest; nothing was pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t06b   # T06's database untouched
+W=scripts/managed-runner/lab/wake-lab.py; K=docs/evidence/managed-runner-wake-followups/2026-10-18/kit
+python3 scripts/managed-runner/lab/single-writer.py import lab.oci.tar && python3 $W prepare --image REF
+python3 $W gate start && sudo scripts/managed-runner/lab/test-server.sh start && python3 $W account root
+sudo scripts/managed-runner/lab/test-server.sh start --managed                   # after stopping the apiserver unit
+python3 scripts/managed-runner/lab/single-writer.py admission install && python3 $W record start
+sudo systemd-run --unit=orbit-mr-lab-t06b-beats $K/beats.sh                     # heartbeat, claim and state stamps
+python3 $W account amy && python3 $W key amy && python3 $W session amy --prompt "T06-B-..."   # wakes: session, message, task
+python3 $W account ben && python3 $W key ben && python3 $K/t06b.py first-session ben --prompt "T06-B-BEN-S1 ..."
+python3 $W quota on && python3 $W message amy SESSION --prompt "T06-B-AMY-Q1 ..." && python3 $W quota off
+python3 $K/timings.py beats.jsonl timeline.jsonl                                # per generation: beat, claim, READY
+```
+
+| Check | Result |
+| --- | --- |
+| Heartbeat before the first claim | Five wakes of amy (a new session, a message, a task's Run Now behind a capacity wait, a message behind a quota wait, a message) and ben's first start: the instance's first heartbeat came 0.03–0.21 s before its first claim every time, and READY 1.1–5.0 s after that claim, the manager's 5 s poll. T06 had READY about 30 s after the first claim. The first beat now waits for the engine probe: it came about 8 s after `orbit run` started. A woken instance's first claim waits for that beat, so it now comes later than T06's 0.2–5 s after the Pod ran. |
+| A self-managed runner | The same build of the runner, run on the host as a self-managed runner of the test server: it claimed its queued session 0.09 s after it started, before any heartbeat of its own, and its first tick came 30.0 s after the start. The one beat between them (4.5 s after the start) was an existing trigger: the engine re-probe after that session failed on a missing Claude Code. |
+| A namespace quota | A ResourceQuota of zero Pods, then a message to amy asleep. Her Pod create was refused 403 `exceeded quota`, and she waited in STARTING with `KUBERNETES_QUOTA_EXCEEDED` and the quota's sentence (no Retry offered) for 2 minutes. She was asked again every 30 s with no attempt spent and never failed, and it was logged once. Before this change it went FAILED `KUBERNETES_FORBIDDEN`. With the quota removed, the next retry made the Pod about 4 s later, with no retry from the owner, and the message was answered. |
+| A new account's first session | ben signed in while amy held the one slot: WAITING_CAPACITY, his runner never having reported its engines, his default workspace already on his key (`deepseek-2`). His first session with nothing named, and one naming the key, were queued (201 PENDING, on the key). Before this change both answered 409 `MODEL_UNAVAILABLE`. One on Claude Code's own sign-in was still refused 409. When amy slept, ben was admitted. He was READY on the key 15.6 s after STARTING, and both sessions were answered 1.4–1.5 s after READY. |
+
 ## Known limits
 
 - **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2

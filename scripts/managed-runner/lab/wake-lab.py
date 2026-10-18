@@ -7,10 +7,11 @@ runs, a scale to zero and the start after it, a disabled account, and the switch
 docs/managed-runner-lab.md, "Wake, sleep and capacity (T06)". It drives the test control plane of
 test-server.sh (127.0.0.1 only) and the lab's context and namespace through T04's manager-lab.py,
 whose commands it also passes through (gate, replica, status, action, view, consistency, watch,
-kill-runner, foreign). LAB_TEST_SERVER_DIR must name test-server-t06. Every command prints JSON and
-never a credential: owners' tokens and passwords, runner credentials, the model key (fake-model.py's
-placeholder) and the manager's token stay in files of mode 0600 there, in the lab's Secrets and in
-the test server's provider store. Sessions run on fake-model.py, which is not a model.
+kill-runner, foreign). LAB_TEST_SERVER_DIR must name test-server-t06, or T06b's test-server-t06b.
+Every command prints JSON and never a credential: owners' tokens and passwords, runner credentials,
+the model key (fake-model.py's placeholder) and the manager's token stay in files of mode 0600
+there, in the lab's Secrets and in the test server's provider store. Sessions run on fake-model.py,
+which is not a model.
 
   prepare --image REF           T02a's CA and webhook token, T04's manager identity and the profile:
                                 the gate as its API server, a budget of ONE runner, idle after 60 s
@@ -88,9 +89,14 @@ out = sw.out
 http = ml.http
 
 
+# T06's directory, or T06b's (its follow-ups: the heartbeat before the first claim, a quota's wait, a
+# first session queued while waiting for capacity), each with its own database.
+OWN_SERVER_DIRS = ('test-server-t06', 'test-server-t06b')
+
+
 def require_own_server_dir():
-    if SERVER.name != 'test-server-t06':
-        raise SystemExit(f'LAB_TEST_SERVER_DIR must be {sw.LAB_DIR}/test-server-t06 (the other tasks\' databases stay untouched), not {SERVER}')
+    if SERVER.name not in OWN_SERVER_DIRS:
+        raise SystemExit(f'LAB_TEST_SERVER_DIR must be {sw.LAB_DIR}/test-server-t06 or test-server-t06b (the other tasks\' databases stay untouched), not {SERVER}')
 
 
 def name_of(email):

@@ -158,8 +158,13 @@ export type ManagedRunnerBackendFailure =
    * TLS session with the API server; Docker: no connection to the channel) — so nothing was tried.
    */
   | { readonly retryable: true; readonly unreachable?: true }
-  /** A definite refusal: the mapping fails with `code` (a reason the manager's table words). */
-  | { readonly retryable: false; readonly code: string; readonly detail: string; readonly log: string };
+  /**
+   * A definite refusal: the mapping fails with `code` (a reason the manager's table words). With
+   * `waitForRoom`, a cap on what the environment may hold refused a create and nothing was made
+   * (Kubernetes: a namespace ResourceQuota): not a failure — the manager waits for room, as it does at
+   * the Docker channel's cap on containers (ManagedInstanceLimit).
+   */
+  | { readonly retryable: false; readonly code: string; readonly detail: string; readonly log: string; readonly waitForRoom?: true };
 
 /**
  * What the infrastructure holds is not what the mapping recorded, or is not safe to use: an operator

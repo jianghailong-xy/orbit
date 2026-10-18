@@ -1139,6 +1139,65 @@
       }
     },
     {
+      "name": "waking: the cluster's resource quota has no room for its Pod",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 27,
+          "generation": 3,
+          "initialProvider": "claude",
+          "lastErrorCode": "KUBERNETES_QUOTA_EXCEEDED",
+          "nextAttemptAt": "2026-10-09T08:01:00.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 27,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "KUBERNETES_QUOTA_EXCEEDED",
+          "message": "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+          "retryable": false
+        },
+        "retryAfter": "2026-10-09T08:01:00.000Z",
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
       "name": "waiting for capacity to wake",
       "server": {
         "enabled": true,
