@@ -79,6 +79,8 @@ import {
   isAsyncAgentLaunchAck,
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
+  IntegrationJobOutputRequest,
+  IntegrationJobOutputResponse,
   IntegrationJobProgressRequest,
   IntegrationJobReleaseRequest,
   IntegrationJobReleaseResponse,
@@ -1732,6 +1734,31 @@ export class RunnerApiController {
   ) {
     try {
       return await this.integrationQueue().progress(runner.id, jobId, body, runner.ownerId);
+    } catch (error) {
+      throw integrationJobHttpError(error);
+    }
+  }
+
+  /**
+   * One chunk of a running check's output (contract §2.2 J-T4's output route, §2.9 LS2): the runner
+   * streams what the check prints while it runs, fenced on the claim it names, and the control plane
+   * keeps a bounded head and tail per check.
+   *
+   * Only a v2 claim uploads. The fence is the progress route's — a claim that was taken over,
+   * released or abandoned is 409 STALE_CLAIM, a job already written down is 409 ALREADY_FINAL, and
+   * another account's job is 404 — and each of those is a stop signal for the uploader rather than a
+   * transient failure. The body is refused 400 when it is not a chunk.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('integration-jobs/:jobId/output')
+  @HttpCode(200)
+  async integrationJobOutput(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() body: IntegrationJobOutputRequest,
+  ): Promise<IntegrationJobOutputResponse> {
+    try {
+      return await this.integrationQueue().output(jobId, runner.id, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }

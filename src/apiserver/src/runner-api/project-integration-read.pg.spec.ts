@@ -527,17 +527,48 @@ test('GET /runner/projects/:id/integration reads the line, and only this account
   });
 
   await t.test('the page slots revision 12 reserves are echoed under pagination', async () => {
+    // A cursor the log read itself issues (its opaque position: claim, round, check, seq). The
+    // slots are read now, not merely echoed: `jobId` resolves the attempt and the rest narrow it.
+    const cursor = Buffer.from(JSON.stringify({ c: 1, r: 2, k: 3, s: 0 }), 'utf8').toString('base64url');
     const read = await stack.controller.getProjectIntegration(
       runnerA, a.projectId, a.coordinatorSessionId,
-      runningTaskJob, '1', '2', '3', 'page-cursor',
+      runningTaskJob, '1', '2', '3', cursor,
     );
     assert.deepEqual(read.pagination, {
       jobId: runningTaskJob,
       claim: 1,
       round: 2,
       check: 3,
-      cursor: 'page-cursor',
+      cursor,
     });
+    // The attempt is this project's, so its log slot is served (empty until the runner uploads).
+    assert.equal(read.log?.jobId, runningTaskJob);
+    assert.deepEqual(read.log?.entries, []);
+  });
+
+  await t.test('a job the request names serves its check output, narrowed by check', async () => {
+    for (let seq = 0; seq < 3; seq += 1) {
+      await stack.db.projectIntegrationJobLog.create({
+        data: {
+          jobId: runningTaskJob, claimGeneration: 1n, round: 2,
+          checkName: 'MERGE_CHECK', checkIndex: 3, seq, text: `line ${seq}\n`,
+        },
+      });
+    }
+    const read = await stack.controller.getProjectIntegration(
+      runnerA, a.projectId, a.coordinatorSessionId, runningTaskJob,
+    );
+    assert.deepEqual(read.log?.entries.map((entry) => entry.text), ['line 0\n', 'line 1\n', 'line 2\n']);
+    const otherCheck = await stack.controller.getProjectIntegration(
+      runnerA, a.projectId, a.coordinatorSessionId, runningTaskJob, undefined, undefined, '1',
+    );
+    assert.deepEqual(otherCheck.log?.entries, []);
+    // Another account's job id is not this project's attempt: the same 404 as an id naming nothing.
+    await assert.rejects(
+      () => stack.controller.getProjectIntegration(runnerB, b.projectId, b.coordinatorSessionId, runningTaskJob),
+      (error) => statusOf(error) === 404,
+      'another account\'s job was readable as this project\'s',
+    );
   });
 
   await t.test('another account\'s project is the ordinary 404', async () => {

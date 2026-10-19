@@ -1091,6 +1091,7 @@ func prepareIntegrationTree(stop context.Context, scratch string, progress *inte
 		func(out *integrationOutput) {
 			if progress != nil {
 				progress.beginStep("CHECK", "PREPARE", nil, out)
+				progress.uploadPrepare(out)
 			}
 		})
 	if progress != nil {
@@ -1244,6 +1245,7 @@ func runIntegrationCheckTracked(stop context.Context, scratch string, spec Integ
 	output, runErr, stopErr := runIntegrationCommand(ctx, scratch, spec.Command, func(out *integrationOutput) {
 		if progress != nil {
 			progress.beginStep("CHECK", "", check, out)
+			progress.uploadOutput(out, IntegrationJobOutputCheck{Name: spec.Name, Index: index})
 		}
 	})
 	if progress != nil {
@@ -1297,6 +1299,37 @@ type integrationOutput struct {
 	bytes     int64
 	started   time.Time
 	lastWrite time.Time
+	// sink is where the same writes are streamed for upload (§2.2 J-T4's output route); nil on a
+	// legacy claim and whenever no uploader was attached. Writing to it is what the tail buffer
+	// does not do — it keeps every byte, the tail keeps the last 16 KB.
+	sinkMu sync.Mutex
+	sink   integrationOutputSink
+}
+
+// integrationOutputSink is the uploader's side of the writer: one Write per chunk the command
+// printed, and a Close that sends what is left.
+type integrationOutputSink interface {
+	Write(p []byte)
+	Close()
+}
+
+// attachSink starts streaming this command's writes. Called before the command starts.
+func (o *integrationOutput) attachSink(sink integrationOutputSink) {
+	o.sinkMu.Lock()
+	o.sink = sink
+	o.sinkMu.Unlock()
+}
+
+// closeSink stops streaming and sends what is left. Called after the command's process tree is
+// gone; a late write from a child that outlived an ErrWaitDelay end finds no sink and is dropped.
+func (o *integrationOutput) closeSink() {
+	o.sinkMu.Lock()
+	sink := o.sink
+	o.sink = nil
+	o.sinkMu.Unlock()
+	if sink != nil {
+		sink.Close()
+	}
 }
 
 func newIntegrationOutput() *integrationOutput {
@@ -1305,7 +1338,6 @@ func newIntegrationOutput() *integrationOutput {
 
 func (o *integrationOutput) Write(p []byte) (int, error) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.lastWrite = time.Now()
 	o.bytes += int64(len(p))
 	o.tail = append(o.tail, p...)
@@ -1313,6 +1345,14 @@ func (o *integrationOutput) Write(p []byte) (int, error) {
 	// per line; text() answers exactly the last integrationOutputTail bytes either way.
 	if len(o.tail) > 2*integrationOutputTail {
 		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail:]...)
+	}
+	o.mu.Unlock()
+	// The uploader copies what it takes; the slice is the caller's and is reused.
+	o.sinkMu.Lock()
+	sink := o.sink
+	o.sinkMu.Unlock()
+	if sink != nil {
+		sink.Write(p)
 	}
 	return len(p), nil
 }
@@ -1367,8 +1407,10 @@ func runIntegrationCommand(ctx context.Context, dir, command string, onStart fun
 		onStart(output)
 	}
 	runErr := cmd.Run()
-	// Normal end or not, what the command left behind in its process group goes now.
+	// Normal end or not, what the command left behind in its process group goes now, and the
+	// uploader sends what the command printed before the next step starts.
 	_ = terminateSessionProcessTree(cmd)
+	output.closeSink()
 	if errors.Is(runErr, exec.ErrWaitDelay) {
 		runErr = nil
 	}
@@ -1438,6 +1480,7 @@ type integrationProgress struct {
 	round     int
 	check     *IntegrationJobCurrentCheck
 	output    *integrationOutput
+	uploads   *integrationLogUploader
 	stepAt    time.Time
 	afterPush bool
 	noted     bool
@@ -1455,6 +1498,9 @@ func newIntegrationProgress(jobCtx context.Context, cancel context.CancelCauseFu
 		// a phase the control plane accepts.
 		phase: "FETCH",
 	}
+	// The output stream exists only for a v2 claim: a legacy claim has no outputSender and keeps
+	// exactly the 16 KB tail its result carries (§2.2 J-T4, §2.9 LS2).
+	p.uploads = newIntegrationLogUploader(sendCtx, cmd)
 	p.wg.Add(1)
 	go p.tick()
 	return p
@@ -1491,9 +1537,13 @@ func (p *integrationProgress) tick() {
 }
 
 // close ends the ticker and whatever send is in flight, and waits for the goroutine. Called on
-// every exit, so no report outlives its job.
+// every exit, so no report outlives its job. The output uploader finishes first, while sendCtx is
+// still alive, so the last chunks a check printed are not lost to the shutdown.
 func (p *integrationProgress) close() {
 	close(p.done)
+	if p.uploads != nil {
+		p.uploads.close()
+	}
 	p.stopSends()
 	p.wg.Wait()
 }
@@ -1541,6 +1591,24 @@ func (p *integrationProgress) beginStep(phase, step string, check *IntegrationJo
 	p.mu.Unlock()
 	resp, err := p.send(p.sendCtx, p.request())
 	p.handleAnswer(resp, err)
+}
+
+// uploadOutput streams this command's writes as the check they belong to (§2.2 J-T4's output
+// route). A legacy claim has no uploader, and nothing is attached.
+func (p *integrationProgress) uploadOutput(out *integrationOutput, check IntegrationJobOutputCheck) {
+	if p.uploads != nil {
+		p.uploads.attach(out, check)
+	}
+}
+
+// uploadPrepare streams the tree's recipe under the check it is preparing: the recipe runs once
+// before the checks, so its output belongs to the first check's log (and shares that check's seq
+// numbering, which is why the recipe's chunks are not overwritten by check 1's first chunk).
+func (p *integrationProgress) uploadPrepare(out *integrationOutput) {
+	if p.uploads == nil || len(p.cmd.Checks) == 0 {
+		return
+	}
+	p.uploads.attach(out, IntegrationJobOutputCheck{Name: p.cmd.Checks[0].Name, Index: 1})
 }
 
 // endStep leaves the named sub-step. The next report either names a new one or says none.
@@ -1980,6 +2048,15 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 			req.ClaimGeneration = job.ClaimGeneration
 			req.LeaseOwner = job.LeaseOwner
 			return t.integrationJobProgress(ctx, job.JobID, req)
+		}
+		// The output stream is v2's too (§2.2 J-T4, §2.9 LS2): chunks carry the same claim fence and
+		// are redacted of this machine's own secrets before they leave it. A legacy claim gets
+		// neither, and keeps the 16 KB result tail it always had.
+		job.outputRedactor = newIntegrationOutputRedactor(t.token)
+		job.outputSender = func(ctx context.Context, req IntegrationJobOutputRequest) error {
+			req.ClaimGeneration = job.ClaimGeneration
+			req.LeaseOwner = job.LeaseOwner
+			return t.integrationJobOutput(ctx, job.JobID, req)
 		}
 	}
 	result := runIntegrationJobUntilWithProgress(stop, job, func(phase string, moved *IntegrationUpstreamMoved) {
