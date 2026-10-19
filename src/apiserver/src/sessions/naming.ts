@@ -385,8 +385,10 @@ export const ENGINE_NAMING_INSTRUCTIONS =
  * provider holds no key the server may spend (`configuredRow` is the configured row the session's
  * provider names, null for a built-in engine or a pool), since either of those named it at creation
  * (SessionsService.beautifySessionLater) — and only on an engine with a way to answer: Claude Code's
- * own generate_session_title, a Codex side thread, or the title Cursor CLI gives a session in its first
- * turn (session_info_update, docs/cursor-runtime-contract.md §3.2), which its runner reports only when asked.
+ * own generate_session_title, a Codex side thread, or the title Cursor CLI gives a conversation from the
+ * first prompt it is sent (session_info_update, docs/cursor-runtime-contract.md §3.2), which its runner
+ * reports only when asked, and never for a conversation it opened: that one's first prompt leads with Orbit's
+ * agent instructions, which the title then names (D-P8-2), so the session keeps the title cut from its prompt.
  * A session whose title is not the one cut from its prompt has a real one already — given by a person,
  * a task, a project, or an earlier naming — and so does any session that opened with no words.
  */

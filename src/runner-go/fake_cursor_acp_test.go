@@ -649,15 +649,18 @@ func newCursorReplay(t *testing.T, recording, session string) *cursorReplay {
 	return newCursorReplayScript(t, fakeCursorACPScript{Recording: recording, Session: session})
 }
 
-// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor) the
-// way the rest of the script says.
+// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor, or a
+// test's own directory by its absolute path) the way the rest of the script says.
 func newCursorReplayScript(t *testing.T, script fakeCursorACPScript) *cursorReplay {
 	t.Helper()
 	recording := script.Recording
 	dir := t.TempDir()
-	abs, err := filepath.Abs(filepath.Join("testdata", "cursor", recording))
-	if err != nil {
-		t.Fatal(err)
+	abs := recording
+	if !filepath.IsAbs(abs) {
+		var err error
+		if abs, err = filepath.Abs(filepath.Join("testdata", "cursor", recording)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(abs, "stdout.jsonl")); err != nil {
 		t.Fatalf("no recording %s: %v", recording, err)

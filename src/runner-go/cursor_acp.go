@@ -39,6 +39,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -1125,11 +1126,20 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 
 	var naming sync.WaitGroup
 	defer naming.Wait()
+	// Cursor names a conversation from the first prompt it is sent (§3.2). A conversation opened here has
+	// Orbit's agent instructions ahead of that prompt, so its name sums up those rather than the person's
+	// message — "Orbit Agent Instructions" in P8 — in whatever words Cursor picks. None is reported: the
+	// session keeps the title cut from the person's first message.
+	var openedWithInstructions atomic.Bool
 	mapper := newCursorEventMapper(p.emitFor)
 	mapper.onTitle = func(title string) {
 		// Only when the claim asks for it (session_naming.go): any other session's title is a person's,
 		// a task's or the server's, which a title Cursor made up must not replace.
 		if p.job.Naming == nil || p.t == nil {
+			return
+		}
+		if openedWithInstructions.Load() {
+			logln("session title: Cursor CLI named", p.job.SessionID, "from Orbit's agent instructions, not the person's message; not reported")
 			return
 		}
 		naming.Add(1)
@@ -1199,6 +1209,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	if method == "session/new" {
 		instructions = cursorAgentInstructions(p.job)
 	}
+	openedWithInstructions.Store(instructions != "")
 	// The control plane keeps the runtime session id from this event (runtimeInitSessionId).
 	p.emit(evSystem, map[string]interface{}{"subtype": "init", "provider": providerCursor, "runtime": "acp",
 		"sessionId": sessionID, "cliVersion": launch.Version, "resumed": method == "session/load"})

@@ -64,6 +64,8 @@ type cursorRunOptions struct {
 	agent   func(*AgentExecConfig)
 	// naming is whether the claim asks the engine to name the session (session_naming.go).
 	naming bool
+	// title is the title the claim carries; "Cursor test session" when empty.
+	title string
 	// runtimeSessionID is a conversation the session has already had.
 	runtimeSessionID string
 	blobs            map[string]string // attachments the control plane serves, by id
@@ -195,7 +197,11 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	if env == nil {
 		env = map[string]string{"CURSOR_API_KEY": cursorTestKey}
 	}
-	job := &ClaimedSession{SessionID: cursorTestSessionID, Provider: providerCursor, Title: "Cursor test session", TaskID: opts.taskID,
+	title := opts.title
+	if title == "" {
+		title = "Cursor test session"
+	}
+	job := &ClaimedSession{SessionID: cursorTestSessionID, Provider: providerCursor, Title: title, TaskID: opts.taskID,
 		RuntimeSessionID: opts.runtimeSessionID, Agent: AgentExecConfig{Provider: providerCursor, Env: env}}
 	if opts.naming {
 		job.Naming = &SessionNamingJob{Description: "the session's opening request"}
@@ -804,9 +810,12 @@ func TestCursorACPEventMapping(t *testing.T) {
 		}
 	})
 	t.Run("title", func(t *testing.T) {
+		// A conversation a later process loads, whose prompts are the person's own. One opened here leads with
+		// Orbit's agent instructions, and its title is never reported (TestCursorSessionTitlePrefix).
 		first, then := cursorTurns(cursorMessage("turn-1", "first message"))
-		run := runCursorSession(t, cursorRunOptions{recording: "multi-turn-tools-default/turns", first: first, then: then, naming: true})
-		if !reflect.DeepEqual(run.namings, []SessionNamingRequest{{Replaces: "Cursor test session", Title: "Automated Protocol Probe"}}) {
+		run := runCursorSession(t, cursorRunOptions{recording: cursorLoadedTitleRecording(t, "Previous Shell Command"), runtimeSessionID: "<UUID_1>",
+			first: first, then: then, naming: true})
+		if !reflect.DeepEqual(run.namings, []SessionNamingRequest{{Replaces: "Cursor test session", Title: "Previous Shell Command"}}) {
 			t.Fatalf("naming = %+v, want Cursor's title reported once against the claimed one", run.namings)
 		}
 	})
@@ -1065,8 +1074,9 @@ func TestCursorACPTwoTurnsSettleOnce(t *testing.T) {
 		if len(run.completions) != 1 || len(run.of("turn-1", evTurnEnd)) != 1 {
 			t.Fatalf("completions %+v, turn_ends %v: want one of each", run.completions, run.of("turn-1", evTurnEnd))
 		}
-		// The title and the commands arrived after the prompt's answer and still reached the session.
-		if !reflect.DeepEqual(run.namings, []SessionNamingRequest{{Replaces: "Cursor test session", Title: "Git Attribution Probe"}}) {
+		// The title and the commands arrived after the prompt's answer. The title names a conversation opened
+		// with Orbit's agent instructions, so it is not reported (TestCursorSessionTitlePrefix/late-title).
+		if len(run.namings) != 0 {
 			t.Fatalf("naming = %+v", run.namings)
 		}
 		if commands, _ := slashReg.extrasFor(providerCursor, nil); len(commands) == 0 {
