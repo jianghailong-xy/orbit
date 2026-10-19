@@ -763,7 +763,7 @@ test('(3) the owner declining a BLOCKED candidate closes its failure, and its ca
 
 // ── (4) cancelled, then the late result ────────────────────────────────────────────────────────
 
-test('(4) a CHECK_FAILED that comes back after the owner called the merge back opens nothing',
+test('(4) a cancel asked of a landing that is still reporting is settled by its result, and a red that comes back opens nothing',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -776,12 +776,22 @@ test('(4) a CHECK_FAILED that comes back after the owner called the merge back o
       await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, LINE_FIRST);
       const land = await onlyClaim(stack, w, 'LAND_PROMOTION');
 
-      // The owner calls the merge back while the runner is in its checks: the job is asked to stop,
-      // and the candidate ends now (M-T10).
+      // The owner calls the merge back while the runner is in its checks. The job is still
+      // reporting, so it is only ASKED to stop (J-T8): the candidate stays CONFIRMED and reads as
+      // cancelling, and its result is what settles it (M-T10, J-T12).
       const view = await stack.promotions.cancel({ userId: w.ownerId }, w.projectId, promotion.id);
-      assert.equal(view.state, 'CANCELLED');
+      assert.equal(view.state, 'CONFIRMED', 'a landing still reporting is asked, not declared stopped');
+      assert.equal(view.execution?.state, 'RUNNING');
+      const asked = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: land.jobId },
+        select: { state: true, cancelRequestedAt: true },
+      });
+      assert.equal(asked.state, 'RUNNING');
+      assert.ok(asked.cancelRequestedAt, 'the job it reported on was the one asked to stop');
 
-      // The checks had already run, and come back red.
+      // The checks had already run, and come back red. The report is kept as the fact it is, the
+      // cancellation it answers is settled, and nothing is opened: nobody is waiting for that
+      // check any more.
       const late = await report(stack, w, land, redCheck(LINE_FIRST));
       assert.equal(late.accepted, true, 'the runner\'s report is taken');
       assert.equal(late.openItemId, null, '…and opens nothing');
@@ -794,7 +804,7 @@ test('(4) a CHECK_FAILED that comes back after the owner called the merge back o
       assert.equal(job.state, 'CHECK_FAILED', 'the report is kept where it belongs: on the job row');
       assert.ok(job.cancelRequestedAt, 'the job it reported on was the one asked to stop');
       assert.equal((await promotionById(stack.db, promotion.id)).state, 'CANCELLED',
-        'and the candidate keeps the answer it already had');
+        'and the cancellation the result settles is the candidate\'s ending');
     } finally {
       await stack.db.$disconnect();
     }

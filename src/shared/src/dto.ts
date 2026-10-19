@@ -2702,7 +2702,10 @@ export interface IntegrationJobCommand {
    *  `promotion-automatic-land/v1`; absent on every other job. */
   automatic?: boolean;
   checks: IntegrationCheckSpec[];
-  /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
+  /** Somebody asked for this job to stop. Today's runner reads it once, when it starts the job (and
+   *  a takeover's new process reads the request its claim carries), so a request written while a
+   *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to
+   *  every answer (§2.2 J-T4, J-T12). */
   cancelRequested: boolean;
 }
 

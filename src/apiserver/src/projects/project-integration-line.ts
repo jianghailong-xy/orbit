@@ -14,7 +14,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
-import { IntegrationCheckSource, integrationJobLimitSeconds } from './project-integration-job';
+import { IntegrationCheckSource, endTimedOutLanding, integrationJobLimitSeconds, timedOutErrorCode } from './project-integration-job';
 import { readProjectLandTaskViews } from './project-task-integration';
 
 /**
@@ -658,6 +658,75 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
     if (check.exitCode !== check.expectedExitCode) return 'FAILING';
   }
   return complete ? 'PASSING' : 'UNKNOWN';
+}
+
+/** How a call to `stopInFlightJob` left the one generation it names. */
+export type InFlightStop =
+  /** A QUEUED row: ended `CANCELLED` on the spot (J-T8) — it never held the push, and it stops
+   *  counting as in flight, in a queue, or against a criterion. */
+  | { outcome: 'CANCELLED'; errorCode: null }
+  /** A RUNNING row already silent past its limit (§7.2 V6): ended `ERROR` now, by the J-T9
+   *  compare-and-set, with J12's code for its kind — nobody will ever collect it otherwise. */
+  | { outcome: 'ENDED'; errorCode: 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' }
+  /** A RUNNING row still inside its reporting window: `cancel_requested_at` only, and the runner's
+   *  result decides (J-T12, M-T8). */
+  | { outcome: 'STOP_REQUESTED'; errorCode: null }
+  /** Not in flight when it was read, or the job moved on under the write. Nothing was written. */
+  | { outcome: 'NONE'; errorCode: null };
+
+/**
+ * J-T8's one way of stopping a generation, for every door that stops one: the owner's Cancel and a
+ * candidate's supersession (`project-promotion.service.ts`), a retired candidate's check (M-T13),
+ * and a task reopened or cancelled (`tasks.service.ts`).
+ *
+ * WHY IT IS NOT JUST A WRITE. A QUEUED row is ended here and now: it was never claimed, so nothing
+ * can have pushed, and leaving it to the runner's result is what used to leave a row nobody could
+ * claim counted as in flight for ever. A RUNNING row still reporting is only ASKED to stop — the
+ * runner reads that when it next reports (or when its next process claims it, J-T3) and answers
+ * CANCELLED; the server must not claim a landing did not happen while a push may be in flight.
+ * The exception is a RUNNING row that is already silent past its limit (§7.2 V6, read by
+ * `readInFlightJobs` — this function has no timeout rule of its own): a request written onto it
+ * would never be collected, and it would hold its `serial_key` for ever, so it is ended on the spot
+ * as the ERROR it is, with J12's code (`timedOutErrorCode`: a check is always `RUNNER_LOST`; a
+ * landing's legacy claim is `PUSH_OUTCOME_UNKNOWN`).
+ *
+ * `NONE` is an ordinary answer: the caller raced a result, a claim or another stop and the row has
+ * already moved, so it must act on nothing. A caller that needs to know whether the promotion may
+ * claim "not cancelled" reads the outcome: only `CANCELLED` and `RUNNER_LOST` prove nothing was
+ * pushed.
+ */
+export async function stopInFlightJob(
+  tx: Prisma.TransactionClient,
+  input: { projectId: string; jobId: string; now: Date },
+): Promise<InFlightStop> {
+  const [job] = await readInFlightJobs(tx, input.projectId, input.jobId);
+  if (!job) return { outcome: 'NONE', errorCode: null };
+
+  if (job.state === 'QUEUED') {
+    const ended = await tx.projectIntegrationJob.updateMany({
+      where: { id: input.jobId, state: 'QUEUED' },
+      data: { state: 'CANCELLED', cancelRequestedAt: input.now, finishedAt: input.now },
+    });
+    if (ended.count === 1) return { outcome: 'CANCELLED', errorCode: null };
+    // It was claimed between the read and the write: fall through and ask that claim to stop.
+  } else if (job.timedOut) {
+    if (await endTimedOutLanding(tx, job)) {
+      return { outcome: 'ENDED', errorCode: timedOutErrorCode(job.kind) };
+    }
+    // The compare-and-set lost: it reported again between the read and the write, so it is talking
+    // after all and gets the ordinary ask below.
+  }
+
+  const asked = await tx.projectIntegrationJob.updateMany({
+    where: { id: input.jobId, state: 'RUNNING', cancelRequestedAt: null },
+    data: { cancelRequestedAt: input.now },
+  });
+  if (asked.count === 1) return { outcome: 'STOP_REQUESTED', errorCode: null };
+  // A second stop of the same claim (already asked), or a result that ended it first.
+  const [after] = await readInFlightJobs(tx, input.projectId, input.jobId);
+  return after?.state === 'RUNNING'
+    ? { outcome: 'STOP_REQUESTED', errorCode: null }
+    : { outcome: 'NONE', errorCode: null };
 }
 
 /** What a request may set (L5). Each field is written only when sent; null clears the merge check. */

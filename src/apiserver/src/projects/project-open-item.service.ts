@@ -1693,9 +1693,11 @@ export class ProjectOpenItemService {
    *
    * A TIMED-OUT LANDING (§2.2 J-T9). A RUNNING newest landing whose runner has said nothing past its
    * limit is judged here by the read the job list draws (`readInFlightJobs`), and a retry of it first
-   * ends it as `ERROR · RUNNER_LOST` — a compare-and-set on the heartbeat it was judged from — then
-   * queues the next generation like any other rerun. The account owner may press that one without an
-   * item of theirs: nothing has opened one yet.
+   * ends it as `ERROR` — a compare-and-set on the heartbeat it was judged from, with J12's code for
+   * the kind: `PUSH_OUTCOME_UNKNOWN` for a landing (its legacy claim cannot prove nothing was
+   * pushed), `RUNNER_LOST` only where the claim's protocol can — then queues the next generation
+   * like any other rerun. The account owner may press that one without an item of theirs: nothing
+   * has opened one yet.
    */
   async retryIntegration(
     ownerId: string,
