@@ -100,10 +100,20 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // waiting loses nothing. There is no deadline after which the update stops waiting — a runner busy
 // at every check stays on its release until a check finds it idle. The heartbeat reports the wait
 // as waitingForIdle.
-func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, interval time.Duration) selfUpdateChecker {
+//
+// The work the heartbeat started is waited out the same way (operations): a landing's checks can run
+// for an hour, and the stop an update makes would give them only its operations budget before
+// stopping them and handing the landing back to be run again (shutdownSequence).
+func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval time.Duration) selfUpdateChecker {
 	return func(ctx context.Context, server string) (string, bool) {
 		remote, ok := check(ctx, server)
 		if !ok {
+			return "", false
+		}
+		if n := operations(); n > 0 {
+			logln(fmt.Sprintf("orbit %s update available; deferred — %d heartbeat operation(s) in flight, checking again in %s",
+				remote, n, interval))
+			noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
 			return "", false
 		}
 		if n := pool.closeForUpdate(); n > 0 {
@@ -391,7 +401,6 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		LeaseOwner:         r.LeaseOwner,
 		MaxSeq:             r.MaxSeq,
 		Source:             r.Source,
-		WikiMaintenance:    r.WikiMaintenance,
 	}
 }
 
@@ -939,9 +948,29 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// The owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate) runs the release check
 	// below without waiting for its next tick. Buffered by one, like hbNow.
 	checkSelfUpdateNow := make(chan struct{}, 1)
+	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
+	// goroutine itself. Stop dispatching it as soon as drain begins; what is already running is
+	// waited for, within the stop's budget (shutdownSequence), before this process exits or a
+	// self-update replaces its image.
+	// Counted as well as joined: a managed instance reports how much of it is running (managed_sleep.go).
+	var heartbeatOps countedOps
+	// The sign-in relay reclaims the slot an add-account attempt leaves empty; a slot one of this
+	// runner's live sessions is stuck to is not one it may take away.
+	login := &loginRelay{liveSessionIDs: pool.sessionIDs}
+	install := &installRelay{}
+	// What the stop waits for besides the sessions (shutdownSequence), and what a self-update waits
+	// out first: the heartbeat's operations and an engine install.
+	operationsInFlight := func() int { return heartbeatOps.inFlight() + install.inFlight() }
+	// The heartbeat's operations are stopped when the stop's budget for them runs out
+	// (shutdownSequence), not when the claim loop ends; what is handed back then is sent until the
+	// stop's deadline.
+	opsCtx, interruptOps := context.WithCancel(context.Background())
+	defer interruptOps()
+	handBackCtx, stopHandBacks := context.WithCancel(context.Background())
+	defer stopHandBacks()
 	var check selfUpdateChecker
 	if selfUpdateEnabled() {
-		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)
+		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval)
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
 			// What the check found rides a beat now rather than up to half a minute from now: after
@@ -1194,17 +1223,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	go runWakeLoop(loopCtx, t.waitForWake, beatNow)
 	engineSignedOutSeen.Store(&engineSignedOut)
 	defer engineSignedOutSeen.Store(nil)
-	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
-	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
-	// already running before a self-update replaces this process image.
-	// Counted as well as joined: a managed instance reports how much of it is running (managed_sleep.go).
-	var heartbeatOps countedOps
-	// The sign-in relay reclaims the slot an add-account attempt leaves empty; a slot one of this
-	// runner's live sessions is stuck to is not one it may take away.
-	login := &loginRelay{liveSessionIDs: pool.sessionIDs}
-	install := &installRelay{}
 	// Codex rate-limit reset steps outlive the drain signal (a started step still reports), and are
-	// stopped only once the heartbeat has: nothing can be delivered to this process after that.
+	// stopped once the sessions have drained (shutdownSequence): the control plane hands a draining
+	// process nothing, so nothing more can be delivered to it.
 	resetCtx, stopResets := context.WithCancel(context.Background())
 	defer stopResets()
 	resetConsumer := newCodexResetConsumer(codexUsageProbe)
@@ -1213,6 +1234,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
 	sleeper := newManagedSleep()
 	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
+	// Closed once a managed instance's first heartbeat has been taken, or given up on
+	// (managedStartupBeat); its claims wait for it.
+	startupBeatDone := make(chan struct{})
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
@@ -1233,9 +1257,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Repository operations this process has in flight, for the same reason: the claim is exclusive
 		// in the control plane, but a redelivered heartbeat must not start the same snapshot twice.
 		repoOpsNow := map[string]bool{}
+		// Whether the last beat was answered: what a managed instance's first beat is retried on.
+		beatTaken := false
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
-		runHeartbeatTicks(hbStop, ticker.C, hbNow, func() {
+		beat := func() {
+			beatTaken = false
 			draining := loopCtx.Err() != nil
 			assetMu.Lock()
 			cmds, skills := hbCommands, hbSkills
@@ -1276,6 +1303,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				return
 			}
+			beatTaken = true
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.
@@ -1361,6 +1389,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						logln("releasing claimed "+r.kind+" for", r.sessionID+":", err)
 					}
 				}
+				// The same for a landing this answer claimed for this process (§2.2 J-T11).
+				handBackUnstartedIntegrationJobs(resp.IntegrationJobs, t.leaseOwner, func(jobID string) bool {
+					mergeMu.Lock()
+					defer mergeMu.Unlock()
+					return integratingNow[jobID]
+				}, &heartbeatOps, func(job IntegrationJobCommand) { handBackIntegrationJob(handBackCtx, t, job) })
 				return
 			}
 			// The platform's own git work: put a task's branch onto its project's integration
@@ -1392,7 +1426,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(integratingNow, job.JobID)
 						mergeMu.Unlock()
 					}()
-					runIntegrationJobAndReport(loopCtx, t, job)
+					runIntegrationJobAndReport(opsCtx, handBackCtx, t, job)
 				}(job)
 			}
 			// The wiki's repository operations (contracts/wiki.contract.json `repoOps`, design §7):
@@ -1733,7 +1767,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Check the Cursor API keys somebody is waiting on (cursor_key_check.go), off this goroutine for
 			// the reason the history scan is.
 			startCursorKeyChecks(resp.CursorKeyChecks, &heartbeatOps, t.cursorKeyCheckResult)
-		})
+		}
+		// A managed instance beats before it claims anything: as soon as the engine probe has answered,
+		// rather than at the first tick, so that the control plane sees it online, with its engines,
+		// before its first claim. The ticker keeps its cadence from the start.
+		if currentManagedInstance() != nil {
+			managedStartupBeat(loopCtx, engineHealth.probed(), managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,
+				func() bool { beat(); return beatTaken })
+		}
+		close(startupBeatDone)
+		beatUntilStopped(hbStop, ticker.C, hbNow, beat)
 	}()
 
 	logln(fmt.Sprintf("runner %q online -> %s (max %d concurrent)", cfg.Name, cfg.ServerURL, cfg.MaxConcurrent))
@@ -1914,6 +1957,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		liveSet := pool.ids()
 		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
 		gcUploads(liveSet)
+	}
+
+	// A managed instance claims nothing before its first heartbeat (managedStartupBeat): the manager's
+	// READY waits for one, and an instance that claimed first served turns while its mapping read
+	// STARTING. A self-managed runner claims at once, as it always has.
+	if currentManagedInstance() != nil {
+		select {
+		case <-startupBeatDone:
+		case <-loopCtx.Done():
+		}
 	}
 
 	// Consecutive claim failures at the transport, which is what the retry backoff below is paced by.
@@ -2100,33 +2153,48 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// any live session whose runner has been silent >90s, so going quiet while we finish an
 	// in-flight turn would get the very session we're trying to preserve marked FAILED.
 	// Cover provider drain, both release backstops, the final event flush, and a racing
-	// terminal finalization. systemd's stop timeout remains above this whole envelope.
-	drainDeadline := time.Now().Add(shutdownSupervisorTimeout)
-	drainTimedOut := false
-	for {
-		n := pool.count()
-		if n == 0 {
-			break
-		}
-		if time.Now().After(drainDeadline) {
-			logln(fmt.Sprintf("drain deadline reached; %d session supervisor(s) still attached, exiting", n))
-			drainTimedOut = true
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	close(hbStop)
-	<-hbDone
+	// terminal finalization — and the heartbeat's own operations, which keep it beating too
+	// until they are done or stopped (shutdownSequence). systemd's stop timeout and a managed
+	// Pod's termination grace both remain above this whole envelope.
+	drainStart := time.Now()
+	drainDeadline := drainStart.Add(shutdownSupervisorTimeout)
+	// A landing being handed back is sent until the deadline and no longer: past it, the lease
+	// hands the job on, as it did before there were hand-backs.
+	handBacksEnd := time.AfterFunc(time.Until(drainDeadline), stopHandBacks)
+	defer handBacksEnd.Stop()
+	heartbeatStopped := false
+	left := shutdownSequence{
+		sessions:   pool.count,
+		operations: operationsInFlight,
+		// A reset step still waiting on a receipt gives up once the sessions have drained rather than
+		// holding the stop: this process is handed nothing more, and its claim goes to the successor
+		// under the same key.
+		stopResets: stopResets,
+		interrupt:  interruptOps,
+		stopHeartbeat: func() {
+			close(hbStop)
+			select {
+			case <-hbDone:
+				heartbeatStopped = true
+			case <-time.After(shutdownLastBeatWait):
+				logln("the last heartbeat did not finish within", shutdownLastBeatWait, "; stopping without waiting for it")
+			}
+		},
+		poll: shutdownPollInterval,
+	}.run(drainStart.Add(shutdownOperationsTimeout), drainDeadline)
+	drainTimedOut := left.sessions > 0 || left.operations > 0
 	telemetry.wait()
 	agentDirs.wait()
 	login.stop()
-	// An installer already running is joined, not killed: a half-applied `curl | bash` is worse
-	// than one that finishes while the runner shuts down.
-	install.stop()
-	// A reset step still waiting on a receipt gives up now rather than holding the self-update: this
-	// process is handed nothing more, and its claim goes to the successor under the same key.
-	stopResets()
-	heartbeatOps.Wait()
+	if left.operations == 0 && heartbeatStopped {
+		// An installer already running is joined, not killed: a half-applied `curl | bash` is worse
+		// than one that finishes while the runner shuts down. Joined only once the wait above has
+		// seen it finish: past the drain deadline, the runner's own stop is what is at stake. What
+		// the heartbeat's last answers started since is a hand-back, sent until the deadline.
+		install.stop()
+		heartbeatOps.Wait()
+	}
+	stopHandBacks()
 	// A SIGTERM delivered after update discovery still means "stop", not
 	// "install". Stop signal forwarding first so this final channel check cannot
 	// miss a delivery racing with the return value.

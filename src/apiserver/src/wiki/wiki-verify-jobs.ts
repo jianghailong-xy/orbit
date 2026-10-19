@@ -9,8 +9,8 @@ import type { PrismaService } from '../prisma/prisma.service';
  *
  * THE TRIGGER IS A FACT, NOT A CLOCK. An op that enters `verifying` is the whole reason a job exists, so the
  * submission that recorded it enqueues one: the session that proposed it is the one waiting for the verdict
- * (in the server path it does not run `orbit wiki verify` at all — contract `agentSurface.verify`), and the
- * job is made at {@link WIKI_VERIFY_PRIORITY} so it is taken before background maintenance. Nothing polls:
+ * (its `orbit wiki verify`, if it runs one, only asks the server and waits — contract `agentSurface.verify`), and
+ * the job is made at {@link WIKI_VERIFY_PRIORITY} so it is taken before background maintenance. Nothing polls:
  * where the op came from is a session that is still waiting.
  *
  * ONE JOB PER WAITING SESSION, AND THE SECOND OP RIDES THE FIRST. A queued job has not read the list yet, so
@@ -37,7 +37,7 @@ export function wikiVerifyJobNeeded(ops: readonly WikiOpOutcome[]): boolean {
  * Queue the verification of one session's waiting ops in one space, unless the session already has a verify
  * job queued there (which will read the list when it runs, and so covers this too). The job's input names the
  * session whose ops it verifies: `recordVerifications` finds an op among its proposer's, so the job acts as
- * that session — an identity a row, not a session, has to be (the runner path's own rule, `verification.who`).
+ * that session — an identity a row, not a session, has to be (the runner path's own rule before P11, `verification.who`).
  */
 export async function enqueueWikiVerifyJob(
   prisma: PrismaService,

@@ -550,6 +550,8 @@ final class AppModel {
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
         // A managed runner set up from Infrastructure brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
+        // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
+        managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         managedRunner = managedRunnerModel
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)

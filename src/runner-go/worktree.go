@@ -2702,12 +2702,17 @@ const maxRetainedEligibleCheckouts = 32
 // Branches are always preserved — only the checkout directory and the base ref go — so anything
 // reclaimed here can be checked out again from its branch. On any query failure the candidates are
 // left untouched: GC never destroys a checkout it couldn't confirm removable.
+//
+// Merge recovery's repair checkouts (recovery-*) are no session's, so the control plane is not asked
+// about them and none of the above applies: one that is clean and has not changed for two weeks goes,
+// its branch kept, whatever the disk looks like, and any other stays (gcRecoveryCheckouts).
 func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure) {
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return
 	}
+	gcRecoveryCheckouts(root, entries)
 	// touched is the checkout directory's mtime: the last time anything wrote in it, which is a
 	// better answer to "whose contents is a successor least likely to still want" than the
 	// session's age, and it is what orders every removal below. A directory that will not stat is

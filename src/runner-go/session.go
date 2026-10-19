@@ -269,7 +269,12 @@ type sessionMeta struct {
 	// from (cursorSessionAccountDirToRecord): what a removal of that account refuses to take while the
 	// session is running. Empty on Default, and on a key.
 	CursorAccountDir string `json:"cursorAccountDir,omitempty"`
-	WorkDir          string `json:"workDir"`
+	// CursorIdentity is the credential a Cursor CLI session's conversation was opened on
+	// (cursorCredentialIdentity): an account's id, or a key's or a token's fingerprint, never the key or
+	// the token. A process that would continue the conversation on another is refused before it starts
+	// (cursorIdentityRefusal); one that opens or loads it records the one it runs on (writeCursorSessionMeta).
+	CursorIdentity string `json:"cursorIdentity,omitempty"`
+	WorkDir        string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
 	// to another of this machine's workspaces last ran, and so where its Claude conversation is
 	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
@@ -332,28 +337,34 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 }
 
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, "")
 }
 
 // writeClaudeSessionMeta records the account a Claude engine has actually started on. A generic
 // write before that start keeps the previous account so removing it cannot strand the conversation;
 // once the new engine is running, moving to Default must clear that old account from the record.
 func writeClaudeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true, false)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true, false, "")
 }
 
 // writeKimiSessionMeta is writeSessionMeta from a Kimi engine that has started in the KIMI_CODE_HOME
 // its claim names, the session's conversation carried there first (carryKimiConversation): the one
 // write that moves KimiCodeHome to another account.
 func writeKimiSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, true)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, true, "")
+}
+
+// writeCursorSessionMeta is writeSessionMeta from a Cursor CLI process that has opened or loaded the
+// session's conversation on identity (cursorCredentialIdentity): the one write that pins it there.
+func writeCursorSessionMeta(scratch string, job *ClaimedSession, execDir, identity string) {
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, identity)
 }
 
 func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
-	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false, false)
+	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false, false, "")
 }
 
-func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, claudeStarted, kimiStarted bool) {
+func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, claudeStarted, kimiStarted bool, cursorIdentity string) {
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
@@ -380,6 +391,11 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		if !claudeStarted && claudeDir == "" {
 			claudeDir = existing.ClaudeConfigDir
 		}
+		// A Cursor CLI conversation stays on the identity it was opened on until a process of the session
+		// opens or loads it on one (writeCursorSessionMeta): every write before then keeps it.
+		if cursorIdentity == "" && runtimeProvider(job) == providerCursor {
+			cursorIdentity = existing.CursorIdentity
+		}
 	}
 	// The directory the session ran in before this one is kept until the session moves again.
 	var previousWorkDir string
@@ -400,6 +416,7 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		AntigravityGoogleDir: antigravityDir,
 		KimiCodeHome:         kimiHome,
 		CursorAccountDir:     cursorSessionAccountDirToRecord(job),
+		CursorIdentity:       cursorIdentity,
 		WorkDir:              execDir,
 		PreviousWorkDir:      previousWorkDir,
 		Title:                job.Title,
@@ -1599,12 +1616,6 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		emit(evError, map[string]interface{}{"message": r.Code + ": " + reason})
 		return stFailed, true, false
 	}
-	// A Wiki maintenance run that may not start — pinned to a provider it cannot have, or on the wrong
-	// runtime — gets no engine either, and says why the same way (wiki_maintenance_session.go).
-	if msg := wikiMaintenanceRefusal(job); msg != "" {
-		emit(evError, map[string]interface{}{"message": msg})
-		return stFailed, true, false
-	}
 	provider := runtimeProvider(job)
 	// An engine this runner knows but has no session driver for gets no engine either: nothing is
 	// installed or started for a session it cannot run. The control plane hands a Cursor CLI session
@@ -1740,14 +1751,6 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
-	// A Wiki maintenance run starts in a HOME and config directory of its own, and the transcript
-	// rebuild below has to look for its conversation there (wiki_maintenance_session.go).
-	if job.wikiMaintenanceCleanStart() {
-		if err := prepareWikiMaintenanceStart(job, scratchDir); err != nil {
-			emit(evError, map[string]interface{}{"message": "could not make the Wiki maintenance run's own HOME: " + err.Error()})
-			return stFailed, true, false
-		}
-	}
 	// Set when an inbox 'reload' turn asks us to re-spawn with a new model/mode.
 	var reloadRequested atomic.Bool
 	// Set by the stdout reader on the first stream-json message. A process that exits
@@ -2654,11 +2657,6 @@ scanLoop:
 				}
 				reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetEnded.Error(), false)
 				settleSteerTurn(d.turnID, errCurrentWorkTargetEnded, job, completeTurn)
-			}
-			// A Wiki maintenance run cut short by its turn limit failed, and the run can no longer say so
-			// itself: the runner records it on the space's cursor (wiki_maintenance_session.go).
-			if r.Subtype == claudeMaxTurnsSubtype && job.WikiMaintenance != nil {
-				reportWikiMaintenanceTruncated(t, job)
 			}
 			// A Claude API error — or an expired sign-in — returns as assistant text + a
 			// "success" result with no is_error, so it slips past resultFrom. Treat the turn

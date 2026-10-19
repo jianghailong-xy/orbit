@@ -7,7 +7,6 @@ import {
   type WikiDocMaterialWeight,
   type WikiDocRecordKind,
   type WikiEntryKind,
-  type WikiPlanSessionCondition,
   type WikiSourceKind,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
@@ -18,9 +17,10 @@ import { isOwnerTurn, type WikiPrincipal, type WikiService } from './wiki.servic
 
 /**
  * The server's half of a document section's material (criterion 9; contracts/wiki.contract.json
- * `docs.material`, `docs.reads.material`): what only the database has, for `orbit wiki docs build`.
- * The repository's half — design-document sections, code and contracts at origin/main — is read by the
- * runner in its checkout; this file never names a path.
+ * `docs.material`, `docs.reads.material`): what only the database has, for the documents' build and a
+ * maintenance run's documents step, as it was for `orbit wiki docs build` before P11. The repository's half —
+ * design-document sections, code and contracts at origin/main — is read through the space's runner, in its
+ * checkout; this file never names a path.
  *
  * TWO WAYS IN, BOTH BY THE SECTION'S SESSION CONDITION. The space's live entries that fit it
  * (`sectionFit`: its keywords or anchor paths find them, or — of its entry kinds — its topics or projects
@@ -545,22 +545,4 @@ export async function gatherDocMaterial(
     recordedAt: entry.recordedAt.toISOString(),
   }));
   return { entries, records, unresolved };
-}
-
-/** The condition as the read answers it: the plan's own words, its projects named as they stand now. */
-export async function conditionView(db: Reader, ownerId: string, condition: StoredSessionCondition | null): Promise<WikiPlanSessionCondition | null> {
-  if (!condition) return null;
-  const ids = [...new Set(condition.projects ?? [])];
-  const projects = ids.length === 0 ? [] : await db.project.findMany({ where: { ownerId, id: { in: ids } }, select: { id: true, title: true } });
-  const titles = new Map(projects.map((project) => [project.id, project.title]));
-  return {
-    projects: ids.map((id) => ({ id, title: titles.get(id) ?? null })),
-    since: condition.since ?? null,
-    until: condition.until ?? null,
-    keywords: condition.keywords ?? [],
-    anchorPaths: condition.anchorPaths ?? [],
-    entryKinds: (condition.entryKinds ?? []) as WikiPlanSessionCondition['entryKinds'],
-    topics: condition.topics ?? [],
-    evidence: condition.evidence ?? '',
-  };
 }

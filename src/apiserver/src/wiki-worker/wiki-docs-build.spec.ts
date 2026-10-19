@@ -21,13 +21,14 @@ import { WikiDocsSnapshotRepo } from './wiki-docs-build-job';
 import { WIKI_DOCS_BUILD_SYSTEM_PROMPT, wikiDocCleanPath, type WikiDocRepo, type WikiDocShown, type WikiDocsPlanDoc, type WikiDocViewForOverview } from './wiki-docs-writer';
 
 /**
- * A build of a space's documents on the server (wiki-docs-build.ts), case for case the end-to-end cases of
- * `src/runner-go/wiki_docs_build_test.go`: the same confirmed plan (an overview, a mechanism with a design document,
- * code and a contract, and conventions with a session condition), the same records, the same files at the commit,
- * and the same scripted model — each answer naming the section by its title, as the prompt gives it. Where the
- * runner's test read a git checkout and a door over HTTP, these read a repository and a server in memory; where it
- * spawned a clean Claude Code, these hand the call to the queue's stand-in. What both implementations must answer
- * byte for byte is wiki-docs-build-golden.spec.ts; the job against PostgreSQL is wiki-docs-build-job.pg.spec.ts.
+ * A build of a space's documents on the server (wiki-docs-build.ts), case for case the end-to-end cases
+ * `src/runner-go/wiki_docs_build_test.go` had before P11 deleted it: the same confirmed plan (an overview, a mechanism
+ * with a design document, code and a contract, and conventions with a session condition), the same records, the same
+ * files at the commit, and the same scripted model — each answer naming the section by its title, as the prompt gives
+ * it. Where the runner's test read a git checkout and a door over HTTP, these read a repository and a server in memory;
+ * where it spawned a clean Claude Code, these hand the call to the queue's stand-in. What the server must answer byte
+ * for byte, as the runner's Go code did, is wiki-docs-build-golden.spec.ts; the job against PostgreSQL is
+ * wiki-docs-build-job.pg.spec.ts.
  */
 
 // ── The confirmed plan ──────────────────────────────────────────────────────────────────────────

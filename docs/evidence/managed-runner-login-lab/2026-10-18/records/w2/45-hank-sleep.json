@@ -1,0 +1,36 @@
+{
+  "action": "sleep",
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hkNygvIoJ0bZc22Q7ss",
+    "contractVersion": 1,
+    "desiredState": "SLEEPING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek-3",
+    "lastHeartbeatAt": "2026-10-17T23:40:19.024Z",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 14,
+    "runnerId": "34hkNygpQwr1z3lWcv1TW",
+    "runnerPublicId": "34hkNygpQwr1z3lWcv1TW",
+    "usable": true,
+    "workspaceId": "34hkNygvIoJ0bZc22Q7ss",
+    "workspacePublicId": "34hkNygvIoJ0bZc22Q7ss"
+  },
+  "at": "2026-10-17T23:40:45.498+00:00",
+  "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 13
+  },
+  "owner": "hank",
+  "status": 202
+}

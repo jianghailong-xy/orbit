@@ -212,131 +212,6 @@ func retryDoor(t *testing.T, answer func(send int) (status int, retryAfter, body
 	}
 }
 
-// ── A run through a deploy window ───────────────────────────────────────────────────────────────
-
-// 09-29, both runs at once: a page whose answer was cut, the proposal whose answer the edge's reset stream
-// took, and the 502s of a deploy on the verdicts and on the run's end. Each call is sent again, the run
-// goes on to the end and advances the cursor, and the proposal — which landed twice — is recorded once.
-func TestWikiRetryCarriesAMaintenanceRunThroughA502AndAProtocolError(t *testing.T) {
-	f := newMaintainFixture(t)
-	door := newFakeMaintainDoor(t)
-	door.context = maintainContext(f, "automatic", 0, "tok-expect")
-	door.pages[""] = maintainPage("tok-1", true, portDossier("session-a"), werewolfDossier("session-b"))
-	door.pages["tok-1"] = maintainPage("tok-expect", false)
-	door.propose = pendingForVerification
-	door.verifications = `{"spaceId":"space-1","mode":"automatic","items":[` +
-		`{"opId":"op-0","op":"add","entryId":"e-0","entry":{"kind":"convention","title":"fixture 不写死端口","summary":"s","fields":{}},"sources":[{"kind":"turn","ref":"turn-1","quote":"以后 fixture 里不要写死端口","text":"以后 fixture 里不要写死端口，一律从 fixture 的返回值里取。","truncated":false}],"similar":[]},` +
-		`{"opId":"op-1","op":"add","entryId":"e-1","entry":{"kind":"pitfall","title":"PORT","summary":"s","fields":{}},"sources":[{"kind":"tool_call","ref":"call-2","quote":null,"text":"connect ECONNREFUSED 127.0.0.1:9000","truncated":false}],"similar":[]}` +
-		`],"next":""}`
-	vllm := newFakeVLLM(t, extractorAnswers)
-	fakeVerifyClaude(t)
-	wikiMaintainSession(t, door.URL, vllm)
-	clock := withFakeWikiRetry(t)
-	flaky := withFlakyWikiTransport(t, map[string][]wikiFault{
-		"GET dossiers":                {{lost: wikiAnswerCut}},
-		"POST maintenance/changesets": {{lost: wikiStreamReset}},
-		"POST verifications":          {{status: http.StatusBadGateway}},
-		"POST maintenance/finish":     {{status: http.StatusBadGateway}},
-	})
-
-	summary, err := runMaintainCLI(t)
-	if err != nil {
-		t.Fatalf("orbit wiki maintain through a deploy window: %v\n%+v\n%s", err, summary, strings.Join(clock.lines(), "\n"))
-	}
-	if summary.Outcome != "succeeded" || !summary.Advanced || summary.Cursor != "tok-expect" {
-		t.Errorf("summary = %+v, want a run that succeeded and advanced the cursor", summary)
-	}
-	r := summary.Report
-	if r.Ops.Recorded != 2 || r.Ops.Refused != 0 || r.Verification == nil || r.Verification.Verified != 2 {
-		t.Errorf("ops %+v, verification %+v: want both ops recorded and verified", r.Ops, r.Verification)
-	}
-
-	// The proposal landed twice, both times under one key: the server keeps one changeset per key, and
-	// answers the second landing with what the first recorded.
-	var landed []string
-	for _, proposal := range door.of(http.MethodPost, "maintenance/changesets") {
-		if proposal.body["dryRun"] != true {
-			key, _ := proposal.body["idempotencyKey"].(string)
-			landed = append(landed, key)
-		}
-	}
-	if len(landed) != 2 || landed[0] == "" || landed[0] != landed[1] {
-		t.Errorf("the proposal landed under keys %q: want twice under one key, which the server records once", landed)
-	}
-	// The 502s were the gateway's: those sends never reached the server, and each call landed once.
-	if got := len(door.of(http.MethodPost, "verifications")); got != 2 || flaky.sent("POST verifications") != 3 {
-		t.Errorf("the verdicts landed %d times over %d sends: want one each, the first send met the 502", got, flaky.sent("POST verifications"))
-	}
-	if end := finished(t, door); end["outcome"] != "succeeded" || end["to"] != "tok-expect" {
-		t.Errorf("the run ended %v", end)
-	}
-	if got := len(door.of(http.MethodGet, "dossiers")); got != 3 {
-		t.Errorf("the pages were read %d times: want the cut one twice and the next once", got)
-	}
-
-	// One line a retry: the method, the path, why, and which retry — each after the first wait, 2 seconds.
-	lines := clock.lines()
-	want := [][]string{
-		{"GET /runner/wiki/spaces/space-1/dossiers?", "(EOF)", "retry 1 in 2s"},
-		{"POST /runner/wiki/spaces/space-1/maintenance/changesets", "(stream error: stream ID 1; PROTOCOL_ERROR; received from peer)", "retry 1 in 2s"},
-		{"POST /runner/wiki/spaces/space-1/verifications", "(502 Bad Gateway)", "retry 1 in 2s"},
-		{"POST /runner/wiki/spaces/space-1/maintenance/finish", "(502 Bad Gateway)", "retry 1 in 2s"},
-	}
-	if len(lines) != len(want) {
-		t.Fatalf("the retries said:\n%s\nwant %d lines", strings.Join(lines, "\n"), len(want))
-	}
-	for i, words := range want {
-		for _, word := range words {
-			if !strings.HasPrefix(lines[i], "orbit wiki: ") || !strings.Contains(lines[i], word) {
-				t.Errorf("retry line %d = %q, want it to say %q", i+1, lines[i], word)
-			}
-		}
-	}
-	if waits := clock.waited(); !reflect.DeepEqual(waits, []time.Duration{2 * time.Second, 2 * time.Second, 2 * time.Second, 2 * time.Second}) {
-		t.Errorf("waits = %v", waits)
-	}
-}
-
-// 09-29's first run: the edge reset the stream of POST …/articles/ui-design after the server had written
-// it. The write is sent again, the server finds the articles it holds written from the same entries and
-// writes nothing, and no topic is left unwritten.
-func TestWikiRetryWritesAnArticleWhoseStreamTheEdgeReset(t *testing.T) {
-	door := newFakeArticlesDoor(t, []map[string]interface{}{planTopic("ui-design", 3, true)},
-		map[string]map[string]interface{}{"ui-design": topicInput("ui-design", smallTopic("ui-design", 3))})
-	// The server's rule: a topic's articles are stored once per entry set, and the same set again is unchanged.
-	stored, written := map[string]string{}, 0
-	door.answer = func(slug string, body wikiArticleWrite) (int, string) {
-		if stored[slug] == body.EntrySetSha256 {
-			return http.StatusOK, `{"spaceId":"space-1","slug":"` + slug + `","written":false,"unchanged":true,"reason":null,"parts":[],"stats":{}}`
-		}
-		stored[slug] = body.EntrySetSha256
-		written++
-		return http.StatusOK, ""
-	}
-	vllm := newFakeVLLM(t, articleAnswers)
-	fakeVerifyClaude(t)
-	wikiArticlesSession(t, door.URL, vllm)
-	clock := withFakeWikiRetry(t)
-	flaky := withFlakyWikiTransport(t, map[string][]wikiFault{"POST articles/ui-design": {{lost: wikiStreamReset}}})
-
-	var out strings.Builder
-	if err := cmdWikiCLI([]string{"articles", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
-		t.Fatalf("orbit wiki articles: %v\n%s", err, out.String())
-	}
-	door.mu.Lock()
-	writes := written
-	door.mu.Unlock()
-	if flaky.sent("POST articles/ui-design") != 2 || writes != 1 {
-		t.Errorf("the write was sent %d times and written %d: want twice, and written once", flaky.sent("POST articles/ui-design"), writes)
-	}
-	if strings.Contains(out.String(), "not written") {
-		t.Errorf("a topic was left unwritten: %s", out.String())
-	}
-	if lines := clock.lines(); len(lines) != 1 || !strings.Contains(lines[0], "POST /runner/wiki/spaces/space-1/articles/ui-design failed (stream error: stream ID 1; PROTOCOL_ERROR; received from peer); retry 1 in 2s") {
-		t.Errorf("the retry said %q", lines)
-	}
-}
-
 // ── The budget ──────────────────────────────────────────────────────────────────────────────────
 
 // A failure that does not clear is sent again from 2 seconds, doubling to 30, for 5 minutes — a retry only
@@ -345,10 +220,10 @@ func TestWikiRetryWritesAnArticleWhoseStreamTheEdgeReset(t *testing.T) {
 func TestWikiRetryGivesUpOnceTheBudgetIsSpentWithTheOriginalError(t *testing.T) {
 	tr, sends := retryDoor(t, func(int) (int, string, string) { return http.StatusBadGateway, "", "error code: 502" })
 	clock := withFakeWikiRetry(t)
-	_, err := tr.writeWikiArticles("maintenance-session", "space-1", "ui-design", map[string]interface{}{"entrySetSha256": "sha"})
+	_, _, err := tr.registerWikiNote("caller-session", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 	var httpErr *transportHTTPError
 	if !errors.As(err, &httpErr) || httpErr.statusCode != http.StatusBadGateway ||
-		err.Error() != "POST /runner/wiki/spaces/space-1/articles/ui-design -> 502 error code: 502" {
+		err.Error() != "POST /runner/wiki/spaces/space-1/notes -> 502 error code: 502" {
 		t.Fatalf("after the budget = %v, want the 502 as the transport returned it", err)
 	}
 	waits := clock.waited()
@@ -366,32 +241,30 @@ func TestWikiRetryGivesUpOnceTheBudgetIsSpentWithTheOriginalError(t *testing.T) 
 	}
 	lines := clock.lines()
 	if len(lines) != 13 || !strings.Contains(lines[11], "retry 12 in 30s, 1m0s of the 5m0s budget left") ||
-		lines[12] != "orbit wiki: POST /runner/wiki/spaces/space-1/articles/ui-design failed (502 Bad Gateway) on send 13; the 5m0s retry budget is spent, so the failure stands" {
+		lines[12] != "orbit wiki: POST /runner/wiki/spaces/space-1/notes failed (502 Bad Gateway) on send 13; the 5m0s retry budget is spent, so the failure stands" {
 		t.Errorf("the retries said:\n%s", strings.Join(lines, "\n"))
 	}
 
 	// A reset that does not clear either: the caller gets the transport's own error, and can still read it.
 	withFakeWikiRetry(t)
-	withFlakyWikiTransport(t, map[string][]wikiFault{"GET maintenance/run": faults(20, wikiFault{lost: wikiStreamReset})})
-	door := newFakeMaintainDoor(t)
-	_, err = NewTransport(door.URL, "runner-token").wikiMaintainRunContext("maintenance-session", "space-1")
+	withFlakyWikiTransport(t, map[string][]wikiFault{"GET verifications": faults(20, wikiFault{lost: wikiStreamReset})})
+	door, _ := retryDoor(t, func(int) (int, string, string) { return http.StatusOK, "", `{"spaceId":"space-1"}` })
+	_, err = door.listWikiVerifications("verifications", "caller-session", "space-1", "", 1)
 	var urlErr *url.Error
 	if !errors.As(err, &urlErr) || !errors.Is(err, wikiStreamReset) {
 		t.Errorf("after the budget = %#v, want the transport's own error", err)
 	}
 
-	// And a command fails as it did before, only later: the topic is left unwritten, saying why.
-	articles := newFakeArticlesDoor(t, []map[string]interface{}{planTopic("ui-design", 3, true)},
-		map[string]map[string]interface{}{"ui-design": topicInput("ui-design", smallTopic("ui-design", 3))})
-	fakeVerifyClaude(t)
-	wikiArticlesSession(t, articles.URL, newFakeVLLM(t, articleAnswers))
+	// And a command fails as it did before, only later: the run says what the list answered.
+	verify := newFakeVerifyDoor(t, nil)
+	wikiVerifySession(t, verify)
 	withFakeWikiRetry(t)
-	withFlakyWikiTransport(t, map[string][]wikiFault{"POST articles/ui-design": faults(20, wikiFault{status: http.StatusBadGateway})})
+	withFlakyWikiTransport(t, map[string][]wikiFault{"GET verifications": faults(20, wikiFault{status: http.StatusBadGateway})})
 	var out strings.Builder
-	err = cmdWikiCLI([]string{"articles", "--space", "space-1"}, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), "1 topic was left unwritten") ||
-		!strings.Contains(out.String(), "topic ui-design: not written — orbit wiki articles: POST /runner/wiki/spaces/space-1/articles/ui-design -> 502 error code: 502") {
-		t.Errorf("a write the budget gave up on = %v\n%s", err, out.String())
+	err = cmdWikiCLI([]string{"verify", "--space", "space-1"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "orbit wiki verify: GET /runner/wiki/spaces/space-1/verifications") ||
+		!strings.Contains(err.Error(), "-> 502 error code: 502") {
+		t.Errorf("a list the budget gave up on = %v\n%s", err, out.String())
 	}
 }
 
@@ -406,9 +279,12 @@ func TestWikiRetryNeverResendsA4xx(t *testing.T) {
 		tr, sends := retryDoor(t, func(int) (int, string, string) { return status, "", body })
 		clock := withFakeWikiRetry(t)
 		for _, call := range []func() error{
-			func() error { _, err := tr.wikiMaintainRunContext("maintenance-session", "space-1"); return err },
 			func() error {
-				_, err := tr.writeWikiArticles("maintenance-session", "space-1", "ui-design", map[string]interface{}{"entrySetSha256": "sha"})
+				_, err := tr.listWikiVerifications("verifications", "caller-session", "space-1", "", 1)
+				return err
+			},
+			func() error {
+				_, _, err := tr.registerWikiNote("caller-session", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 				return err
 			},
 		} {
@@ -440,7 +316,7 @@ func TestWikiRetryWaitsWhatRetryAfterSays(t *testing.T) {
 			}
 			return http.StatusOK, "", `{"spaceId":"space-1"}`
 		})
-		if _, err := tr.wikiMaintainRunContext("maintenance-session", "space-1"); err != nil {
+		if _, err := tr.listWikiVerifications("verifications", "caller-session", "space-1", "", 1); err != nil {
 			t.Fatalf("Retry-After %s: %v", c.retryAfter, err)
 		}
 		lines := clock.lines()
@@ -454,7 +330,7 @@ func TestWikiRetryWaitsWhatRetryAfterSays(t *testing.T) {
 	tr, sends := retryDoor(t, func(int) (int, string, string) {
 		return http.StatusTooManyRequests, "600", `{"message":"come back later"}`
 	})
-	_, err := tr.wikiMaintainRunContext("maintenance-session", "space-1")
+	_, err := tr.listWikiVerifications("verifications", "caller-session", "space-1", "", 1)
 	if !isTransportHTTPStatus(err, http.StatusTooManyRequests) || sends() != 1 || len(clock.waited()) != 0 {
 		t.Errorf("Retry-After past the budget = %v after %d sends and waits %v: want the 429 at once", err, sends(), clock.waited())
 	}
@@ -503,43 +379,15 @@ func wikiEffectOf(route string, body map[string]interface{}, landing int) string
 	switch {
 	case body["dryRun"] == true:
 		return "" // a dry run records nothing
-	case strings.HasSuffix(route, "changesets") || strings.HasSuffix(route, "imports"):
+	case strings.HasSuffix(route, "changesets"):
 		if key := str("idempotencyKey"); key != "" {
 			return once(key) // UNIQUE (owner_id, idempotency_key): a second landing is answered from the first
 		}
 		return each() // with no key, each landing is another changeset
-	case strings.HasSuffix(route, "plan/drafts"):
-		if key := str("idempotencyKey"); key != "" {
-			return once(key) // UNIQUE (owner_id, idempotency_key): a second landing is answered with the version the first stored
-		}
-		return each() // with no key, a second landing is WIKI_PLAN_STALE, its base no longer the newest
-	case strings.HasSuffix(route, "verifications"):
-		verdicts, _ := body["verdicts"].([]interface{})
-		verdict, _ := verdicts[0].(map[string]interface{})
-		return once(fmt.Sprint(verdict["opId"]), fmt.Sprint(verdict["verdict"])) // recorded while the op still waits
 	case strings.HasSuffix(route, "notes"):
 		return once(str("text")) // UNIQUE (space_id, content_sha256)
-	case strings.HasPrefix(route, "POST articles/"):
-		return once(str("entrySetSha256")) // replaced whole, and only from another entry set
-	case strings.HasSuffix(route, "anchor-checks"):
-		return once(str("ref")) // anchors set to what was found; a challenge only while none is open
-	case strings.HasPrefix(route, "POST docs/"):
-		sections, _ := body["sections"].([]interface{})
-		var written []string
-		for _, raw := range sections {
-			section, _ := raw.(map[string]interface{})
-			written = append(written, fmt.Sprint(section["key"]), fmt.Sprint(section["materialSha256"]))
-		}
-		return once(written...) // a section whose stored fingerprint is the write's is left as it is
-	case strings.HasSuffix(route, "article-plan"):
-		return once() // the default topics, for a space with none
-	case strings.HasSuffix(route, "maintenance/advance"):
-		return once(str("to")) // the position alone, by compare-and-set: a cursor at or past the token moves nothing
-	case strings.HasSuffix(route, "cursor") || strings.HasSuffix(route, "maintenance/finish"):
-		if outcome := str("outcome"); outcome != "" && outcome != "succeeded" {
-			return each() // one more consecutive failure each time it lands
-		}
-		return once(str("to")) // a cursor that stands at the token already moves nothing
+	case strings.HasSuffix(route, "verifications/request"):
+		return once() // one queued job per session and space
 	}
 	return each()
 }
@@ -554,8 +402,8 @@ func (l *wikiLedger) counts() (landings, effects int) {
 }
 
 // Every write lands once, and its answer is cut on the way back. The ones the server records at most once
-// are sent again, and record once; the rest — a failed or truncated run's report, a proposal or a plan draft
-// with no key — are sent once, and their failure is the caller's, as before.
+// are sent again, and record once; the rest — a proposal with no key — are sent once, and their failure is
+// the caller's, as before.
 func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 	proposal := func(extra map[string]interface{}) map[string]interface{} {
 		body := map[string]interface{}{"ops": []interface{}{map[string]interface{}{"op": "add"}}, "rationale": "why"}
@@ -583,75 +431,12 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 			_, err := tr.proposeWikiChangeset("s", proposal(nil))
 			return err
 		}},
-		{"a maintenance run's proposal", "POST maintenance/changesets", true, 1, func(tr *Transport) error {
-			_, err := tr.proposeWikiMaintenance("s", "space-1", proposal(map[string]interface{}{"idempotencyKey": "wiki-maintain-1"}))
-			return err
-		}},
-		{"an import's proposal", "POST imports", true, 1, func(tr *Transport) error {
-			_, err := tr.importWikiChangeset("s", "space-1", proposal(map[string]interface{}{"idempotencyKey": "wiki-import:1"}))
-			return err
-		}},
-		{"a plan draft under its key", "POST plan/drafts", true, 1, func(tr *Transport) error {
-			_, err := tr.submitWikiPlanDraft("s", "space-1", wikiPlanDraftRequest{Plan: wikiPlanDraft{}, IdempotencyKey: "wiki-plan-1"})
-			return err
-		}},
-		{"a plan draft with no key", "POST plan/drafts", false, 0, func(tr *Transport) error {
-			_, err := tr.submitWikiPlanDraft("s", "space-1", wikiPlanDraftRequest{Plan: wikiPlanDraft{}})
-			return err
-		}},
-		{"a verdict", "POST verifications", true, 1, func(tr *Transport) error {
-			_, err := tr.reportWikiVerifications("verifications", "s", "space-1", map[string]interface{}{"verdicts": []interface{}{
-				map[string]interface{}{"opId": "op-1", "verdict": "supported", "reason": "it says so", "model": "m"}}})
-			return err
-		}},
-		{"a verdict for an adopted op", "POST maintenance/verifications", true, 1, func(tr *Transport) error {
-			_, err := tr.reportWikiVerifications("maintenance/verifications", "s", "space-1", map[string]interface{}{"verdicts": []interface{}{
-				map[string]interface{}{"opId": "op-1", "verdict": "supported", "reason": "it says so", "model": "m"}}})
-			return err
-		}},
 		{"a note", "POST notes", true, 1, func(tr *Transport) error {
 			_, _, err := tr.registerWikiNote("s", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 			return err
 		}},
-		{"a topic's articles", "POST articles/ui-design", true, 1, func(tr *Transport) error {
-			_, err := tr.writeWikiArticles("s", "space-1", "ui-design", map[string]interface{}{"entrySetSha256": "sha-1"})
-			return err
-		}},
-		{"the article plan", "POST article-plan", true, 1, func(tr *Transport) error {
-			_, err := tr.planWikiArticles("s", "space-1")
-			return err
-		}},
-		{"a document's sections", "POST docs/session-runtime", true, 1, func(tr *Transport) error {
-			_, err := tr.writeWikiDoc("s", "space-1", "session-runtime", wikiDocWriteRequest{PlanVersion: 1, RepoSha: strings.Repeat("a", 40),
-				Sections: []wikiDocSection{{Key: "s2", MaterialSha256: strings.Repeat("b", 64), Markdown: "一句[1]。", Footnotes: []wikiDocFootnote{}, Dispositions: []wikiDocDisposition{}}}})
-			return err
-		}},
-		{"the anchors' checks", "POST anchor-checks", true, 1, func(tr *Transport) error {
-			_, err := tr.reportWikiAnchorChecks("s", "space-1", map[string]interface{}{"ref": strings.Repeat("a", 40), "entries": []interface{}{}})
-			return err
-		}},
-		{"a succeeded run's cursor", "POST cursor", true, 1, func(tr *Transport) error {
-			_, err := tr.advanceWikiCursor("s", "space-1", map[string]interface{}{"outcome": "succeeded", "to": "tok-1"})
-			return err
-		}},
-		{"a failed run's cursor", "POST cursor", false, 0, func(tr *Transport) error {
-			_, err := tr.advanceWikiCursor("s", "space-1", map[string]interface{}{"outcome": "failed", "error": "it broke"})
-			return err
-		}},
-		{"a truncated run's cursor", "POST cursor", false, 0, func(tr *Transport) error {
-			_, err := tr.advanceWikiCursor("s", "space-1", map[string]interface{}{"outcome": "truncated", "error": "cut short"})
-			return err
-		}},
-		{"the cursor's move once a run's ops are recorded", "POST maintenance/advance", true, 1, func(tr *Transport) error {
-			_, err := tr.advanceWikiMaintenance("s", "space-1", map[string]interface{}{"to": "tok-1"})
-			return err
-		}},
-		{"a succeeded run's end", "POST maintenance/finish", true, 1, func(tr *Transport) error {
-			_, err := tr.finishWikiMaintenance("s", "space-1", map[string]interface{}{"outcome": "succeeded", "to": "tok-1", "report": map[string]interface{}{}})
-			return err
-		}},
-		{"a failed run's end", "POST maintenance/finish", false, 0, func(tr *Transport) error {
-			_, err := tr.finishWikiMaintenance("s", "space-1", map[string]interface{}{"outcome": "failed", "error": "it broke", "report": map[string]interface{}{}})
+		{"a request to verify", "POST verifications/request", true, 1, func(tr *Transport) error {
+			_, err := tr.requestWikiVerification("s", "space-1")
 			return err
 		}},
 	} {
@@ -679,31 +464,29 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 }
 
 // A note the server already holds, answered to a registration that had to be sent twice, is the first send's:
-// it landed and its answer was cut. The file is read and proposed from, not left out as imported before.
+// it landed and its answer was cut. The file is handed to the job and read, not left out as imported before.
 func TestWikiRetryReadsANoteWhoseFirstSendLanded(t *testing.T) {
 	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
-	door := newFakeImportDoor(t, "tiered")
-	vllm := newFakeVLLM(t, scripted(map[string]string{"memory/feedback-1.md": manyEntries("One", 1)}))
-	fakeVerifyClaude(t)
-	wikiImportSession(t, door, vllm)
+	server := newFakeImportServer(t, readAll(map[string]int{"memory/feedback-1.md": 1}))
+	wikiImportServerSession(t, server)
 	clock := withFakeWikiRetry(t)
 	flaky := withFlakyWikiTransport(t, map[string][]wikiFault{
-		"POST notes":   {{lost: wikiAnswerCut}},
-		"POST imports": {{status: http.StatusServiceUnavailable}},
+		"POST notes":       {{lost: wikiAnswerCut}},
+		"POST import-jobs": {{status: http.StatusServiceUnavailable}},
 	})
 
 	summary, err := importSummary(t, "--from", library, "--space", "space-1")
 	if err != nil || summary.Proposed != 1 || summary.NewNotes != 1 || summary.KnownNotes != 0 || summary.Remaining != 0 {
 		t.Fatalf("an import whose note's answer was cut = %v, %+v: want the note read and its entry proposed", err, summary)
 	}
-	if registrations := door.Registrations(); len(registrations) != 2 || len(door.notes) != 1 {
-		t.Errorf("registrations %v, notes %d: want the note sent twice and kept once", registrations, len(door.notes))
+	if registrations := server.door.Registrations(); len(registrations) != 2 || len(server.door.notes) != 1 {
+		t.Errorf("registrations %v, notes %d: want the note sent twice and kept once", registrations, len(server.door.notes))
 	}
-	if len(door.proposed()) != 1 || flaky.sent("POST imports") != 2 {
-		t.Errorf("proposed %d ops over %d sends: want the one entry, sent again after the 503", len(door.proposed()), flaky.sent("POST imports"))
+	if jobs := server.Jobs(); len(jobs) != 1 || len(jobs[0].Notes) != 1 || flaky.sent("POST import-jobs") != 2 {
+		t.Errorf("jobs %+v over %d sends: want the one note handed to one job, sent again after the 503", jobs, flaky.sent("POST import-jobs"))
 	}
 	if lines := clock.lines(); len(lines) != 2 || !strings.Contains(lines[0], "POST /runner/wiki/spaces/space-1/notes failed (EOF)") ||
-		!strings.Contains(lines[1], "POST /runner/wiki/spaces/space-1/imports failed (503 Service Unavailable)") {
+		!strings.Contains(lines[1], "POST /runner/wiki/spaces/space-1/import-jobs failed (503 Service Unavailable)") {
 		t.Errorf("the retries said %q", lines)
 	}
 
@@ -722,7 +505,7 @@ func TestWikiRetryReadsANoteWhoseFirstSendLanded(t *testing.T) {
 	}
 	withFlakyWikiTransport(t, map[string][]wikiFault{"POST notes": {{status: http.StatusBadGateway}}})
 	summary, err = importSummary(t, "--from", copies, "--space", "space-1")
-	if err != nil || summary.KnownNotes != 1 || summary.Proposed != 0 || len(door.notes) != 1 {
+	if err != nil || summary.KnownNotes != 1 || summary.Proposed != 0 || len(server.door.notes) != 1 {
 		t.Errorf("a copy under another name = %v, %+v: want it known as the note already there", err, summary)
 	}
 }
@@ -733,12 +516,12 @@ func TestWikiRetryReadsANoteWhoseFirstSendLanded(t *testing.T) {
 // request that timed out — and the gateway's and the edge's answers, told apart from the server's own.
 func TestWikiRetryKnowsATransientFailureFromAnAnswer(t *testing.T) {
 	transient := func(err error) bool {
-		_, _, ok := wikiTransient(err, http.MethodGet, "/runner/wiki/spaces/space-1/anchors", time.Now())
+		_, _, ok := wikiTransient(err, http.MethodGet, "/runner/wiki/spaces/space-1/verifications", time.Now())
 		return ok
 	}
 	get := func(url string, timeout time.Duration) error {
 		var out json.RawMessage
-		return NewTransport(url, "runner-token").doHeaders(nil, http.MethodGet, "/runner/wiki/spaces/space-1/anchors", nil, &out, timeout, nil)
+		return NewTransport(url, "runner-token").doHeaders(nil, http.MethodGet, "/runner/wiki/spaces/space-1/verifications", nil, &out, timeout, nil)
 	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -776,10 +559,10 @@ func TestWikiRetryKnowsATransientFailureFromAnAnswer(t *testing.T) {
 	html.Close()
 
 	status := func(code int, retryAfter string) error {
-		return &transportHTTPError{method: http.MethodGet, path: "/runner/wiki/spaces/space-1/anchors", statusCode: code, body: "error code", retryAfter: retryAfter}
+		return &transportHTTPError{method: http.MethodGet, path: "/runner/wiki/spaces/space-1/verifications", statusCode: code, body: "error code", retryAfter: retryAfter}
 	}
 	edge := func(words string) error {
-		return &url.Error{Op: "Post", URL: "https://orbitd.io/api/runner/wiki/spaces/space-1/articles/ui-design", Err: errors.New(words)}
+		return &url.Error{Op: "Post", URL: "https://orbitd.io/api/runner/wiki/spaces/space-1/notes", Err: errors.New(words)}
 	}
 	for _, c := range []struct {
 		name string

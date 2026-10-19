@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T04:11:37.449",
+    "ingested_at": "2026-10-18T04:11:37.6089+00:00",
+    "ingested_by_runner_id": "01a14d31-2558-76b5-aa8a-f8f35df30d08",
+    "seq": 8,
+    "session_id": "01a14d31-4b75-72bd-82d8-7a4184213d1e",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-B-BEN-S1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T04:11:37Z",
+      "kind": "text",
+      "messages": 2,
+      "n": 5,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14d31-2558-76b5-aa8a-f8f35df30d08",
+    "created_at": "2026-10-18T04:07:18.645",
+    "engine": "claude",
+    "id": "01a14d31-4b75-72bd-82d8-7a4184213d1e",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-B-BEN-S1 the first session, nothing named, while the run"
+  },
+  "turns": [
+    {
+      "answered_at": null,
+      "client_turn_id": "initial-01a14d31-4b75-72bd-82d8-7a4184213d1e",
+      "content": "T06-B-BEN-S1 the first session, nothing named, while the runner waits for capacity",
+      "created_at": "2026-10-18T04:11:35.415",
+      "delivered_at": "2026-10-18T04:11:37.253",
+      "id": "01a14d35-3677-746c-adc4-5df5429c444a",
+      "kind": "message",
+      "seq": 1,
+      "status": "IN_FLIGHT"
+    }
+  ]
+}

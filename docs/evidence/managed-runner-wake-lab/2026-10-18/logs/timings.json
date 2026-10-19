@@ -1,0 +1,448 @@
+{
+ "amy": {
+  "sleeps": [
+   {
+    "generation": 2,
+    "drainAsked": "2026-10-18T00:50:00.025+00:00",
+    "accepted": "2026-10-18T00:50:25.206+00:00",
+    "podGone": "2026-10-18T00:50:30.001+00:00",
+    "sleeping": "2026-10-18T00:50:39.575+00:00",
+    "seconds": 39.5
+   },
+   {
+    "generation": 3,
+    "drainAsked": "2026-10-18T00:58:01.689+00:00",
+    "accepted": "2026-10-18T00:58:30.425+00:00",
+    "podGone": "2026-10-18T00:58:35.221+00:00",
+    "sleeping": "2026-10-18T00:58:39.987+00:00",
+    "seconds": 38.3
+   },
+   {
+    "generation": 4,
+    "drainAsked": "2026-10-18T01:16:16.825+00:00",
+    "accepted": "2026-10-18T01:16:41.985+00:00",
+    "podGone": "2026-10-18T01:16:46.760+00:00",
+    "sleeping": "2026-10-18T01:16:52.733+00:00",
+    "seconds": 35.9
+   },
+   {
+    "generation": 5,
+    "drainAsked": "2026-10-18T01:18:58.333+00:00",
+    "accepted": "2026-10-18T01:19:24.650+00:00",
+    "podGone": "2026-10-18T01:19:28.244+00:00",
+    "sleeping": "2026-10-18T01:19:39.000+00:00",
+    "seconds": 40.7
+   },
+   {
+    "generation": 6,
+    "drainAsked": "2026-10-18T01:23:14.427+00:00",
+    "accepted": "2026-10-18T01:23:39.541+00:00",
+    "podGone": "2026-10-18T01:23:44.331+00:00",
+    "sleeping": "2026-10-18T01:23:50.313+00:00",
+    "seconds": 35.9
+   },
+   {
+    "generation": 7,
+    "drainAsked": "2026-10-18T01:28:46.065+00:00",
+    "accepted": "2026-10-18T01:28:54.421+00:00",
+    "podGone": "2026-10-18T01:29:01.666+00:00",
+    "sleeping": "2026-10-18T01:29:11.237+00:00",
+    "seconds": 25.2
+   },
+   {
+    "generation": 8,
+    "drainAsked": "2026-10-18T01:31:44.943+00:00",
+    "accepted": "2026-10-18T01:32:01.713+00:00",
+    "podGone": "2026-10-18T01:32:05.318+00:00",
+    "sleeping": "2026-10-18T01:32:13.693+00:00",
+    "seconds": 28.8
+   },
+   {
+    "generation": 9,
+    "drainAsked": "2026-10-18T01:39:53.568+00:00",
+    "accepted": "2026-10-18T01:40:21.176+00:00",
+    "podGone": "2026-10-18T01:40:25.977+00:00",
+    "sleeping": "2026-10-18T01:40:31.987+00:00",
+    "seconds": 38.4
+   },
+   {
+    "generation": 10,
+    "drainAsked": "2026-10-18T01:42:37.898+00:00",
+    "accepted": "2026-10-18T01:43:04.229+00:00",
+    "podGone": "2026-10-18T01:43:07.809+00:00",
+    "sleeping": "2026-10-18T01:43:17.360+00:00",
+    "seconds": 39.5
+   },
+   {
+    "generation": 12,
+    "drainAsked": "2026-10-18T01:47:18.947+00:00",
+    "accepted": "2026-10-18T01:47:47.651+00:00",
+    "podGone": "2026-10-18T01:47:54.828+00:00",
+    "sleepingNotSeen": true,
+    "sleeping": "2026-10-18T01:47:59.642+00:00",
+    "seconds": 40.7
+   },
+   {
+    "generation": 13,
+    "drainAsked": "2026-10-18T01:50:06.669+00:00",
+    "accepted": "2026-10-18T01:50:31.786+00:00",
+    "podGone": "2026-10-18T01:50:36.567+00:00",
+    "sleeping": "2026-10-18T01:50:42.546+00:00",
+    "seconds": 35.9
+   },
+   {
+    "generation": 14,
+    "drainAsked": "2026-10-18T01:54:49.367+00:00",
+    "accepted": "2026-10-18T01:55:18.163+00:00",
+    "podGone": "2026-10-18T01:55:21.764+00:00",
+    "sleeping": "2026-10-18T01:55:26.546+00:00",
+    "seconds": 37.2
+   },
+   {
+    "generation": 15,
+    "drainAsked": "2026-10-18T02:27:01.261+00:00",
+    "accepted": "2026-10-18T02:27:30.020+00:00",
+    "podGone": "2026-10-18T02:27:33.694+00:00",
+    "sleeping": "2026-10-18T02:27:42.079+00:00",
+    "seconds": 40.8
+   },
+   {
+    "generation": 16,
+    "drainAsked": "2026-10-18T02:32:20.554+00:00",
+    "accepted": "2026-10-18T02:32:49.334+00:00",
+    "podGone": "2026-10-18T02:32:55.331+00:00",
+    "sleeping": "2026-10-18T02:33:00.126+00:00",
+    "seconds": 39.6
+   }
+  ],
+  "starts": [
+   {
+    "from": "SLEEPING",
+    "generation": 2,
+    "left": "2026-10-18T00:44:51.990+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T00:44:51.990+00:00",
+    "podRunning": "2026-10-18T00:44:54.389+00:00",
+    "ready": "2026-10-18T00:45:26.805+00:00",
+    "secondsToReady": 34.8
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 3,
+    "left": "2026-10-18T00:56:18.574+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T00:56:18.574+00:00",
+    "podRunning": "2026-10-18T00:56:30.591+00:00",
+    "ready": "2026-10-18T00:57:01.817+00:00",
+    "secondsToReady": 43.2
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 4,
+    "left": "2026-10-18T01:07:02.531+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:07:02.531+00:00",
+    "podRunning": "2026-10-18T01:07:12.114+00:00",
+    "ready": "2026-10-18T01:07:43.311+00:00",
+    "secondsToReady": 40.8
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 5,
+    "left": "2026-10-18T01:17:11.880+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:17:13.080+00:00",
+    "podRunning": "2026-10-18T01:17:23.834+00:00",
+    "ready": "2026-10-18T01:17:58.541+00:00",
+    "secondsToReady": 46.7
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 6,
+    "left": "2026-10-18T01:21:32.679+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:21:33.877+00:00",
+    "podRunning": "2026-10-18T01:21:39.856+00:00",
+    "ready": "2026-10-18T01:22:13.378+00:00",
+    "secondsToReady": 40.7
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 7,
+    "left": "2026-10-18T01:25:44.057+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:25:45.250+00:00",
+    "podRunning": "2026-10-18T01:25:53.626+00:00",
+    "ready": "2026-10-18T01:26:25.968+00:00",
+    "secondsToReady": 41.9
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 8,
+    "left": "2026-10-18T01:29:56.673+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:29:56.673+00:00",
+    "podRunning": "2026-10-18T01:30:00.296+00:00",
+    "ready": "2026-10-18T01:30:31.842+00:00",
+    "secondsToReady": 35.2
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 9,
+    "left": "2026-10-18T01:37:16.503+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:37:16.503+00:00",
+    "podRunning": "2026-10-18T01:37:21.272+00:00",
+    "ready": "2026-10-18T01:37:52.532+00:00",
+    "secondsToReady": 36.0
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 10,
+    "left": "2026-10-18T01:40:55.916+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:40:55.916+00:00",
+    "podRunning": "2026-10-18T01:41:03.107+00:00",
+    "ready": "2026-10-18T01:41:36.860+00:00",
+    "secondsToReady": 40.9
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 12,
+    "left": "2026-10-18T01:45:22.804+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:45:22.804+00:00",
+    "podRunning": "2026-10-18T01:45:26.396+00:00",
+    "ready": "2026-10-18T01:46:19.064+00:00",
+    "secondsToReady": 56.3
+   },
+   {
+    "from": "SLEEPING (not seen)",
+    "generation": 13,
+    "left": "2026-10-18T01:47:59.642+00:00",
+    "firstState": "REQUESTED",
+    "reason": null,
+    "failed": {
+     "at": "2026-10-18T01:48:00.841+00:00",
+     "reason": "KUBERNETES_FORBIDDEN"
+    }
+   },
+   {
+    "from": "FAILED",
+    "generation": 13,
+    "left": "2026-10-18T01:48:22.415+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:48:22.415+00:00",
+    "podRunning": "2026-10-18T01:48:30.869+00:00",
+    "ready": "2026-10-18T01:49:03.132+00:00",
+    "secondsToReady": 40.7
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 14,
+    "left": "2026-10-18T01:51:49.623+00:00",
+    "firstState": "WAITING_CAPACITY",
+    "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "waitedForCapacity": true,
+    "podCreated": "2026-10-18T01:53:08.678+00:00",
+    "podRunning": "2026-10-18T01:53:17.068+00:00",
+    "ready": "2026-10-18T01:53:49.425+00:00",
+    "secondsToReady": 119.8
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 15,
+    "left": "2026-10-18T02:13:19.654+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T02:13:19.654+00:00",
+    "podRunning": "2026-10-18T02:13:29.373+00:00",
+    "ready": "2026-10-18T02:13:59.705+00:00",
+    "secondsToReady": 40.1
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 16,
+    "left": "2026-10-18T02:30:39.714+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T02:30:39.714+00:00",
+    "podRunning": "2026-10-18T02:30:48.109+00:00",
+    "ready": "2026-10-18T02:31:19.362+00:00",
+    "secondsToReady": 39.6
+   }
+  ]
+ },
+ "ben": {
+  "sleeps": [
+   {
+    "generation": 1,
+    "drainAsked": "2026-10-18T01:52:49.537+00:00",
+    "accepted": "2026-10-18T01:52:54.323+00:00",
+    "podGone": "2026-10-18T01:52:57.915+00:00",
+    "sleeping": "2026-10-18T01:53:05.094+00:00",
+    "seconds": 15.6
+   },
+   {
+    "generation": 2,
+    "drainAsked": "2026-10-18T01:57:10.915+00:00",
+    "accepted": "2026-10-18T01:57:38.469+00:00",
+    "podGone": "2026-10-18T01:57:42.056+00:00",
+    "sleeping": "2026-10-18T01:57:51.625+00:00",
+    "seconds": 40.7
+   },
+   {
+    "generation": 3,
+    "drainAsked": "2026-10-18T02:00:07.032+00:00",
+    "podGone": "2026-10-18T02:00:32.212+00:00",
+    "sleeping": "2026-10-18T02:00:42.978+00:00",
+    "seconds": 35.9
+   },
+   {
+    "generation": 4,
+    "drainAsked": "2026-10-18T02:01:40.571+00:00",
+    "podGone": "2026-10-18T02:02:05.741+00:00",
+    "sleeping": "2026-10-18T02:02:15.321+00:00",
+    "seconds": 34.8
+   },
+   {
+    "generation": 5,
+    "drainAsked": "2026-10-18T02:10:45.008+00:00",
+    "accepted": "2026-10-18T02:10:54.602+00:00",
+    "podGone": "2026-10-18T02:10:58.185+00:00",
+    "sleeping": "2026-10-18T02:11:02.978+00:00",
+    "seconds": 18.0
+   },
+   {
+    "generation": 6,
+    "drainAsked": "2026-10-18T02:13:00.513+00:00",
+    "accepted": "2026-10-18T02:13:07.684+00:00",
+    "podGone": "2026-10-18T02:13:10.088+00:00",
+    "sleeping": "2026-10-18T02:13:19.654+00:00",
+    "seconds": 19.1
+   },
+   {
+    "generation": 7,
+    "drainAsked": "2026-10-18T02:29:58.946+00:00",
+    "accepted": "2026-10-18T02:30:26.544+00:00",
+    "podGone": "2026-10-18T02:30:28.953+00:00",
+    "sleeping": "2026-10-18T02:30:38.518+00:00",
+    "seconds": 39.6
+   }
+  ],
+  "starts": [
+   {
+    "from": null,
+    "generation": 1,
+    "left": "2026-10-18T01:49:22.327+00:00",
+    "firstState": "WAITING_CAPACITY",
+    "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "waitedForCapacity": true,
+    "podCreated": "2026-10-18T01:50:47.333+00:00",
+    "podRunning": "2026-10-18T01:50:53.326+00:00",
+    "ready": "2026-10-18T01:51:28.049+00:00",
+    "secondsToReady": 125.7
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 2,
+    "left": "2026-10-18T01:54:11.005+00:00",
+    "firstState": "WAITING_CAPACITY",
+    "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "waitedForCapacity": true,
+    "podCreated": "2026-10-18T01:55:30.140+00:00",
+    "podRunning": "2026-10-18T01:55:38.506+00:00",
+    "ready": "2026-10-18T01:56:10.919+00:00",
+    "secondsToReady": 119.9
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 3,
+    "left": "2026-10-18T01:59:43.010+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T01:59:43.010+00:00",
+    "podRunning": "2026-10-18T01:59:53.817+00:00",
+    "endedBeforeReady": {
+     "at": "2026-10-18T02:00:07.032+00:00",
+     "state": "DRAINING"
+    }
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 4,
+    "left": "2026-10-18T02:01:26.179+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T02:01:26.179+00:00",
+    "podRunning": "2026-10-18T02:01:34.584+00:00",
+    "endedBeforeReady": {
+     "at": "2026-10-18T02:01:40.571+00:00",
+     "state": "DRAINING"
+    }
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 5,
+    "left": "2026-10-18T02:07:41.282+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T02:07:41.282+00:00",
+    "podRunning": "2026-10-18T02:07:54.547+00:00",
+    "ready": "2026-10-18T02:08:27.051+00:00",
+    "secondsToReady": 45.8
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 6,
+    "left": "2026-10-18T02:12:04.098+00:00",
+    "firstState": "STARTING",
+    "reason": null,
+    "podCreated": "2026-10-18T02:12:04.098+00:00",
+    "podRunning": "2026-10-18T02:12:06.503+00:00",
+    "ready": "2026-10-18T02:12:38.908+00:00",
+    "secondsToReady": 34.8
+   },
+   {
+    "from": "SLEEPING",
+    "generation": 7,
+    "left": "2026-10-18T02:26:58.865+00:00",
+    "firstState": "WAITING_CAPACITY",
+    "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "waitedForCapacity": true,
+    "podCreated": "2026-10-18T02:27:43.273+00:00",
+    "podRunning": "2026-10-18T02:27:55.280+00:00",
+    "ready": "2026-10-18T02:28:27.804+00:00",
+    "secondsToReady": 88.9
+   }
+  ]
+ },
+ "carl": {
+  "sleeps": [],
+  "starts": [
+   {
+    "from": null,
+    "generation": 1,
+    "left": "2026-10-18T01:53:53.009+00:00",
+    "firstState": "WAITING_CAPACITY",
+    "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+    "waitedForCapacity": true,
+    "endedBeforeReady": {
+     "at": "2026-10-18T01:53:54.206+00:00",
+     "state": "SLEEPING"
+    }
+   }
+  ]
+ }
+}

@@ -13,7 +13,8 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 - Docker Engine with the Compose plugin
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
-- One or more runner machines with a supported runtime installed and authenticated
+- One or more runner machines with a supported runtime installed and authenticated, or room on this host for
+  [managed runners](#managed-runners): by default 2 CPUs, 4 GiB of memory and a 20 GiB volume for each runner awake
 
 The server does not need the runtime credentials. Claude Code, Codex, Kimi, and OpenCode logins stay on the
 runner machines.
@@ -31,6 +32,22 @@ SIGKILL that ends an abandoned sign-in.
 ```bash
 git clone https://github.com/jianghailong-xy/orbit.git
 cd orbit
+```
+
+For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
+with two independently generated secrets, prepares [managed runners](#managed-runners) and starts the stack.
+Give it the external origin when you serve Orbit on a domain:
+
+```bash
+scripts/install-server.sh --public-origin https://orbit.example.com
+```
+
+It stops without changing anything where a `.env` or `data/postgres` already exists: that checkout holds a
+deployment, which is [upgraded](#upgrading), never installed over. What follows is what it does, for configuring a
+deployment by hand. A `.env` written by hand leaves managed runners off until it switches them on
+([Turn them off or on](#turn-them-off-or-on)).
+
+```bash
 cp .env.example .env
 ```
 
@@ -63,6 +80,8 @@ deployment options.
 rebuild the web image whenever it changes.
 
 ## 2. Start the stack
+
+The install script has started it already. By hand:
 
 ```bash
 docker compose up -d --build
@@ -109,6 +128,9 @@ Orbit can execute code with the runner account's privileges. Do not expose an in
 attach a runner with broader credentials than its users should be able to exercise.
 
 ## 4. Register a runner
+
+With managed runners on, every account is given a runner at sign-in, and this step is optional: register a machine
+when the work needs that machine's repositories, network or credentials.
 
 Open **Add a runner** in the web UI and use the generated command. It points at this deployment and enrolls
 the machine through browser approval. A generic example is:
@@ -327,8 +349,162 @@ The address must be reachable from inside the container, whose `127.0.0.1` is th
 the Docker host, use the host's LAN or tunnel address. The worker probes `{base}/health` every 10 seconds (200 or 404
 counts as up) and records the result. The wiki settings and health line show the model's name and its state, never
 its address or key; if the endpoint refuses the key, correct it and recreate the worker. See the
-[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. Until the wiki's jobs
-move to the server, the worker only probes the model and reports its state.
+[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. The worker runs every
+account's wiki jobs with this model. To pause them, stop it with `docker compose stop wiki-worker`: the jobs wait in
+the queue until it is started again.
+
+## Managed runners
+
+A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
+session. It is a container on this host's Docker, given when the account signs in, with a data volume that keeps
+its checkouts, sessions and engine sign-ins. After an hour with nothing to do it sleeps: the container stops and
+the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
+Runners that people register themselves keep working beside it.
+
+### What the install sets up
+
+`scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
+
+```dotenv
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+COMPOSE_PROFILES=managed-runners-docker
+```
+
+- **The switch.** `ORBIT_MANAGED_RUNNERS_ENABLED=true` turns managed runners on in the apiserver. Absent, empty or
+  `false` is off, and so is any other value, with a warning in the apiserver's log.
+- **The Docker backend.** The `managed-runners-docker` Compose profile starts `docker-channel`, the
+  [restricted Docker channel](../deploy/managed-runner/docker-channel/README.md): the only process given the Docker
+  socket. It makes each runner's container and volume from its own template and touches nothing it did not make.
+  The apiserver reaches it through a socket in `data/managed-runners` and is never given the Docker socket.
+- **Their files.** `data/managed-runners` (mode 0700) holds the channel's token, its configuration
+  (`channel.json`) and the apiserver's managed runner profile (`profile.json`, `"backend": "docker"`). The profile
+  gives each runner 2 CPUs, 4 GiB of memory with its `/tmp` counted in it, 4096 processes and a 20 GiB volume, and
+  the channel refuses anything above its own ceilings. The pool is what this host has, less a quarter of its CPU
+  and memory and a tenth of the disk Docker's volumes live on, whichever filesystem the checkout is on; a runner
+  that does not fit waits until another one sleeps. The channel also makes no more containers than one per CPU and
+  per GiB of this host's memory, whichever is fewer, and deletes no volume unless an operator turns that on. To
+  change these, edit both files and run `docker compose up -d --force-recreate docker-channel apiserver`
+  ([where each setting lives](managed-runner-docker-operations.md#where-each-setting-lives)).
+- **The image.** The script builds the managed runner image from
+  [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
+  `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
+  built elsewhere from a commit you reviewed, load it with `docker load` and pass `--managed-runner-image <image>`.
+- **Their network.** `orbit-managed-runners`, a bridge network on which containers cannot reach one another. A
+  runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a runner on
+  another machine does: through the gateway's published port 2086, at the host's address on that network. It
+  reaches neither another runner nor the stack's own containers.
+- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
+  runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
+  so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
+  another machine over plain HTTP, a LAN address included.
+
+The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
+sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
+`--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+
+### Who gets one
+
+Every account, including the ones open sign-up creates ("Anyone with a Google account" under
+[Who can sign in with Google](#who-can-sign-in-with-google)), except a disabled one. Disabling an account
+(**Admin → Users → Disable**) stops its runner from being given, started or woken, and puts a running one to sleep
+with its volume kept.
+
+### Isolation and its limits
+
+Read this before opening sign-up on a deployment with managed runners. A managed runner is a container, and every
+container shares this host's kernel: with every other managed runner and with the Orbit stack itself. The channel
+makes each one from the same template: an unprivileged user, every capability dropped, no privilege escalation, a
+read-only root filesystem, limits on CPU, memory, processes and disk, no host directory and no Docker socket. Its
+`/tmp` is executable, as builds and `go test` need, and `nosuid` and `nodev`; on Docker older than 27 it stays
+`noexec`.
+Managed runners cannot reach one another on their network. That keeps honest users apart and contains their
+mistakes. It is not a strong boundary against a malicious user: a flaw in the kernel or the container runtime lets
+code in one container reach the host, other people's runners and data, and this deployment's secrets. Where anyone
+can sign up, that risk comes with the deployment, and accepting it is the deployer's decision. Where it is not
+acceptable, switch managed runners off or keep sign-up to people you trust.
+
+A runner can also reach every service this host listens to on an address other than loopback (sshd, for one), and
+through the host the network it sits on. Bind such services to loopback, or firewall the managed runners' network:
+[what a managed runner can reach](managed-runner-docker-operations.md#what-a-managed-runner-can-reach).
+
+### Turn them off or on
+
+Managed runners are switched in `.env`, and only there. An upgrade never writes these lines.
+
+- **Off:** set `ORBIT_MANAGED_RUNNERS_ENABLED=false` and recreate the apiserver with `docker compose up -d apiserver`.
+  From then on no account is given a runner, and none is started or woken. Nothing is stopped or deleted: a runner
+  that is running keeps running, every volume stays, and switching them on again carries on from where they were.
+- **On again:** set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and run `docker compose up -d apiserver`.
+- **On, for a deployment installed without them:** every deployment installed before managed runners existed, and
+  one installed with `--no-managed-runners`. Upgrade it first, then, from its checkout:
+
+  ```bash
+  scripts/install-server.sh --enable-managed-runners
+  ```
+
+  This prepares managed runners as a fresh install does, writes the three lines into `.env` (replacing an
+  `ORBIT_MANAGED_RUNNERS_ENABLED=false` line and leaving every other line as it was), starts `docker-channel` and
+  recreates the apiserver from the image it already runs.
+
+### What an upgrade does
+
+An upgrade (the `/upgrade` skill's script, or the steps under [Upgrading](#upgrading)) never writes `.env`, so
+managed runners stay as they were: off on a deployment whose `.env` does not switch them on, which is every
+deployment installed before them. There `/upgrade` builds and recreates exactly what it did before managed runners
+existed, and writes nothing under `data/`.
+
+Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also keeps the managed runners current. The
+runner in their image never updates itself, so each upgrade:
+
+1. stops before building anything unless `channel.json` and `profile.json` are in the managed runners' directory,
+   as Compose binds it into `docker-channel`;
+2. rebuilds `docker-channel` with the other images, then the managed runner image from this checkout, as
+   `orbit-managed-runner:local`, on this host and pushed nowhere;
+3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
+   file replaced whole by a rename;
+4. recreates the other services, then the apiserver if that did not recreate it, then `docker-channel`, last.
+   Both read their file only as they start. Until the channel serves the image the apiserver's profile names, the
+   apiserver starts no runner and only waits; in the other order, a channel already on the new image would refuse
+   the previous apiserver and fail a runner it was starting.
+
+Nothing a managed runner is doing is interrupted. A container keeps the image it was made from: the upgrade does not
+stop, drain or restart it, and the channel still reads, stops and removes containers of the previous image. Each
+runner moves to the new image with its next container, the one the wake after its next sleep makes, on the same
+volume and with the same runner. A sleep comes after an hour with nothing to do, or sooner when its owner asks for
+one through the API (`POST /api/managed-runner/sleep`), and only while nothing runs on it; one container per volume
+and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
+channel removes it and makes a new one from the current image.
+
+`/upgrade` deletes no image, and Docker keeps whatever a container still runs. What happens to the previous image
+then depends on Docker's image store:
+
+- In the containerd image store, which a fresh Docker 29 uses (`docker info` lists `io.containerd.snapshotter.v1`),
+  the previous image loses its name as soon as the new one takes the tag: `docker image ls` no longer shows it and
+  nothing new can be made from it, but containers made from it keep running on it, and its storage goes when the
+  last of them is removed. Nothing is left to delete.
+- In the classic store it stays as an untagged image. Docker refuses to remove it while any container, running or
+  stopped, was made from it, and `/upgrade --prune` (`docker image prune -f`) removes it once none is.
+
+Either way it is gone once every runner has slept once. To see which runners still run a previous image, list the
+managed runner containers with their images:
+
+```bash
+docker ps -a --filter label=orbit.managed-runner.instance --format '{{.Names}} {{.Image}}'
+```
+
+The layers of every image an upgrade rebuilds also stay in Docker's build cache until `docker builder prune`.
+
+If an upgrade stops between writing the files and starting both services on them, `data/managed-runners/.image-switch`
+names the image, and the next `/upgrade` starts the apiserver and the channel again whatever it builds.
+
+Every new commit gives a new image, since the image is stamped with the commit it was built from, and so a few
+minutes of building on each upgrade: the build's package step runs again, which needs the network.
+
+Each runner's data is on a Docker volume, `mr-data-<runner id>`, on this host's disk alone. The Postgres backups
+above do not include it, and neither switching managed runners off nor disabling an account deletes it. Back the
+volumes up, restore them, and handle a full disk, a memory limit, a channel or apiserver outage and a host restart as
+[Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) describes.
 
 ## Upgrading
 
@@ -343,7 +519,21 @@ docker compose up -d --build
 
 The control plane applies pending Prisma migrations on startup, and `wiki-worker`, which runs the same image,
 starts once it is healthy. Keep Postgres running unless the release notes explicitly require a database change
-outside the normal migration path.
+outside the normal migration path. An upgrade leaves `.env`, and with it [managed runners](#what-an-upgrade-does),
+as it was.
+
+These steps leave the managed runner image as it was. On a deployment with managed runners, upgrade with
+`/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`), which also rebuilds that image and switches to it, or do
+its steps after the ones above:
+
+```bash
+docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$(git rev-parse HEAD)" \
+  -t orbit-managed-runner:local .
+docker image inspect -f '{{.Id}}' orbit-managed-runner:local
+# Write that ID as "image" in data/managed-runners/channel.json and as runner.image in profile.json, then:
+docker compose up -d --wait --no-deps --force-recreate apiserver
+docker compose up -d --wait --no-deps --force-recreate docker-channel
+```
 
 ## Production checklist
 
@@ -356,6 +546,8 @@ outside the normal migration path.
       scripts with one under a runner service's OS account.
 - [ ] If Google sign-in is on, the Google app is published and who can sign in with Google is a deliberate
       choice.
+- [ ] Managed runners are on or off by a deliberate choice in `.env`, and where they are on and anyone can sign up,
+      the shared-kernel risk under [Isolation and its limits](#isolation-and-its-limits) is accepted.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.

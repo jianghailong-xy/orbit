@@ -1,6 +1,6 @@
 {
-  "why": "One input, one deterministic answer on both paths: what src/runner-go/wiki_docs_build.go makes of a confirmed document's sections — the material, the filter and the cap, the fingerprint, the prompts, the merge and the draft as read, the footnotes and their quotes found in the files, the ledger, the overview — and the TypeScript port in src/apiserver/src/wiki-worker must make the same of it, byte for byte.",
-  "write": "ORBIT_WIKI_DOCS_BUILD_FIXTURE=write go test -run TestWikiDocsBuildFixtureIsTheServersToo .",
+  "why": "Frozen since P11 (2026-10-19), when the runner's Go code was deleted: one input, one deterministic answer: what src/runner-go/wiki_docs_build.go made of a confirmed document's sections — the material, the filter and the cap, the fingerprint, the prompts, the merge and the draft as read, the footnotes and their quotes found in the files, the ledger, the overview — and the TypeScript port in src/apiserver/src/wiki-worker must make the same of it, byte for byte.",
+  "write": "nothing: frozen since P11 (2026-10-19), when its Go writer (TestWikiDocsBuildFixtureIsTheServersToo) was deleted",
   "sha": "5ca1ab1e0ddba11c0ffee5ca1ab1e0ddba11c0ff",
   "files": {
     "contracts/session.contract.json": "{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n",

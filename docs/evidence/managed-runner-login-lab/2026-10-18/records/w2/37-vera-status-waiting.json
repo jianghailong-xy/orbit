@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T23:39:43.708+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+    "ensure": false,
+    "kind": "waitingCapacity",
+    "moving": true,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Waiting for capacity"
+  },
+  "owner": "vera",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hkQIyNjyAjsIXngyDiP",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "OFFLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "WAITING_CAPACITY",
+    "reason": {
+      "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+      "message": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+      "retryable": true
+    },
+    "retryAfter": "2026-10-17T23:40:13.555Z",
+    "revision": 2,
+    "runnerId": "34hkQIyHd7Hzt3eHh6cRM",
+    "runnerPublicId": "34hkQIyHd7Hzt3eHh6cRM",
+    "usable": false,
+    "workspaceId": "34hkQIyNjyAjsIXngyDiP",
+    "workspacePublicId": "34hkQIyNjyAjsIXngyDiP"
+  }
+}

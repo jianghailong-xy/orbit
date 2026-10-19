@@ -25,7 +25,6 @@ import {
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
-import type { WikiMaintenanceRun } from './wiki';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 
@@ -1816,10 +1815,6 @@ export interface ClaimedSession {
    *  `source-pin/v1` (SR35), so a payload carrying this field only ever reaches a process that
    *  knows it must pin before it may create a worktree or spawn an engine (SR33). */
   source?: SessionSourceSnapshot;
-  /** Present on a Wiki maintenance session only (contracts/wiki.contract.json `maintenance.run`): the run it is
-   *  pinned to, and the clean start and guardrails it is started with. Only a runner that declares
-   *  `wiki-maintenance-run/v1` is handed such a session at all. */
-  wikiMaintenance?: WikiMaintenanceRun;
   /** Asks the runner to name the session through the engine running it, once its opening turn is
    *  underway (runner session_naming.go): present only while nothing else will name it and its engine
    *  can answer from inside its own process. A runner that ignores it leaves the title it has. */
@@ -2199,8 +2194,6 @@ export interface ReclaimSession {
    *  (SR29): a session already `PINNED` keeps the SHA its first claim froze, whatever the
    *  binding's configuration or the ref's tip have done since. */
   source?: SessionSourceSnapshot;
-  /** The maintenance run, cf. ClaimedSession.wikiMaintenance: a restarted runner starts it clean again. */
-  wikiMaintenance?: WikiMaintenanceRun;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */
@@ -2720,6 +2713,22 @@ export interface IntegrationJobProgressRequest {
   phase: IntegrationJobPhase;
   /** Upstream moved under the job while it worked, for a reader of the timeline. */
   upstreamMoved?: { from: string; to: string; commits?: number };
+}
+
+/** Runner → control plane: give a claimed job back to the queue (POST
+ *  /runner/integration-jobs/:jobId/release, contract §2.2 J-T11). Sent by a stopping runner for a job
+ *  it did not start, or one it stopped before its push: nothing was pushed under this claim. */
+export interface IntegrationJobReleaseRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+}
+
+/** Control plane → runner: `released` when the job went back to the queue, to be claimed by the next
+ *  heartbeat that asks for work. Otherwise `state` is what it ended as instead: CANCELLED when
+ *  somebody had asked it to stop, since a queued job with a stop request is never claimed (J-T12). */
+export interface IntegrationJobReleaseResponse {
+  released: boolean;
+  state: IntegrationJobState;
 }
 
 /** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */

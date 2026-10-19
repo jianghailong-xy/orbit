@@ -315,7 +315,7 @@ final class WikiContractTests: XCTestCase {
 
     /// A space's maintenance settings carry exactly the contract's keys, read the contract's own
     /// default as `.default` — off — and decode to it when the server sends none of them.
-    /// The maintenance job's health (criterion 3): why a due space made no task is one of the contract's
+    /// The maintenance job's health (criterion 3): why a due space made no run is one of the contract's
     /// reasons, and decodes as the server sends it on the cursor state.
     func testMaintenanceHeldReasonsAreTheContracts() throws {
         let job = try object(try object(try contract()["maintenance"], "maintenance")["job"], "maintenance.job")
@@ -325,9 +325,6 @@ final class WikiContractTests: XCTestCase {
         let data = Data(#"{"reason":"daily_limit_reached","at":"2026-09-28T06:00:00.000Z"}"#.utf8)
         XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceHeld.self, from: data),
                        WikiMaintenanceHeld(reason: .dailyLimitReached, at: "2026-09-28T06:00:00.000Z"))
-        // The task a fact makes is judged by its check, which the contract states as a command.
-        let task = try object(job["task"], "maintenance.job.task")
-        XCTAssertEqual(task["acceptanceCommand"] as? String, "orbit wiki check --space <id> --expect-cursor <token>")
     }
 
     func testMaintenanceSettingsAreTheContracts() throws {

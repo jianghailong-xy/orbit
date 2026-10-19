@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import { WIKI_JOB } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { currentWikiExecutorSwitch, wikiExecutorClaimOwners } from '../wiki/wiki-executor-switch';
 import {
   claimWikiJobs,
   endWikiJobAtRetryLimit,
@@ -113,7 +112,7 @@ export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
  * scheduler claims it when the model has room, and the answer wakes the job.
  *
  * ONE PASS: reclaim, claim, start.
- *   - first, whatever the switch says: repository operations no runner will settle — their job ended without
+ *   - first: repository operations no runner will settle — their job ended without
  *     them, or their claim went quiet long ago — are settled failed with the reason (`failAbandonedWikiRepoOps`).
  *   - reclaim: running jobs whose lease ran out go back to queued with the lost attempt counted — the
  *     worker that had them died. Their requests were let go the same way (their own sweep), so the job is
@@ -123,9 +122,9 @@ export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
  *   - start: each claimed job runs concurrently; its lease is renewed while it runs.
  * Bootstrap runs a pass at once, so a worker that starts after a restart picks the queue up where it stands.
  *
- * WHAT STOPS IT CLAIMING: ORBIT_WIKI_EXECUTOR (nothing under `runner`, only the listed accounts under
- * `canary`) and SIGTERM — the loop stops, the jobs in flight are cancelled, each is handed back to the queue
- * with nothing counted, and the next process's first pass claims them (design §5.4, plan A).
+ * It claims every account's jobs. WHAT STOPS IT CLAIMING: SIGTERM — the loop stops, the jobs in flight are
+ * cancelled, each is handed back to the queue with nothing counted, and the next process's first pass claims them
+ * (design §5.4, plan A).
  */
 @Injectable()
 export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy {
@@ -194,18 +193,16 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
   /** Reclaim, claim, start — returns how many jobs this pass started. */
   async runOnce(): Promise<number> {
     // Repository operations no runner will ever settle — their job ended without them, or their claim went quiet
-    // long ago — are ended first, whatever the switch says: they are the server's own leftovers (repoOps.abandoned).
+    // long ago — are ended first: they are the server's own leftovers (repoOps.abandoned).
     await failAbandonedWikiRepoOps(this.prisma)
       .then((ended) => {
         if (ended > 0) this.log.warn(`${ended} abandoned repository operation(s) settled failed`);
       })
       .catch((error: unknown) => this.log.warn(`the repository operations' sweep failed: ${this.message(error)}`));
-    const owners = wikiExecutorClaimOwners(currentWikiExecutorSwitch());
-    if (owners !== null && owners.length === 0) return 0;
     await reclaimExpiredWikiJobs(this.prisma, WIKI_JOB.maxConcurrentPerWorker).catch((error: unknown) =>
       this.log.warn(`the job sweep failed: ${this.message(error)}`));
     // A job the sweep, or a repository wait, put back at the retry limit is ended rather than claimed.
-    await endWikiJobsPastRetryLimit(this.prisma, owners)
+    await endWikiJobsPastRetryLimit(this.prisma, null)
       .then((ended) => ended.forEach((id) => this.log.warn(`job ${id} reached the retry limit and is ended`)))
       .catch((error: unknown) => this.log.warn(`the retry limit's pass failed: ${this.message(error)}`));
     if (this.stopped) return 0;
@@ -214,7 +211,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     const claimed = await claimWikiJobs(this.prisma, {
       workerId: this.workerId,
       kinds: Object.keys(this.runners),
-      owners,
+      owners: null,
       limit: room,
       leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
     });

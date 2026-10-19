@@ -2324,7 +2324,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `session`, `project` or `project_acceptance_*` object nor any of the six preserved
       // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is not
       // another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0429_wiki_plan_job_support_trigger'],
+      '0429_wiki_plan_job_support_trigger',
+      // A managed runner mapping's run backend (0430, docs/managed-runner-design.md "Implementation record:
+      // Docker backend"): one TEXT NOT NULL column on `managed_runner` (0399's table) with the constant
+      // default 'kubernetes' — catalog-only — and a CHECK every stored row satisfies (the two backends).
+      // Only `managed_runner` is named: no `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions, and no index, function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored mapping reads 'kubernetes'.
+      '0430_managed_runner_backend'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

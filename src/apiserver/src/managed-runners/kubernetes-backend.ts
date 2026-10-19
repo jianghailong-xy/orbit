@@ -1,12 +1,15 @@
 import type { ManagedRunner } from '@prisma/client';
 
 import {
+  KubeAmbiguousError,
   KubeApiError,
+  KubeUnreachableError,
   isRetryableKubeError,
   type ManagedKubeClient,
   type PersistentVolume,
   type PersistentVolumeClaim,
   type Pod,
+  type PodContainerStatus,
   type Secret,
 } from './kube-client';
 import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
@@ -26,6 +29,7 @@ import { capacityBudget, computeShare, storageShare, type CapacityBudget, type C
 import { observedStop, readFencingReceipt, type ManagedRunnerPredecessor, type ObservedStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import {
+  MANAGED_STOP_REPORT_FINALIZER,
   OWNER_ANNOTATION,
   RUNNER_ANNOTATION,
   bootstrapCredentialOf,
@@ -37,6 +41,7 @@ import {
   managedPodName,
   managedPvcName,
   managedSecretName,
+  podHeldForStopReport,
   podIdentityProblem,
   podStopConfirmed,
   podTerminated,
@@ -54,13 +59,15 @@ import {
  *   data volume   PVC `mr-data-<runner uuid>` (storage/pvc.template.json), bound to a Ceph-CSI PV
  *   credential    Secret `mr-boot-<runner uuid>`, the runner credential of one generation
  *   instance      bare Pod `mr-<runner uuid>` (runner-pod.yaml.example), behind the admission guard
- *   stop report   the kubelet's terminal container states (podStopConfirmed)
+ *   stop report   the kubelet's terminal container states (podStopConfirmed), kept on the Pod by the
+ *                 manager's finalizer until the manager has recorded them, whoever deleted it
  *   released      no VolumeAttachment names the volume's PV
  *   fencing       an operator's receipt in ConfigMap `mr-fence-<runner uuid>`
  *   capacity      the profile's budget, pooled by cluster key and namespace
  *
- * Every method makes exactly the calls the manager made itself before this interface existed, in
- * the same order, with the same identity checks and messages.
+ * Every method makes the calls the manager made itself before this interface existed, in the same
+ * order, with the same identity checks and messages; T04 added the stop-report finalizer's removal
+ * to `removeInstance`, and an API server that cannot be reached at all, which spends no attempt.
  */
 
 const TERMS: ManagedRunnerBackendTerms = {
@@ -101,16 +108,34 @@ function credentialOf(secret: Secret): KubeCredential {
   };
 }
 
+/**
+ * How a terminal Pod ended, by the kubelet's container states: the runner's exit code, and whether a
+ * container ended killed (137) with the runtime's OOMKilled reason — which, like Docker's flag, is
+ * also given for a container in which only a child process was killed.
+ */
+function exitOf(pod: Pod): ManagedInstance['exit'] {
+  if (!podTerminated(pod)) return null;
+  const ended = (statuses: PodContainerStatus[] | undefined) => (statuses ?? []).flatMap((c) => (c.state?.terminated ? [c.state.terminated] : []));
+  const runner = ended(pod.status?.containerStatuses);
+  const all = [...ended(pod.status?.initContainerStatuses), ...runner];
+  if (all.length === 0) return null;
+  return { code: (runner[0] ?? all[0]).exitCode ?? null, outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137) };
+}
+
 function instanceOf(pod: Pod): KubeInstance {
+  const terminated = podTerminated(pod);
   return {
     name: pod.metadata.name,
     uid: pod.metadata.uid!,
     node: pod.spec.nodeName ?? null,
     phase: pod.status?.phase,
     running: pod.status?.phase === 'Running',
-    terminated: podTerminated(pod),
+    terminated,
     stopConfirmed: podStopConfirmed(pod),
-    removing: !!pod.metadata.deletionTimestamp,
+    // A deleted Pod that has ended and that the stop-report finalizer still holds does not go by
+    // itself: it waits for the manager, which records its stop and then removes it (`removeInstance`).
+    removing: !!pod.metadata.deletionTimestamp && !(terminated && podHeldForStopReport(pod)),
+    exit: exitOf(pod),
     pod,
   };
 }
@@ -226,9 +251,15 @@ export class KubernetesBackend implements ManagedRunnerBackend {
     return podIdentityProblem(instance.pod, this.identity(mapping), mapping.pvcUid!);
   }
 
-  /** Released by UID: a successor under the same name is never deleted. */
+  /**
+   * Released by UID: a successor under the same name is never deleted. Then the stop-report finalizer
+   * comes off that same Pod — its stop is recorded, which is all it waited for — and the object goes
+   * once its kubelet is done with it, as one without the finalizer would.
+   */
   async removeInstance(mapping: ManagedRunner): Promise<void> {
-    await this.kube.pods.delete(managedPodName(mapping.runnerId), { uid: mapping.podUid! });
+    const name = managedPodName(mapping.runnerId);
+    await this.kube.pods.delete(name, { uid: mapping.podUid! });
+    await this.releaseStopReport(name, mapping.podUid!);
   }
 
   // ── stop proof ─────────────────────────────────────────────────────────────────────────────
@@ -249,17 +280,51 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   }
 
   failure(error: unknown): ManagedRunnerBackendFailure | null {
+    if (error instanceof KubeUnreachableError) return { retryable: true, unreachable: true };
     if (isRetryableKubeError(error)) return { retryable: true };
     if (!(error instanceof KubeApiError)) return null;
+    const log = `Kubernetes answered ${error.status} ${error.reason}: ${error.message}`;
+    // A namespace ResourceQuota refused the create — its admission answers 403 with "exceeded quota:
+    // <quota>, requested: …, used: …, limited: …" — and nothing was made. Not a permission: room lets
+    // the same create through.
+    const quota = error.status === 403 ? /exceeded quota: .*/.exec(error.message) : null;
+    if (quota) return { retryable: false, waitForRoom: true, code: 'KUBERNETES_QUOTA_EXCEEDED', detail: quota[0], log };
     return {
       retryable: false,
       code: error.status === 401 || error.status === 403 ? 'KUBERNETES_FORBIDDEN' : 'KUBERNETES_REJECTED',
       detail: `HTTP ${error.status} ${error.reason}`.trim(),
-      log: `Kubernetes answered ${error.status} ${error.reason}: ${error.message}`,
+      log,
     };
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The stop-report finalizer off the Pod `name` with the UID `uid`, if it is still on it. The patch
+   * tests the UID and the finalizer it removes, so it changes nothing on a successor, or on a Pod
+   * whose finalizers moved since the read; such a Pod is read again on the manager's next pass.
+   */
+  private async releaseStopReport(name: string, uid: string): Promise<void> {
+    const pod = await this.kube.pods.get(name);
+    if (!pod || pod.metadata.uid !== uid) return;
+    const at = (pod.metadata.finalizers ?? []).indexOf(MANAGED_STOP_REPORT_FINALIZER);
+    if (at < 0) return;
+    try {
+      await this.kube.pods.patch(name, [
+        { op: 'test', path: '/metadata/uid', value: uid },
+        { op: 'test', path: `/metadata/finalizers/${at}`, value: MANAGED_STOP_REPORT_FINALIZER },
+        { op: 'remove', path: `/metadata/finalizers/${at}` },
+      ]);
+    } catch (error) {
+      // A test that did not hold (409 or 422): the Pod changed between the read and the patch.
+      if (error instanceof KubeApiError && (error.status === 409 || error.status === 422)) {
+        throw new KubeAmbiguousError(`the stop-report finalizer of Pod ${uid} was not removed: the Pod changed meanwhile (${error.message})`);
+      }
+      // Gone meanwhile: nothing to release.
+      if (error instanceof KubeApiError && error.status === 404) return;
+      throw error;
+    }
+  }
 
   /** What every builder and check needs to know about the mapping. */
   private identity(mapping: ManagedRunner): ManagedRunnerIdentity {

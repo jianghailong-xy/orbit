@@ -1,9 +1,9 @@
 {
   "about": [
     "One topic the runner and the server write the same way (contracts/wiki.contract.json `articles`, `jobs.kindRuns.articles`).",
-    "The runner's `orbit wiki articles` (src/runner-go/wiki_articles_test.go, TestWikiArticleAsksWhatTheServerAsks) and the",
-    "server's `articles` job (src/apiserver/src/wiki-worker/wiki-articles-job.spec.ts, wiki-articles-writer.spec.ts) are each run",
-    "on `topics` with the model answering as `model` says, and each must ask exactly `calls` — every prompt, word for word,",
+    "The runner's `orbit wiki articles` wrote it (src/runner-go/wiki_articles_test.go, deleted in P11, 2026-10-19); the",
+    "server's `articles` job (src/apiserver/src/wiki-worker/wiki-articles-job.spec.ts, wiki-articles-writer.spec.ts) is run",
+    "on `topics` with the model answering as `model` says, and must ask exactly `calls` — every prompt, word for word,",
     "by the unit the server files it under — and group the big topic exactly as `groups` says, entry for entry.",
     "",
     "`model`: the nth prompt that asks for a group's name is answered `names[n]` wrapped as a model wraps a short answer",
@@ -11,8 +11,8 @@
     "`article`; any other prompt for an article titled `shortFor` is answered `short` (so that topic is asked twice), and every",
     "other article `article`, which keeps more than rules.minChars.",
     "",
-    "`calls` and `groups` are written by the runner: `go test -run TestWikiArticleAsksWhatTheServerAsks",
-    "-update-wiki-article-writer-fixture` from src/runner-go. Change a prompt on one side and the other side's test says so."
+    "`calls` and `groups` are frozen: the runner's Go writer that wrote them is gone, and nothing writes them again. A",
+    "prompt changed on the server's side is a change of these answers, which its tests then say."
   ],
   "calls": {
     "database": {

@@ -38,17 +38,15 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
  * answer land. The apiserver dispatches and settles those rows (runner-api/wiki-repo-op-relay.ts); the
  * worker only writes and waits.
  *
- * ORBIT_WIKI_EXECUTOR decides who they run for (wiki-executor-switch.ts): under the default `runner` they
- * claim nothing, and the worker only probes — exactly what it did before this phase.
+ * They run for every account: the server executes every account's wiki (contract `jobs.executor.removed`).
  *
  * THE PIPELINES WRITE THROUGH THE WIKI'S OWN SERVICES, not through their own queries (design §4.2): an import
- * proposes through WikiService, the same one writer the runner door's `imports` route calls, with origin
- * import; the `articles` job reads the plan and a topic's input and writes its articles through WikiArticles,
- * exactly as the runner door does, and asks for the space's snapshot through WikiRepoOps; a verify job reads
- * the verification list and records verdicts through WikiService, exactly as the runner door does, against the
- * same evidence reader and the same one writer of a verdict; a plan job reads the plan and stores its draft
- * through WikiPlans, the gate the runner door's drafts go through; the `docs_build` job reads what is written and
- * writes a document's sections through WikiDocs, the documents' route's own writer, and reads the repository at
+ * proposes through WikiService, the one writer of a changeset, with origin import; the `articles` job reads the
+ * plan and a topic's input and writes its articles through WikiArticles, and asks for the space's snapshot through
+ * WikiRepoOps; a verify job reads the verification list and records verdicts through WikiService, against the
+ * one evidence reader and the one writer of a verdict; a plan job reads the plan and stores its draft through
+ * WikiPlans and the plan's gate; the `docs_build` job reads what is written and writes a document's sections
+ * through WikiDocs, the documents' one writer, and reads the repository at
  * the snapshot's commit through WikiRepoOps. The worker holds no realtime hub and no push
  * service — the services' own defaults are none — so what a job records is not announced to a connected client
  * by this process; realtime is an accelerant and never the truth (contract `realtime.correctness`). What the

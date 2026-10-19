@@ -1,0 +1,58 @@
+{
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34henzw58bMujstITsz03",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "OFFLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "REQUESTED",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 10,
+    "runnerId": "34henzvsur3N7nKIMcXRR",
+    "runnerPublicId": "34henzvsur3N7nKIMcXRR",
+    "usable": false,
+    "workspaceId": "34henzw58bMujstITsz03",
+    "workspacePublicId": "34henzw58bMujstITsz03"
+  },
+  "at": "2026-10-17T19:51:59.645+00:00",
+  "before": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": true,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34henzw58bMujstITsz03",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "OFFLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "FAILED",
+    "reason": {
+      "code": "ADMISSION_GUARD_MISSING",
+      "message": "The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.",
+      "retryable": true
+    },
+    "retryAfter": null,
+    "revision": 9,
+    "runnerId": "34henzvsur3N7nKIMcXRR",
+    "runnerPublicId": "34henzvsur3N7nKIMcXRR",
+    "usable": false,
+    "workspaceId": "34henzw58bMujstITsz03",
+    "workspacePublicId": "34henzw58bMujstITsz03"
+  },
+  "status": 202
+}

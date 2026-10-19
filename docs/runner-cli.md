@@ -355,8 +355,8 @@ The commands the runner runs itself never act as you, even when you are logged i
 covers a task's EXECUTABLE acceptance command and a `!` command in a session. The runner marks the processes it
 starts for its sessions (engines, shell commands, background jobs) with `ORBIT_RUNNER_CHILD=1`, and there the CLI
 skips your login: such a process acts as its session if it has one, and otherwise as the machine. So
-`orbit wiki check` and `orbit wiki plan check` still run as the runner, and `orbit whoami` there says why. A
-terminal you open yourself has no such mark.
+`orbit token list` there still runs as the runner, and `orbit whoami` there says why. A terminal you open
+yourself has no such mark.
 
 ## Security notes
 

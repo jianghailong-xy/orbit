@@ -20,6 +20,12 @@ import type { ConfigMap, PersistentVolume, Pod } from './kube-client';
  * namespace, key `receipt.json` — a kind of object the manager may read and may not write. The
  * format below follows the design's fault procedure: who did what to which predecessor, and an
  * independent observation that it took effect.
+ *
+ * On the Docker backend there is one host, whose Docker reports every container's exit itself, so a
+ * receipt is only ever needed for a container that vanished unobserved (removed by hand, outside the
+ * channel). The operator's record is then `HOST_PROCESS_CHECK` (DockerFencingReceiptV1): that no
+ * process of that instance remains on the host and nothing holds its volume, left as
+ * `<channel state>/fencing/<runner-uuid>.json`, a file the channel reads and never writes.
  */
 
 export const FENCING_RECEIPT_KEY = 'receipt.json';
@@ -73,6 +79,25 @@ export interface FencingReceiptV1 {
   };
 }
 
+/** The Docker backend's receipt, schema version 1: a host check of a container that vanished unobserved. */
+export interface DockerFencingReceiptV1 {
+  schemaVersion: 1;
+  kind: typeof FENCING_RECEIPT_KIND;
+  method: 'HOST_PROCESS_CHECK';
+  predecessor: {
+    runnerId: string;
+    generation: number;
+    podName: string;
+    podUid: string;
+    nodeName: string;
+    pvcUid: string;
+    volumeHandle: string;
+  };
+  /** What the operator checked on the host: no container or process of the instance, nothing holding its volume. */
+  action: { performedBy: string; performedAt: string; description: string; reference: string };
+  verification: { observedBy: string; observedAt: string; result: 'NO_PROCESS_OF_THE_INSTANCE'; evidenceReference: string };
+}
+
 export interface ObservedStopProof {
   kind: 'OBSERVED_STOP';
   predecessor: ManagedRunnerPredecessor;
@@ -89,8 +114,9 @@ export interface FencingReceiptProof {
   kind: 'FENCING_RECEIPT';
   predecessor: ManagedRunnerPredecessor;
   recordedAt: string;
-  source: { configMap: string; uid: string | null; resourceVersion: string | null };
-  receipt: FencingReceiptV1;
+  /** Where it was read: the ConfigMap (Kubernetes), or the channel's receipt file (Docker). */
+  source: { configMap: string; uid: string | null; resourceVersion: string | null } | { file: string };
+  receipt: FencingReceiptV1 | DockerFencingReceiptV1;
   retiredAt?: string;
 }
 
@@ -253,5 +279,60 @@ export function readFencingReceipt(
       },
       receipt: value as FencingReceiptV1,
     },
+  };
+}
+
+/**
+ * Read a Docker backend receipt (DockerFencingReceiptV1, from `source`) and accept it only if it is
+ * complete and bound to `predecessor` field by field: the same runner, generation, container name and
+ * instance UID, host, volume UID and volume handle. Every problem is reported, not just the first.
+ */
+export function readDockerFencingReceipt(value: unknown, source: string, predecessor: ManagedRunnerPredecessor, now: Date): FencingReceiptVerdict {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, problems: [`${source} is not an object`] };
+  const problems: string[] = [];
+  const at = (path: string): unknown =>
+    path.split('.').reduce<unknown>((node, key) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined), value);
+  const text = (path: string): string => {
+    const v = at(path);
+    if (typeof v !== 'string' || !v.trim()) {
+      problems.push(`${path} must be a non-empty string`);
+      return '';
+    }
+    return v;
+  };
+  const time = (path: string): number => {
+    const v = text(path);
+    const ms = v ? Date.parse(v) : NaN;
+    if (v && (!/^\d{4}-\d{2}-\d{2}T/.test(v) || Number.isNaN(ms))) problems.push(`${path} must be an ISO 8601 time`);
+    else if (v && ms > now.getTime() + CLOCK_SKEW_MS) problems.push(`${path} is in the future`);
+    return ms;
+  };
+  const same = (path: string, expected: string | number | null) => {
+    const v = at(path);
+    if (v !== expected) problems.push(`${path} is ${JSON.stringify(v)}, not the recorded ${JSON.stringify(expected)}`);
+  };
+  if (at('schemaVersion') !== 1) problems.push('schemaVersion must be 1');
+  if (at('kind') !== FENCING_RECEIPT_KIND) problems.push(`kind must be ${FENCING_RECEIPT_KIND}`);
+  if (at('method') !== 'HOST_PROCESS_CHECK') problems.push('method must be HOST_PROCESS_CHECK on the Docker backend');
+  same('predecessor.runnerId', predecessor.runnerId);
+  same('predecessor.generation', predecessor.generation);
+  same('predecessor.podName', predecessor.podName);
+  same('predecessor.podUid', predecessor.podUid);
+  same('predecessor.nodeName', predecessor.nodeName);
+  same('predecessor.pvcUid', predecessor.pvcUid);
+  same('predecessor.volumeHandle', predecessor.volumeHandle);
+  text('action.performedBy');
+  text('action.description');
+  text('action.reference');
+  const performedAt = time('action.performedAt');
+  text('verification.observedBy');
+  text('verification.evidenceReference');
+  const observedAt = time('verification.observedAt');
+  if (observedAt < performedAt) problems.push('verification.observedAt is before action.performedAt');
+  if (at('verification.result') !== 'NO_PROCESS_OF_THE_INSTANCE') problems.push('verification.result must be NO_PROCESS_OF_THE_INSTANCE');
+  if (problems.length) return { ok: false, problems };
+  return {
+    ok: true,
+    proof: { kind: 'FENCING_RECEIPT', predecessor, recordedAt: now.toISOString(), source: { file: source }, receipt: value as DockerFencingReceiptV1 },
   };
 }

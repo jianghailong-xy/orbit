@@ -97,10 +97,10 @@ import { verifyWikiOps } from './wiki-verify-job';
 /**
  * The `maintain` job (contracts/wiki.contract.json `jobs.kindRuns.maintain`, `maintenance.job.server`;
  * design §5 and §8, P8): a space's Wiki maintenance run, done by the wiki-worker with the deployment's
- * System model in place of a maintenance session's provider, and with the space's runner only for the
- * repository operations it cannot do itself.
+ * System model in place of the provider a maintenance session ran on before P11, and with the space's runner
+ * only for the repository operations it cannot do itself.
  *
- * WHAT IT IS, IN THE RUNNER'S OWN ORDER (`src/runner-go/wiki_maintain.go`, which does this until P10). It
+ * WHAT IT IS, IN THE RUNNER'S OWN ORDER (`src/runner-go/wiki_maintain.go`, which did this until P11). It
  * reads where the run starts and the space's snapshot of origin/main (one `wiki_repo_op`), reads the
  * dossiers since the cursor up to the position the run expects, asks the model about each one — one request
  * per dossier through the queue, four in flight at most — checks every entry against its dossier and the
@@ -113,13 +113,14 @@ import { verifyWikiOps } from './wiki-verify-job';
  * the articles a successful run owes (`queueWikiArticlesAfterRun`).
  *
  * A SPACE THAT IS BEHIND WRITES NO DOCUMENT: a run made while the space was catching up skips the documents
- * and the plan proposal whole, as the runner's does.
+ * and the plan proposal whole, as the runner's did.
  *
  * HOW IT FAILS (§5.5). A failure of the platform — the runner away, a read or a request past its limit, the
  * database closing or refusing a unit of work under the run (P2028, `asStop`), the worker stopping — is
  * thrown as infra: the job is tried again on the backoff and NOTHING is counted against
  * the space's streak. A failure of the work — the model's answers, the server's refusals — ends the run
- * through the finish route, which counts it, so three in a row tell the owner, and the job fails as content.
+ * through its finish (`finishWikiMaintenanceJob`), which counts it, so three in a row tell the owner, and the job
+ * fails as content.
  * Every call is a breakpoint: the pair `(step, unit)` is a request's identity, so a replayed job reuses the
  * answers it already has.
  *
@@ -268,7 +269,7 @@ function union(a: readonly string[], b: readonly string[]): string[] {
   return [...new Set([...a, ...b])];
 }
 
-/** The run's context: what the runner's context route answers, read from the space and the run row. */
+/** The run's context: what the runner's context route answered before P11, read from the space and the run row. */
 interface WikiMaintainContext {
   title: string;
   repo: { urlNorm: string; rootCommitSha: string };
@@ -331,7 +332,8 @@ function readRunId(input: Record<string, unknown>): string {
 
 /**
  * One run's state: where it reports, what it read, and what it has spent. The pipeline is the runner's
- * (`wikiMaintainRun` in Go), step for step; what changes is who asks the model and where the repository is.
+ * (`wikiMaintainRun` in Go, before P11), step for step; what changed is who asks the model and where the
+ * repository is.
  */
 class WikiMaintainRun {
   private readonly report: WikiMaintainReport = {
@@ -622,7 +624,7 @@ class WikiMaintainRun {
 
   // ── The context and the snapshot ──────────────────────────────────────────────────────────────
 
-  /** Where the run starts: the space, its mode and numbers, its topics, and the position its task expects. */
+  /** Where the run starts: the space, its mode and numbers, its topics, and the position the run expects. */
   private async readContext(expectAt: Date | null, expectKind: string | null, expectRef: string | null, catchUp: string | null): Promise<void> {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
@@ -654,8 +656,8 @@ class WikiMaintainRun {
       expect: expectAt && expectKind && expectRef
         ? (encodeCursorToken(space.id, { at: expectAt, kind: expectKind as never, ref: expectRef }) ?? '')
         : '',
-      // The run's own size, as the session's context route answers it: the position a task expects covers it,
-      // and a run of a job no task expects anything of reads this many sessions.
+      // The run's own size, as the session's context route answered it before P11: the position the run expects
+      // covers it, and a run that expects none reads this many sessions.
       runSessions: wikiMaintenanceRunSessions({ mode: reviewMode, activeEntries, pendingInSpace }),
       catchUp,
     };
@@ -722,7 +724,7 @@ class WikiMaintainRun {
   // ── The dossiers ──────────────────────────────────────────────────────────────────────────────
 
   /**
-   * The pages from the cursor up to the position the run expects — or, for a run no task expects anything of,
+   * The pages from the cursor up to the position the run expects — or, for a run that expects none,
    * as many sessions as the run may cover — and the dossiers not processed yet, one a session.
    *
    * A PAGE HANDS A SESSION OUT MORE THAN ONCE (2026-10-11, P10 round 93). A page covers facts until it holds
@@ -780,7 +782,7 @@ class WikiMaintainRun {
     return out;
   }
 
-  /** One page of the space's dossiers, through the server's own reader (the runner door's is the same one). */
+  /** One page of the space's dossiers, through the server's own reader (the one the runner door served before P11). */
   private async dossiersUntil(after: string, until: string, limit: number): Promise<Awaited<ReturnType<WikiMaintenance['dossierPage']>>> {
     const { job } = this.jobContext;
     try {
@@ -1014,7 +1016,7 @@ class WikiMaintainRun {
     // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
     const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, stripNul(body));
     if (!Array.isArray(answer.ops)) {
-      // A request refused whole: the answer carries no op outcomes, and the run stops on it as the runner's.
+      // A request refused whole: the answer carries no op outcomes, and the run stops on it as the runner's did.
       const code = typeof answer.code === 'string' ? answer.code : 'WIKI_SCHEMA';
       const message = typeof answer.message === 'string' ? answer.message : 'the server refused the proposal';
       throw new WikiJobContentError(`the server refused the proposal (${code}): ${message}`);
@@ -1243,7 +1245,7 @@ class WikiMaintainRun {
         }));
         for (let from = 0; from < reported.length; from += WIKI_ANCHOR_RULES.reportEntriesMax) {
           const written = await this.deps.wiki.recordAnchorChecks(
-            { ownerId: job.ownerId, sessionId: null, jobId: job.id },
+            { ownerId: job.ownerId, jobId: job.id },
             job.spaceId,
             { ref, entries: reported.slice(from, from + WIKI_ANCHOR_RULES.reportEntriesMax) },
           );
@@ -1599,7 +1601,7 @@ class WikiMaintainRun {
     throw new WikiJobInfraError(`REPO_OP_FAILED: reading ${what} failed 3 times: ${last}`);
   }
 
-  /** One document's write through the route's own writer; a refusal is the section's, said as the runner said it. */
+  /** One document's write through the shared writer (`WikiDocs.write`); a refusal is the section's, said as the runner said it. */
   private async writeDocument(slug: string, request: WikiDocsWriteRequest): Promise<WikiDocsWriteAnswer> {
     const { job } = this.jobContext;
     try {
@@ -1632,7 +1634,7 @@ class WikiMaintainRun {
    * reach — and each operation is still asked once the one before it has settled.
    *
    * A RENAME IS TAKEN BY ITS OLD PATH, AND A DELETED FILE IS READ AT ITS COMMIT (2026-10-10), as the runner's
-   * comparison takes them (`wikiGitChanges`, and `newWikiDocRepo` at the commit itself): the names are keyed by the
+   * comparison took them (`wikiGitChanges`, and `newWikiDocRepo` at the commit itself): the names are keyed by the
    * path at the section's commit (`gitChangesOf`), so either end of a rename touches a section that names it and the
    * old one is withdrawn, `to` where it went; and the commit's files have what the range deleted or renamed away
    * (`baseTreeOf`), so a cited file that is gone is read there and its going changes the section's material. The
@@ -1718,7 +1720,7 @@ class WikiMaintainRun {
         if (!samePieces(before.pieces, after.pieces)) changed.push({ doc: pending.doc, key: pending.key });
       }
     }
-    // By the paths' bytes, as the runner's `sort.Slice` compares Go strings.
+    // By the paths' bytes, as the runner's `sort.Slice` compared Go strings.
     gone.sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
     return { changed, gone };
   }
@@ -1754,8 +1756,8 @@ class WikiMaintainRun {
       const content = await this.readWholeFile(head, path);
       if (content === null) continue;
       const outline = wikiDesignOutline(content);
-      // The commit that added it is the runner's `git log -1`; the repository operations answer a range's
-      // names and not which commit landed one, so the head stands for it, as the runner's fallback does.
+      // The commit that added it was the runner's `git log -1`; the repository operations answer a range's
+      // names and not which commit landed one, so the head stands for it, as the runner's fallback did.
       docs.push({ path, renamedFrom: renames.get(path) ?? '', commit: head, title: outline.title, headings: outline.headings, opening: outline.opening });
     }
     docs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -1795,7 +1797,7 @@ class WikiMaintainRun {
       if (items.length === WIKI_MAINTAIN_PROPOSAL.itemsMax) break;
       items.push({ id: `K${items.length + 1}`, entry });
     }
-    // The answer's references are checked in the files at the snapshot's commit, as the runner checks them in its
+    // The answer's references are checked in the files at the snapshot's commit, as the runner checked them in its
     // checkout (`wikiDocRepo`), not against the snapshot's index.
     const repo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
     const prompt = wikiMaintainProposalPrompt(this.plan, items);
@@ -1936,7 +1938,7 @@ function pathNamed(changed: string, named: readonly string[]): boolean {
 }
 
 /**
- * A diff's names keyed by the path at the commit it starts from, as the runner's `wikiGitChanges` keys `git diff
+ * A diff's names keyed by the path at the commit it starts from, as the runner's `wikiGitChanges` keyed `git diff
  * --name-status -M`: a rename under its old path (R, `to` its new one) and its new path once more, as added (A); a
  * copy's new path as added; any other change under its path, by its status's first letter.
  */
@@ -1959,7 +1961,7 @@ function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from:
 
 /**
  * The base commit's file list, as the diff names it: the head's, less what the range added or renamed into
- * place, plus what it deleted or renamed away — the files the runner reads at the commit itself, so a deleted
+ * place, plus what it deleted or renamed away — the files the runner read at the commit itself, so a deleted
  * one is read there too. The files whose sizes the head does not carry are marked with one byte, which is what
  * lets a read of them answer at all (their content is still whatever git holds).
  */

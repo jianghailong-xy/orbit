@@ -21,7 +21,7 @@
  *       recorded as the proof, the Pod is deleted by UID, and only then is the generation retired and
  *       compute given back. The PVC, the runner row and the default workspace stay; the old
  *       credential is dead. An instance that already stopped on its own sleeps the same way (an
- *       enabled owner's would be FAILED); one gone without the kubelet's report fences, compute kept;
+ *       enabled owner's is started again); one gone without the kubelet's report fences, compute kept;
  *   (4) nothing wakes it while the account is disabled: demand — the hook every session path calls —
  *       records nothing, the sweep passes over its queued work, a wake desired before the account was
  *       disabled is dropped, and ensure, retry, wake, sleep and delete are 403 ACCOUNT_DISABLED with
@@ -331,11 +331,11 @@ test('a disabled account\'s managed runner is put to sleep and kept there, again
     for (let i = 0; i < 4 && outcomes.at(-1) !== 'SLEEPING'; i += 1) outcomes.push(await w.primary.reconcile(stopped.mapping.id));
     assert.equal(outcomes.at(-1), 'SLEEPING', outcomes.join(' → '));
     assert.equal(computeOf(await w.mappingOf(stopped.ownerId)), null);
-    // An enabled owner's instance that stops unasked is FAILED, as ever.
+    // An enabled owner's instance that stops unasked is started again (managed-runner-recovery.pg.spec.ts).
     const unasked = await w.readyRunner('stopped-enabled');
     w.cluster.stopPod(managedPodName(unasked.mapping.runnerId));
-    assert.equal(await w.primary.reconcile(unasked.mapping.id), 'FAILED');
-    assert.equal(((await w.mappingOf(unasked.ownerId)).lastError as { code: string }).code, 'POD_TERMINATED');
+    assert.equal(await w.primary.reconcile(unasked.mapping.id), 'BACKOFF');
+    assert.equal(((await w.mappingOf(unasked.ownerId)).lastError as { code: string }).code, 'POD_RESTARTING');
 
     // A drained instance whose Pod vanishes without the kubelet's report is fenced, compute kept.
     const vanished = await w.readyRunner('vanished');

@@ -21,10 +21,10 @@ import { shortWikiHash, WIKI_PLAN_MATERIAL_CAPS, type WikiPlanRepo } from './wik
 
 /**
  * What the drafting job asks the model, step by step (contract `plan.jobs.server`) — ported word for word from
- * `src/runner-go/wiki_plan_prompts.go` (the sample's draft_plan.py and p1_revise.py, made general): the materials
- * each step reads, and the line format each answer is written in. The prompts are English, as all of Orbit's copy
- * is (AGENTS.md section 5); the paths, symbols and commands in them are the repository's own. `wiki-plan.fixture.json`
- * holds them to the runner's bytes.
+ * `src/runner-go/wiki_plan_prompts.go` before P11 deleted it (the sample's draft_plan.py and p1_revise.py, made
+ * general): the materials each step reads, and the line format each answer is written in. The prompts are English,
+ * as all of Orbit's copy is (AGENTS.md section 5); the paths, symbols and commands in them are the repository's own.
+ * `wiki-plan.fixture.json`, frozen since P11, holds them to the runner's bytes.
  */
 
 /** A version as the plan's read gives it: what a draft revises (WikiPlanVersion of @orbit/shared, the fields read here). */
