@@ -200,6 +200,63 @@ func TestMCPTaskRequestConfirmationRefusesOutsideASession(t *testing.T) {
 	}
 }
 
+func TestMCPIntegrationAbandonPostsTheJobUnderTheCoordinatingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "integration_abandon") {
+		t.Fatalf("integration_abandon missing from the base tools")
+	}
+	var gotMethod, gotPath, gotSession string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"jobId":"j1","kind":"LAND_TASK","state":"ERROR","errorCode":"PUSH_OUTCOME_UNKNOWN"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("integration_abandon", map[string]interface{}{
+		"projectId": "p1", "jobId": "j1", "reason": "its runner is gone",
+	})
+	if res["isError"] == true {
+		t.Fatalf("integration_abandon returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/projects/p1/integration/jobs/j1/abandon" {
+		t.Fatalf("integration_abandon hit %s %s", gotMethod, gotPath)
+	}
+	// The acting session is the whole authority: the server checks it against the project's own
+	// coordinator pointer.
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+	if gotBody["reason"] != "its runner is gone" {
+		t.Fatalf("the reason sent = %#v", gotBody["reason"])
+	}
+}
+
+func TestMCPIntegrationAbandonRequiresTheJobAndAReason(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	for name, args := range map[string]map[string]interface{}{
+		"no reason": {"projectId": "p1", "jobId": "j1", "reason": "   "},
+		"no job":    {"projectId": "p1", "reason": "its runner is gone"},
+	} {
+		res := mcp.callTool("integration_abandon", args)
+		if res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the door was reached without the job and the reason it needs")
+	}
+}
+
 func TestMCPConfirmationReviewToolsPostTheInputUnderTheReviewingSession(t *testing.T) {
 	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
 		if !hasMCPTool(toolDescriptors(false, false), tool) {

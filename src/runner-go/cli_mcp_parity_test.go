@@ -52,6 +52,11 @@ var cliParityExemptTools = map[string]string{
 	// open_item_resolve, a command typed outside a session could only ever be refused; inside one,
 	// the coordinator reaches it over MCP.
 	"integration_retry": "reruns a landing as the project's coordinator session: a terminal outside one is refused by the server",
+	// integration_abandon ends a running job AS the project's coordinator conversation (contract
+	// §2.2 J-T10), and the runner door reads no missing header as the account owner — the owner's
+	// abandon is the user API's own door. A command typed outside a session could only ever be
+	// refused; inside one, the coordinator reaches it over MCP.
+	"integration_abandon": "abandons a running job as the project's coordinator session: a terminal outside one is refused by the server",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.
