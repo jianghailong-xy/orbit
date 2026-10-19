@@ -461,6 +461,24 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_integration_get":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		// The acting session is the read's second gate: the line is a project's own work, and the
+		// server refuses a session that is not one of the project's. A missing one is refused here
+		// rather than sent, so the answer names the reason instead of a bare 403.
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("project_integration_get requires an Orbit Session: the line is read as "+
+				"a session in the project", true)
+		}
+		raw, err := s.t.getProjectIntegration(s.sessionID, id, getString(args, "jobId"), getString(args, "cursor"))
+		if err != nil {
+			return toolResult("read project integration failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_crossings":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -3188,6 +3206,36 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_integration_get",
+			"description": "Read one project's integration line — where its finished work lands and what " +
+				"is happening to it right now. Returns the queue (every QUEUED and RUNNING job across " +
+				"all three kinds: a task landing, a merge candidate's check, and a merge into main), why " +
+				"each waits or where it stopped (blockingReason), every current generation with its " +
+				"jobId, generation, state, phase, errorCode, round and the check it is running, each " +
+				"task's newest landing through the same read model the task page uses, and each live or " +
+				"last-merged candidate's newest check and merge. READ THIS TOOL for the integration line; " +
+				"do NOT query the production database directly — these are the same facts, served by the " +
+				"interface that is allowed to serve them. Read only. The acting session must belong to " +
+				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
+				"project's session is refused, and another account's project answers 404. jobId and " +
+				"cursor are the page selectors the timeline and check-log reads will use: they are " +
+				"accepted now and echoed under pagination.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+				"jobId": map[string]interface{}{
+					"type":        "string",
+					"description": "Narrow the page to one job, as the queue or a task's landing names it.",
+				},
+				"cursor": map[string]interface{}{
+					"type":        "string",
+					"description": "Continue a paged read from this cursor.",
 				},
 			}, "projectId"),
 		},

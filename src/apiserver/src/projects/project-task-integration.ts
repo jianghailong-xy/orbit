@@ -245,6 +245,7 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
     jobId: row.jobId,
     state: row.jobState as IntegrationJobState,
     phase: row.jobPhase as IntegrationJobPhase | null,
+    errorCode: row.jobErrorCode,
     generation: String(row.jobGeneration),
     queuedAt: row.jobCreatedAt,
     startedAt: row.jobStartedAt,

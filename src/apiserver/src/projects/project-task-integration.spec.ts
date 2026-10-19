@@ -113,7 +113,7 @@ test('a queued attempt carries its generation, target, instants, live wait and r
   }), now);
   assert.equal(view.state, 'QUEUED');
   assert.deepEqual(view.landTask, {
-    jobId: 'landing', state: 'QUEUED', phase: null, generation: '2',
+    jobId: 'landing', state: 'QUEUED', phase: null, errorCode: null, generation: '2',
     queuedAt, startedAt: null, heartbeatAt: null, finishedAt: null,
     targetRef: 'refs/heads/project/example', waitMs: 360_000,
     blockingReason: {

@@ -449,6 +449,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({ params: { id: of.projectId }, body: { message: 'from the census' } }),
   },
   'GET /runner/projects/:id': { as: RUNNER, request: (of) => ({ params: { id: of.projectId } }) },
+  // The agent's read of the line. The header names a session of the project — the caller's own
+  // coordinator — so B's own request reaches the route; on A's project it is the project's 404 that
+  // answers first, exactly as an id that names nothing does.
+  'GET /runner/projects/:id/integration': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+    }),
+  },
   'POST /runner/projects/:id/acceptance/merge-evidence': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.projectId }, body: { requirementId: 'census', targetBranch: 'refs/heads/main', contentHash: 'd'.repeat(64) } }),
@@ -1007,6 +1017,23 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: SESSION,
     request: (of, mine) => ({ params: { id: mine.projectId }, body: { message: 'from the census', clientTurnId: openItemTurnKey(of) } }),
   },
+  // The job the read pages by: B reads its own project's line with A's job id in the query, and is
+  // answered as if it named nothing — the candidate is resolved within the project and nowhere else.
+  'GET /runner/projects/:id/integration query jobId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      query: { jobId: of.runner.integrationJobId },
+    }),
+  },
+  // The acting session itself: B reads its own project with A's coordinator in the header, and is
+  // answered as with a session that names nothing.
+  'GET /runner/projects/:id/integration header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    (mine) => ({ params: { id: mine.projectId } }),
+    (of) => of.runner.coordinatorSessionId,
+  ),
   'POST /runner/projects/:id/owner-questions body blocksTaskIds[]': {
     as: RUNNER,
     request: (of, mine) => ({

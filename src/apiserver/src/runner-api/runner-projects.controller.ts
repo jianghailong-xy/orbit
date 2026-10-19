@@ -303,6 +303,53 @@ export class RunnerProjectsController {
   }
 
   /**
+   * An agent's read of a project's integration line (`project_integration_get`, contract §2.2 J-T4,
+   * §2.9 LS6): the queue, all three job kinds, why each waits or where it stopped, every current
+   * generation with its rounds and check, each task's newest landing, and each merge candidate's
+   * newest check and merge.
+   *
+   * READ ONLY, and it exists because the alternative was a coordinator querying the production
+   * database: `project_get` carries the project's durable context and says nothing about the queue,
+   * so a session that needed to know why a landing was stuck had no interface to ask.
+   *
+   * The runner credential says which account; `X-Orbit-Session-Id` says which conversation, and it
+   * must be a session of THIS project (its coordinator, a session of one of its tasks, or a child of
+   * one of those — the same membership rule the session list uses). A missing header and a session
+   * of another project are refused alike. `jobId`, `claim`, `round`, `check` and `cursor` are the
+   * slots the timeline and check-log reads page by; revision 12 reserves them before those reads
+   * land, and this response echoes them under `pagination`.
+   */
+  @Get('projects/:id/integration')
+  async getProjectIntegration(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Query('jobId', PublicIdPipe) jobId?: string,
+    @Query('claim') claim?: string,
+    @Query('round') round?: string,
+    @Query('check') check?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    const selectors = {
+      ...(jobId ? { jobId } : {}),
+      ...(claim === undefined ? {} : { claim: RunnerProjectsController.pageNumber('claim', claim) }),
+      ...(round === undefined ? {} : { round: RunnerProjectsController.pageNumber('round', round) }),
+      ...(check === undefined ? {} : { check: RunnerProjectsController.pageNumber('check', check) }),
+      ...(cursor?.trim() ? { cursor: cursor.trim() } : {}),
+    };
+    return this.projects.integrationForAgent(runner.ownerId, id, sessionId?.trim(), selectors);
+  }
+
+  /** One of the read's page selectors, which a caller may omit but not send malformed. */
+  private static pageNumber(field: string, raw: string): number {
+    const value = raw.trim();
+    if (!/^\d+$/.test(value)) {
+      throw new BadRequestException(`${field} must be a non-negative integer`);
+    }
+    return Number(value);
+  }
+
+  /**
    * Record what a target branch was observed to contain.
    *
    * The runner is the side that can actually look: it has the checkout. `contentHash` is a digest
