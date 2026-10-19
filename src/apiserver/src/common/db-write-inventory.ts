@@ -1801,6 +1801,28 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. The job is a row; the runner it was asked to stop reads cancel_requested_at on its next progress answer (or its next claim\'s command), and the deferred DONE\'s generation is handed out by the next heartbeat.',
     answer: 'Typed 503 from the global boundary; the owner presses again, and the conditional writes make that safe.',
   },
+  {
+    at: 'projects/landing-session.ts#ensureLandingSession',
+    shape: 'TX_RETRIED',
+    locks: 'session (rank 30) — the INSERT of the LANDING row, under the pre-generated id — and reads of project_landing (rank 60), project, the source session and task, all without locks. It never runs inside a claim statement: the claim has committed before this unit is called (LS1), so no rank-60 job gate waits on a session row.',
+    identity: 'The landing subject\'s pre-generated `session_id`, which is the primary key of the row it inserts: `createMany({ skipDuplicates })` makes a second call the same answer rather than a second conversation. The `jobId` (or the newest claimed attempt of the subject) says which claim warranted the row; a subject no attempt has claimed writes nothing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything the row\'s values rest on — the subject\'s status, its title facts, the source session\'s workspace, the project\'s coordinator workspace — is read inside the closure, after the claim committed, so a re-run re-derives from the committed world. The insert is keyed by its own primary key; a retry after a lost response inserts nothing.',
+    effects: 'None. This row is the platform\'s container: no `session.created` / `session.updated` is emitted (contract §2.9 LS1), no runner is woken, no engine is started.',
+    answer: 'Typed 503 from the global boundary; the compensation point that called it runs again from its own committed fact.',
+  },
+  {
+    at: 'projects/landing-session.ts#settleLanding',
+    shape: 'TX_RETRIED',
+    locks: 'session (rank 30) FOR UPDATE when the row exists, then project_landing (rank 60) FOR UPDATE — the order §2.9 LS3 states. It reads the subject\'s attempts and the fact\'s own row unlocked inside the same closure, after the landing / cancellation transaction has committed. It never runs inside a job gate, which is what keeps the rank-60 job tables from waiting on a session row.',
+    identity: 'The subject row and its settled pair: the locked re-read refuses a row that is already settled, so every edge is one fact written once. The in-flight check and the fact re-check are read under that lock, so a later attempt or a fact that stopped holding leaves the row open.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every input is re-read inside the closure — the subject, the segment\'s QUEUED/RUNNING attempts, the fact (a terminal job, a landed receipt, the task\'s status or project, the closed item set, the promotion\'s state) — so a re-run decides against the committed world rather than replaying a decision. The terminal pair is written by one conditional statement guarded by the locked re-read.',
+    effects: 'None inside. A settled subject and its container\'s terminal status commit together or not at all; the next fact-driven compensation point re-runs the unit.',
+    answer: 'Typed 503 from the global boundary; the edge that called it runs from the fact it had already committed, and the conditional write makes a second attempt a no-op.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -1853,6 +1875,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-handoff.service.ts#lockMoveForConfirmation', under: "tasks.applyMoveApproval — the request row FOR UPDATE (rank 60), after the owner mutex, both projects and the task, and read again under that lock before anything is decided on it" },
   { at: 'projects/project-handoff.service.ts#approveMoveForConfirmation', under: "tasks.applyMoveApproval — the person's yes to a MOVE_TASK, one compare-and-set PENDING → APPROVED on the row already locked, pinned on the whole crossing, written only after every check the move meets has passed" },
   { at: 'tasks/tasks.service.ts#lockPlanExecutionIdentity', under: 'tasks.create, tasks.createMany — rank 10 then rank 15, before either takes a list or a session' },
+  // §2.9 LS1 (migration 0436): the landing subject is opened or joined inside the enqueue
+  // transaction, before the attempt that names it. Both helpers take rank-60 rows only and wait on
+  // nothing: a `project_landing` INSERT plus its partial unique index are the whole write.
+  { at: 'projects/landing-session.ts#openTaskLanding', under: 'projects/project-integration-job.ts#queueLandTask and #queuePromotionJob (a MAIN line TASK_BRANCH candidate), in the DONE or candidate transaction that already holds the task (50) and the codebase (55)' },
+  { at: 'projects/landing-session.ts#openPromotionRound', under: 'projects/project-integration-job.ts#queuePromotionJob — the enqueue transaction, for a candidate on a PROJECT_BRANCH line: the round\'s first candidate opens it, later ones join the open row' },
+  { at: 'projects/landing-session.ts#discardOpenedLanding', under: 'projects/project-integration-job.ts#queueLandTask and #queuePromotionJob — when the insert lost a race to a unique index, so a subject this same transaction opened does not outlive the attempt that never was' },
   { at: 'tasks/tasks.service.ts#assertPlanAuthorityUnchanged', under: 'tasks.create, tasks.createMany — the preflight facts, re-read under the locks now held and before the first row' },
   { at: 'tasks/tasks.service.ts#assertDependencyCrossingsAtEffect', under: 'tasks.create, tasks.createMany — the cross-project edges, re-judged under a rank-50 lock on the prerequisites' },
   { at: 'tasks/tasks.service.ts#copyAttachmentsToTask', under: 'tasks.create, tasks.createMany — the input files copied onto the new task, in the transaction that inserts it and after its row; a source deleted after the preflight fails the recheck and rolls the task back with them' },
@@ -2541,6 +2569,8 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"model_provider","trigger":"model_provider_builtin_cursor_guard_rename","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0426_cursor_engine","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_opencode_guard_delete","event":"BEFORE DELETE","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_opencode_guard_rename","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
+  {"table":"model_provider","trigger":"model_provider_builtin_orbit_guard_delete","event":"BEFORE DELETE","kind":"ROW/STATEMENT","since":"0436_landing_sessions","takes":[]},
+  {"table":"model_provider","trigger":"model_provider_builtin_orbit_guard_rename","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0436_landing_sessions","takes":[]},
   {"table":"model_provider","trigger":"model_provider_dispatch_slug_guard","event":"BEFORE INSERT OR UPDATE OF \"slug\"","kind":"ROW/STATEMENT","since":"0265_provider_pool","takes":[]},
   {"table":"project","trigger":"project_coordinator_companions_bind","event":"AFTER UPDATE OF \"coordinator_workspace_id\"","kind":"CONSTRAINT","since":"0113_project_coordinator_final_row","takes":["project_member WRITE","project_runtime WRITE","workspace LOCK"]},
   {"table":"project","trigger":"project_coordinator_companions_insert","event":"AFTER INSERT","kind":"CONSTRAINT","since":"0113_project_coordinator_final_row","takes":["project_member WRITE","project_runtime WRITE","workspace LOCK"]},

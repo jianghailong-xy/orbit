@@ -97,15 +97,15 @@ test('the query matches the check task and session writes run', async () => {
   await serviceFor([], captured).listUsable('user-1');
 
   assert.deepEqual(captured.where, {
-    // Not the compatibility rows migrations 0080 and 0367 parked on the two built-in names.
-    slug: { notIn: ['opencode', 'antigravity', 'cursor'] },
+    // Not the compatibility rows migrations 0080, 0367, 0426 and 0436 parked on reserved names.
+    slug: { notIn: ['opencode', 'antigravity', 'cursor', 'orbit'] },
     AND: [{ OR: [{ enabled: true }, { slug: 'dsh' }] }],
     ownerId: 'user-1',
   });
 
   await serviceFor([], captured, [], 'ADMIN').listUsable('user-1');
   assert.deepEqual(captured.where, {
-    slug: { notIn: ['opencode', 'antigravity', 'cursor'] },
+    slug: { notIn: ['opencode', 'antigravity', 'cursor', 'orbit'] },
     AND: [{ OR: [{ enabled: true }, { slug: 'dsh' }] }],
     OR: [{ ownerId: null }, { ownerId: 'user-1' }],
   });

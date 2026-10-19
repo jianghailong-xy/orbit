@@ -144,6 +144,7 @@ import {
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
+import { readSourceLanding } from '../projects/landing-session';
 import {
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
@@ -3588,6 +3589,13 @@ export class SessionsService {
     const route = session.taskId
       ? (await readTaskRouteSummaries(this.prisma, ownerId, [session.id])).get(session.id) ?? null
       : null;
+    // §2.9 LS1: a CONVERSATION may be the source work session of landing work, and the detail is
+    // where a client draws its "Landing · checking ›" / "On project/<id> ✓ ›" label. One probe of
+    // `project_integration_job_session_created_idx` for the newest generation, then the subject it
+    // names. A LANDING row has no derived label about itself, and no other kind exists.
+    const sourceLanding = session.sessionKind === 'LANDING'
+      ? null
+      : await readSourceLanding(this.prisma, session.id);
     return withSessionCapabilities({
       ...rest,
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
@@ -3622,6 +3630,7 @@ export class SessionsService {
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
+      sourceLanding,
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });

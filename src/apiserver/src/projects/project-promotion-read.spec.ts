@@ -106,9 +106,26 @@ function prismaStub(
       updateMany: async () => ({ count: 1 }),
       update: async () => row(over.promotion),
     },
-    projectCodebase: { findUnique: async () => ({ canonicalRepoUrl: 'git@example.com:repo.git' }) },
+    projectCodebase: {
+      findUnique: async () => ({
+        canonicalRepoUrl: 'git@example.com:repo.git',
+        integrationRef: 'refs/heads/project/bg-jobs',
+        upstreamRef: 'refs/heads/main',
+      }),
+    },
     projectIntegrationJob: {
       createManyAndReturn: async () => [{ id: 'job-1' }],
+      // The enqueue's idempotency pre-check and its inheritance of a subject from an earlier
+      // generation of the same candidate (migration 0436).
+      findUnique: async () => null,
+      findFirst: async () => null,
+    },
+    // A PROJECT_BRANCH promotion opens or joins its merge round; this read-model spec is not about
+    // the round's row, so it lets the enqueue open one.
+    projectLanding: {
+      findFirst: async () => null,
+      aggregate: async () => ({ _max: { episode: null } }),
+      createManyAndReturn: async () => [{ id: 'landing-1', sessionId: 'landing-session-1' }],
     },
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },
   };

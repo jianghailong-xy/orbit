@@ -18,6 +18,7 @@ import {
   type EngineProviderDeps,
 } from './engine-provider';
 import { encryptSecret } from './provider-crypto';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { ProvidersService } from './providers.service';
 import { readBatchPlan, readExecuteTarget, taskRunEngine } from '../tasks/task-run-receipt';
 import { routeTaskRun, type ModelRoutingInput } from '../tasks/model-routing';
@@ -122,6 +123,23 @@ function world(opts: {
 const refusal = (code: string, message?: string) =>
   (error: { response?: { code?: string; message?: string } }) =>
     error.response?.code === code && (message === undefined || error.response.message === message);
+
+test('the LANDING provider slug is a platform value, never a credential — for an admin or anybody else', async () => {
+  // The migration parks a shared compatibility row on the name, and an admin's scope includes
+  // owner_id NULL rows. The refusal must come before any read, so neither role can resolve it as a
+  // key: the guard row's ciphertext would fail at dispatch, not here.
+  for (const role of ['USER', 'ADMIN']) {
+    const { deps } = world({ keys: [key(LANDING_PROVIDER_SLUG, { ownerId: null })], role });
+    await assert.rejects(
+      classifyProvider(deps, OWNER, LANDING_PROVIDER_SLUG, 'session'),
+      /provider not available: "orbit"/,
+    );
+    await assert.rejects(
+      classifyProvider(deps, OWNER, LANDING_PROVIDER_SLUG, 'pin'),
+      /provider not available/,
+    );
+  }
+});
 
 test('T3 resolution: a provider alone runs on the engine it ran on before the split', async () => {
   const keys = [deepSeek('deepseek'), glm(), responses(), gemini(), key('legacy-harness', { runtime: 'dsh', presetSlug: 'deepseek-harness', baseUrl: 'https://api.deepseek.com/anthropic' })];
