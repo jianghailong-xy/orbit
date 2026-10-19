@@ -82,6 +82,8 @@ interface TaskIntegrationRow {
   jobFinishedAt: Date | null;
   jobErrorCode: string | null;
   jobConflictCount: number | null;
+  /** The landing session of the newest attempt's subject (§2.9), or null for a job written before 0436. */
+  jobLandingSessionId: string | null;
   /** The first check that did not pass, for a CHECK_FAILED attempt. */
   jobFailedCheck: { name?: unknown; exitCode?: unknown; expectedExitCode?: unknown; timedOut?: unknown } | null;
   /** For a QUEUED attempt only: the first claim condition (§2.3 J-T2) that holds it back. */
@@ -244,6 +246,7 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
   return {
     jobId: row.jobId,
     state: row.jobState as IntegrationJobState,
+    landingSessionId: row.jobLandingSessionId ?? null,
     phase: row.jobPhase as IntegrationJobPhase | null,
     errorCode: row.jobErrorCode,
     generation: String(row.jobGeneration),
@@ -368,7 +371,7 @@ export async function readTaskIntegrationViews(
     newest_job AS (
       SELECT DISTINCT ON (j."task_id")
              j."task_id", j."id", j."state", j."phase", j."generation", j."target_ref",
-             j."serial_key", j."session_id", j."error_code", j."cancel_requested_at",
+             j."serial_key", j."session_id", j."landing_id", j."error_code", j."cancel_requested_at",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
         FROM "project_integration_job" j
@@ -406,6 +409,11 @@ export async function readTaskIntegrationViews(
            newest_job."heartbeat_at" AS "jobHeartbeatAt", newest_job."created_at" AS "jobCreatedAt",
            newest_job."finished_at" AS "jobFinishedAt",
            newest_job."error_code" AS "jobErrorCode", newest_job."conflict_count" AS "jobConflictCount",
+           -- §2.9: the LANDING session of this attempt's subject. Its id is pre-generated when the
+           -- subject opens, so it is here before the session row is inserted; the job's own
+           -- session_id is the source work session and is a history reference (0424), so nothing
+           -- about a deleted source can remove this address.
+           landing."session_id" AS "jobLandingSessionId",
            failed_check."check" AS "jobFailedCheck",
            -- The claim's own conditions (integration-job-relay.ts claimOne), in the table's order,
            -- for the one state they decide: why a QUEUED attempt has not been claimed yet. Since
@@ -450,6 +458,7 @@ export async function readTaskIntegrationViews(
              WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "mainBranch"
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
+      LEFT JOIN "project_landing" landing ON landing."id" = newest_job."landing_id"
       LEFT JOIN open_item ON open_item."task_id" = scoped."taskId"
       LEFT JOIN landed_at ON landed_at."task_id" = scoped."taskId"
       LEFT JOIN LATERAL (

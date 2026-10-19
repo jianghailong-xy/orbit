@@ -575,6 +575,12 @@ test('an answered card queues one generation that is handed no merge check, and 
       assert.equal(skipped.failureClass, 'CHECK_FAILED');
       assert.equal(skipped.reason, REASON, 'the reason is kept as given, trimmed');
       assert.equal(skipped.sourceRef, `refs/heads/${task.branch}`);
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(skipped.landingSessionId, segment.sessionId,
+        'the answer addresses the landing session the skipped generation belongs to');
 
       // THE RECORD: the skip, who approved it, and why — on the row itself, not inferred from an
       // empty checks array (which is also what a project with no check command produces).
@@ -820,6 +826,12 @@ test('the account owner needs no card: their own press is the approval, and the 
       assert.equal(second.skipApprovalId, null, 'no card was raised, and none is claimed');
       assert.equal(second.retryRequestedByUserId, w.ownerId, 'the owner asked, on the user channel');
       assert.equal(second.retryRequestedBySessionId, null);
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(skipped.landingSessionId, segment.sessionId,
+        'the owner door answers the same landing session as the coordinator door');
 
       // An error is not a check: the machinery stopping is answered by running the landing again,
       // and the next task's landing is where that is said — its own world, so the queue this case

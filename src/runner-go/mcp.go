@@ -3135,7 +3135,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_get",
-			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this. The top-level lastProgressAt, progressState and convergenceCounters belong to the project's convergence accounting, not to reported progress: what the task's run reported with task_progress_report is in `progress` (phase, current, total, message, revision, lastProgressAt), the same read task_progress_report gives when called with none of its fields; a task that never reported shows revision 0 with nothing in it.",
+			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this. The top-level lastProgressAt, progressState and convergenceCounters belong to the project's convergence accounting, not to reported progress: what the task's run reported with task_progress_report is in `progress` (phase, current, total, message, revision, lastProgressAt), the same read task_progress_report gives when called with none of its fields; a task that never reported shows revision 0 with nothing in it. `integration.landTask` says what the platform is doing with the task's newest landing, and its `landingSessionId` addresses the LANDING session that records that attempt — read it with session_get, which serves the landing view by that id (the id is settled when the landing opens, so the link resolves before the job's first claim).",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -3198,7 +3198,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"carries `blockers`: every structured reason this project did not move, each with " +
 				"the one sentence it is asking for (`requiredAction`) — read `blockers.open` when " +
 				"the work is stopped and you cannot see why, and end one with " +
-				"project_blocker_resolve when you can say what changed. Returns the " +
+				"project_blocker_resolve when you can say what changed. Landing work it reports " +
+				"in flight carries `landingSessionId`, and a criterion waiting on a landing says so " +
+				"through its landing reason; that id is the LANDING session recording the attempt — " +
+				"open it with session_get rather than reading the integration tables yourself. " +
+				"Returns the " +
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
 				"project_create and project_update.",
@@ -3840,7 +3844,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"the project line first, by having the task's run put a merge commit of the project branch " +
 				"tip and the upstream tip, conflicts resolved, into its source branch and do nothing else " +
 				"(task_reopen) — with both tips in it, its next landing lands by MERGE. Queues exactly " +
-				"one new job, which carries your reason and the failure class it reruns; your open items " +
+				"one new job, which carries your reason and the failure class it reruns, and answers with " +
+				"`landingSessionId` — the LANDING session that records the new attempt, readable with " +
+				"session_get; your open items " +
 				"about the failure stay open and " +
 				"read as being handled until that job reports — if it lands or passes they are marked " +
 				"handled in your name with your reason, and if it fails again they are marked superseded " +

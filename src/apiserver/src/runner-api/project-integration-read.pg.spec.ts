@@ -204,6 +204,7 @@ async function job(
     at: Date;
     taskId?: string | null;
     sessionId?: string | null;
+    landingId?: string | null;
     promotionId?: string | null;
     serialKey?: string;
     targetRef?: string;
@@ -232,6 +233,7 @@ async function job(
       generation: 1,
       taskId: spec.taskId ?? null,
       sessionId: spec.sessionId ?? null,
+      landingId: spec.landingId ?? null,
       promotionId: spec.promotionId ?? null,
       serialKey: spec.serialKey ?? `${f.projectId}:${spec.idempotency}`,
       targetRef: spec.targetRef ?? 'refs/heads/main',
@@ -309,6 +311,22 @@ test('GET /runner/projects/:id/integration reads the line, and only this account
   const minutes = (n: number) => new Date(now - n * 60_000);
 
   // ── A's line ──────────────────────────────────────────────────────────────────────────────────
+  // The subject the running landing belongs to (§2.9 LS1): its address is pre-generated here, and
+  // the session row is deliberately NOT created — the link answers from the subject.
+  const landingSessionId = randomUUID();
+  const landingId = randomUUID();
+  await stack.db.projectLanding.create({
+    data: {
+      id: landingId,
+      projectId: a.projectId,
+      ownerId: a.ownerId,
+      codebaseId: a.codebaseId,
+      subject: 'TASK',
+      taskId: a.taskId,
+      episode: 1,
+      sessionId: landingSessionId,
+    },
+  });
   // A running LAND_TASK, mid-check, on its second round.
   const runningTaskJob = await job(stack.db, a, {
     state: 'RUNNING',
@@ -319,6 +337,7 @@ test('GET /runner/projects/:id/integration reads the line, and only this account
     heartbeatAt: minutes(1),
     taskId: a.taskId,
     sessionId: a.workSessionId,
+    landingId,
     runnerId: a.runnerId,
     progressProtocol: 'v2',
     claimGeneration: 1n,
@@ -437,6 +456,11 @@ test('GET /runner/projects/:id/integration reads the line, and only this account
       assert.equal(running.check?.index, 1);
       assert.equal(running.check?.count, 2);
       assert.equal(running.liveness, 'LIVE');
+      // §2.9 LS6: every job item carries the landing session its subject opened, even though that
+      // session's row does not exist yet — the address is served from `project_landing`.
+      assert.equal(running.landingSessionId, landingSessionId);
+      assert.equal(read.queue[1].landingSessionId, null,
+        'a job written without a subject carries no landing address');
     });
 
   await t.test('another account\'s blocking job is named by its reason alone', async () => {
@@ -480,8 +504,12 @@ test('GET /runner/projects/:id/integration reads the line, and only this account
           check: 'TASK_ACCEPTANCE',
         },
       );
+      // §2.9 LS6: a generation addresses its landing session too, so any attempt the read lists
+      // can be opened with session_get.
+      assert.equal(running?.landingSessionId, landingSessionId);
       const queued = read.generations.find((generation) => generation.jobId === queuedCheckJob);
       assert.equal(queued?.blockingReason?.code, 'WAITING_SERIAL_SLOT');
+      assert.equal(queued?.landingSessionId, null);
       const landed = read.generations.find((generation) => generation.jobId === mergedJob);
       assert.equal(landed?.kind, 'LAND_PROMOTION');
       assert.equal(landed?.state, 'LANDED');
@@ -602,4 +630,17 @@ test('GET /runner/projects/:id/integration reads the line, and only this account
         'a header that names no session at all was not refused as one',
       );
     });
+
+  await t.test('a purged source session is not an error and does not unaddress the landing', async () => {
+    // 0424: a job's `session_id` is a history reference with no foreign key, so the conversation
+    // that produced the work can be deleted under a job that still runs.
+    await stack.db.session.delete({ where: { id: a.workSessionId } });
+    const read = await stack.controller.getProjectIntegration(
+      runnerA, a.projectId, a.coordinatorSessionId,
+    );
+    const running = read.queue.find((entry) => entry.jobId === runningTaskJob);
+    assert.ok(running, 'the queue lost its job when the source session was purged');
+    assert.equal(running.landingSessionId, landingSessionId,
+      'the landing address is the subject’s own, never derived from the purged source session');
+  });
 });
