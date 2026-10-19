@@ -65,6 +65,7 @@ import {
   recordPromotionApproval,
   resolveHandledItems,
   resolveIntegrationItemsOnLanding,
+  resolveLeaseExpiredItems,
   supersedeHandledItems,
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
@@ -957,6 +958,11 @@ export async function receiveIntegrationJobProgress(
       report,
       before,
     });
+    // §4.6 X-E5: an accepted report is the claim talking again, so the item about its silence is
+    // answered inside the SAME transaction as the renewal and its timeline lines — never a second
+    // one on this path. A report from a claim that was taken over, released or abandoned never
+    // reaches here: the FOR NO KEY UPDATE read above matched no row.
+    await resolveLeaseExpiredItems(tx, jobId);
   }, loggedRetry(logger, 'integrationJob.progress'));
   // M-T7: the upstream moved after the owner confirmed, so the job is redoing the merge and the
   // checks on the new tip. A progress report rather than a question — the owner confirmed these
@@ -1416,6 +1422,9 @@ export async function releaseIntegrationJob(
       data: { claimGeneration: claimGeneration.toString(), runnerId: input.runnerId, runnerName: runner?.name ?? null },
       text: releasedText(Number(claimGeneration), runner?.name ?? null),
     });
+    // §4.6 X-E5: handing the claim back answers the item about its silence, inside the same
+    // transaction as the row and its timeline line — never a second one.
+    await resolveLeaseExpiredItems(tx, input.jobId);
     return { released: true };
   }, loggedRetry(logger, 'integrationJob.release'));
 }
@@ -1738,6 +1747,9 @@ export async function applyIntegrationJobResult(
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
       // result takes below.
       await queueReopenedDone();
+      // §4.6 X-E5: the claim is over either way — cleared for a requeue, ended for a stop that was
+      // asked — so the item about its silence is answered in this transaction like every other edge.
+      await resolveLeaseExpiredItems(tx, job.id);
       return {
         answer: {
           accepted: true,
@@ -1840,6 +1852,8 @@ export async function applyIntegrationJobResult(
             data: { cause: 'CANDIDATE_WORK_STILL_MOVING' },
             text: cancelRequested ? cancelledText(false) : requeuedText(),
           });
+          // §4.6 X-E5: the check's claim is over the same two ways, so its item is answered here.
+          await resolveLeaseExpiredItems(tx, job.id);
           return {
             answer: {
               accepted: true,
@@ -2031,6 +2045,16 @@ export async function applyIntegrationJobResult(
     } else {
       await tx.projectIntegrationJob.update({ where: { id: job.id }, data: terminalData });
     }
+    // §4.6 X-E5: the job is terminal, so the item about its claim's silence is answered — by the
+    // party that ended it (the owner pressing Abandon is USER, with their id on the row; the
+    // coordinator's integration_abandon is COORDINATOR, with its conversation) or by the platform
+    // when a result closed it. Written in the same transaction as the terminal state, which is the
+    // fact the item was asking somebody to bring about.
+    await resolveLeaseExpiredItems(tx, job.id, !platformEnd
+      ? { resolvedBy: 'PLATFORM' }
+      : platformEnd.by === 'owner'
+        ? { resolvedBy: 'USER', resolvedByUserId: job.ownerId }
+        : { resolvedBy: 'COORDINATOR', resolvedBySessionId: platformEnd.sessionId ?? null });
 
     // §2.6, the other half: the line answered about a branch this task's work did not end on, so the
     // commits are on a branch nothing has offered and nothing will — the row just written is terminal
