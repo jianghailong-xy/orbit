@@ -27,6 +27,10 @@ type integrationRepo struct {
 	t      *testing.T
 	origin string
 	work   string
+	// scratch is the root this repo's jobs stage their throwaway worktree under. It is a
+	// directory of the test's own rather than worktreesDir(): these cases run in parallel, and
+	// t.Setenv cannot be used in a parallel test.
+	scratch string
 }
 
 func newIntegrationRepo(t *testing.T) *integrationRepo {
@@ -38,7 +42,7 @@ func newIntegrationRepo(t *testing.T) *integrationRepo {
 	mustRun(t, root, "git", "init", "--quiet", "--initial-branch=main", work)
 	mustRun(t, work, "git", "config", "user.email", "orbit@example.invalid")
 	mustRun(t, work, "git", "config", "user.name", "orbit")
-	r := &integrationRepo{t: t, origin: origin, work: work}
+	r := &integrationRepo{t: t, origin: origin, work: work, scratch: filepath.Join(root, "scratch")}
 	r.write("README.md", "base\n")
 	r.commit("base")
 	mustRun(t, work, "git", "remote", "add", "origin", origin)
@@ -112,7 +116,13 @@ func (r *integrationRepo) command(sourceBranch, targetBranch string, checks ...I
 		UpstreamRef:  "refs/heads/main",
 		SourceRef:    "refs/heads/" + sourceBranch,
 		Checks:       checks,
+		scratchRoot:  r.scratch,
 	}
+}
+
+// scratchPath is where this repo's jobs stage their scratch worktree for one job id.
+func (r *integrationRepo) scratchPath(jobID string) string {
+	return filepath.Join(r.scratch, integrateScratchPrefix+jobID)
 }
 
 func mustRun(t *testing.T, dir, name string, args ...string) {
@@ -1199,6 +1209,7 @@ func (r *integrationRepo) promotionCommand(kind, sourceBranch, sourceKind string
 		UpstreamRef:         "refs/heads/main",
 		SourceRef:           "refs/heads/" + sourceBranch,
 		PromotionSourceKind: sourceKind,
+		scratchRoot:         r.scratch,
 	}
 }
 

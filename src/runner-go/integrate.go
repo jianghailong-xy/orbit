@@ -26,9 +26,13 @@ const integrationJobCapabilityV1 = "integration-job/v1"
 // PROMOTION_AUTOMATIC_LAND in src/apiserver/src/projects/project-integration-job.ts.
 const promotionAutomaticLandCapabilityV1 = "promotion-automatic-land/v1"
 
-// Where a throwaway integration worktree lives, under the same worktrees directory as everything
-// else this runner stages. Prefixed so the garbage collector can recognise one that outlived its
-// job (a process killed mid-run) and remove it.
+// Where a throwaway integration worktree lives: directly under the runner's worktrees directory,
+// among the session checkouts and the rebase scratch trees, so one place holds everything this
+// runner stages and one sweep can find what a killed process left behind. The prefix is what the
+// worktree garbage collector keys on to leave these alone: every directory there that is not a
+// session id is answered removable by the control plane, so gcWorktrees must exclude this prefix
+// (worktree.go) or it would delete the tree of a job that is still running. Leftovers are removed
+// by sweepIntegrationScratch instead, which knows which jobs are in flight.
 const integrateScratchPrefix = "_integrate-"
 
 // How many times a job goes back to FETCH when the push is refused because somebody else advanced
@@ -143,7 +147,19 @@ func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, rep
 	lock.Lock()
 	defer lock.Unlock()
 
-	scratch := filepath.Join(filepath.Dir(workDir), integrateScratchPrefix+cmd.JobID)
+	scratch := integrationScratchPath(cmd)
+	if err := os.MkdirAll(filepath.Dir(scratch), 0o755); err != nil {
+		return errorResult("FETCH", "FETCH_FAILED", map[string]any{
+			"detail": fmt.Sprintf("cannot create the scratch root %s: %v", filepath.Dir(scratch), err),
+		})
+	}
+	// Before the move, a job's scratch worktree was staged beside its workspace
+	// (filepath.Dir(workDir), often the user's home), where the worktree GC never looked. A
+	// process of that build killed mid-job leaves one there, and the new path would never trip
+	// over it, so this job clears its own legacy copy before staging its new one.
+	if legacy := legacyIntegrationScratchPath(workDir, cmd.JobID); legacy != scratch {
+		removeIntegrationWorktree(repoRoot, legacy)
+	}
 	defer removeIntegrationWorktree(repoRoot, scratch)
 
 	one := integrateOnce
@@ -998,6 +1014,76 @@ func runIntegrationCheckUntil(stop context.Context, scratch string, spec Integra
 		result.OutputTail = tailOf(result.OutputTail+"\n"+runErr.Error(), integrationOutputTail)
 	}
 	return result, false
+}
+
+// integrationScratchPath is where one job's throwaway worktree is staged: under
+// <worktreesDir>/_integrate-<jobId>, or under the root the caller injected (tests that run in
+// parallel cannot set ORBIT_HOME for the whole process, and each case needs a root of its own).
+func integrationScratchPath(cmd IntegrationJobCommand) string {
+	root := cmd.scratchRoot
+	if root == "" {
+		root = worktreesDir()
+	}
+	return filepath.Join(root, integrateScratchPrefix+cmd.JobID)
+}
+
+// legacyIntegrationScratchPath is where builds before the move staged the same job: beside the
+// workspace's work dir (filepath.Dir(workDir)), often the user's home. Nothing sweeps that place
+// any more, so it is named only to clear the one copy a killed old-build process could have left.
+func legacyIntegrationScratchPath(workDir, jobID string) string {
+	return filepath.Join(filepath.Dir(expandTilde(workDir)), integrateScratchPrefix+jobID)
+}
+
+// sweepIntegrationScratch removes scratch worktrees that no job is using: what a process killed
+// mid-landing — a self-update, a restart, a crash — leaves behind. It is called before this
+// process claims any work, with the roots that may hold one: the current worktrees directory and,
+// once the control plane has named the workspaces, the parent of every workspace's work dir (where
+// builds before the move staged them). active reports whether this process is integrating a job
+// right now; that job's tree is never touched.
+//
+// The worktree garbage collector deliberately never reclaims these (it excludes the prefix), so
+// this sweep is the only thing that does, and it must run with the in-flight set rather than
+// trusting the server's removable answer — the server says every non-session directory is
+// removable, which includes a landing that is running.
+func sweepIntegrationScratch(roots []string, active func(jobID string) bool) {
+	seen := make(map[string]bool, len(roots))
+	for _, root := range roots {
+		if root == "" || seen[root] {
+			continue
+		}
+		seen[root] = true
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() || !strings.HasPrefix(e.Name(), integrateScratchPrefix) {
+				continue
+			}
+			jobID := strings.TrimPrefix(e.Name(), integrateScratchPrefix)
+			if jobID == "" || (active != nil && active(jobID)) {
+				continue
+			}
+			path := filepath.Join(root, e.Name())
+			logln("integration scratch", path, "was left by a process that is gone; removing it")
+			removeIntegrationScratch(path)
+		}
+	}
+}
+
+// removeIntegrationScratch removes one leftover scratch directory. A scratch tree is a registered
+// worktree of the repository it was staged from, so it is unregistered through the repository the
+// directory itself names; one whose repository is gone, or that is not a worktree at all, is
+// removed as a plain directory.
+func removeIntegrationScratch(path string) {
+	if common, err := git(path, "rev-parse", "--git-common-dir"); err == nil && common != "" {
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(path, common)
+		}
+		removeIntegrationWorktree(filepath.Dir(common), path)
+		return
+	}
+	_ = os.RemoveAll(path)
 }
 
 // removeIntegrationWorktree takes the scratch worktree out of the repository's administrative list
