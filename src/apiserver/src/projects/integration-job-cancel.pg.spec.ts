@@ -144,15 +144,19 @@ async function world(
   label: string,
   line: 'MAIN' | 'PROJECT_BRANCH',
   repoUrl = `https://git.invalid/${label}-${randomUUID().slice(0, 6)}.git`,
+  /** An account to add a second project to: the unknown-push list is one account's own queue. */
+  existingOwnerId?: string,
 ): Promise<World> {
   const db = stack.db;
-  const ownerId = randomUUID();
+  const ownerId = existingOwnerId ?? randomUUID();
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
   const projectId = randomUUID();
-  await db.user.create({
-    data: { id: ownerId, email: `${label}-${ownerId}@cancel.invalid`, name: label, passwordHash: 'x' },
-  });
+  if (!existingOwnerId) {
+    await db.user.create({
+      data: { id: ownerId, email: `${label}-${ownerId}@cancel.invalid`, name: label, passwordHash: 'x' },
+    });
+  }
   await db.runner.create({
     data: {
       id: runnerId,
@@ -949,5 +953,222 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
       }),
       /project_integration_job_queued_cancel_chk|violates check constraint/,
     );
+  });
+});
+
+// ── J12's receipt repair: an unknown push found later, by the next landing on the queue ─────────
+
+/** The synchronous PUSH report a v2 runner sends before it pushes (§2.2 J-T4, J12): the commit it
+ *  is about to push and what the row has to keep in case nobody hears from it again. */
+function pushReport(
+  stack: Stack,
+  w: World,
+  job: { jobId: string; claimGeneration: string; leaseOwner: string },
+  facts: { testedSha: string; testedTreeSha: string; sourceSha: string; targetShaBefore: string },
+) {
+  return stack.jobs.progress(w.runnerId, job.jobId, {
+    claimGeneration: job.claimGeneration,
+    leaseOwner: job.leaseOwner,
+    phase: 'PUSH',
+    ...facts,
+  });
+}
+
+/** A landing left silent past its claim limit, so the next door that asks ends it as J12 says. */
+async function goSilent(stack: Stack, jobId: string): Promise<void> {
+  await stack.db.projectIntegrationJob.update({
+    where: { id: jobId },
+    data: { claimedAt: new Date(Date.now() - 11 * 60_000), heartbeatAt: new Date(Date.now() - 11 * 60_000) },
+  });
+}
+
+function receiptsForUnknown(db: PrismaClient, jobId: string) {
+  return db.sessionMergeReceipt.findMany({
+    where: { detail: { path: ['integrationJobId'], equals: jobId } },
+    select: { id: true, taskId: true, result: true, sourceSha: true, targetShaBefore: true, targetShaAfter: true, detail: true },
+  });
+}
+
+test('J12: the next landing on a serial key repairs a push whose outcome nobody could read', {
+  skip, concurrency: 1, timeout: 600_000,
+}, async (t) => {
+  const stack = await connect();
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+  });
+
+  /** One MAIN-line world whose promotion landing ended PUSH_OUTCOME_UNKNOWN after recording its
+   *  PUSH report, and the next landing queued on the same serial key by a second project of the
+   *  same account (the queue one runner may be told about). */
+  async function unknownPushOnTheQueue(label: string) {
+    const w = await world(stack, label, 'MAIN');
+    const { taskId, candidate } = await offered(stack, w, label);
+    const check = await claim(stack, w);
+    await report(stack, w, check, CLEAN(sha('a')));
+    await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, candidate.id, sha('a'));
+    const land = await claim(stack, w);
+    assert.equal(land.kind, 'LAND_PROMOTION');
+    const tested = sha('1');
+    await pushReport(stack, w, land, {
+      testedSha: tested,
+      testedTreeSha: sha('2'),
+      sourceSha: sha('3'),
+      targetShaBefore: UPSTREAM_TIP,
+    });
+    await goSilent(stack, land.jobId);
+    // The door that ends a silent claim: the owner's Cancel refuses once the push boundary is
+    // passed (M-T10), but the abandon / stop path ends it as the ERROR it is, and the candidate with
+    // it — which is the shape J12's repair is for.
+    const stopped = await stack.db.$transaction((tx) => stopInFlightJob(tx, {
+      projectId: w.projectId, jobId: land.jobId, now: new Date(),
+    }));
+    assert.equal(stopped.outcome, 'ENDED');
+    assert.equal(stopped.errorCode, 'PUSH_OUTCOME_UNKNOWN');
+    await stack.db.projectPromotion.update({
+      where: { id: candidate.id },
+      data: { state: 'BLOCKED', blockedReason: 'ERROR', decidedAt: new Date() },
+    });
+    const ended = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: land.jobId },
+      select: { id: true, state: true, errorCode: true, testedSha: true, serialKey: true, claimGeneration: true },
+    });
+    assert.equal(ended.state, 'ERROR');
+    assert.equal(ended.errorCode, 'PUSH_OUTCOME_UNKNOWN');
+    assert.equal(ended.testedSha, tested, 'the PUSH report left the row the commit to check');
+
+    // The next landing on this serial key is this ACCOUNT's — the runner of another account is
+    // never told about a job of this one (tenant isolation), so the repair happens on the same
+    // account's queue.
+    const other = await world(stack, `${label}-next`, 'MAIN', w.repoUrl, w.ownerId);
+    await doneTask(stack, other, `${label}-other`);
+    const otherCodebase = await stack.db.projectCodebase.findFirstOrThrow({ where: { projectId: other.projectId } });
+    const otherCandidate = await stack.db.projectPromotion.findFirstOrThrow({
+      where: { projectId: other.projectId, sourceKind: 'TASK_BRANCH' },
+    });
+    const otherSession = await stack.db.session.findFirstOrThrow({ where: { taskId: otherCandidate.taskId! } });
+    const nextJob = await stack.db.projectIntegrationJob.create({
+      data: {
+        ownerId: other.ownerId,
+        projectId: other.projectId,
+        codebaseId: otherCodebase.id,
+        kind: 'LAND_PROMOTION',
+        generation: 1,
+        taskId: otherCandidate.taskId,
+        sessionId: otherSession.id,
+        promotionId: otherCandidate.id,
+        serialKey: ended.serialKey,
+        targetRef: other.upstreamRef,
+        upstreamRef: other.upstreamRef,
+        sourceRef: `refs/heads/${otherSession.branch}`,
+        runnerId: other.runnerId,
+        confirmedAutomatically: false,
+        idempotencyKey: `ij:v1:LAND_PROMOTION:${otherCandidate.id}:1`,
+      },
+    });
+    return { w, other, taskId, ended, nextJob };
+  }
+
+  await t.test('(1) a LAND_PROMOTION: found on the target, the receipt is written against the unknown job and the old row is unchanged', async () => {
+    const { other, ended, nextJob } = await unknownPushOnTheQueue('unknown-found');
+    const handed = (await beat(stack, other)).find((command) => command.jobId === nextJob.id);
+    assert.ok(handed, 'the next landing is handed out');
+    assert.deepEqual(handed!.unknownPushes, [{ jobId: ended.id, testedSha: ended.testedSha }],
+      'the next landing is told which earlier result to check');
+
+    const before = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: ended.id } });
+    // This landing's own answer is a push that was rejected for a reason that is not a race; what
+    // matters here is that its result transaction is the one that repairs the earlier unknown push.
+    const taken = await report(stack, other, handed!, {
+      state: 'ERROR',
+      phase: 'PUSH',
+      errorCode: 'PUSH_REJECTED',
+      unknownPushes: [{ jobId: ended.id, landed: true }],
+    });
+    assert.equal(taken.accepted, true);
+    const receipts = await receiptsForUnknown(stack.db, ended.id);
+    assert.equal(receipts.length, 1, 'the unknown push was found on the target: its receipt exists now');
+    assert.equal(receipts[0]!.result, 'MERGED');
+    assert.equal(receipts[0]!.targetShaAfter, ended.testedSha, 'the commit that was pushed is where the target went');
+    assert.equal((receipts[0]!.detail as { recoveredUnknownPush?: boolean }).recoveredUnknownPush, true,
+      'the ledger says this receipt is a repair');
+    assert.ok(taken.receiptIds.includes(receipts[0]!.id), 'the job that wrote it keeps it beside its own');
+    const after = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: ended.id } });
+    assert.deepEqual(after, before, 'the old ERROR row is not rewritten (J4)');
+  });
+
+  await t.test('(2) not found on the target: nothing is written', async () => {
+    const { other, ended, nextJob } = await unknownPushOnTheQueue('unknown-absent');
+    const handed = (await beat(stack, other)).find((command) => command.jobId === nextJob.id);
+    assert.ok(handed, 'the next landing is handed out');
+    await report(stack, other, handed!, {
+      state: 'ERROR',
+      phase: 'PUSH',
+      errorCode: 'PUSH_REJECTED',
+      unknownPushes: [{ jobId: ended.id, landed: false }],
+    });
+    assert.deepEqual(await receiptsForUnknown(stack.db, ended.id), [],
+      'a commit that is not on the target is not a landing');
+  });
+
+  await t.test('(3) a result that names no checks at all (an older runner) writes nothing', async () => {
+    const { other, ended, nextJob } = await unknownPushOnTheQueue('unknown-old-runner');
+    const handed = (await beat(stack, other)).find((command) => command.jobId === nextJob.id);
+    assert.ok(handed, 'the next landing is handed out');
+    await report(stack, other, handed!, {
+      state: 'ERROR',
+      phase: 'PUSH',
+      errorCode: 'PUSH_REJECTED',
+    });
+    assert.deepEqual(await receiptsForUnknown(stack.db, ended.id), [],
+      'a runner that does not check leaves the unknown result to the coordinator, as before');
+  });
+
+  await t.test('(4) a LAND_TASK: the J8 receipt is written against the unknown job, with the facts its PUSH report left', async () => {
+    const w = await world(stack, 'unknown-task', 'PROJECT_BRANCH');
+    const work = await doneTask(stack, w, 'unknown-task');
+    const land = await claim(stack, w);
+    assert.equal(land.kind, 'LAND_TASK');
+    const tested = sha('7');
+    const source = sha('8');
+    await pushReport(stack, w, land, {
+      testedSha: tested,
+      testedTreeSha: sha('9'),
+      sourceSha: source,
+      targetShaBefore: sha('a'),
+    });
+    await goSilent(stack, land.jobId);
+    await stack.tasks.update(w.ownerId, work.taskId, { status: TaskStatus.CANCELLED } as never);
+    const ended = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: land.jobId },
+      select: { id: true, state: true, errorCode: true, testedSha: true },
+    });
+    assert.equal(ended.state, 'ERROR');
+    assert.equal(ended.errorCode, 'PUSH_OUTCOME_UNKNOWN');
+    assert.equal(ended.testedSha, tested);
+
+    await doneTask(stack, w, 'unknown-task-next');
+    const [handed] = await beat(stack, w);
+    assert.ok(handed, 'the next landing is handed out');
+    assert.deepEqual(handed!.unknownPushes, [{ jobId: ended.id, testedSha: tested }]);
+    await report(stack, w, handed!, {
+      state: 'LANDED',
+      phase: 'VERIFY',
+      sourceSha: sha('b'),
+      targetShaBefore: sha('c'),
+      testedSha: sha('d'),
+      testedTreeSha: sha('e'),
+      landedSha: sha('d'),
+      landedTreeSha: sha('e'),
+      unknownPushes: [{ jobId: ended.id, landed: true }],
+    });
+    const receipts = await receiptsForUnknown(stack.db, ended.id);
+    assert.equal(receipts.length, 1, 'J8\'s receipt, written after the fact');
+    assert.equal(receipts[0]!.taskId, work.taskId);
+    assert.equal(receipts[0]!.result, 'MERGED');
+    assert.equal(receipts[0]!.sourceSha, source, 'the branch tip the PUSH report left');
+    assert.equal(receipts[0]!.targetShaAfter, tested);
+    const after = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: ended.id } });
+    assert.equal(after.state, 'ERROR');
+    assert.equal(after.errorCode, 'PUSH_OUTCOME_UNKNOWN');
   });
 });

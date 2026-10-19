@@ -1124,6 +1124,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
     + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
+  'POST /runner/integration-jobs/:jobId/result body unknownPushes[].jobId':
+    'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
+    + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
+    + 'found, and nothing of it is read or written (integration-job-relay.ts:1646)',
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
     + 'scoped to that session on this runner (runner-api.controller.ts:1255)',
