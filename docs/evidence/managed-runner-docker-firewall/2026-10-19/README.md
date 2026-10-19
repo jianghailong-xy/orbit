@@ -39,7 +39,8 @@ Every scenario's command exited 0. Every result below was read from inside a man
     tried, and nothing was sent over them.
 - **The commits.** `pre-d9`: the project line's tip 20eaa14b7. `d9`: this branch at a6d24199a (S1, S1b, and S2 until
   its upgrade), then at 74f2c0ec5 (S2 after its `/upgrade`, S3, S4). Between the two, only the apiserver's wait on
-  `FIREWALL_NOT_ENFORCED` (below) and the kit changed.
+  `FIREWALL_NOT_ENFORCED` (below) and the kit changed. After 74f2c0ec5 the branch changed no behaviour these runs
+  measure: the closing message of `--enable-managed-runner-firewall --no-start`, the apiserver's census tests, and docs.
 - **The HPC host itself was not changed.** Its firewall and its network were not touched, and its Docker daemon was
   never restarted. Every rule written was in the test host's own network namespace. On the HPC host's Docker there were
   only `d9-dind` (and, briefly, `d9-probe`, an earlier exploration of Docker 29's rules), both labelled, and
