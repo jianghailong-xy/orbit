@@ -1,0 +1,14 @@
+{"n": 1, "phase": "facts", "step": "git", "startedAt": "2026-10-19T12:27:35.969+00:00", "seconds": 3.0, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 2, "phase": "facts", "step": "host", "startedAt": "2026-10-19T12:27:39.018+00:00", "seconds": 6.1, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 3, "phase": "facts", "step": "cluster", "startedAt": "2026-10-19T12:27:45.181+00:00", "seconds": 0.3, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 4, "phase": "facts", "step": "ceph", "startedAt": "2026-10-19T12:27:45.480+00:00", "seconds": 6.2, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 5, "phase": "facts", "step": "image", "startedAt": "2026-10-19T12:27:51.646+00:00", "seconds": 117.0, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 6, "phase": "setup", "step": "server-dir", "startedAt": "2026-10-19T12:29:48.710+00:00", "seconds": 3.6, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 7, "phase": "setup", "step": "admin", "startedAt": "2026-10-19T12:29:52.341+00:00", "seconds": 114.0, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 8, "phase": "on", "step": "prepare", "startedAt": "2026-10-19T12:31:46.401+00:00", "seconds": 2.7, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 9, "phase": "on", "step": "start", "startedAt": "2026-10-19T12:31:49.130+00:00", "seconds": 4.0, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 10, "phase": "on", "step": "admission", "startedAt": "2026-10-19T12:31:53.123+00:00", "seconds": 11.4, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 11, "phase": "account", "step": "ready", "startedAt": "2026-10-19T12:32:04.478+00:00", "seconds": 43.5, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 12, "phase": "account", "step": "data", "startedAt": "2026-10-19T12:32:48.006+00:00", "seconds": 14.6, "ok": true, "error": null, "checks": 4, "failed": []}
+{"n": 13, "phase": "migrate", "step": "sleep", "startedAt": "2026-10-19T12:33:02.656+00:00", "seconds": 33.7, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 14, "phase": "migrate", "step": "move", "startedAt": "2026-10-19T12:33:36.412+00:00", "seconds": 421.3, "ok": false, "error": "Failed: no run event carrying Answering: T02-ANN-MOVE within 420 s", "checks": 1, "failed": []}

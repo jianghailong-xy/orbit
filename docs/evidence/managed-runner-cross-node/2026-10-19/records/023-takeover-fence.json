@@ -1,0 +1,823 @@
+{
+ "checks": [
+  {
+   "check": "the mapping still names the predecessor on the second node",
+   "ok": true,
+   "value": {
+    "generation": 2,
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab-2",
+    "pod_uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+   }
+  },
+  {
+   "check": "the power-off is verified again before anything is released",
+   "ok": true,
+   "value": {
+    "activeState": "inactive",
+    "at": "2026-10-19T12:59:51.701+00:00",
+    "linkConnections": [],
+    "mainPid": "0",
+    "qemuProcesses": [],
+    "qmpRefused": true,
+    "sshRefused": true,
+    "subState": "dead",
+    "unit": "orbit-mr-lab-2.service"
+   }
+  },
+  {
+   "check": "the stale Pod was made Failed by the control plane, not by its kubelet (DisruptionTarget)",
+   "ok": true,
+   "value": {
+    "lastTransitionTime": "2026-10-19T12:58:32Z",
+    "reason": "DeletionByTaintManager",
+    "status": "True"
+   }
+  },
+  {
+   "check": "the manager went FENCING: the stop is unproven",
+   "ok": true,
+   "value": "PREDECESSOR_STOP_UNPROVEN"
+  },
+  {
+   "check": "the stale Pod is held by the stop-report finalizer",
+   "ok": true,
+   "value": [
+    "orbit.dev/managed-runner-stop-report"
+   ]
+  },
+  {
+   "check": "the predecessor's credential is refused 401 once fenced, at every door",
+   "ok": true,
+   "value": [
+    [
+     "GET /api/runner/me",
+     401
+    ],
+    [
+     "GET /api/runner/sessions/claim",
+     401
+    ],
+    [
+     "POST /api/runner/heartbeat",
+     401
+    ]
+   ]
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the takeover",
+   "ok": true,
+   "value": "csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+  },
+  {
+   "check": "the receipt was accepted: the predecessor retired on FENCING_RECEIPT, from the ConfigMap",
+   "ok": true,
+   "value": {
+    "kind": "FENCING_RECEIPT",
+    "recordedAt": "2026-10-19T13:00:06.666Z",
+    "retiredAt": "2026-10-19T13:00:06.678Z",
+    "source": {
+     "configMap": "mr-fence-01a15431-f1f1-773e-b7cd-c25915447151",
+     "resourceVersion": "57582",
+     "uid": "cfe08029-90b8-45c5-9c85-385f6100f797"
+    }
+   }
+  },
+  {
+   "check": "the next generation, a new Pod",
+   "ok": true,
+   "value": [
+    3,
+    "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+   ]
+  },
+  {
+   "check": "generation 3: the runner's Pod runs on orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+   }
+  },
+  {
+   "check": "generation 3: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+    }
+   ]
+  },
+  {
+   "check": "generation 3: one VolumeAttachment, to orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-797c640b925b17520e68ff5abf14cc03f36f67be75e8db5a3c102324edade266",
+     "node": "orbit-mr-lab"
+    }
+   ]
+  },
+  {
+   "check": "generation 3: the image is mapped by orbit-mr-lab's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.1:0/3421088657",
+     "client": "clientclient284119",
+     "device": "rbd1",
+     "image": "orbit-mr-rbd/csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+    }
+   ]
+  },
+  {
+   "check": "generation 3: one RBD watcher, orbit-mr-lab's kernel client (10.77.0.1)",
+   "ok": true,
+   "value": [
+    "10.77.0.1:0/3421088657"
+   ]
+  },
+  {
+   "check": "never two Pods on the claim while it moved",
+   "ok": true
+  },
+  {
+   "check": "never two VolumeAttachments while it moved",
+   "ok": true
+  },
+  {
+   "check": "one Pod was made on the claim since the receipt: the next generation's",
+   "ok": true,
+   "value": [
+    "cdb1107e"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T13:00:30.790+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "takeover",
+ "result": {
+  "configMap": "mr-fence-01a15431-f1f1-773e-b7cd-c25915447151",
+  "finalizerOffAt": "2026-10-19T13:00:02.291+00:00",
+  "finalizerPatch": [
+   {
+    "op": "test",
+    "path": "/metadata/uid",
+    "value": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+   },
+   {
+    "op": "test",
+    "path": "/metadata/finalizers/0",
+    "value": "orbit.dev/managed-runner-stop-report"
+   },
+   {
+    "op": "remove",
+    "path": "/metadata/finalizers/0"
+   }
+  ],
+  "gate": {
+   "at": "2026-10-19T13:00:30.530+00:00",
+   "byKind": {
+    "Pod create": 1,
+    "Secret create": 1,
+    "admission probe": 1,
+    "other (reads, patches, deletes)": 45
+   },
+   "connections": 48,
+   "largestRecordSizes": {
+    "1111": 2,
+    "1136": 13,
+    "1147": 10,
+    "1155": 5,
+    "1159": 1,
+    "1170": 13,
+    "1295": 1,
+    "1669": 1,
+    "4084": 1,
+    "4111": 1
+   },
+   "since": "2026-10-19T12:59:51.741+00:00",
+   "until": null
+  },
+  "identity": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 3,
+   "podUid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-4221311d-4f1c-4715-be48-cc3d8c5ae9a5",
+   "pvUid": "446bb2d6-4df3-4366-bedc-21a0f0f2ba51",
+   "pvcName": "mr-data-01a15431-f1f1-773e-b7cd-c25915447151",
+   "pvcUid": "4221311d-4f1c-4715-be48-cc3d8c5ae9a5",
+   "rbdImage": "csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+   "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+   "workspaceId": "01a15431-f209-754c-863a-32417a673d07"
+  },
+  "nodes": {
+   "orbit-mr-lab": {
+    "name": "orbit-mr-lab",
+    "ready": "True",
+    "readySince": "2026-10-17T05:37:00Z",
+    "reason": "KubeletReady",
+    "taints": [],
+    "uid": "2aacc9d7-fc60-4ef9-97a4-5a776d40c386",
+    "unschedulable": false
+   },
+   "orbit-mr-lab-2": {
+    "name": "orbit-mr-lab-2",
+    "ready": "Unknown",
+    "readySince": "2026-10-19T12:53:32Z",
+    "reason": "NodeStatusUnknown",
+    "taints": [
+     "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute",
+     "node.kubernetes.io/unreachable:NoSchedule",
+     "node.kubernetes.io/unreachable:NoExecute"
+    ],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   }
+  },
+  "placement": {
+   "at": "2026-10-19T13:00:28.707+00:00",
+   "generation": 3,
+   "guests": {
+    "orbit-mr-lab": {
+     "bootId": "96bff9b5-cacb-434e-ab76-a612a742ba4a",
+     "devices": [
+      {
+       "address": "10.77.0.1:0/3421088657",
+       "client": "clientclient284119",
+       "device": "rbd0",
+       "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+      },
+      {
+       "address": "10.77.0.1:0/3421088657",
+       "client": "clientclient284119",
+       "device": "rbd1",
+       "image": "orbit-mr-rbd/csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+      }
+     ],
+     "mounts": [
+      {
+       "fstype": "ext4",
+       "source": "/dev/rbd0",
+       "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+      },
+      {
+       "fstype": "ext4",
+       "source": "/dev/rbd0",
+       "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+      },
+      {
+       "fstype": "ext4",
+       "source": "/dev/rbd1",
+       "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/8b09aac67339b4ea49432c03ff815a154dc7d08508e47e87e37328cfef312091/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+      },
+      {
+       "fstype": "ext4",
+       "source": "/dev/rbd1",
+       "target": "/var/lib/kubelet/pods/cdb1107e-94d9-4d8b-b3a4-74c003a0dc37/volumes/kubernetes.io~csi/pvc-4221311d-4f1c-4715-be48-cc3d8c5ae9a5/mount"
+      }
+     ],
+     "uptimeSeconds": 2094.47
+    },
+    "orbit-mr-lab-2": null
+   },
+   "image": "orbit-mr-rbd/csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+   "nodeName": "orbit-mr-lab",
+   "pod": {
+    "containers": [
+     {
+      "exitCode": 0,
+      "name": "private-volume-directories",
+      "reason": "Completed",
+      "state": "terminated"
+     },
+     {
+      "exitCode": null,
+      "name": "runner",
+      "reason": null,
+      "state": "running"
+     }
+    ],
+    "deletionTimestamp": null,
+    "disruptionTarget": null,
+    "finalizers": [
+     "orbit.dev/managed-runner-stop-report"
+    ],
+    "generation": "3",
+    "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "ready": "True",
+    "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+   },
+   "podUid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37",
+   "podsOnTheClaim": [
+    {
+     "deleting": false,
+     "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+    }
+   ],
+   "state": "READY",
+   "volumeAttachments": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-797c640b925b17520e68ff5abf14cc03f36f67be75e8db5a3c102324edade266",
+     "node": "orbit-mr-lab"
+    }
+   ],
+   "watchers": [
+    {
+     "address": "10.77.0.1:0/3421088657",
+     "client": 284119,
+     "cookie": 18446462598732840966
+    }
+   ]
+  },
+  "power": {
+   "activeState": "inactive",
+   "at": "2026-10-19T12:59:51.701+00:00",
+   "linkConnections": [],
+   "mainPid": "0",
+   "qemuProcesses": [],
+   "qmpRefused": true,
+   "sshRefused": true,
+   "subState": "dead",
+   "unit": "orbit-mr-lab-2.service"
+  },
+  "proof": {
+   "kind": "FENCING_RECEIPT",
+   "predecessor": {
+    "generation": 2,
+    "nodeName": "orbit-mr-lab-2",
+    "podName": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "pvcUid": "4221311d-4f1c-4715-be48-cc3d8c5ae9a5",
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+   },
+   "receipt": {
+    "action": {
+     "description": "The qemu process of VM orbit-mr-lab-2 (systemd unit orbit-mr-lab-2.service) was killed with SIGKILL on the hypervisor host (stop.sh --node 2 --hard): the guest's power was cut, with no shutdown inside it.",
+     "performedAt": "2026-10-19T12:52:44.611Z",
+     "performedBy": "T02 lab operator (task 34ZtjTqbRV2J7OFLVheO3)",
+     "reference": "T02 lab, docs/evidence/managed-runner-cross-node/2026-10-19"
+    },
+    "kind": "orbit.managed-runner.fencing-receipt",
+    "method": "NODE_POWER_OFF",
+    "nodePowerOff": {
+     "mechanism": "HYPERVISOR",
+     "quarantineReference": "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute stays on orbit-mr-lab-2, and its VM stays off, until the stale Pod object and VolumeAttachment are gone; on its return the node is checked to map and mount nothing of the volume before the taint is removed",
+     "quarantined": true
+    },
+    "predecessor": {
+     "generation": 2,
+     "nodeName": "orbit-mr-lab-2",
+     "nodeUid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+     "podName": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+     "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+     "pvcUid": "4221311d-4f1c-4715-be48-cc3d8c5ae9a5",
+     "rbdImage": {
+      "image": "csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+      "pool": "orbit-mr-rbd"
+     },
+     "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+    },
+    "schemaVersion": 1,
+    "verification": {
+     "evidenceReference": "host checks at 2026-10-19T12:59:51.701+00:00: unit inactive, no qemu process for orbit-mr-lab-2, SSH 127.0.0.1:16223 and the QMP socket refused, no link connection",
+     "observedAt": "2026-10-19T12:59:51.701+00:00",
+     "observedBy": "T02 lab operator (task 34ZtjTqbRV2J7OFLVheO3)",
+     "result": "POWERED_OFF"
+    }
+   },
+   "recordedAt": "2026-10-19T13:00:06.666Z",
+   "retiredAt": "2026-10-19T13:00:06.678Z",
+   "source": {
+    "configMap": "mr-fence-01a15431-f1f1-773e-b7cd-c25915447151",
+    "resourceVersion": "57582",
+    "uid": "cfe08029-90b8-45c5-9c85-385f6100f797"
+   }
+  },
+  "receipt": {
+   "action": {
+    "description": "The qemu process of VM orbit-mr-lab-2 (systemd unit orbit-mr-lab-2.service) was killed with SIGKILL on the hypervisor host (stop.sh --node 2 --hard): the guest's power was cut, with no shutdown inside it.",
+    "performedAt": "2026-10-19T12:52:44.611Z",
+    "performedBy": "T02 lab operator (task 34ZtjTqbRV2J7OFLVheO3)",
+    "reference": "T02 lab, docs/evidence/managed-runner-cross-node/2026-10-19"
+   },
+   "kind": "orbit.managed-runner.fencing-receipt",
+   "method": "NODE_POWER_OFF",
+   "nodePowerOff": {
+    "mechanism": "HYPERVISOR",
+    "quarantineReference": "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute stays on orbit-mr-lab-2, and its VM stays off, until the stale Pod object and VolumeAttachment are gone; on its return the node is checked to map and mount nothing of the volume before the taint is removed",
+    "quarantined": true
+   },
+   "predecessor": {
+    "generation": 2,
+    "nodeName": "orbit-mr-lab-2",
+    "nodeUid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "podName": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "pvcUid": "4221311d-4f1c-4715-be48-cc3d8c5ae9a5",
+    "rbdImage": {
+     "image": "csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+     "pool": "orbit-mr-rbd"
+    },
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-6b461c68-73b8-4dd6-9cf9-d8c194663bb6"
+   },
+   "schemaVersion": 1,
+   "verification": {
+    "evidenceReference": "host checks at 2026-10-19T12:59:51.701+00:00: unit inactive, no qemu process for orbit-mr-lab-2, SSH 127.0.0.1:16223 and the QMP socket refused, no link connection",
+    "observedAt": "2026-10-19T12:59:51.701+00:00",
+    "observedBy": "T02 lab operator (task 34ZtjTqbRV2J7OFLVheO3)",
+    "result": "POWERED_OFF"
+   }
+  },
+  "receiptAt": "2026-10-19T12:59:51.741+00:00",
+  "replayWhileFenced": {
+   "at": "2026-10-19T13:00:02.227+00:00",
+   "kept": [
+    {
+     "generation": 2,
+     "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+     "tokenSha256Prefix": "bc13c48f09b9"
+    }
+   ],
+   "mapping": {
+    "generation": 2,
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "state": "FENCING"
+   },
+   "results": [
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "its own generation and Pod",
+     "route": "GET /api/runner/me",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "its own generation and Pod",
+     "route": "POST /api/runner/heartbeat",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "its own generation and Pod",
+     "route": "GET /api/runner/sessions/claim",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "no instance declaration",
+     "route": "GET /api/runner/me",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "no instance declaration",
+     "route": "POST /api/runner/heartbeat",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "no instance declaration",
+     "route": "GET /api/runner/sessions/claim",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "the current generation, another Pod UID",
+     "route": "GET /api/runner/me",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "the current generation, another Pod UID",
+     "route": "POST /api/runner/heartbeat",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "the current generation, another Pod UID",
+     "route": "GET /api/runner/sessions/claim",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "the next generation",
+     "route": "GET /api/runner/me",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "the next generation",
+     "route": "POST /api/runner/heartbeat",
+     "runnerId": null,
+     "status": 401
+    },
+    {
+     "code": null,
+     "credential": "generation 2",
+     "message": "invalid runner token",
+     "offer": "the next generation",
+     "route": "GET /api/runner/sessions/claim",
+     "runnerId": null,
+     "status": 401
+    }
+   ]
+  },
+  "seconds": {
+   "cutToReady": 463.8,
+   "cutToReceipt": 427.1,
+   "finalizerOffToReady": 26.1,
+   "taintToFencing": 10.3
+  },
+  "taintAt": "2026-10-19T12:59:51.771+00:00",
+  "times": {
+   "generation": 3,
+   "initialProvider": "deepseek",
+   "mappingCreatedAt": "2026-10-19T12:45:21.807+00:00",
+   "node": "orbit-mr-lab",
+   "podCreatedAt": "2026-10-19T13:00:06Z",
+   "pvcCreatedAt": "2026-10-19T12:45:21Z",
+   "readyAt": "2026-10-19T13:00:27.396+00:00",
+   "runner": {
+    "capabilities_reported_at": "2026-10-19T13:00:27.198+00:00",
+    "enrolled_at": "2026-10-19T12:45:21.777",
+    "last_heartbeat_at": "2026-10-19T13:00:27.197",
+    "status": "ONLINE",
+    "version": "managed-8055bb5686ba981c7a518557190aebfb8dedc46b"
+   },
+   "runnerContainerStartedAt": "2026-10-19T13:00:19Z",
+   "secretCreatedAt": "2026-10-19T13:00:06Z"
+  },
+  "untilFencing": [
+   {
+    "at": "2026-10-19T12:59:51.935+00:00",
+    "generation": 2,
+    "pod": {
+     "deletionTimestamp": "2026-10-19T13:02:32Z",
+     "disruptionTarget": {
+      "lastTransitionTime": "2026-10-19T12:58:32Z",
+      "reason": "DeletionByTaintManager",
+      "status": "True"
+     },
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+    },
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "podsOnTheClaim": [
+     [
+      "457b55b5",
+      "orbit-mr-lab-2",
+      "Running"
+     ]
+    ],
+    "proof": "OBSERVED_STOP",
+    "proofRetired": true,
+    "reason": null,
+    "state": "READY",
+    "volumeAttachments": [
+     [
+      "orbit-mr-lab-2",
+      true,
+      false
+     ]
+    ]
+   },
+   {
+    "at": "2026-10-19T12:59:57.575+00:00",
+    "generation": 2,
+    "pod": {
+     "deletionTimestamp": "2026-10-19T12:59:56Z",
+     "disruptionTarget": {
+      "lastTransitionTime": "2026-10-19T12:58:32Z",
+      "reason": "DeletionByTaintManager",
+      "status": "True"
+     },
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "node": "orbit-mr-lab-2",
+     "phase": "Failed",
+     "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+    },
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "podsOnTheClaim": [
+     [
+      "457b55b5",
+      "orbit-mr-lab-2",
+      "Failed"
+     ]
+    ],
+    "proof": "OBSERVED_STOP",
+    "proofRetired": true,
+    "reason": null,
+    "state": "READY",
+    "volumeAttachments": []
+   },
+   {
+    "at": "2026-10-19T13:00:02.100+00:00",
+    "generation": 2,
+    "pod": {
+     "deletionTimestamp": "2026-10-19T12:59:56Z",
+     "disruptionTarget": {
+      "lastTransitionTime": "2026-10-19T12:58:32Z",
+      "reason": "DeletionByTaintManager",
+      "status": "True"
+     },
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "node": "orbit-mr-lab-2",
+     "phase": "Failed",
+     "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+    },
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "podsOnTheClaim": [
+     [
+      "457b55b5",
+      "orbit-mr-lab-2",
+      "Failed"
+     ]
+    ],
+    "proof": "OBSERVED_STOP",
+    "proofRetired": true,
+    "reason": "PREDECESSOR_STOP_UNPROVEN",
+    "state": "FENCING",
+    "volumeAttachments": []
+   }
+  ],
+  "untilReady": [
+   {
+    "at": "2026-10-19T13:00:02.455+00:00",
+    "generation": 2,
+    "pod": null,
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "podsOnTheClaim": [],
+    "proof": "OBSERVED_STOP",
+    "proofRetired": true,
+    "reason": "PREDECESSOR_STOP_UNPROVEN",
+    "state": "FENCING",
+    "volumeAttachments": []
+   },
+   {
+    "at": "2026-10-19T13:00:06.966+00:00",
+    "generation": 3,
+    "pod": {
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "node": "orbit-mr-lab",
+     "phase": "Pending",
+     "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+    },
+    "podUid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37",
+    "podsOnTheClaim": [
+     [
+      "cdb1107e",
+      "orbit-mr-lab",
+      "Pending"
+     ]
+    ],
+    "proof": "FENCING_RECEIPT",
+    "proofRetired": true,
+    "reason": null,
+    "state": "STARTING",
+    "volumeAttachments": [
+     [
+      "orbit-mr-lab",
+      true,
+      false
+     ]
+    ]
+   },
+   {
+    "at": "2026-10-19T13:00:20.484+00:00",
+    "generation": 3,
+    "pod": {
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+    },
+    "podUid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37",
+    "podsOnTheClaim": [
+     [
+      "cdb1107e",
+      "orbit-mr-lab",
+      "Running"
+     ]
+    ],
+    "proof": "FENCING_RECEIPT",
+    "proofRetired": true,
+    "reason": null,
+    "state": "STARTING",
+    "volumeAttachments": [
+     [
+      "orbit-mr-lab",
+      true,
+      false
+     ]
+    ]
+   },
+   {
+    "at": "2026-10-19T13:00:28.372+00:00",
+    "generation": 3,
+    "pod": {
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37"
+    },
+    "podUid": "cdb1107e-94d9-4d8b-b3a4-74c003a0dc37",
+    "podsOnTheClaim": [
+     [
+      "cdb1107e",
+      "orbit-mr-lab",
+      "Running"
+     ]
+    ],
+    "proof": "FENCING_RECEIPT",
+    "proofRetired": true,
+    "reason": null,
+    "state": "READY",
+    "volumeAttachments": [
+     [
+      "orbit-mr-lab",
+      true,
+      false
+     ]
+    ]
+   }
+  ]
+ },
+ "seconds": 39.3,
+ "startedAt": "2026-10-19T12:59:51.537+00:00",
+ "step": "fence"
+}

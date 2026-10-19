@@ -1434,7 +1434,7 @@ by `scripts/managed-runner/lab/acceptance-lab.py` in one pass on the project lin
 | Busy and idle | A long turn and a background job each kept their runner READY past the idle interval, and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; once the work ended each slept by itself. |
 | The controller | Both apiservers SIGKILLed while one runner was being woken and the other ran a turn: the turn finished, the waking runner came up without a second Pod create, and the database and Kubernetes agreed. |
 | Backup and restore | The RBD image of a disabled, asleep account exported out of the VM to the host, checked there with no cluster (`debugfs`, SQLite, Git, checksums), and written into a new claim's image, which read back byte for byte as the backup; a Pod found the data there. The original was untouched and its runner woke on it. A static PV naming an imported image cannot be used with this Ceph-CSI (its ControllerPublish refuses the handle and its ControllerUnpublish panics), so the runbook restores into a claim the driver provisions. |
-| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node. A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented (since T08b an administrator's switch does it: "Implementation record: a restored volume back under its runner"). Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
+| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node (since T02 on the two-node lab: "Implementation record: one runner across two nodes"). A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented (since T08b an administrator's switch does it: "Implementation record: a restored volume back under its runner"). Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
 
 Verified on 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md), [the lab page](managed-runner-lab.md#end-to-end-acceptance-t08)).
 
@@ -1570,3 +1570,39 @@ Left to later work, or not shown here:
 - A connection a runner had open before `--enable-managed-runner-firewall` is not cut; new ones are filtered at once.
 - The firewall's image is built at install and never rebuilt by `/upgrade`; a newer firewall program reaches an existing
   deployment only by turning the firewall off and on again (the runbook).
+
+## Implementation record: one runner across two nodes
+
+Recorded 2026-10-19 for task T02, the cross-node part of criterion 2, on the lab's two nodes (task L1: two VMs on one
+physical machine, one failure domain, Ceph a single-host cluster in the first). No product code changed: the record is of
+what the delivered manager, admission guard and fencing gate did. It was run by `scripts/managed-runner/lab/takeover-lab.py`
+through the test server's manager, with its findings
+([evidence](evidence/managed-runner-cross-node/2026-10-19/README.md), [the lab page](managed-runner-lab.md#cross-node-migration-and-takeover-t02)).
+
+| Area | What the run established |
+| --- | --- |
+| Normal move | A runner put to sleep on one node (its kubelet's report recorded as the stop proof, the volume detached, no RBD client left) and woken with that node cordoned started its next generation on the other node. The runner, PVC, PV, volume handle, RBD image and workspace were the same; probe data, uploads, the worktree, transcripts and the engine's session carried over. The manager places nothing: the scheduler does, among the schedulable nodes. |
+| A second Pod on another node | While the runner ran on one node, Pods on its claim pinned to the other node were refused by the admission guard, whoever created them and in whatever shape. The refusals were `NOT_THE_MANAGER`, `NOT_THE_FIXED_NAME`, `NOT_RESERVED`, `NOT_THE_RESERVED_GENERATION`, and a Job's Pod refused at its controller's create. The guard decides from the database and never looks at the node. Without it, RWO alone left a second node's Pod `Pending` (the attach/detach controller), a refusal the out-of-service taint deliberately overrides; on one node RWO admits a second Pod outright. RBD alone (`layering`, no `exclusive-lock`) let a second client open and read the image. |
+| A node that stops | The node's power cut while its runner wrote. For 420 s the mapping stayed `READY` at its generation with its Pod recorded, and the owner's status said not usable once the heartbeat was stale. No Pod, admission probe or Secret was created, demand waited and the owner's retry was refused. The VolumeAttachment stayed on the dead node, and the taint manager's eviction (`DeletionByTaintManager`) left the Pod `Running`, held by the stop-report finalizer. |
+| Failover | The runbook's steps: a `NODE_POWER_OFF` receipt bound to the predecessor, the out-of-service taint, the finalizer taken off. PodGC made the Pod `Failed` and the attachment was force-deleted. The manager went `FENCING` on a Pod terminal by the control plane's word, replacing the predecessor's credential, then accepted the receipt as the stop proof and started the next generation on the other node. Every SQLite row acknowledged before the cut was there after WAL recovery, `integrity_check` ok, fsynced files as before. |
+| The old node's return | Under the taint it mapped and mounted nothing of the volume and ran nothing of the old Pod. Its kubelet could not reach the CSI driver, whose node plugin the taint evicts. The old generation's credential was refused 401, and an instance naming it 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. With the taint removed the node rejoined, and the volume stayed with the new generation. |
+
+Found, and left to later work (reported to the coordinator):
+
+- **For an unreachable node, the manager does not persist `FENCING`.** "Single Pod and single writer protection" above
+  says it should, and that it should reject the predecessor's generation.
+  - What the manager does: it blocks replacement, but it fences only when the recorded Pod disappears, is replaced, or
+    turns terminal without its kubelet's report.
+  - A Pod on a lost node stays `Running`, evicted or not, so the mapping stays `READY` and the predecessor's credential
+    stays valid until the operator's out-of-service taint lets PodGC make the Pod terminal.
+  - One option is to fence on the control plane's eviction mark. Its cost: a healthy node's `NoExecute` taint would then
+    cut a draining runner's credential before it finished.
+- **Work a node had not made durable when it lost power can be lost**, and a repository with it.
+  - Git fsyncs neither loose objects nor refs by default. ext4 allocates delayed blocks at writeback, and a rename is
+    durable only at the next journal commit.
+  - A commit 14 s before the cut came back as zero-length files.
+  - With `core.fsync=committed,index`, a commit 1.5 s before a cut kept its objects but lost `HEAD` and its branch ref.
+  - The runner's workspace and worktrees are such repositories. Making the Git work that must survive durable (for
+    example syncing the volume after it), or repairing a repository at the next start, is the image's and the runner's.
+- Not established: a partition that keeps the old node running, a storage fence as the receipt's method, two managers,
+  failover across physical machines, a real model.

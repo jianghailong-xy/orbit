@@ -1,0 +1,197 @@
+{
+ "checks": [
+  {
+   "check": "the owner's sleep is accepted",
+   "ok": true,
+   "value": 202
+  },
+  {
+   "check": "asleep: no Pod on the claim",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "asleep: no VolumeAttachment",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "asleep: mapped by no running VM",
+   "ok": true,
+   "value": {
+    "1": [],
+    "2": []
+   }
+  },
+  {
+   "check": "asleep: no RBD watcher",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "the drained generation retired on its kubelet's report (OBSERVED_STOP)",
+   "ok": true,
+   "value": {
+    "kind": "OBSERVED_STOP",
+    "recordedAt": "2026-10-19T12:33:28.028Z",
+    "retiredAt": "2026-10-19T12:33:33.193Z"
+   }
+  },
+  {
+   "check": "no compute held while asleep",
+   "ok": true
+  },
+  {
+   "check": "the claim is kept, bound to the same PV",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T12:33:36.396+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "migrate",
+ "result": {
+  "action": {
+   "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 13
+   },
+   "status": 202
+  },
+  "placement": {
+   "at": "2026-10-19T12:33:33.772+00:00",
+   "generation": 2,
+   "guests": {
+    "orbit-mr-lab": {
+     "bootId": "96bff9b5-cacb-434e-ab76-a612a742ba4a",
+     "devices": [
+      {
+       "address": "10.77.0.1:0/3421088657",
+       "client": "clientclient284119",
+       "device": "rbd0",
+       "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+      }
+     ],
+     "mounts": [
+      {
+       "fstype": "ext4",
+       "source": "/dev/rbd0",
+       "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+      },
+      {
+       "fstype": "ext4",
+       "source": "/dev/rbd0",
+       "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+      }
+     ],
+     "uptimeSeconds": 480.03
+    },
+    "orbit-mr-lab-2": {
+     "bootId": "2e316843-fd8c-40da-a386-cabb86a84944",
+     "devices": [],
+     "mounts": [],
+     "uptimeSeconds": 479.16
+    }
+   },
+   "image": "orbit-mr-rbd/csi-vol-5789a0fc-1192-4966-a2be-b86f1a7ef15b",
+   "nodeName": null,
+   "pod": null,
+   "podUid": null,
+   "podsOnTheClaim": [],
+   "state": "SLEEPING",
+   "volumeAttachments": [],
+   "watchers": []
+  },
+  "proof": {
+   "kind": "OBSERVED_STOP",
+   "observation": {
+    "containers": [
+     {
+      "exitCode": 0,
+      "finishedAt": "2026-10-19T12:32:22Z",
+      "name": "private-volume-directories",
+      "state": "terminated"
+     },
+     {
+      "exitCode": 0,
+      "finishedAt": "2026-10-19T12:33:24Z",
+      "name": "runner",
+      "state": "terminated"
+     }
+    ],
+    "phase": "Succeeded"
+   },
+   "predecessor": {
+    "generation": 1,
+    "nodeName": "orbit-mr-lab",
+    "podName": "mr-01a15425-c85b-74ae-b075-b1843c1e2c52",
+    "podUid": "7ea5a792-bdf0-4c3a-aac2-af2688a198b0",
+    "pvcUid": "6d10e22d-3a0f-49ab-af1b-8a57df982b2f",
+    "runnerId": "01a15425-c85b-74ae-b075-b1843c1e2c52",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-5789a0fc-1192-4966-a2be-b86f1a7ef15b"
+   },
+   "recordedAt": "2026-10-19T12:33:28.028Z",
+   "retiredAt": "2026-10-19T12:33:33.193Z"
+  },
+  "sleepToAsleepSeconds": 30.8,
+  "until": {
+   "at": "2026-10-19T12:33:33.545+00:00",
+   "changes": [
+    {
+     "at": "2026-10-19T12:33:02.836+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "asked",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "7ea5a792",
+      "reason": null,
+      "revision": 15
+     }
+    },
+    {
+     "at": "2026-10-19T12:33:24.653+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "accepted",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "7ea5a792",
+      "reason": null,
+      "revision": 15
+     }
+    },
+    {
+     "at": "2026-10-19T12:33:28.454+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "accepted",
+      "generation": 1,
+      "management_state": "DRAINING",
+      "pod": "7ea5a792",
+      "reason": null,
+      "revision": 18
+     }
+    },
+    {
+     "at": "2026-10-19T12:33:33.545+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 2,
+      "management_state": "SLEEPING",
+      "pod": null,
+      "reason": null,
+      "revision": 19
+     }
+    }
+   ],
+   "reached": "SLEEPING",
+   "seconds": 30.8
+  }
+ },
+ "seconds": 33.7,
+ "startedAt": "2026-10-19T12:33:02.656+00:00",
+ "step": "sleep"
+}

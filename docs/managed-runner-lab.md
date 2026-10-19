@@ -202,6 +202,7 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
 | `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
 | `switch-lab.py` | Task T08b's run ([below](#a-restored-volume-back-under-its-runner-t08b)), on acceptance-lab.py's helpers: one account provisioned, data on its volume, an independent backup, the volume lost, the runbook's restore into a new claim under the runner's name, the administrator's volume switch and the wake on the restored claim, in one command that stops at the first failed check; `report` condenses a run. |
+| `takeover-lab.py` | Task T02's run on the two nodes ([below](#cross-node-migration-and-takeover-t02)), on acceptance-lab.py's helpers: one account's runner moved to the other node through sleep and wake, Pods on its claim pinned to the other node, what RWO and RBD do alone, the second node's power cut while the runner writes there, the runbook's failover (receipt, out-of-service taint, finalizer) and the old node's return; it stops at the first failed check and goes on from a step (`--from-step`); `report` condenses a run, `secret-scan` checks its records. |
 
 A test window:
 
@@ -758,7 +759,7 @@ acknowledged before the cut, and `integrity_check` was `ok` after SQLite's WAL r
 left no Pod, VolumeAttachment or watcher. Within the 7 minutes nothing moved the volume off the dead
 node: there was no detach while the Pod stayed Terminating, and no replacement Pod, since none was
 asked for. Whether and how a successor may take the volume, and how the old node is fenced, is for
-T02 to establish.
+T02 to establish ([it did](#cross-node-migration-and-takeover-t02)).
 
 A finding: after this test Ceph reported `BLUESTORE_SLOW_OP_ALERT` for osd.2, slow BlueStore
 operations on the shared HDD. By default the alert stays for 24 hours, which held `status.sh`
@@ -830,6 +831,64 @@ VM up, so the units' figures are the VMs' footprint and the host's are context.
 - The CSI controller plugin stays on the first VM, so attach and detach keep working while the
   second is down.
 
+## Cross-node migration and takeover (T02)
+
+Recorded 2026-10-19 by task T02, the cross-node part of criterion 2, on the two nodes of [L1](#two-nodes-l1). One
+account's runner (`ann`) ran through the test server's manager, admission guard and fencing gate, in one run of
+`takeover-lab.py`: 31 steps, 175 checks on the passing ones. Two steps were run again after a check's fix (below).
+The records are in [the evidence](evidence/managed-runner-cross-node/2026-10-19/README.md); the procedure it follows is the
+runbook's [Failover](managed-runner-kubernetes-operations.md#failover).
+
+- **Model.** fake-model.py stood in as a DeepSeek-preset key, which is not a model.
+- **Image.** Built from `8055bb568` with the lab CA layer and imported into both VMs' containerd; nothing pushed.
+- **Lab window.** Both VMs were on from 12:25 to 13:12 UTC, after other sessions' pg-spec batches had ended.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02    # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+bash docs/evidence/managed-runner-cross-node/2026-10-19/kit/build-image.sh /mnt/data/tmp/t02-cross-node/image   # the archive the run imports
+OUT=/mnt/data/tmp/t02-cross-node/run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t02-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/takeover-lab.py run --out $OUT    # --from-step PHASE/STEP goes on
+python3 scripts/managed-runner/lab/takeover-lab.py report $OUT
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Normal move | Generation 1 on the first node, the second cordoned. The owner's sleep: asleep in 15.4 s on the kubelet's report, Pod gone, volume detached, no watcher. With the first node cordoned and the second not, a message woke the runner on the second node, its Pod made in the same second: answered after 24.7 s, READY after 25.8 s. The same runner, PVC, PV, handle, image and workspace; probe data, uploads, worktree, transcripts and the session as before |
+| A second Pod on the other node | With the runner on the second node and its writer committing rows, six Pods on its claim pinned to the first node were refused by the guard: by the cluster admin (`NOT_THE_MANAGER`), by the manager's identity and as a copy of the runner's Pod (`NOT_THE_FIXED_NAME`), under the fixed name (`NOT_RESERVED`), for the next generation (`NOT_THE_RESERVED_GENERATION`), and a Job's Pod (`NOT_THE_MANAGER`). One Pod, one attachment, one RBD client throughout |
+| RWO and RBD alone | A plain claim's second Pod on the other node stayed `Pending`: Kubernetes 1.36's attach/detach controller says "Waiting for detach … already used by pod(s)", which the out-of-service taint overrides on purpose. The RBD image has `layering` only (no `exclusive-lock`) and no lock, and a second Ceph client read it while the other node mapped it |
+| Heartbeat loss | The second node's qemu SIGKILLed while the runner wrote there. For 420 s the mapping stayed `READY` at its generation and nothing took over. The gate saw only reads, the attachment stayed on the dead node, a message waited and the owner's retry was refused. The node went `Unknown` at 52 s, the runner not usable at 114 s, and the taint manager evicted the Pod at 351 s; it stayed `Running`, held by the finalizer |
+| Failover | Receipt (`NODE_POWER_OFF`, `HYPERVISOR`) and `node.kubernetes.io/out-of-service`. The Pod was `Failed` by PodGC and its attachment force-deleted within 6 s, and the mapping `FENCING` 10.3 s after the taint, the old credential refused from then on. With the finalizer taken off, the receipt was accepted and generation 3 was READY on the first node 26.1 s later. The gate saw one Pod create |
+| Data after it | Every row the writer had acknowledged before the cut was there (441), `integrity_check` ok after WAL recovery, the rows read before the cut hashing the same. Fsynced files, uploads, worktree, transcripts and the session were as before; the message sent during the outage was answered |
+| The old node back | Under the taint, it mapped and mounted nothing of the volume and ran nothing of the old Pod; its kubelet could not reach the CSI driver, whose node plugin the taint evicts. The old generation's credential got 401, the old instance 403 `SUPERSEDED`. The taint removed: rejoined, the volume still with generation 3 |
+| At the end | Never more than one Pod on the claim nor one attachment of its PV in the timeline; Ceph `HEALTH_OK`; ann asleep |
+
+Findings, reported to the coordinator:
+
+- **Heartbeat loss leaves the mapping READY.** The runbook and the design said `FENCING`. The manager fences only once
+  the Pod is gone or terminal without its kubelet's report, so the predecessor's credential stays valid until the
+  out-of-service taint; nothing is replaced meanwhile. The runbook now says so.
+- **Git work right before a power loss can be lost.** A Git commit made 14 s before the cut came back as zero-length
+  files, an unreadable repository. A second cut ([kit/git-fsync-cut.py](evidence/managed-runner-cross-node/2026-10-19/kit/git-fsync-cut.py))
+  showed that `core.fsync=committed,index` keeps the objects but not a `HEAD` and a branch ref written 1.5 s before the
+  cut. Fsynced data survived.
+- **The Ceph-CSI node plugin has no tolerations.** The out-of-service taint evicts it from the fenced node, so
+  `status.sh` reports the lab unhealthy until the taint is removed; the run booted that node with `start.sh --no-wait`.
+
+The first run (kept in the evidence's `trial/`) stopped at the move because fake-model.py quoted only T06–T08 markers;
+it now quotes T02's too. The runner had moved and answered there as well. Its database is `test-server-t02-dev`, and its
+runner is asleep on its own claim.
+
+Left in the lab: `test-server-t02` (ann SLEEPING on her claim, generation 4 reserved) and the receipt ConfigMap
+`mr-fence-01a15431-…`; the trial's `test-server-t02-dev`; their claims with PVs and images, as retained test data. The
+plain RWO claim and the Git experiment's claim were deleted with their PVs and images. The webhook is removed, the test
+server and gate are stopped, and both VMs are off.
+
 ## Known limits
 
 - **One physical machine, one failure domain.** Since L1 the lab has two k3s nodes, so a volume
@@ -843,8 +902,10 @@ VM up, so the units' figures are the VMs' footprint and the host's are context.
   partition that keeps both VMs running.
 - The admission guard is installed only for a test window (`single-writer.py admission install`)
   and removed after it (`admission remove`): with no test server answering, `failurePolicy: Fail`
-  refuses every Pod create in `orbit-mr-test`. No fencing procedure, Rook or CSI snapshots are
-  installed. `ceph-rbd-verify.py`'s live phases need two nodes and were not run in L1.
+  refuses every Pod create in `orbit-mr-test`. No Rook or CSI snapshots are installed. Fencing is
+  the runbook's operator procedure; T02 ran it with the hypervisor power-off (`stop.sh --node 2
+  --hard`), not with a storage fence. `ceph-rbd-verify.py`'s live phases were not run; T02's driver
+  covers that ground through the manager.
 - The three replicas share one VM and one HDD: no durability against hardware failure, and I/O is
   bound by that disk.
 - Kernel RBD and OSDs share one kernel. Shutdown ordering is handled; severe memory pressure inside

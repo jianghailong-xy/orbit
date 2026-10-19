@@ -1,0 +1,336 @@
+{
+ "checks": [
+  {
+   "check": "samples were taken through the whole window",
+   "ok": true,
+   "value": 75
+  },
+  {
+   "check": "the mapping kept its generation and its recorded Pod: nothing was replaced",
+   "ok": true,
+   "value": {
+    "generations": [
+     2
+    ]
+   }
+  },
+  {
+   "check": "no state on the way to a new instance (REQUESTED, PROVISIONING, STARTING) was entered",
+   "ok": true,
+   "value": [
+    "READY"
+   ]
+  },
+  {
+   "check": "only the old Pod object ever referenced the claim",
+   "ok": true,
+   "value": [
+    "457b55b5-f9e8-454d-827c-dd0fbb909163"
+   ]
+  },
+  {
+   "check": "the gate saw no Pod create from the manager since the cut",
+   "ok": true,
+   "value": {
+    "other (reads, patches, deletes)": 252
+   }
+  },
+  {
+   "check": "the VolumeAttachment stayed on orbit-mr-lab-2 (nothing detached it)",
+   "ok": true
+  },
+  {
+   "check": "the second node went Unknown",
+   "ok": true,
+   "value": [
+    "True",
+    "Unknown"
+   ]
+  },
+  {
+   "check": "the owner's status said the runner is not usable",
+   "ok": true,
+   "value": 114.0
+  },
+  {
+   "check": "the message sent meanwhile was accepted and waits",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "the owner's retry did not start anything",
+   "ok": true,
+   "value": {
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A READY managed runner is not retried."
+    },
+    "status": 409
+   }
+  },
+  {
+   "check": "the message is still waiting at the end of the window",
+   "ok": true,
+   "value": [
+    {
+     "status": "PENDING"
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T12:59:51.518+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "takeover",
+ "result": {
+  "demand": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 3,
+    "status": null
+   },
+   "at": "2026-10-19T12:55:19.397+00:00",
+   "kind": "turn",
+   "session": "34id3phEkD3Fva5iqMbg4",
+   "status": 201
+  },
+  "errors": [],
+  "first": {
+   "at": "2026-10-19T12:52:45.835+00:00",
+   "gateConnections": 320,
+   "mapping": {
+    "attempt": 0,
+    "desired": "RUNNING",
+    "generation": 2,
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "proof": "OBSERVED_STOP",
+    "reason": null,
+    "state": "READY"
+   },
+   "node": {
+    "name": "orbit-mr-lab-2",
+    "ready": "True",
+    "readySince": "2026-10-19T11:02:53Z",
+    "reason": "KubeletReady",
+    "taints": [],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   },
+   "ownerStatus": {
+    "heartbeatStatus": "ONLINE",
+    "managementState": "READY",
+    "reason": null,
+    "usable": true
+   },
+   "pod": {
+    "containers": [
+     {
+      "exitCode": 0,
+      "name": "private-volume-directories",
+      "reason": "Completed",
+      "state": "terminated"
+     },
+     {
+      "exitCode": null,
+      "name": "runner",
+      "reason": null,
+      "state": "running"
+     }
+    ],
+    "deletionTimestamp": null,
+    "disruptionTarget": null,
+    "finalizers": [
+     "orbit.dev/managed-runner-stop-report"
+    ],
+    "generation": "2",
+    "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+    "node": "orbit-mr-lab-2",
+    "phase": "Running",
+    "ready": "True",
+    "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+   },
+   "podsOnTheClaim": [
+    {
+     "deleting": false,
+     "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+    }
+   ],
+   "runner": {
+    "last_heartbeat_at": "2026-10-19T12:52:37.265",
+    "status": "ONLINE"
+   },
+   "secondsSinceCut": 1.1,
+   "volumeAttachments": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-51154fd971fa73ba1ca1674730215aa42d4863fe7c8e3910cf1375571110af87",
+     "node": "orbit-mr-lab-2"
+    }
+   ],
+   "watchers": [
+    {
+     "address": "10.77.0.2:0/2935771823",
+     "client": 284177,
+     "cookie": 18446462598732840961
+    }
+   ]
+  },
+  "firstEvictedSeconds": 351.3,
+  "firstUnknownSeconds": 51.6,
+  "firstUnusableSeconds": 114.0,
+  "gate": {
+   "at": "2026-10-19T12:59:48.304+00:00",
+   "byKind": {
+    "other (reads, patches, deletes)": 252
+   },
+   "connections": 252,
+   "largestRecordSizes": {
+    "1136": 84,
+    "1147": 84,
+    "1170": 84
+   },
+   "since": "2026-10-19T12:52:44.611Z",
+   "until": null
+  },
+  "last": {
+   "at": "2026-10-19T12:59:43.186+00:00",
+   "gateConnections": 569,
+   "mapping": {
+    "attempt": 0,
+    "desired": "RUNNING",
+    "generation": 2,
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "proof": "OBSERVED_STOP",
+    "reason": null,
+    "state": "READY"
+   },
+   "node": {
+    "name": "orbit-mr-lab-2",
+    "ready": "Unknown",
+    "readySince": "2026-10-19T12:53:32Z",
+    "reason": "NodeStatusUnknown",
+    "taints": [
+     "node.kubernetes.io/unreachable:NoSchedule",
+     "node.kubernetes.io/unreachable:NoExecute"
+    ],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   },
+   "ownerStatus": {
+    "heartbeatStatus": "ONLINE",
+    "managementState": "READY",
+    "reason": null,
+    "usable": false
+   },
+   "pod": {
+    "containers": [
+     {
+      "exitCode": 0,
+      "name": "private-volume-directories",
+      "reason": "Completed",
+      "state": "terminated"
+     },
+     {
+      "exitCode": null,
+      "name": "runner",
+      "reason": null,
+      "state": "running"
+     }
+    ],
+    "deletionTimestamp": "2026-10-19T13:02:32Z",
+    "disruptionTarget": {
+     "lastTransitionTime": "2026-10-19T12:58:32Z",
+     "reason": "DeletionByTaintManager",
+     "status": "True"
+    },
+    "finalizers": [
+     "orbit.dev/managed-runner-stop-report"
+    ],
+    "generation": "2",
+    "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+    "node": "orbit-mr-lab-2",
+    "phase": "Running",
+    "ready": "False",
+    "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+   },
+   "podsOnTheClaim": [
+    {
+     "deleting": true,
+     "name": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "457b55b5-f9e8-454d-827c-dd0fbb909163"
+    }
+   ],
+   "runner": {
+    "last_heartbeat_at": "2026-10-19T12:52:37.265",
+    "status": "ONLINE"
+   },
+   "secondsSinceCut": 418.5,
+   "volumeAttachments": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-51154fd971fa73ba1ca1674730215aa42d4863fe7c8e3910cf1375571110af87",
+     "node": "orbit-mr-lab-2"
+    }
+   ],
+   "watchers": null
+  },
+  "memory": {
+   "at": "2026-10-19T12:59:48.444Z",
+   "host": {
+    "MemAvailable": 7063,
+    "MemTotal": 15357,
+    "SwapFree": 31726,
+    "SwapTotal": 44285
+   },
+   "label": "t02 second node down",
+   "vms": {
+    "orbit-mr-lab": {
+     "guest": {
+      "stat-available-memory": 3851,
+      "stat-disk-caches": 887,
+      "stat-free-memory": 3137,
+      "stat-total-memory": 5920
+     },
+     "unit": {
+      "currentMiB": 1723,
+      "peakMiB": 4760,
+      "swapMiB": 1683
+     }
+    },
+    "orbit-mr-lab-2": "off"
+   }
+  },
+  "retry": {
+   "answer": {
+    "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+    "message": "A READY managed runner is not retried."
+   },
+   "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 30
+   },
+   "status": 409
+  },
+  "samples": 75,
+  "statesSeen": [
+   "READY"
+  ],
+  "timeline": "/mnt/data/tmp/t02-cross-node/run/records/takeover-heartbeat-loss-timeline.jsonl",
+  "windowSeconds": 420
+ },
+ "seconds": 425.9,
+ "startedAt": "2026-10-19T12:52:45.658+00:00",
+ "step": "heartbeat-loss"
+}

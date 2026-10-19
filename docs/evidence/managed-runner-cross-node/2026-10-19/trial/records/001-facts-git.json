@@ -1,0 +1,25 @@
+{
+ "checks": [
+  {
+   "check": "the apiserver is built in this checkout",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T12:27:38.984+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "apiserverBuiltAt": "2026-10-19T11:48:03+00:00",
+  "branch": "orbit/task-ceph-rbd-5580b7",
+  "head": "742b58fb6d3224247b5b997c1424d008705cf2dd",
+  "originMain": "e7168b246175a18b4af1928aa2c5b2bf4a656297",
+  "projectLine": "8055bb5686ba981c7a518557190aebfb8dedc46b",
+  "projectLineIsAncestor": true,
+  "subject": "feat(managed-runner-lab): takeover-lab.py, one runner across the two nodes: migration, second Pods, a hard stop and the runbook's failover (T02)",
+  "uncommitted": []
+ },
+ "seconds": 3.0,
+ "startedAt": "2026-10-19T12:27:35.969+00:00",
+ "step": "git"
+}

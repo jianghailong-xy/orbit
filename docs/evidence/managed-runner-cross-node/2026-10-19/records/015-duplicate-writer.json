@@ -1,0 +1,50 @@
+{
+ "checks": [
+  {
+   "check": "the probe writer runs in the runner container and has committed rows",
+   "ok": true,
+   "value": 101
+  },
+  {
+   "check": "it writes on orbit-mr-lab-2",
+   "ok": true,
+   "value": "orbit-mr-lab-2"
+  }
+ ],
+ "endedAt": "2026-10-19T12:48:04.264+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "duplicate",
+ "result": {
+  "at": "2026-10-19T12:47:22.556+00:00",
+  "committedRows": 101,
+  "generation": 2,
+  "pod": "mr-01a15431-f1f1-773e-b7cd-c25915447151",
+  "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+  "resumedExistingData": false,
+  "runId": "t02-writer",
+  "runnerVolume": {
+   "config": {
+    "maxConcurrent": 2,
+    "name": "orbit-managed",
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+   },
+   "containerIdentity": {
+    "layoutVersion": 1,
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+   },
+   "managedInstance": {
+    "generation": 2,
+    "podUid": "457b55b5-f9e8-454d-827c-dd0fbb909163",
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151"
+   }
+  }
+ },
+ "seconds": 41.9,
+ "startedAt": "2026-10-19T12:47:22.360+00:00",
+ "step": "writer"
+}

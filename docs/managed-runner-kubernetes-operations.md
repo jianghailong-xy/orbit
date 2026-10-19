@@ -8,12 +8,16 @@ on kernel RBD), the claim's PersistentVolume (`Retain`) and an RBD image `csi-vo
 the account's checkouts, sessions, uploads, engine sign-ins and the runner's own identity; nothing else keeps a copy of
 it. A deployment whose managed runners run on Docker has [its own runbook](managed-runner-docker-operations.md).
 
-The procedures were run in the single-machine lab ([docs/managed-runner-lab.md](managed-runner-lab.md)): k3s v1.36.5,
-Ceph 20.2.4, Ceph-CSI v3.18.0, one node. The deployment steps are its scripts' (tasks L0, T02a and T04); everything else,
-and every number, is from task T08's end-to-end run of 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md)),
-except the volume switch, whose procedure and numbers are task T08b's run of the same day
-([evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md)).
-What needs a second node, or was not run, is marked **Not verified here**. Read the [design contract](managed-runner-design.md)
+The procedures were run in the lab ([docs/managed-runner-lab.md](managed-runner-lab.md)): k3s v1.36.5, Ceph 20.2.4,
+Ceph-CSI v3.18.0. The deployment steps are its scripts' (tasks L0, T02a and T04). Every other number comes from one of these
+runs:
+
+- task T08's end-to-end run of 2026-10-18 on one node ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md));
+- task T08b's volume switch, the same day ([evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md));
+- task T02's move to another node and failover, on the lab's two nodes on 2026-10-19
+  ([evidence](evidence/managed-runner-cross-node/2026-10-19/README.md)).
+
+What was not run is marked **Not verified here**. Read the [design contract](managed-runner-design.md)
 first: this page says how to operate it, not why it is built so.
 
 Conventions. Name the context and the namespace on every command, never a default:
@@ -417,11 +421,39 @@ are kept, nothing starts, and no timeout, lease or owner's retry opens it.
 
 **A planned move off a node** (`kubectl drain`, maintenance): the eviction deletes the Pod, the finalizer keeps its
 kubelet's report until the manager has it, the volume detaches, and the next generation is scheduled on another node
-with the same claim. In the lab, with one node, an eviction, a delete and a crash each started the next generation on the
-same volume (T04, and the T08 rebuild); the move to another node is **Not verified here**.
+with the same claim. The manager names no node itself, so cordon the node the runner should leave.
 
-**A node that stops reporting** (power loss, network partition): its runner's Pod is not terminal by its kubelet, so the
-mapping goes `FENCING` (`PREDECESSOR_STOP_UNPROVEN`). To bring the runner back elsewhere:
+- On one node, an eviction, a delete and a crash each started the next generation on the same volume (T04, and the T08
+  rebuild).
+- On the two-node lab (T02) the owner's sleep put the runner to sleep in 15.4 s, on its kubelet's report: the Pod went
+  and the volume detached. With its node cordoned, a message woke it on the other node 24.7 s later: the same runner,
+  claim, PV and RBD image, data and session.
+
+**A node that stops reporting** (power loss, network partition): its runner's Pod is not terminal by its kubelet, and
+nothing replaces it. The manager has no right to read nodes, and a lost heartbeat proves nothing, so the mapping stays
+`READY` with its generation and Pod recorded.
+
+- The owner's status says the runner is not usable once its last heartbeat is older than `heartbeatFreshSeconds`.
+- Work sent meanwhile waits, and the owner's retry is refused.
+- The node's VolumeAttachment stays.
+- After the node's `NoExecute` toleration (300 s) the taint manager evicts the Pod. It is still `Running`, held by the
+  stop-report finalizer, with no kubelet to confirm anything.
+- The mapping goes `FENCING` (`PREDECESSOR_STOP_UNPROVEN`), and the predecessor's credential is replaced, only when the
+  control plane makes that Pod terminal (step 4 below) or its object goes.
+
+Measured on the two-node lab (T02), the second node's qemu killed while the runner wrote there:
+
+| After the power cut | Seen |
+| --- | --- |
+| 35 s | The node's RBD watcher gone |
+| 52 s | The node `Unknown` |
+| 114 s | The runner not usable |
+| 351 s | The Pod evicted by the taint manager |
+
+For 420 s the manager made no Pod, admission probe or Secret, the mapping stayed `READY` at its generation, and the
+attachment stayed on the dead node.
+
+To bring the runner back elsewhere:
 
 1. Identify the predecessor from the mapping: runner, generation, Pod name and UID, node, claim UID, volume handle, RBD
    pool and image.
@@ -436,14 +468,44 @@ mapping goes `FENCING` (`PREDECESSOR_STOP_UNPROVEN`). To bring the runner back e
 4. **Let Kubernetes release the volume**: the `node.kubernetes.io/out-of-service` taint on the fenced node (only after the
    power-off is verified), then [take the finalizer off](#the-stop-report-finalizer) the stale Pod. The manager waits for
    the object and the attachment to be gone, reads the receipt, and starts the next generation on another node.
+   - PodGC makes the stale Pod `Failed`, and the attach/detach controller deletes its VolumeAttachment without waiting
+     for an unmount nobody can report.
+   - The manager, finding the Pod terminal but not by its kubelet, goes `FENCING`. The predecessor's credential is
+     refused from then on.
+   - The taint also evicts the Ceph-CSI node plugin from that node, unless it tolerates the taint. In the lab it does not,
+     so the node maps nothing until the taint is removed, which is the quarantine.
 5. Check the account's data on the new node (SQLite, Git, the engine's session), and keep the old node out until it is
-   wiped or rejoined under the rejoin policy.
+   wiped or rejoined under the rejoin policy. When its stale Pod and attachment are gone and it maps and mounts nothing of
+   the volume, remove the taint.
 
-All of this is **Not verified here**: the lab has one node, and powering it off stops the cluster. What was seen on the
-one node: `FENCING` after a stop nobody could prove (a force delete, T02a; a Pod gone with its finalizer stripped, T04), a
-receipt refused field by field (T02a), the finalizer keeping an operator's delete provable (T04, T08), and the gate waiting
-for the old attachment to go (T07b). An accepted receipt, the out-of-service taint, a second node's mount, and the old
-writer's fate after a takeover have not been run on real nodes.
+Measured on the two-node lab (T02, 2026-10-19, [evidence](evidence/managed-runner-cross-node/2026-10-19/README.md)):
+
+- **Steps 3 and 4.** The receipt (`NODE_POWER_OFF`, mechanism `HYPERVISOR`, the host's checks as its observation) and
+  the taint went in at once. Within 6 s the stale Pod was `Failed` and its attachment gone. 10.3 s after the taint the
+  mapping was `FENCING`, and the predecessor's credential got 401 at heartbeat, claim and `/runner/me`.
+- **The next generation.** 26.1 s after the finalizer came off it was READY on the other node, the receipt recorded as
+  its stop proof. That is 463.8 s after the power cut, 427 s of it waiting on purpose.
+- **The data.** Every row the writer had acknowledged was there, `integrity_check` ok after SQLite's WAL recovery, and
+  the files, uploads, worktree, transcripts and session as before. The work sent during the outage was answered then.
+- **The old node, back under the taint.** It mapped and mounted nothing of the volume, and ran nothing of the old Pod.
+  Its kubelet could not even reach the CSI driver to tear the old volume down. The old generation's credential got 401
+  and the old instance 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. With the taint removed, the node rejoined and the
+  volume stayed with the new generation, one Pod and one attachment throughout.
+
+**What a node that loses power can lose.** Data its processes had not made durable when the power went may be gone:
+ext4 allocates delayed blocks only at writeback.
+
+- A Git commit made 14 s before the cut came back as zero-length files, an unreadable repository. Git fsyncs neither
+  loose objects nor refs by default.
+- Even with `core.fsync=committed,index`, a repository committed 1.5 s before a cut lost its `HEAD` and its branch ref.
+- What was fsynced survived: SQLite with `synchronous=FULL`, and fsynced files.
+
+After a failover, check the account's repositories (`git fsck`) before relying on the last minute of work.
+
+**Not verified here:**
+- a node that keeps running but is cut off, a partition;
+- a storage fence (`STORAGE_FENCE`) as the receipt's method;
+- failover across separate physical machines: the lab's two nodes are VMs on one host.
 
 ## Where each setting lives
 

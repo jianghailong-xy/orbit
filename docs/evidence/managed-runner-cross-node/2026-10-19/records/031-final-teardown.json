@@ -1,0 +1,44 @@
+{
+ "checks": [
+  {
+   "check": "the webhook is removed",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T13:06:37.589+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "final",
+ "result": {
+  "admission": {
+   "at": "2026-10-19T13:06:36.931+00:00",
+   "note": "the k3s AdmissionConfiguration (/etc/rancher/k3s/orbit-admission) stays: it only holds the token for 10.0.2.2:13711",
+   "removed": "orbit-managed-runner-pods",
+   "webhook": null
+  },
+  "gate": {
+   "at": "2026-10-19T13:06:37.555+00:00",
+   "connections": 854,
+   "control": {
+    "mode": "pass"
+   },
+   "listen": "127.0.0.1:16444",
+   "log": null,
+   "lost": [],
+   "refused": [],
+   "unit": "inactive"
+  },
+  "recorder": {
+   "at": "2026-10-19T13:06:36.895+00:00",
+   "lines": 69,
+   "log": "/mnt/data/managed-runner-lab/test-server-t02/timeline.jsonl",
+   "unit": "inactive"
+  },
+  "server": [
+   "13:06:37Z stopped; data kept in /mnt/data/managed-runner-lab/test-server-t02"
+  ]
+ },
+ "seconds": 0.7,
+ "startedAt": "2026-10-19T13:06:36.887+00:00",
+ "step": "teardown"
+}

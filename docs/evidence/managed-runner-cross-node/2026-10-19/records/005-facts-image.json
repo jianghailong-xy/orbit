@@ -1,0 +1,81 @@
+{
+ "checks": [
+  {
+   "check": "the image is in both VMs' containerd under the same digest reference and ID",
+   "ok": true,
+   "value": {
+    "orbit-mr-lab": {
+     "alreadyThere": true,
+     "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+     "importSeconds": null,
+     "repoDigests": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9"
+     ],
+     "repoTags": [
+      "docker.io/library/orbit-managed-runner-lab:t02-8055bb568"
+     ],
+     "size": "499715572"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": true,
+     "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+     "importSeconds": null,
+     "repoDigests": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9"
+     ],
+     "repoTags": [
+      "docker.io/library/orbit-managed-runner-lab:t02-8055bb568"
+     ],
+     "size": "499715572"
+    }
+   }
+  },
+  {
+   "check": "the image sources are unchanged since the image was built",
+   "ok": true,
+   "value": "(no difference)"
+  }
+ ],
+ "endedAt": "2026-10-19T12:43:16.977+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "archive": "/mnt/data/tmp/t02-cross-node/image/lab.oci.tar",
+  "archiveSha256": "90c8987b3adcd8d722cfcaa96008bd8e8d02d8b55336ae50cf163fce4357c838",
+  "labManifest": "sha256:2f6cc4f2722027fb7f2b135367eac432dc5de454ff3bb496fc04ecd8a6bc00fb",
+  "nodes": {
+   "orbit-mr-lab": {
+    "alreadyThere": true,
+    "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+    "importSeconds": null,
+    "repoDigests": [
+     "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9"
+    ],
+    "repoTags": [
+     "docker.io/library/orbit-managed-runner-lab:t02-8055bb568"
+    ],
+    "size": "499715572"
+   },
+   "orbit-mr-lab-2": {
+    "alreadyThere": true,
+    "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+    "importSeconds": null,
+    "repoDigests": [
+     "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9"
+    ],
+    "repoTags": [
+     "docker.io/library/orbit-managed-runner-lab:t02-8055bb568"
+    ],
+    "size": "499715572"
+   }
+  },
+  "pushed": false,
+  "reference": "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9",
+  "source": "8055bb5686ba981c7a518557190aebfb8dedc46b",
+  "tag": "docker.io/library/orbit-managed-runner-lab:t02-8055bb568"
+ },
+ "seconds": 8.8,
+ "startedAt": "2026-10-19T12:43:08.198+00:00",
+ "step": "image"
+}
