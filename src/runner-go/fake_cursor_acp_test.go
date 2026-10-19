@@ -23,8 +23,9 @@ package main
 // sub-agents. What the runner wrote is kept in received.jsonl, each line with how much of the
 // recording had gone out by then, and how the CLI was started in start.json. Like the real CLI it does
 // not exit when stdin ends, only on SIGTERM (143) or SIGINT (130) (§3.4) — or, when the script says so,
-// once its recording has gone out: killed, as a crash, or with its stdout closed while it runs on. The
-// same binary answers `agent models` the ways P0a recorded it (§9), each call noted in models.jsonl.
+// once its recording has gone out or where the replay holds: killed, as a crash, or with its stdout closed
+// while it runs on. The same binary answers `agent models` the ways P0a recorded it (§9), each call noted
+// in models.jsonl.
 //
 // A script can also have the CLI start, as its first prompt arrives, what a session's commands leave
 // running (Spawn, scope.json): the processes a session's scope has to reclaim (session_scope.go).
@@ -52,8 +53,9 @@ type fakeCursorACPScript struct {
 	Recording string `json:"recording"`
 	// Session, when set, is the one session of a recording that holds two.
 	Session string `json:"session,omitempty"`
-	// Exit ends the CLI once its recording has gone out and nothing waits on the runner: "SIGKILL" kills
-	// it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while it runs on.
+	// Exit ends the CLI once its recording has gone out, or HoldAfter holds it, and nothing waits on the
+	// runner: "SIGKILL" kills it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while
+	// it runs on.
 	Exit string `json:"exit,omitempty"`
 	// Models is how `agent models` answers: "invalid-key" or "offline" as P0a recorded them
 	// (failure-shapes-without-prompt), a catalogue otherwise.
@@ -75,7 +77,8 @@ type fakeCursorACPScript struct {
 	// current_mode_update for the mode asked, then {}.
 	Modes bool `json:"modes,omitempty"`
 	// HoldAfter stops the replay once the runner has answered the request the CLI sent under this recorded
-	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running.
+	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running — with
+	// Exit, the CLI ends there.
 	HoldAfter string `json:"holdAfter,omitempty"`
 	// Config answers a session/set_config_option the recording does not hold with the same params the way
 	// the recording shows the CLI answering one (§10), from the recording's own data: selecting a model
@@ -449,7 +452,7 @@ func runFakeCursorACP(dir string) int {
 			cursor++
 			waiting = line.ask
 		}
-		if cursor == len(lines) && waiting == "" {
+		if (cursor == len(lines) || held) && waiting == "" {
 			switch script.Exit {
 			case "SIGKILL":
 				_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)

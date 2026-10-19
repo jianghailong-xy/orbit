@@ -81,6 +81,9 @@ type cursorRunOptions struct {
 	approve func(card cursorTestCard) cursorTestDecision
 	// onCard hears each card as it is filed, and says what to deliver next.
 	onCard func(card cursorTestCard) []RunInboxResponse
+	// onAnswer hears each answer the runner sent the replayed CLI to a request of the CLI's own, by the
+	// request's recorded id, once the CLI has read it, and says what to deliver next.
+	onAnswer func(id string) []RunInboxResponse
 	// executable runs the session on this Cursor CLI instead of a replay (cursor_permissions_real_test.go);
 	// serve answers the control-plane requests the stub does not know, reporting whether it did.
 	executable string
@@ -364,6 +367,31 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 				inbox <- next
 			}
 		}
+	}
+	if opts.onAnswer != nil {
+		// The replayed CLI notes each line it reads in received.jsonl as it reads it.
+		go func() {
+			heard := map[string]bool{}
+			for ctx.Err() == nil {
+				data, _ := os.ReadFile(filepath.Join(fake.dir, "received.jsonl"))
+				for _, line := range strings.Split(string(data), "\n") {
+					var received fakeCursorReceived
+					if json.Unmarshal([]byte(line), &received) != nil || received.Message["method"] != nil || received.Message["id"] == nil {
+						continue
+					}
+					if id := rpcIDKey(received.Message["id"]); !heard[id] {
+						heard[id] = true
+						for _, next := range opts.onAnswer(id) {
+							select {
+							case inbox <- next:
+							case <-ctx.Done():
+							}
+						}
+					}
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}()
 	}
 	status, ended, reload := providerRuntimeFor(runtimeProvider(job)).run(sessionProcessArgs{
 		ctx: engineCtx, shutdownCtx: shutdownCtx, t: NewTransport(server.URL, "synthetic-runner-token"),

@@ -14,7 +14,7 @@ package main
 // of the Orbit tool it is (cursorToolCall). There is no `failed` status: the outcome is read from
 // rawOutput (cursorToolResult) — except a call Orbit refused, which Cursor completes with nothing at all
 // when it is a command or an edit: the permission bridge marks its card first (refuse), and it settles
-// as not run.
+// as not run, also when the turn ends before Cursor completes it.
 //
 // A sub-agent's own updates arrive under the sub-agent's session id, which subagent_spawned binds to
 // the Task card that launched it: they go out stamped with that card's id (parentToolUseId, which the
@@ -473,8 +473,14 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 		tool := turn.tools[id]
 		if !tool.done {
 			// A cancelled card is never completed (§3.3), and nothing more comes for any once the turn is over.
+			// A call Orbit refused did not run, however the turn ended: Cursor CLI runs nothing before it has the
+			// answer (§5.2), so it settles as its completion would have.
+			content, isError := cursorUnfinishedTool(request.Status), true
+			if tool.refused {
+				content, isError = cursorToolResult(tool)
+			}
 			m.emitToolUse(turn, tool)
-			m.emitToolResult(turn, tool, cursorUnfinishedTool(request.Status), true)
+			m.emitToolResult(turn, tool, content, isError)
 		}
 		m.retired[id] = true
 	}
@@ -757,8 +763,8 @@ func (m *cursorEventMapper) permissionAsk(toolCall map[string]interface{}) (curs
 }
 
 // refuse marks the running turn's card toolID as a call Orbit did not allow, before Orbit's answer goes
-// out: whatever Cursor CLI completes it with, it settles as not run (cursorToolResult). No card of that id
-// in that turn, nothing to mark.
+// out: whatever Cursor CLI completes it with, or if the turn ends before it does, it settles as not run
+// (cursorToolResult, settle). No card of that id in that turn, nothing to mark.
 func (m *cursorEventMapper) refuse(turnID, toolID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

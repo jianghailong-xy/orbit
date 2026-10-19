@@ -19,6 +19,9 @@ P8（`34h05gNODW63XwtyJ4Lno`）2026-10-19 03:21Z 在 HPC 的本地全栈上录�
 修复后 runner 记住自己没有放行的调用，卡片结算为 `isError:true`、"Not run: the tool call was rejected."
 （`cursor_permissions.go` 标记，`cursor_events.go` 结算）。回放用例是 [`cursor_permissions_test.go`](../../../cursor_permissions_test.go) 的
 `TestCursorRefusedToolCards`，验收脚本是 [`scripts/test-cursor-rejected-tools.mjs`](../../../../../scripts/test-cursor-rejected-tools.mjs)。
+Cursor 的 `completed` 还没到、这一轮就结束（Stop、CLI 被杀或连接关闭）时，被拒的卡同样结算为 Not run（D-P8-1 收尾 `34iSsJHzTeI5uzhcGSmlI`）：
+回放停在 runner 的拒绝到达 CLI 之后（`HoldAfter`），用例是 `TestCursorRefusedToolCards` 的 `p8-refused-then-*`，
+验收脚本是 [`scripts/test-cursor-refusal-settle.mjs`](../../../../../scripts/test-cursor-refusal-settle.mjs)。
 
 来源与脱敏：
 - 来源是 P8 证据里的 `recordings/acp-key-recorded.ndjson`，每行一个 `{t, pid, dir, msg}`，SHA256 `81e6ba97314c309eaf09db827bbdfa256dae3df8a9191f282ca6d8adae7b90c2`。
