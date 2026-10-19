@@ -13,6 +13,9 @@ import {
   IntegrationJobResultRequest,
   IntegrationJobResultResponse,
   IntegrationJobState,
+  IntegrationUnknownPush,
+  UpstreamMovedCommits,
+  UpstreamMovedCommitsEnriched,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -73,6 +76,7 @@ import {
   applyPromotionJobResult,
   automaticLandingRefusal,
   markPromotionRechecking,
+  recoverPromotionPushReceipts,
   refileCandidateBehindTheWork,
 } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
@@ -199,6 +203,8 @@ export interface IntegrationDispatchHeartbeat {
 /** The row the claim returns, joined with what the runner needs to act on it. */
 interface ClaimedRow {
   id: string;
+  /** The account the job belongs to: J12's unknown-push list is that account's own queue. */
+  ownerId: string;
   kind: string;
   claimGeneration: bigint;
   targetRef: string;
@@ -300,6 +306,12 @@ export async function dispatchIntegrationJobs(
         continue;
       }
     }
+    // J12's receipt repair: the earlier landings on this serial key whose push outcome nobody could
+    // read, so this job's fetch can check whether they landed after all. Not a check's business —
+    // a CHECK_PROMOTION never pushes.
+    const unknownPushes = row.kind === 'CHECK_PROMOTION'
+      ? []
+      : await unresolvedUnknownPushes(prisma, row);
     commands.push({
       jobId: row.id,
       kind: row.kind as IntegrationJobCommand['kind'],
@@ -324,11 +336,42 @@ export async function dispatchIntegrationJobs(
       ...(row.confirmedAutomatically ? { automatic: true } : {}),
       checks: checksFor(row),
       cancelRequested: row.cancelRequestedAt != null,
+      ...(unknownPushes.length > 0 ? { unknownPushes } : {}),
       // §2.2 J-T4: only a v2 claim is asked to report PUSH synchronously and wait for the answer.
       ...(row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL ? { reportBeforePush: true as const } : {}),
     });
   }
   return commands;
+}
+
+/**
+ * The landings on one serial key whose push outcome nobody could read and that have no receipt yet
+ * (J12): what the next landing is handed so its fetch can check them.
+ *
+ * Only rows carrying a `tested_sha` are listed. A legacy claim that died before its synchronous
+ * PUSH report left nothing to check, and "cannot tell" is not an answer to give. A receipt is
+ * recognised by the job id its detail names — the repair is written against the unknown job, which
+ * the terminal guard keeps from ever being rewritten itself (J4) — so a repaired one is not offered
+ * again.
+ */
+async function unresolvedUnknownPushes(
+  prisma: PrismaService,
+  row: { ownerId: string; serialKey: string },
+): Promise<IntegrationUnknownPush[]> {
+  return prisma.$queryRaw<IntegrationUnknownPush[]>(Prisma.sql`
+    SELECT j."id" AS "jobId", j."tested_sha" AS "testedSha"
+      FROM "project_integration_job" j
+     WHERE j."owner_id" = ${row.ownerId}::uuid
+       AND j."serial_key" = ${row.serialKey}
+       AND j."state" = 'ERROR'
+       AND j."error_code" = 'PUSH_OUTCOME_UNKNOWN'
+       AND j."tested_sha" IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM "session_merge_receipt" r
+          WHERE r."owner_id" = j."owner_id"
+            AND r."detail"->>'integrationJobId' = j."id"::text)
+     ORDER BY j."finished_at" ASC NULLS LAST, j."id"
+     LIMIT 20`);
 }
 
 /**
@@ -484,6 +527,7 @@ async function claimOne(
        AND s."id" = j."session_id"
     RETURNING
       j."id" AS "id",
+      j."owner_id" AS "ownerId",
       j."kind" AS "kind",
       j."claim_generation" AS "claimGeneration",
       j."target_ref" AS "targetRef",
@@ -764,6 +808,14 @@ export async function receiveIntegrationJobProgress(
              "push_reported_generation" = CASE
                WHEN ${report.phase}::text = 'PUSH' THEN "claim_generation"
                ELSE "push_reported_generation" END,
+             -- J12: what the synchronous PUSH report says about the commit about to be pushed. It is
+             -- safe to record only here — the report is sent before the push, and the claim still
+             -- holds the row — and it is what lets the next landing on this serial key check an
+             -- unknown outcome later. COALESCE: a report never overwrites a fact already written.
+             "tested_sha" = COALESCE("tested_sha", ${report.testedSha}::char(40)),
+             "tested_tree_sha" = COALESCE("tested_tree_sha", ${report.testedTreeSha}::char(40)),
+             "source_sha" = COALESCE("source_sha", ${report.sourceSha}::char(40)),
+             "target_sha_before" = COALESCE("target_sha_before", ${report.targetShaBefore}::char(40)),
              "updated_at" = now()
        WHERE "id" = ${jobId}::uuid
          AND "runner_id" = ${runnerId}::uuid
@@ -803,6 +855,10 @@ function progressReport(body: IntegrationJobProgressRequest): {
   round: number | null;
   check: IntegrationJobCurrentCheck | null;
   outputIdleMs: number | null;
+  testedSha: string | null;
+  testedTreeSha: string | null;
+  sourceSha: string | null;
+  targetShaBefore: string | null;
 } {
   if (typeof body?.leaseOwner !== 'string' || body.leaseOwner === ''
       || typeof body?.claimGeneration !== 'string' || !/^\d{1,19}$/.test(body.claimGeneration)) {
@@ -846,6 +902,9 @@ function progressReport(body: IntegrationJobProgressRequest): {
   if (outputIdleMs != null && (!Number.isFinite(outputIdleMs) || outputIdleMs < 0)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `outputIdleMs must be a non-negative number, not ${outputIdleMs}`);
   }
+  // J12's push facts are the PUSH report's own, and nowhere else's — a later phase going by does
+  // not describe a commit this job is about to push. Absent is "not measured".
+  const onPush = body.phase === 'PUSH';
   return {
     claimGeneration: body.claimGeneration,
     leaseOwner: body.leaseOwner,
@@ -854,7 +913,20 @@ function progressReport(body: IntegrationJobProgressRequest): {
     round,
     check: current,
     outputIdleMs: outputIdleMs == null ? null : Math.round(outputIdleMs),
+    testedSha: onPush ? reportSha(body.testedSha, 'testedSha') : null,
+    testedTreeSha: onPush ? reportSha(body.testedTreeSha, 'testedTreeSha') : null,
+    sourceSha: onPush ? reportSha(body.sourceSha, 'sourceSha') : null,
+    targetShaBefore: onPush ? reportSha(body.targetShaBefore, 'targetShaBefore') : null,
   };
+}
+
+/** A commit a progress report names, or null when it names none. A malformed one is refused. */
+function reportSha(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string' || !/^[0-9a-f]{40}$/.test(value)) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `${field} is not a full commit sha: ${String(value)}`);
+  }
+  return value;
 }
 
 /**
@@ -1017,6 +1089,8 @@ export async function applyIntegrationJobResult(
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
+        // J12: the queue the job belongs to, which is the scope an unknown push is repaired on.
+        serialKey: true,
         codebaseId: true, cancelRequestedAt: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
         // The columns J-T10's gate and J12's answer are read from: the phase the job stopped at,
@@ -1401,6 +1475,23 @@ export async function applyIntegrationJobResult(
     }
 
     const checks = clipChecks(body.checks ?? []);
+    // J-T13's commits, with the control plane's own reading of each one: whether it arrived from
+    // outside the landing queue, and which merge of this account's put it there. Written on the job
+    // row — never in `errorDetail`, which is copied verbatim into an item's payload and its
+    // delivery text.
+    const upstreamMovedCommits = await enrichUpstreamMovedCommits(tx, {
+      ownerId: job.ownerId,
+      serialKey: job.serialKey,
+      moved: body.upstreamMovedCommits ?? null,
+    });
+    // J12: an earlier landing on this queue whose push outcome nobody could read, now found on the
+    // target. Its receipt is written against THAT job — the row is terminal and must not be
+    // rewritten (J4) — and this job's result transaction is where it happens.
+    const recoveredReceiptIds = await recoverUnknownPushReceipts(tx, {
+      ownerId: job.ownerId,
+      serialKey: job.serialKey,
+      checks: Array.isArray(body.unknownPushes) ? body.unknownPushes : [],
+    });
     // §4.7 H2 for a candidate: the coordinator's rerun of a blocked candidate's check passed, so the
     // items it was handling are HANDLED in its name — BEFORE the promotion is applied below, because
     // the Automatic setting's own rule counts every open integration item of the project (M-T11), and
@@ -1436,6 +1527,11 @@ export async function applyIntegrationJobResult(
         conflicts: body.conflicts ?? [],
         // J-T8: the result settles a cancellation that was asked of this claim — unless it landed.
         cancelRequested,
+        // J12's code, so the promotion can tell a push that lost a race (J-T13) from a failure M-T9
+        // blocks for, and whether the runner is one that reports the move at all: an older runner's
+        // ERROR / TARGET_MOVED keeps today's path.
+        errorCode: body.errorCode ?? null,
+        movedCommitsReported: upstreamMovedCommits !== null,
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
@@ -1464,7 +1560,9 @@ export async function applyIntegrationJobResult(
       conflicts: (body.conflicts ?? []).slice(0, 200),
       errorCode: body.errorCode ?? undefined,
       errorDetail: (body.errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
-      receiptIds: [...receiptIds, ...promotionReceiptIds],
+      // J-T13's list, enriched above. NULL for every job that did not move the upstream.
+      upstreamMovedCommits: (upstreamMovedCommits ?? undefined) as Prisma.InputJsonValue | undefined,
+      receiptIds: [...receiptIds, ...promotionReceiptIds, ...recoveredReceiptIds],
       finishedAt: new Date(),
       heartbeatAt: new Date(),
     };
@@ -1578,7 +1676,12 @@ export async function applyIntegrationJobResult(
     // §4's INTEGRATION_ERROR row): its work is not on the line, no result will ever say so, and the
     // item is the door through which the coordinator reaches `integration_retry`. The condition is
     // therefore `cancelRequested` alone, not the abandon path as such.
-    if (itemKind && !candidateMovedOn && !cancelRequested) {
+    //
+    // J-T13: neither does a refused push that was re-queued as the next generation under the same
+    // confirmation. Nobody is being asked to fix anything — the candidate is still the owner's, and
+    // the new landing is already queued — so an item would be a todo whose only answer is "wait".
+    // The third consecutive one is BLOCKED instead, and that result opens its item as any failure.
+    if (itemKind && !candidateMovedOn && !cancelRequested && promotion?.requeuedUnderConfirmation !== true) {
       // A promotion's item is named after the merge it is about: into the project's main branch.
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
@@ -1606,6 +1709,9 @@ export async function applyIntegrationJobResult(
           checks,
           errorCode: body.errorCode ?? null,
           errorDetail: body.errorDetail ?? null,
+          // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
+          // does not read it, so the replay it does stays byte-for-byte the same.
+          upstreamMovedCommits,
           generation: job.generation,
           retry: job.retryOfJobId
             ? {
@@ -1652,7 +1758,7 @@ export async function applyIntegrationJobResult(
       answer: {
         accepted: true,
         state: state as never,
-        receiptIds: [...receiptIds, ...promotionReceiptIds],
+        receiptIds: [...receiptIds, ...promotionReceiptIds, ...recoveredReceiptIds],
         openItemId,
       },
       after: {
@@ -1756,6 +1862,157 @@ export async function abandonIntegrationJob(
 }
 
 /**
+ * J-T13's commits as the job row stores them: the runner's list, with the control plane's own
+ * reading of each entry added.
+ *
+ * `outsideQueue` is true when no LANDED LAND_PROMOTION on this serial key names the commit as its
+ * `landed_sha` — it arrived on the upstream by some other route (a session's own merge, a hand
+ * push, another queue's work that this one did not record). `landedBy` names that landing when one
+ * exists: this account gets its job and candidate ids, and another account gets only the fact —
+ * never its ids, which are not this account's to read.
+ *
+ * A malformed list from a runner is stored as much of itself as can be read, or not at all: what a
+ * job reports must not be able to fail the result that records it.
+ */
+async function enrichUpstreamMovedCommits(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; serialKey: string; moved: UpstreamMovedCommits | null },
+): Promise<UpstreamMovedCommitsEnriched | null> {
+  const moved = input.moved;
+  if (!moved || typeof moved !== 'object' || !Array.isArray(moved.commits)) return null;
+  const commits = moved.commits
+    .filter((commit) => commit != null && typeof commit.sha === 'string' && SHA40.test(commit.sha))
+    .slice(0, 20)
+    .map((commit) => ({
+      sha: commit.sha,
+      subject: typeof commit.subject === 'string' ? [...commit.subject].slice(0, 200).join('') : '',
+    }));
+  const total = Number.isSafeInteger(moved.total) && moved.total >= 0 ? moved.total : commits.length;
+  if (commits.length === 0 && total === 0) return null;
+  const landings = commits.length === 0 ? [] : await tx.projectIntegrationJob.findMany({
+    where: {
+      serialKey: input.serialKey,
+      kind: 'LAND_PROMOTION',
+      state: 'LANDED',
+      promotionId: { not: null },
+      landedSha: { in: commits.map((commit) => commit.sha) },
+    },
+    orderBy: { finishedAt: 'asc' },
+    select: { id: true, ownerId: true, promotionId: true, landedSha: true },
+  });
+  const bySha = new Map<string, (typeof landings)[number]>();
+  for (const landing of landings) {
+    if (landing.landedSha && !bySha.has(landing.landedSha)) bySha.set(landing.landedSha, landing);
+  }
+  return {
+    total,
+    commits: commits.map((commit) => {
+      const landing = bySha.get(commit.sha);
+      return {
+        ...commit,
+        outsideQueue: landing === undefined,
+        ...(landing
+          ? {
+            landedBy: landing.ownerId === input.ownerId
+              ? { jobId: landing.id, promotionId: landing.promotionId! }
+              : { reason: 'ANOTHER_ACCOUNT' as const },
+          }
+          : {}),
+      };
+    }),
+  };
+}
+
+/** A full commit sha, as the result route accepts one. */
+const SHA40 = /^[0-9a-f]{40}$/;
+
+/**
+ * J12's receipt repair: for each earlier landing on this serial key whose push outcome nobody could
+ * read and whose tested commit the runner found on the target, write the receipt that landing never
+ * got to report — against ITS job, in this job's result transaction.
+ *
+ * The old ERROR row is not touched (J4): its state is the record of what was known then, and the
+ * receipt's detail names it (`integrationJobId`), which is the association. A task's landing writes
+ * the J8 receipt; a promotion's writes the M9 receipts for the tasks it carried. Nothing is written
+ * when the facts a receipt needs are missing (a purged session, a task whose branch tip was never
+ * recorded), and a result that names a job this queue never listed is ignored.
+ */
+async function recoverUnknownPushReceipts(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; serialKey: string; checks: { jobId?: unknown; landed?: unknown }[] },
+): Promise<string[]> {
+  const receiptIds: string[] = [];
+  for (const check of input.checks) {
+    if (check == null || check.landed !== true || typeof check.jobId !== 'string') continue;
+    const unknown = await tx.projectIntegrationJob.findFirst({
+      where: {
+        id: check.jobId,
+        ownerId: input.ownerId,
+        serialKey: input.serialKey,
+        state: 'ERROR',
+        errorCode: 'PUSH_OUTCOME_UNKNOWN',
+      },
+      select: {
+        id: true, kind: true, projectId: true, sessionId: true, taskId: true, promotionId: true,
+        sourceRef: true, targetRef: true, targetShaBefore: true, testedSha: true,
+        testedTreeSha: true, sourceSha: true, mainSyncSha: true, confirmedAutomatically: true,
+      },
+    });
+    if (!unknown || !unknown.testedSha) continue;
+    const already = await tx.sessionMergeReceipt.findFirst({
+      where: {
+        ownerId: input.ownerId,
+        detail: { path: ['integrationJobId'], equals: unknown.id },
+      },
+      select: { id: true },
+    });
+    if (already) continue;
+    if (unknown.kind === 'LAND_TASK') {
+      const session = unknown.sessionId
+        ? await tx.session.findFirst({ where: { id: unknown.sessionId }, select: { id: true } })
+        : null;
+      // The receipt's session is a foreign key; a purged one gets none, exactly as the ordinary
+      // landing path writes one only for a session that is still there.
+      if (!session || !unknown.sourceSha) continue;
+      const task = unknown.taskId
+        ? await tx.task.findFirst({ where: { id: unknown.taskId }, select: { id: true } })
+        : null;
+      receiptIds.push(...await MergeReceiptService.fromIntegrationJob(tx, {
+        ownerId: input.ownerId,
+        sessionId: session.id,
+        taskId: task?.id ?? null,
+        projectId: unknown.projectId,
+        jobId: unknown.id,
+        // The push happened: the target holds the tested commit, and that is what landed.
+        state: 'LANDED',
+        sourceBranch: shortBranchName(unknown.sourceRef),
+        targetBranch: shortBranchName(unknown.targetRef),
+        sourceSha: unknown.sourceSha,
+        targetShaBefore: unknown.targetShaBefore,
+        landedSha: unknown.testedSha,
+        rebaseBaseSha: unknown.mainSyncSha ?? unknown.targetShaBefore,
+        testedTreeSha: unknown.testedTreeSha,
+        landedTreeSha: unknown.testedTreeSha,
+        mainSyncSha: unknown.mainSyncSha,
+        recoveredUnknownPush: true,
+      }));
+      continue;
+    }
+    if (unknown.kind === 'LAND_PROMOTION' && unknown.promotionId) {
+      receiptIds.push(...await recoverPromotionPushReceipts(tx, {
+        promotionId: unknown.promotionId,
+        jobId: unknown.id,
+        testedSha: unknown.testedSha,
+        targetShaBefore: unknown.targetShaBefore,
+        testedTreeSha: unknown.testedTreeSha,
+        confirmedAutomatically: unknown.confirmedAutomatically,
+      }));
+    }
+  }
+  return receiptIds;
+}
+
+/**
  * The branches of this task whose sessions reported work of their own — the branches a delivery is
  * on, read by the same predicate that chose which one the line should have been handed
  * (`landing-source-branch.ts`).
@@ -1845,6 +2102,9 @@ function fullyAppliedComment(input: {
     checks: IntegrationCheckResult[];
     errorCode: string | null;
     errorDetail: Record<string, unknown> | null;
+    /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
+     *  top-level field, never inside `errorDetail` (which the delivery text quotes verbatim). */
+    upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
     /** Which generation of the landing this was, and — when the coordinator asked for it through
      *  `integration_retry` — what it reran and why (migration 0344). */
     generation: number;
@@ -1899,6 +2159,7 @@ function fullyAppliedComment(input: {
     jobKind: detail.kind,
     errorCode: detail.errorCode,
     errorDetail: detail.errorDetail,
+    ...(detail.upstreamMovedCommits ? { upstreamMovedCommits: detail.upstreamMovedCommits } : {}),
     ...classified,
   };
 }

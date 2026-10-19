@@ -2707,10 +2707,31 @@ export interface IntegrationJobCommand {
    *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to
    *  every answer (§2.2 J-T4, J-T12). */
   cancelRequested: boolean;
+  /** Earlier landings on this job's serial key whose push outcome the control plane could not know
+   *  (ERROR · PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
+   *  asks git whether each one's tested commit is already an ancestor of the target, and reports
+   *  which are. An older runner ignores the field, and the control plane leaves those results to a
+   *  coordinator as it always did. */
+  unknownPushes?: IntegrationUnknownPush[];
   /** The v2 progress protocol (§2.2 J-T4): before it pushes, the runner reports `phase = PUSH` and
    *  waits for the answer. Sent only to a claim whose `progress_protocol` this server wrote as
    *  `v2`; absent on every legacy claim, whose runner pushes without asking. */
   reportBeforePush?: true;
+}
+
+/** One earlier landing the control plane could not read the push outcome of, as a command names it
+ *  (J12): the job, and the commit it tested and would have pushed. */
+export interface IntegrationUnknownPush {
+  jobId: string;
+  testedSha: string;
+}
+
+/** That same landing after the runner asked git: `landed` is whether its tested commit is now an
+ *  ancestor of the target. Only an entry git answered for is reported, so an absent one means
+ *  "cannot tell", never "not landed". */
+export interface IntegrationUnknownPushCheck {
+  jobId: string;
+  landed: boolean;
 }
 
 /** The named sub-step a v2 claim is on, beside `phase` (§2.2 J-T4). It does not widen
@@ -2749,6 +2770,15 @@ export interface IntegrationJobProgressRequest {
   outputBytes?: number;
   /** Upstream moved under the job while it worked, for a reader of the timeline. */
   upstreamMoved?: { from: string; to: string; commits?: number };
+  /** The synchronous PUSH report's facts (J12), sent on `phase = PUSH` and nowhere else: the commit
+   *  about to be pushed, its tree, the commit it replays or merges into it, and the target tip it
+   *  expects. The control plane writes them on the row while the claim still holds it, so a job
+   *  whose push outcome later becomes unknown leaves the next landing on its serial key enough to
+   *  check — and, if the push did happen, to write the receipt nobody got to report. */
+  testedSha?: string;
+  testedTreeSha?: string;
+  sourceSha?: string;
+  targetShaBefore?: string;
 }
 
 /** Control plane → runner: the renewal was taken, and — a stop signal in the other direction —
@@ -2809,6 +2839,45 @@ export interface IntegrationJobResultRequest {
   conflicts?: string[];
   errorCode?: string | null;
   errorDetail?: Record<string, unknown> | null;
+  /** With a LAND_PROMOTION that ended because the upstream moved under it (J-T13, M-T12): what the
+   *  upstream gained between the tip the job worked from and the tip it found. Written into the job
+   *  row and carried at the top level of its INTEGRATION_ERROR item's payload; never put in
+   *  `errorDetail`, which is copied verbatim into delivery text. */
+  upstreamMovedCommits?: UpstreamMovedCommits | null;
+  /** What this job's fetch found about the earlier unknown pushes its command named (J12): only the
+   *  entries git could answer for. */
+  unknownPushes?: IntegrationUnknownPushCheck[];
+}
+
+/** The commits that moved the upstream under a landing, as the runner measured them on the
+ *  repository it fetched (J-T4, J-T13 / M-T12): first-parent, newest first, at most twenty, with the
+ *  true total beside them. */
+export interface UpstreamMovedCommits {
+  total: number;
+  commits: UpstreamMovedCommit[];
+}
+
+export interface UpstreamMovedCommit {
+  sha: string;
+  /** Cut to 200 characters by the runner. */
+  subject: string;
+}
+
+/** The list as the control plane stores it: the runner's commits with its own reading of each one
+ *  added. Not what a runner sends — `IntegrationJobResultRequest` carries `UpstreamMovedCommits` —
+ *  because these two facts are the control plane's to establish, never the reporting machine's. */
+export interface UpstreamMovedCommitsEnriched {
+  total: number;
+  commits: UpstreamMovedCommitEnriched[];
+}
+
+export interface UpstreamMovedCommitEnriched extends UpstreamMovedCommit {
+  /** True when no LANDED LAND_PROMOTION on the job's serial key landed this commit, so it arrived
+   *  from outside the landing queue. */
+  outsideQueue: boolean;
+  /** The landing that put it there, when one did: the promotion job and its candidate for this
+   *  account, or only the reason for another account's — never its ids or titles. */
+  landedBy?: { jobId: string; promotionId: string } | { reason: 'ANOTHER_ACCOUNT' };
 }
 
 /** Control plane → runner: whether the result was taken, and what it derived. */
