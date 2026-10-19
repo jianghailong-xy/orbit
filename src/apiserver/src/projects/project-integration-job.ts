@@ -3,6 +3,12 @@ import { randomUUID } from 'crypto';
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
+import {
+  discardOpenedLanding,
+  openPromotionRound,
+  openTaskLanding,
+  type OpenedLanding,
+} from './landing-session';
 import { startOnFirstIntegration } from './project-integration-line';
 import {
   INTEGRATION_ITEM_KINDS,
@@ -1310,6 +1316,26 @@ async function queueLandTask(
     _max: { generation: true },
   });
   const generation = (previous._max.generation ?? 0) + 1;
+  const idempotencyKey = input.idempotencyKey ?? integrationIdempotencyKey({
+    kind: 'LAND_TASK',
+    subjectId: input.taskId,
+    generation,
+  });
+  // The key is decided before the subject is opened: a generation already owed (a retried
+  // `landingBehindTheWorkKey`, or a retry of this very transaction) must not leave an empty subject
+  // behind. A race that loses the insert below discards the subject it opened for the same reason.
+  const alreadyOwed = await tx.projectIntegrationJob.findUnique({
+    where: { idempotencyKey },
+    select: { id: true },
+  });
+  if (alreadyOwed) return null;
+  // §2.9 LS1: the subject opens in the enqueue transaction, and this attempt carries it from INSERT.
+  const landing = await openTaskLanding(tx, {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    codebaseId: input.codebase.id,
+    taskId: input.taskId,
+  });
   const jobId = randomUUID();
   const created = await tx.projectIntegrationJob.createManyAndReturn({
     data: [{
@@ -1320,6 +1346,7 @@ async function queueLandTask(
       kind: 'LAND_TASK' satisfies IntegrationJobKind,
       generation,
       taskId: input.taskId,
+      landingId: landing.id,
       sessionId: input.session.id,
       serialKey: integrationSerialKey({
         kind: 'LAND_TASK',
@@ -1331,11 +1358,7 @@ async function queueLandTask(
       upstreamRef: input.codebase.upstreamRef,
       sourceRef: `refs/heads/${input.session.branch}`,
       runnerId: input.session.runnerId,
-      idempotencyKey: input.idempotencyKey ?? integrationIdempotencyKey({
-        kind: 'LAND_TASK',
-        subjectId: input.taskId,
-        generation,
-      }),
+      idempotencyKey,
       ...(input.retry
         ? {
             retryOfJobId: input.retry.ofJobId,
@@ -1365,8 +1388,14 @@ async function queueLandTask(
   // starts — the floor a Merge press had until sessions.service woke its runner, on the path that
   // runs for every task the platform completes. Only when a row was really written: a duplicate
   // (`skipDuplicates`) means the generation is already queued and already someone's to run.
-  if (created[0]?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
-  return created[0]?.id ?? null;
+  if (!created[0]?.id) {
+    // A unique index won the race — the one-inflight landing key or the idempotency key. The
+    // subject this call may have opened belongs to no attempt, so it goes with it.
+    await discardOpenedLanding(tx, landing);
+    return null;
+  }
+  await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
+  return created[0].id;
 }
 
 /**
@@ -1587,6 +1616,66 @@ export async function queuePromotionJob(
      WHERE "promotion_id" = ${input.promotion.id}::uuid AND "kind" = ${input.kind}
   `;
   const generation = Number(previous?.generation ?? 0) + 1;
+  const idempotencyKey = integrationIdempotencyKey({
+    kind: input.kind,
+    subjectId: input.promotion.id,
+    generation,
+  });
+  const alreadyOwed = await tx.projectIntegrationJob.findUnique({
+    where: { idempotencyKey },
+    select: { id: true },
+  });
+  if (alreadyOwed) return alreadyOwed.id;
+  // §2.9 LS1 / §2.9's subject table: which subject this attempt belongs to, never read off
+  // `project_promotion.task_id` (it always names the last landed task, which is not the round's).
+  //
+  //  * A later generation of THIS candidate (a rerun, a check after main moved, the owner's
+  //    confirmation, the next generation after a push was stolen, Automatic's landing) inherits the
+  //    landing its earlier attempts already name. Re-deriving it would let a re-check open a second
+  //    session for one candidate.
+  //  * A candidate on a MAIN line is one task's branch, so it belongs to that task's segment; the
+  //    task is the source session's own.
+  //  * A candidate on a PROJECT_BRANCH line is one round of merging the project branch into the
+  //    upstream. The first candidate after the last round settled opens the round; every later
+  //    candidate joins it.
+  const inherited = await tx.projectIntegrationJob.findFirst({
+    where: { promotionId: input.promotion.id, landingId: { not: null } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { landingId: true },
+  });
+  let landingId: string | null = inherited?.landingId ?? null;
+  let opened: OpenedLanding | null = null;
+  if (!landingId) {
+    const codebase = await tx.projectCodebase.findUnique({
+      where: { id: input.promotion.codebaseId },
+      select: { integrationRef: true, upstreamRef: true },
+    });
+    const line = codebase && codebase.integrationRef === codebase.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH';
+    if (line === 'MAIN') {
+      const source = input.promotion.sessionId
+        ? await tx.session.findFirst({
+            where: { id: input.promotion.sessionId },
+            select: { taskId: true },
+          })
+        : null;
+      if (source?.taskId) {
+        opened = await openTaskLanding(tx, {
+          ownerId: input.promotion.ownerId,
+          projectId: input.promotion.projectId,
+          codebaseId: input.promotion.codebaseId,
+          taskId: source.taskId,
+        });
+      }
+    } else {
+      opened = await openPromotionRound(tx, {
+        ownerId: input.promotion.ownerId,
+        projectId: input.promotion.projectId,
+        codebaseId: input.promotion.codebaseId,
+        promotionId: input.promotion.id,
+      });
+    }
+    landingId = opened?.id ?? null;
+  }
   const jobId = randomUUID();
   const [created] = await tx.projectIntegrationJob.createManyAndReturn({
     data: [{
@@ -1604,6 +1693,7 @@ export async function queuePromotionJob(
       taskId: null,
       sessionId: input.promotion.sessionId,
       promotionId: input.promotion.id,
+      landingId,
       serialKey: integrationSerialKey({
         kind: input.kind,
         canonicalRepoUrl: input.canonicalRepoUrl,
@@ -1617,11 +1707,7 @@ export async function queuePromotionJob(
       sourceRef: input.promotion.sourceRef,
       sourceSha: input.promotion.sourceSha,
       confirmedAutomatically: input.confirmedAutomatically === true,
-      idempotencyKey: integrationIdempotencyKey({
-        kind: input.kind,
-        subjectId: input.promotion.id,
-        generation,
-      }),
+      idempotencyKey,
       ...(input.retry
         ? {
             retryOfJobId: input.retry.ofJobId,
@@ -1635,8 +1721,18 @@ export async function queuePromotionJob(
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created?.id) {
+    // A unique index won a race after the pre-check above. A subject opened for an attempt that
+    // was not written goes with it; one that was inherited leaves no trace of this call.
+    if (opened) await discardOpenedLanding(tx, opened);
+    const raced = await tx.projectIntegrationJob.findUnique({
+      where: { idempotencyKey },
+      select: { id: true },
+    });
+    return raced?.id ?? jobId;
+  }
   // As for a landing: the runner that will run this check (or landing) is woken when this
   // transaction commits, rather than up to 30s from now on its heartbeat.
-  if (created?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
-  return created?.id ?? jobId;
+  await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
+  return created.id;
 }

@@ -40,6 +40,7 @@ import {
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
+import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
@@ -489,6 +490,15 @@ export class MergeReceiptService {
     // whose response was lost is in, and the first attempt's delivery is the one that may have been
     // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read.
     await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId, recorded.receipt.taskId);
+    // §2.9 LS3 / errata E5: a landed receipt is the task segment's landing fact, whichever door
+    // recorded it — including the replay of one already recorded, which is what retires a candidate
+    // an older build left standing (M-T13). Its own transaction, after the receipt committed.
+    await settleTaskSegmentAfterReceipt(this.prisma, {
+      taskId: recorded.receipt.taskId,
+      projectId: recorded.receipt.projectId,
+      result: recorded.receipt.result,
+    }).catch((error) => this.logger.warn(
+      `landing settlement after receipt ${recorded.receipt.id} failed: ${(error as Error)?.message ?? error}`));
     return recorded;
   }
 

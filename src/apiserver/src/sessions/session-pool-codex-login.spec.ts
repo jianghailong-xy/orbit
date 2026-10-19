@@ -108,6 +108,8 @@ function service(answer: ReturnType<typeof loginRow> | null, over: Record<string
         args.where.accountId === ACCOUNT && args.where.person.pool.slug === POOL_SLUG ? answer : null,
     },
     project: { findMany: async () => [] },
+    // The derived landing label (0436): these rows produced no landing work.
+    projectIntegrationJob: { findFirst: async () => null },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),

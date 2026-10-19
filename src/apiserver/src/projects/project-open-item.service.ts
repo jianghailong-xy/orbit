@@ -35,6 +35,7 @@ import {
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { refuseProjectStatusWrite } from './coordinator-authority';
+import { settleTaskSegmentAfterHandledItem } from './landing-session';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -1584,6 +1585,10 @@ export class ProjectOpenItemService {
         state: true,
         assignee: true,
         askedBySessionId: true,
+        // Which landing segment the item is about (0436): the attempt it came from, and the task it
+        // names. Read for the settlement edge below.
+        taskId: true,
+        integrationJobId: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -1680,6 +1685,13 @@ export class ProjectOpenItemService {
       // press is told to read again rather than reporting a close it did not make.
       throw notOpen();
     }
+    // §2.9 LS3 rule 4: the segment's last OPEN integration item was closed by hand (a fix task was
+    // filed for it), and the segment neither landed nor has an attempt still moving — so it settles
+    // HANDLED. Its own transaction, after the close committed; the rule re-checks all of that under
+    // the subject's lock.
+    await settleTaskSegmentAfterHandledItem(this.prisma, { ownerId, projectId, itemId })
+      .catch((error) => this.logger.warn(
+        `landing settlement after item ${itemId} closed failed: ${(error as Error)?.message ?? error}`));
     return { itemId, state: 'RESOLVED', resolution };
   }
 
