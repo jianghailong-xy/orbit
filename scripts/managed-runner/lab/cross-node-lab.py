@@ -25,7 +25,8 @@ docs/managed-runner-kubernetes-operations.md, and run its own commands where it 
              credentials are refused, the writers go on from the first node; then the taint is removed
   drain      the runbook's planned move: kubectl drain of the first node for the runners' Pods, first with no flags and
              then with one, both refused, then with the two that bare Pods with an emptyDir need: the next generations
-             on the second node
+             on the second node; a managed Pod of an earlier task left Terminating there passed with
+             --skip-wait-for-delete-timeout; then the second node drained and both runners back on the first
   final      consistency, one Pod per claim and one attachment per PV over the whole timeline, Ceph; both asleep
 
   cross-node-lab.py run --out DIR [--from PHASE | --from-step PHASE/STEP] [--to PHASE] [--observe SECONDS]
@@ -1102,57 +1103,90 @@ def rejoin_release(ctx, step):
 
 # ---- the runbook's planned move ------------------------------------------------------------------------------------------
 
-def drain_move(ctx, step):
-    """kubectl drain of the first node for the managed runners' Pods (the lab's CSI controller is pinned to that node, so
-    nothing else is drained): first with no flags, as the runbook named it, then with one flag, then with the two its bare
-    Pods need. A refused drain cordons the node and evicts nothing."""
+def drain_runners(ctx, step, source, target, refusals):
+    """kubectl drain of node SOURCE for the managed runners' Pods only (the lab's CSI controller is pinned to the first node,
+    and the namespace holds earlier tasks' Pods): the next generations on node TARGET. With REFUSALS, first with no flags,
+    as the runbook named it, then with one flag, then with the two its bare Pods need; a refused drain cordons the node and
+    evicts nothing."""
     before = {name: identity(name) for name in USERS}
-    snaps = {name: al.pod_snapshot(name, al.transcript_prefix(ctx['snapshots']['afterTakeover'][name])) for name in USERS}
-    # kubectl's drain stops at the first filter that refuses a Pod: local storage (the runner's /tmp) comes before "no controller".
-    plain = k('drain', NODES[1], f'--pod-selector={RUNNER_PODS}', '--timeout=60s', namespace=None, check=False)
-    said = plain.stdout + plain.stderr
-    step.check('kubectl drain without flags refuses the runners\' Pods: they have local storage (an emptyDir)',
-               plain.returncode != 0 and 'Pods with local storage (use --delete-emptydir-data to override)' in said, said.strip()[-600:])
-    step.check(f'and it cordoned {NODES[1]}', tl.node_view(1)['unschedulable'])
-    emptydir = k('drain', NODES[1], f'--pod-selector={RUNNER_PODS}', '--delete-emptydir-data', '--timeout=60s', namespace=None, check=False)
-    said_emptydir = emptydir.stdout + emptydir.stderr
-    step.check('with --delete-emptydir-data alone it still refuses them: bare Pods declare no controller',
-               emptydir.returncode != 0 and 'Pods that declare no controller (use --force to override)' in said_emptydir, said_emptydir.strip()[-600:])
-    step.check('nothing was evicted by the refused drains', all(mapping(n)['pod_uid'] == before[n]['podUid'] and mapping(n)['management_state'] == 'READY'
-                                                                for n in USERS))
+    snaps = {name: al.pod_snapshot(name) for name in USERS}
+    results = {}
+    if refusals:
+        # kubectl's drain stops at the first filter that refuses a Pod: local storage (the runner's /tmp) comes before "no controller".
+        plain = k('drain', NODES[source], f'--pod-selector={RUNNER_PODS}', '--timeout=60s', namespace=None, check=False)
+        said = plain.stdout + plain.stderr
+        step.check('kubectl drain without flags refuses the runners\' Pods: they have local storage (an emptyDir)',
+                   plain.returncode != 0 and 'Pods with local storage (use --delete-emptydir-data to override)' in said, said.strip()[-600:])
+        step.check(f'and it cordoned {NODES[source]}', tl.node_view(source)['unschedulable'])
+        emptydir = k('drain', NODES[source], f'--pod-selector={RUNNER_PODS}', '--delete-emptydir-data', '--timeout=60s', namespace=None, check=False)
+        said_emptydir = emptydir.stdout + emptydir.stderr
+        step.check('with --delete-emptydir-data alone it still refuses them: bare Pods declare no controller',
+                   emptydir.returncode != 0 and 'Pods that declare no controller (use --force to override)' in said_emptydir, said_emptydir.strip()[-600:])
+        step.check('nothing was evicted by the refused drains', all(mapping(n)['pod_uid'] == before[n]['podUid'] and mapping(n)['management_state'] == 'READY'
+                                                                    for n in USERS))
+        results.update(plain={'exit': plain.returncode, 'output': said.strip().splitlines()},
+                       emptyDirOnly={'exit': emptydir.returncode, 'output': said_emptydir.strip().splitlines()})
+    else:
+        results['uncordonTarget'] = tl.cordon(target, 'uncordon')
     at = now()
-    drained = k('drain', NODES[1], f'--pod-selector={RUNNER_PODS}', '--ignore-daemonsets', '--delete-emptydir-data', '--force', '--timeout=300s',
+    drained = k('drain', NODES[source], f'--pod-selector={RUNNER_PODS}', '--ignore-daemonsets', '--delete-emptydir-data', '--force', '--timeout=300s',
                 namespace=None, check=False)
     drained_at = now()
     output = drained.stdout + drained.stderr
-    step.check('kubectl drain with --force and --delete-emptydir-data evicted both runners\' Pods and finished',
-               drained.returncode == 0 and all(f"mr-{before[n]['runnerId']}" in output for n in USERS), output.strip()[-600:])
+    evicted = {name: f"pod/mr-{before[name]['runnerId']} evicted" in output for name in USERS}
+    waited = sorted(set(re.findall(r'waiting for pod "([^"]+)"', output)))
+    step.check('kubectl drain with --force and --delete-emptydir-data evicted both runners\' Pods', all(evicted.values()), evicted)
+    # A drain waits until every Pod it evicted is gone: a managed Pod goes once a manager has recorded its stop.
+    step.check('the drain finished, or waited at its timeout only for Pods of no runner here', drained.returncode == 0
+               or (waited and not [w for w in waited if any(before[n]['runnerId'] in w for n in USERS)]), {'exit': drained.returncode, 'waitedFor': waited})
     ready = {name: until(name, 'READY', gen_above=before[name]['generation'], timeout=420) for name in USERS}
-    results = {'plain': {'exit': plain.returncode, 'output': said.strip().splitlines()},
-               'emptyDirOnly': {'exit': emptydir.returncode, 'output': said_emptydir.strip().splitlines()}, 'drainStartedAt': at, 'drainEndedAt': drained_at,
-               'drain': {'exit': drained.returncode, 'output': output.strip().splitlines()}, 'ready': ready}
+    results.update(drainStartedAt=at, drainEndedAt=drained_at, drain={'exit': drained.returncode, 'output': output.strip().splitlines(), 'waitedFor': waited},
+                   ready=ready)
+    label = f'after the drain of {NODES[source]}'
     for name in USERS:
         m = mapping(name)
         after = identity(name)
         proof = m['fencing_receipt'] or {}
-        view = moved(step, name, before[name], after, 2, f'after the drain of {NODES[1]}')
+        view = moved(step, name, before[name], after, target, label)
         step.check(f'{name}: the evicted generation retired on its kubelet\'s report (OBSERVED_STOP)', proof.get('kind') == 'OBSERVED_STOP'
                    and (proof.get('predecessor') or {}).get('generation') == before[name]['generation'], {k: proof.get(k) for k in ('kind', 'recordedAt', 'retiredAt')})
-        talk = resumed(step, ctx, name, 'DRAINED', f'on {NODES[2]} after the drain')
-        probe, snap = data_kept(step, ctx, name, snaps[name], f'after the drain of {NODES[1]}')
+        talk = resumed(step, ctx, name, f'DRAINED{target}', f'on {NODES[target]} {label}')
+        probe, snap = data_kept(step, ctx, name, snaps[name], label)
         p2 = probe_check(name, 'p2')
-        step.check(f'{name}: probe p2 the same after the drain', all(p2['same'].values()) and p2['data']['integrityCheck'] == 'ok', p2['same'])
+        step.check(f'{name}: probe p2 the same {label}', all(p2['same'].values()) and p2['data']['integrityCheck'] == 'ok', p2['same'])
         writer = tl.payload_snapshot(m['pod_name'])
         quiet = ctx['writersQuiesced'][name]
         step.check(f'{name}: the quiesced writer\'s rows as they were, integrity_check ok', writer['committedRows'] == quiet['committedRows']
                    and writer['rowSHA256'] == quiet['rowSHA256'] and writer['sqliteIntegrity'] == ['ok'], [writer['committedRows'], quiet['committedRows']])
         ctx['identity'][name] = after
+        times = al.provisioned(name)
         results[name] = {'identityBefore': before[name], 'identityAfter': after, 'proof': proof, 'placement': view, 'talk': talk, 'probe': probe,
-                         'probeP2': p2, 'writer': writer, 'snapshotBefore': snaps[name], 'snapshot': snap,
-                         'drainToReadySeconds': al.seconds_between(at, ready[name]['at']), 'times': al.provisioned(name)}
-    results['uncordon'] = tl.cordon(1, 'uncordon')
+                         'probeP2': p2, 'writer': writer, 'snapshotBefore': snaps[name], 'snapshot': snap, 'times': times,
+                         'drainToPodCreatedSeconds': al.seconds_between(at, times['podCreatedAt']),
+                         'drainToReadySeconds': al.seconds_between(at, times['readyAt'])}
+    results['uncordon'] = tl.cordon(source, 'uncordon')
     results['gate'] = al.gate_summary(at, drained_at)
     return results
+
+
+def drain_stuck(ctx, step):
+    """What held the first node's drain: a managed runner Pod of an earlier task's server, Terminating behind the stop-report
+    finalizer that only its own manager, not running, takes off. kubectl drain's --skip-wait-for-delete-timeout passes it."""
+    ours = {mapping(name)['runner_id'] for name in USERS}
+    stuck = [p for p in kjson('get', 'pods', '-l', RUNNER_PODS)['items'] if p['spec'].get('nodeName') == NODES[1] and p['metadata'].get('deletionTimestamp')]
+    view = [{'name': p['metadata']['name'], 'uid': p['metadata']['uid'], 'phase': p['status'].get('phase'), 'created': p['metadata']['creationTimestamp'],
+             'deletionTimestamp': p['metadata']['deletionTimestamp'], 'finalizers': p['metadata'].get('finalizers'),
+             'generation': (p['metadata'].get('annotations') or {}).get('orbit.dev/generation')} for p in stuck]
+    step.check(f'Terminating managed Pods on {NODES[1]}: none of them a runner of these accounts', view and not [p for p in view if p['name'][3:] in ours], view)
+    at = now()
+    result = k('drain', NODES[1], f'--pod-selector={RUNNER_PODS}', '--ignore-daemonsets', '--delete-emptydir-data', '--force',
+               '--skip-wait-for-delete-timeout=60', '--timeout=120s', namespace=None, check=False)
+    output = result.stdout + result.stderr
+    step.check('with --skip-wait-for-delete-timeout=60 the drain finishes', result.returncode == 0, output.strip()[-600:])
+    left = [kget('pod', p['name']) for p in view]
+    step.check('the Terminating Pods are still there as they were: the drain passed them', all(p and p['metadata']['uid'] == v['uid'] for p, v in zip(left, view)))
+    uncordon = tl.cordon(1, 'uncordon')
+    return {'stuck': view, 'drainAt': at, 'drain': {'exit': result.returncode, 'output': output.strip().splitlines()}, 'uncordon': uncordon}
 
 
 # ---- final -----------------------------------------------------------------------------------------------------------------
@@ -1238,7 +1272,8 @@ def phases():
         ('takeover', [('prepare', takeover_prepare), ('last', takeover_last), ('cut', takeover_cut), ('heartbeat-loss', takeover_heartbeat_loss),
                       ('fence', takeover_fence), ('data', takeover_data)]),
         ('rejoin', [('start', rejoin_start), ('credentials', rejoin_credentials), ('writers', rejoin_writers), ('release', rejoin_release)]),
-        ('drain', [('move', drain_move)]),
+        ('drain', [('move', lambda c, s: drain_runners(c, s, 1, 2, refusals=True)), ('stuck', drain_stuck),
+                   ('back', lambda c, s: drain_runners(c, s, 2, 1, refusals=False))]),
         ('final', [('checks', final_checks), ('teardown', teardown)]),
     ]
 
@@ -1317,8 +1352,11 @@ def cmd_report(args):
         'lastTurn': lambda: {n: {k: v for k, v in get('takeover/data')[n]['lastTurn'].items() if k != 'filesWrittenSinceItsStart'} for n in USERS},
         'lastTurnFiles': lambda: {n: get('takeover/data')[n]['lastTurn']['filesWrittenSinceItsStart'] for n in USERS},
         'oldNodeBootToReady': lambda: get('rejoin/start')['bootToReadySeconds'],
-        'drain': lambda: {'seconds': al.seconds_between(get('drain/move')['drainStartedAt'], get('drain/move')['drainEndedAt']),
-                          **{n: get('drain/move')[n]['drainToReadySeconds'] for n in USERS}},
+        'drain': lambda: {step: {'seconds': al.seconds_between(get(f'drain/{step}')['drainStartedAt'], get(f'drain/{step}')['drainEndedAt']),
+                                 'exit': get(f'drain/{step}')['drain']['exit'],
+                                 **{n: {'podCreated': al.seconds_between(get(f'drain/{step}')['drainStartedAt'], get(f'drain/{step}')[n]['times']['podCreatedAt']),
+                                        'ready': al.seconds_between(get(f'drain/{step}')['drainStartedAt'], get(f'drain/{step}')[n]['times']['readyAt'])}
+                                    for n in USERS}} for step in ('move', 'back')},
         'final': lambda: {k: get('final/checks')[k] for k in ('most', 'timelineLines')},
     }.items():
         try:
