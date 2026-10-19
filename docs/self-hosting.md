@@ -14,7 +14,9 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
 - One or more runner machines with a supported runtime installed and authenticated, or room on this host for
-  [managed runners](#managed-runners): by default 2 CPUs, 4 GiB of memory and a 20 GiB volume for each runner awake
+  [managed runners](#managed-runners): by default 2 CPUs, 4 GiB of memory and a 20 GiB volume for each runner awake.
+  Their [firewall](#isolation-and-its-limits) needs Docker run as root with its iptables firewall backend (the
+  default), not rootless
 
 The server does not need the runtime credentials. Claude Code, Codex, Kimi, and OpenCode logins stay on the
 runner machines.
@@ -35,8 +37,8 @@ cd orbit
 ```
 
 For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
-with two independently generated secrets, prepares [managed runners](#managed-runners) and starts the stack.
-Give it the external origin when you serve Orbit on a domain:
+with two independently generated secrets, prepares [managed runners](#managed-runners), firewalls their network on
+this host, and starts the stack. Give it the external origin when you serve Orbit on a domain:
 
 ```bash
 scripts/install-server.sh --public-origin https://orbit.example.com
@@ -368,7 +370,7 @@ Runners that people register themselves keep working beside it.
 ```dotenv
 ORBIT_MANAGED_RUNNERS_ENABLED=true
 ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
-COMPOSE_PROFILES=managed-runners-docker
+COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
 ```
 
 - **The switch.** `ORBIT_MANAGED_RUNNERS_ENABLED=true` turns managed runners on in the apiserver. Absent, empty or
@@ -390,10 +392,16 @@ COMPOSE_PROFILES=managed-runners-docker
   [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
   `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
   built elsewhere from a commit you reviewed, load it with `docker load` and pass `--managed-runner-image <image>`.
-- **Their network.** `orbit-managed-runners`, a bridge network on which containers cannot reach one another. A
-  runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a runner on
-  another machine does: through the gateway's published port 2086, at the host's address on that network. It
-  reaches neither another runner nor the stack's own containers.
+- **Their network.** `orbit-managed-runners`, an IPv4-only bridge network on which containers cannot reach one
+  another. A runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a
+  runner on another machine does: through the gateway's published port 2086, at the host's address on that network.
+  It reaches neither another runner nor the stack's own containers.
+- **Their firewall.** The `managed-runner-firewall` Compose profile starts `managed-runner-firewall`, which keeps rules
+  on this host's iptables for that network: a runner reaches the gateway's port, DNS and public addresses, and nothing
+  else of this host or the private networks behind it ([Isolation and its limits](#isolation-and-its-limits)). Before
+  writing anything the install checks that this host can carry the rules; then it applies them once and checks from
+  the network that this host and a private address are refused and that DNS still resolves, and once the stack is up
+  that the gateway's port is reached. Where any of that fails it stops and says why.
 - **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
   runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
   so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
@@ -402,6 +410,10 @@ COMPOSE_PROFILES=managed-runners-docker
 The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
 sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
 `--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+`--no-managed-runner-firewall` installs managed runners without their firewall and leaves this host's firewall alone:
+`COMPOSE_PROFILES` then names `managed-runners-docker` alone, `.env` carries a note that the firewall is off, and the
+install says so as it starts and as it ends. Read [Isolation and its limits](#isolation-and-its-limits) before
+choosing it.
 
 ### Who gets one
 
@@ -424,9 +436,28 @@ code in one container reach the host, other people's runners and data, and this 
 can sign up, that risk comes with the deployment, and accepting it is the deployer's decision. Where it is not
 acceptable, switch managed runners off or keep sign-up to people you trust.
 
-A runner can also reach every service this host listens to on an address other than loopback (sshd, for one), and
-through the host the network it sits on. Bind such services to loopback, or firewall the managed runners' network:
-[what a managed runner can reach](managed-runner-docker-operations.md#what-a-managed-runner-can-reach).
+Without a firewall, a runner can also reach every service this host listens to on an address other than loopback
+(sshd and rpcbind, on the host task D5 measured), and through the host the private network it sits on. So the install
+firewalls the managed runners' network on this host: from it a runner reaches the gateway's published port at the
+network's gateway address (how it reaches this deployment), DNS, and public addresses. Every other port of this host,
+on any of its addresses, is refused, and so are private (10/8, 172.16/12, 192.168/16), shared (100.64/10), link-local
+(169.254/16, the cloud metadata address among them), loopback and reserved addresses behind it, and anything IPv6.
+The rules match only traffic from that network's bridge: no other container and no service of this host is affected.
+`managed-runner-firewall` keeps them: it checks them every 10 seconds, writes again what changed, and writes them anew
+after this host restarts; Docker's own restarts leave them in place. The Docker channel starts no runner container
+while the firewall does not report them in force, so a runner never starts unprotected. What a runner reaches, how to
+check the rules, let runners reach an internal model endpoint, turn the firewall off and remove its rules:
+[the managed runners' firewall](managed-runner-docker-operations.md#the-managed-runners-firewall).
+
+The firewall needs Docker's iptables (or iptables with firewalld) firewall backend, nft or legacy iptables underneath,
+and Docker run as root. With rootless Docker, Docker's nftables backend, or `"iptables": false`, the install stops
+before it writes anything. A cloud provider's firewall or security groups are neither changed nor needed. The firewall
+decides where a runner's packets may go; it is not a boundary against a flaw in the kernel or the container runtime,
+which the paragraph above is about.
+
+Installing with `--no-managed-runner-firewall`, or turning the firewall off later, gives every account's runner this
+host's services and the private networks behind it again: anyone who can sign in can probe and reach them from code
+in their runner. Choose it only where those are firewalled otherwise, or where every account is trusted with them.
 
 ### Turn them off or on
 
@@ -443,9 +474,14 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
   scripts/install-server.sh --enable-managed-runners
   ```
 
-  This prepares managed runners as a fresh install does, writes the three lines into `.env` (replacing an
-  `ORBIT_MANAGED_RUNNERS_ENABLED=false` line and leaving every other line as it was), starts `docker-channel` and
-  recreates the apiserver from the image it already runs.
+  This prepares managed runners as a fresh install does, their firewall included, writes the three lines into `.env`
+  (replacing an `ORBIT_MANAGED_RUNNERS_ENABLED=false` line and leaving every other line as it was), starts
+  `managed-runner-firewall` and `docker-channel`, and recreates the apiserver from the image it already runs. Add
+  `--no-managed-runner-firewall` to leave this host's firewall alone.
+- **Their firewall, for a deployment that has managed runners without it:** one installed before the firewall
+  existed, or with `--no-managed-runner-firewall`. Upgrade it first, then run
+  `scripts/install-server.sh --enable-managed-runner-firewall`. Turning the firewall off and removing its rules are in
+  [the runbook](managed-runner-docker-operations.md#turn-it-off).
 
 ### What an upgrade does
 
@@ -453,6 +489,10 @@ An upgrade (the `/upgrade` skill's script, or the steps under [Upgrading](#upgra
 managed runners stay as they were: off on a deployment whose `.env` does not switch them on, which is every
 deployment installed before them. There `/upgrade` builds and recreates exactly what it did before managed runners
 existed, and writes nothing under `data/`.
+
+`/upgrade` never builds, starts or recreates `managed-runner-firewall`, and changes no rule on this host's firewall:
+a deployment without the firewall gets none, and one with it keeps its service and rules as they were. Add it to a
+deployment with `scripts/install-server.sh --enable-managed-runner-firewall`.
 
 Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also keeps the managed runners current. The
 runner in their image never updates itself, so each upgrade:
@@ -548,6 +588,8 @@ docker compose up -d --wait --no-deps --force-recreate docker-channel
       choice.
 - [ ] Managed runners are on or off by a deliberate choice in `.env`, and where they are on and anyone can sign up,
       the shared-kernel risk under [Isolation and its limits](#isolation-and-its-limits) is accepted.
+- [ ] Where managed runners are on, `managed-runner-firewall` is healthy (`docker compose ps`), or it is off by a
+      deliberate choice and this host's services and private networks are firewalled otherwise.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.
