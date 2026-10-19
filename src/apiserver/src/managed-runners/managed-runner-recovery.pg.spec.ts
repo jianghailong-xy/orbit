@@ -56,6 +56,10 @@
  *       restarting again (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY) through admission,
  *       provisioning and the start, until READY clears it; an owner's retry through the same wait
  *       says nothing of a restart;
+ *  (16) Docker only, since the gate is the channel's: a start the channel refuses because the host's
+ *       firewall for managed runners is not in force (FIREWALL_NOT_ENFORCED) waits as (7) does — nothing
+ *       created or spent, no startup deadline running, said once — and starts by itself once the
+ *       firewall reports its rules in force again;
  *  (12)–(15) every other wait on a restart's way is said while it lasts, and the restart again once
  *       it ends, until READY: (12) a transient error when it is due (answered, which spends an
  *       attempt as before; not reached, which spends none); (13) on Docker, where nothing detaches,
@@ -134,6 +138,8 @@ interface Rig {
   raceHolder?(): void;
   /** Docker: the channel's cap on containers (`limits.maxContainers`), set after the pool was measured. */
   capContainers?(max: number): void;
+  /** Docker: the host's firewall for managed runners not in force (the reason the channel gives), or in force again (null). */
+  firewall?(down: string | null): void;
   /** Kubernetes: a ResourceQuota on the namespace's object counts, below the pool's budget; null removes it. */
   quota?(hard: Partial<Record<'pods' | 'persistentvolumeclaims', number>> | null): void;
   /** Kubernetes: the claims in the namespace. */
@@ -331,6 +337,7 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
       release: (mapping) => void channel.foreignHolders.delete(mapping.pvcName),
       raceHolder: () => channel.failNext('createContainer', { kind: 'refused', status: 409, code: 'VOLUME_IN_USE' }),
       capContainers: (max) => void (channel.limits = { maxContainers: max }),
+      firewall: (down) => void (channel.firewallDown = down),
       loseVolume: (mapping) => {
         const volume = channel.volumes.get(mapping.pvcName)!;
         channel.volumes.delete(mapping.pvcName);
@@ -751,6 +758,56 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     assert.deepEqual(
       { generation: ready.generation, runnerId: ready.runnerId, pvcUid: ready.pvcUid, attempt: ready.attempt, lastError: ready.lastError, nextAttemptAt: ready.nextAttemptAt },
       { generation: 2, runnerId: b.mapping.runnerId, pvcUid: b.mapping.pvcUid, attempt: 1, lastError: null, nextAttemptAt: null },
+      'the same runner and volume; the restart counted once, the wait not at all',
+    );
+  });
+
+  const firewalled = docker();
+  await t.test(`(16) a start the channel refuses while the host's firewall is not in force waits, and starts by itself once it is back [${firewalled.backend}]`, async () => {
+    const r = firewalled;
+    const { ownerId, mapping } = await r.readyRunner('firewall');
+    const sentence = "The Docker host's firewall for managed runners is not in force, so this runner is not started yet. It starts by itself once an operator has the firewall running again.";
+    // The firewall service stops, and says so: the channel starts no container, whatever asks.
+    r.firewall!("the firewall service reports 'stopped': the firewall service stopped; its rules stay");
+
+    // The runner's container stops, as on a host restart. It is started again by itself, and its create meets the gate.
+    r.stop(mapping.runnerId, 0);
+    const outcomes = await drive(r, ownerId, ['WAITING']);
+    assert.equal(outcomes.at(-1), 'WAITING', outcomes.join(' → '));
+    const waiting = await r.mappingOf(ownerId);
+    assert.deepEqual(
+      {
+        state: waiting.managementState, code: codeOf(waiting), attempt: waiting.attempt, generation: waiting.generation,
+        podUid: waiting.podUid, operation: waiting.resourceOperationState, deadline: waiting.startupDeadlineAt,
+      },
+      { state: 'STARTING', code: 'FIREWALL_NOT_ENFORCED', attempt: 1, generation: 2, podUid: null, operation: 'COMPLETED', deadline: null },
+    );
+    assert.equal(waiting.nextAttemptAt?.getTime(), r.now().getTime() + r.lifecycle.capacityRetrySeconds * 1000, 'asked again after capacityRetrySeconds');
+    assert.equal(r.instance(mapping.runnerId), null, 'nothing made');
+    const display = managedRunnerDisplay(await r.service.status(ownerId))!;
+    assert.deepEqual([display.retry, display.detail], [false, sentence]);
+
+    // Asked again and again, past the attempt budget and the startup deadline: still waiting, nothing spent, said once.
+    for (let i = 0; i < r.lifecycle.maxAttempts * 3; i += 1) {
+      r.skipTo((await r.mappingOf(ownerId)).nextAttemptAt!);
+      assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+    }
+    r.advance((r.lifecycle.startupDeadlineSeconds + 60) * 1000);
+    assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+    const still = await r.mappingOf(ownerId);
+    assert.deepEqual([still.managementState, codeOf(still), still.attempt, still.podUid], ['STARTING', 'FIREWALL_NOT_ENFORCED', 1, null]);
+    const said = r.logs.filter((line) => line.includes('FIREWALL_NOT_ENFORCED'));
+    assert.equal(said.length, 1, 'said once');
+    assert.match(said[0], /: FIREWALL_NOT_ENFORCED: the managed runners' host firewall is not in force: .*; it is started once the firewall is in force$/);
+
+    // The firewall reports its rules in force again: the runner starts by itself, on its volume, the wait not counted.
+    r.firewall!(null);
+    const awake = await drive(r, ownerId, ['READY']);
+    assert.equal(awake.at(-1), 'READY', awake.join(' → '));
+    const ready = await r.mappingOf(ownerId);
+    assert.deepEqual(
+      { generation: ready.generation, runnerId: ready.runnerId, pvcUid: ready.pvcUid, attempt: ready.attempt, lastError: ready.lastError, nextAttemptAt: ready.nextAttemptAt },
+      { generation: 2, runnerId: mapping.runnerId, pvcUid: mapping.pvcUid, attempt: 1, lastError: null, nextAttemptAt: null },
       'the same runner and volume; the restart counted once, the wait not at all',
     );
   });

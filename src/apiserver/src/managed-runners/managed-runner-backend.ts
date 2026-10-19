@@ -223,6 +223,19 @@ export class ManagedInstanceLimit extends Error {
   }
 }
 
+/**
+ * The host refused an instance because its firewall for managed runners is not in force (Docker: the
+ * channel's FIREWALL_NOT_ENFORCED, while the managed-runner-firewall service does not report its rules on
+ * the host), and made none. Not a failure of the runner: the manager waits, as it waits for room, and
+ * makes the instance once the firewall reports them in force again.
+ */
+export class ManagedFirewallNotEnforced extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ManagedFirewallNotEnforced';
+  }
+}
+
 export interface ManagedRunnerBackend {
   readonly name: ManagedRunnerBackendName;
   readonly terms: ManagedRunnerBackendTerms;
