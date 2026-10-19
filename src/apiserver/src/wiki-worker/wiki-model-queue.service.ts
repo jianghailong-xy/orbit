@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import { WIKI_MODEL_QUEUE, WIKI_SYSTEM_MODEL, wikiModelCallBudgetSeconds } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { currentWikiExecutorSwitch, wikiExecutorClaimOwners } from '../wiki/wiki-executor-switch';
 import { WikiSystemModelReads } from '../wiki/wiki-system-model';
 import { askWikiSystemModel, WikiModelError, type WikiModelEndpoint } from './wiki-model-client';
 import { WikiModelRequestChannel } from './wiki-model-notify';
@@ -64,8 +63,6 @@ export class WikiModelWaitCancelled extends Error {
  * WHAT STOPS IT CLAIMING
  *   - the model is not up (wiki_model_status, read each pass): down and auth_failed leave every request
  *     queued, and the probe goes on — the next up resumes by itself (design §5.3).
- *   - ORBIT_WIKI_EXECUTOR: under `runner`, no worker claims anything (the empty owner set); under `canary`,
- *     only jobs of the listed accounts are run.
  *   - SIGTERM: the loop stops, the calls in flight are aborted, each saves its partial and lets its lease
  *     out to now, and the next process's sweep re-issues them (design §5.4, the owner's plan A).
  */
@@ -143,19 +140,16 @@ export class WikiModelRequestQueue implements OnApplicationBootstrap, OnModuleDe
 
   /** Reclaim, expire, claim, start — the pass. Returns how many calls it started. */
   async runOnce(): Promise<number> {
-    const switch_ = currentWikiExecutorSwitch();
-    const owners = wikiExecutorClaimOwners(switch_);
-    if (owners !== null && owners.length === 0) return 0;
     await reclaimExpiredWikiModelRequests(this.prisma, this.claimLimit).catch((error: unknown) =>
       this.log.warn(`the request sweep failed: ${this.message(error)}`));
-    await failWikiModelRequestsPastWaitLimit(this.prisma, { owners }).catch((error: unknown) =>
+    await failWikiModelRequestsPastWaitLimit(this.prisma, { owners: null }).catch((error: unknown) =>
       this.log.warn(`the wait-limit pass failed: ${this.message(error)}`));
     if (this.stopped) return 0;
     if (!(await this.modelUp())) return 0;
     const claimed = await claimWikiModelRequests(this.prisma, {
       workerId: this.workerId,
       concurrency: this.config.concurrency,
-      owners,
+      owners: null,
       limit: this.options.claimLimit,
       leaseMs: this.leaseMs,
     });

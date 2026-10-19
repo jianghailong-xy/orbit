@@ -32,15 +32,15 @@ import { WikiRepoOpRefused, waitForWikiRepoOpAsJob, type WikiRepoOps, type WikiR
 
 /**
  * The `articles` job (contracts/wiki.contract.json `jobs.kindRuns.articles`, `articles.job`; design §8, P4):
- * what `orbit wiki articles` does in a maintenance session, done by the wiki worker with the System model.
+ * what `orbit wiki articles` did in a maintenance session before P11, done by the wiki worker with the System model.
  *
- * THE SERVER DECIDES WHAT IT CAN; THE MODEL WRITES — as on the runner. The plan names the topics whose entry
+ * THE SERVER DECIDES WHAT IT CAN; THE MODEL WRITES — as it did on the runner. The plan names the topics whose entry
  * set changed (`WikiArticles.plan`, which also gives a space with no topic the default ones); each such topic's
  * entries are read (`input`), a topic of more than `rules.splitAbove` entries is grouped by code
  * (`groupWikiArticleEntries`), the model names each group — one after another, each told the names already
  * taken — and writes the subtopic articles and the overview, `WIKI_ARTICLES_JOB.parallel` at a time, or the
  * one article of a smaller topic; a draft that keeps fewer than `rules.minChars` characters is asked for again
- * once. What it wrote goes through the same `WikiArticles.write` the runner door calls, which keeps a footnote
+ * once. What it wrote goes through the same `WikiArticles.write` the runner door called before P11, which keeps a footnote
  * only when it names an entry of the topic: nothing the model says about which entry backs a sentence is
  * taken on trust here either.
  *
@@ -106,7 +106,7 @@ export interface WikiArticlesTopicRun {
   parts: WikiArticlesPartRun[];
 }
 
-/** What a run did: the job's report, in the shape `orbit wiki articles --json` prints. */
+/** What a run did: the job's report, in the shape `orbit wiki articles --json` printed. */
 export interface WikiArticlesReport {
   kind: 'articles';
   spaceId: string;

@@ -1,0 +1,29 @@
+== rules at 2026-10-19T07:22:10Z: 1-pre-d9-installed
+-- iptables backend: iptables v1.8.13 (nf_tables); Docker's firewall backend: {"Driver":"iptables","Info":[["EnableUserlandProxy","true"],["UserlandProxyPath","/usr/local/bin/docker-proxy"]]}
+-- managed runners' network
+
+Error response from daemon: network orbit-managed-runners not found
+-- iptables: jumps into ORBIT-MR-* (INPUT, DOCKER-USER, FORWARD) and the chains
+-P INPUT ACCEPT
+-P FORWARD ACCEPT
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-N DOCKER-USER
+iptables: No chain/target/match by that name.
+iptables: No chain/target/match by that name.
+-- ip6tables: jumps into ORBIT-MR-* (INPUT, DOCKER-USER, FORWARD) and the chains
+-P INPUT ACCEPT
+-P FORWARD ACCEPT
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-N DOCKER-USER
+ip6tables: No chain/target/match by that name.
+ip6tables: No chain/target/match by that name.
+-- nat DOCKER chain (the published port's DNAT)
+-N DOCKER
+-A DOCKER ! -i br-e776473528d0 -p tcp -m tcp --dport 2086 -j DNAT --to-destination 172.19.0.7:80
+-- the firewall's service
+-- the firewall's status file
+cat: can't open '/work/s1b/data/managed-runners/firewall/status.json': No such file or directory
+-- the firewall's configuration
+cat: can't open '/work/s1b/data/managed-runners/firewall/config.json': No such file or directory

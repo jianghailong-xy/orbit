@@ -216,7 +216,8 @@ describe('Admin → Users · Update wiki documents…', { timeout: 60_000 }, () 
   });
 
   it('keeps the dialog open with the server’s words when it refuses', async () => {
-    refusal = 'this account’s wiki runs on its runners (ORBIT_WIKI_EXECUTOR=runner)';
+    // The plan in force went away meanwhile: the server's own refusal (WIKI_PLAN_UNCONFIRMED).
+    refusal = 'this space has no plan its owner confirmed, so no document is written from one: the owner confirms a draft of the plan in the Wiki first.';
     await open();
     await openDialog('dev@example.test');
     await click(radio('cbai docs'), 'the cbai docs space');
@@ -226,11 +227,11 @@ describe('Admin → Users · Update wiki documents…', { timeout: 60_000 }, () 
     expect(dialog(), 'the dialog stays').toBeTruthy();
   });
 
-  it('says an account whose wiki runs on its runners has nothing to ask for, and picks nothing', async () => {
+  it('picks nothing while the read does not say the server executes the account’s wiki', async () => {
     spaces = { ...spaces, serverExecutes: false };
     await open();
     await openDialog('dev@example.test');
-    expect(dialog()?.querySelector('[role="note"]')?.textContent).toContain('This account’s wiki runs on its runners');
+    expect(dialog()?.querySelector('[role="note"]'), 'no sentence about runners').toBeNull();
     expect(choices().map((choice) => choice.disabled)).toEqual([true, true, true]);
     await type(dialog()?.querySelector('textarea'), 'support');
     expect(go()?.disabled).toBe(true);

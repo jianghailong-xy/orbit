@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import type { WikiDocsDirectory, WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
+import { WIKI_EXECUTOR_READ, type WikiDocsDirectory, type WikiPlanJob, type WikiPlanProposal, type WikiPlanState, type WikiPlanVersion } from '@orbit/shared';
 import { ThemeProvider } from '../lib/theme';
 import type { WikiChangeset, WikiEntry, WikiSpaceRow, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
 import { wikiSeenKey } from '../lib/wiki';
@@ -307,7 +307,7 @@ describe('Activity', () => {
     expect(html).not.toContain('>Principles<');
   });
 
-  it('draws the server’s runs after Review and Plan while the server runs the wiki, and nothing of them under runner (mock 35 ④)', () => {
+  it('draws the server’s runs after Review and Plan while the server runs the wiki, and no card before the read says so (mock 35 ④)', () => {
     const cache = client();
     const maintenance = {
       look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
@@ -315,7 +315,7 @@ describe('Activity', () => {
     };
     cache.setQueryData(['wiki', 'space', ORBIT, 'health'], {
       spaceId: ORBIT, entries: 3, maintenance,
-      executor: { mode: 'canary', serverExecutes: true },
+      executor: WIKI_EXECUTOR_READ,
       systemModel: { state: 'up', model: 'qwen3.8-27b-fp8', since: null, checkedAt: null, workerSeenAt: null },
     });
     cache.setQueryData(['wiki', 'space', ORBIT, 'jobs'], {
@@ -332,26 +332,25 @@ describe('Activity', () => {
       .map((needle) => at(html, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(html).toContain('<b>Done</b> · 4 calls · 6,120 tokens · took 48s');
-    // Under runner: no card at all.
+    // No health read yet: no card at all.
     expect(wiki('/wiki/orbit/activity')).not.toContain('wk-jobs-card');
   });
 
-  it('names the System model under Draft plan while the server runs the wiki, and the provider under runner (mock 35’s Plan card)', () => {
+  it('names the System model under Draft plan, whatever provider the space named before server execution (mock 35’s Plan card)', () => {
     const spaces = [row(ORBIT, 'github.com/jianghailong-xy/orbit', 0, 0, 0)];
     spaces[0].settings = { ...spaces[0].settings, maintenance: { provider: 'local-vllm', workspaceId: null } };
     const cache = client(spaces);
     cache.setQueryData(['wiki', 'space', ORBIT, 'plan'], { spaceId: ORBIT, confirmed: null, draft: null, proposals: [], job: null } satisfies WikiPlanState);
     const note = (html: string): string => card(html, 'wk-plan-card').match(/<span class="hint">([^<]*)<\/span>/)![1];
-    // Under runner the line is the provider maintenance is pinned to, word for word as before.
-    expect(note(wiki('/wiki/orbit/activity', cache))).toBe('local-vllm · about 1–2 hours');
-    // The server drafts with the System model (`health.executor.serverExecutes`): the shared fixture's line.
+    // The shared fixture's line, before the health read answers and after.
+    expect(note(wiki('/wiki/orbit/activity', cache))).toBe(SERVER.plan.note);
     cache.setQueryData(['wiki', 'space', ORBIT, 'health'], {
       spaceId: ORBIT, entries: 0,
       maintenance: {
         look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
         lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
       },
-      executor: { mode: 'canary', serverExecutes: true },
+      executor: WIKI_EXECUTOR_READ,
     });
     expect(note(wiki('/wiki/orbit/activity', cache))).toBe(SERVER.plan.note);
   });

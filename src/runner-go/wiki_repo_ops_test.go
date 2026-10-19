@@ -602,8 +602,7 @@ func TestWikiRepoOpFetchWaitsOutARefLockAnotherFetchHolds(t *testing.T) {
 }
 
 // A fetch that fails says which operation it was, in which checkout, and what git said — in the
-// operation's own words, not those of `orbit wiki anchors verify`, which a reader of a failed read would
-// otherwise go and look for.
+// operation's own words.
 func TestWikiRepoOpFetchFailureSaysWhichOperationInWhichCheckout(t *testing.T) {
 	f := newWikiRepoOpFixture(t)
 	moved := f.push(t, "main moves", func() { f.write(t, "docs/moved.md", "# Moved\n") })
@@ -623,9 +622,6 @@ func TestWikiRepoOpFetchFailureSaysWhichOperationInWhichCheckout(t *testing.T) {
 		want := "the " + cmd.Kind + " operation could not fetch origin main into the checkout " + root + ", so nothing was read: "
 		if outcome.state != "failed" || !strings.Contains(outcome.err, want) || !strings.Contains(outcome.err, "cannot lock ref 'refs/remotes/origin/main'") {
 			t.Fatalf("the %s's failed fetch = %s %q, want %q with git's own words", cmd.Kind, outcome.state, outcome.err, want)
-		}
-		if strings.Contains(outcome.err, "anchors verify") || strings.Contains(outcome.err, "nothing was checked") {
-			t.Fatalf("the %s's failed fetch borrows anchors verify's words: %q", cmd.Kind, outcome.err)
 		}
 	}
 }

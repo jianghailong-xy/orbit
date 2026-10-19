@@ -60,9 +60,6 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
   // The wiki: its topics, the prompts that write it and the prose it writes, on the server and the runner.
   // What the runner keeps are patterns, as the server's port keeps them in regex literals (which this guard skips,
   // and a Go regexp is a string literal):
-  'src/runner-go/wiki_docs_build.go': [1, "counts the facts of a sentence written in Chinese: a fact token's units"],
-  'src/runner-go/wiki_plan_format.go': [3, 'reads the pointers of plan versions written in Chinese, and the agents mark in Chinese'],
-  'src/runner-go/wiki_plan_materials.go': [2, 'reads the Chinese title prefixes of older task and judgment sessions'],
   'src/runner-go/wiki_plan_repo.go': [1, OWNER_WORDS],
 };
 

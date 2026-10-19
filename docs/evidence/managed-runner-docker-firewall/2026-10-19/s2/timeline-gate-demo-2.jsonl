@@ -1,0 +1,367 @@
+{"at": "2026-10-19T08:05:02Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:03Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:04Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:05Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:06Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:07Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:08Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:10Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:11Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:12Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:13Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "enforced"}
+{"at": "2026-10-19T08:05:14Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:15Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:16Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:17Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:19Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:20Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:21Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T07:49:21.2755295Z"], "status": "stopped"}
+{"at": "2026-10-19T08:05:22Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "stopped"}
+{"at": "2026-10-19T08:05:23Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "stopped"}
+{"at": "2026-10-19T08:05:24Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 dead"], "status": "stopped"}
+{"at": "2026-10-19T08:05:25Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:26Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:28Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:29Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:30Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:31Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:32Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:33Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:34Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:35Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:36Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:38Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:39Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:40Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:41Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:42Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:43Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:44Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:45Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:47Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:48Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:49Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:50Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:51Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:52Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:53Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:54Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:56Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:57Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:58Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:05:59Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:00Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:01Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:02Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:03Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:05Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:06Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:07Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:08Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:09Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:10Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:11Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:12Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:14Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:15Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:16Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:17Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:18Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:19Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:20Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:21Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:23Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:24Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:25Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:26Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:27Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:28Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:29Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:30Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:31Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:33Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:34Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:35Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:36Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:37Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:38Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:40Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:41Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:42Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:43Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:44Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:45Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:46Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:47Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:48Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:50Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:51Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:52Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:53Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:54Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:55Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:56Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:57Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:06:59Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:00Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:01Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:02Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:03Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:04Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:05Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:06Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:07Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:09Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:10Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:11Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:12Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:13Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:14Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:15Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:16Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:18Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:19Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:20Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:21Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:22Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:23Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:24Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:26Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:27Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:28Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:29Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:30Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:31Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:32Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:33Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:34Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:36Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:37Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:38Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:39Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:40Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:41Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:42Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:43Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:45Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:46Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:47Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:48Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:49Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:50Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:51Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:52Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:54Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:55Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:56Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:57Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:58Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:07:59Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:00Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:02Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:03Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:04Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:05Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:06Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:07Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:08Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:09Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:11Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:12Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:13Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:14Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:15Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:16Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:17Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:18Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:20Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:21Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:22Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:23Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:24Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:25Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:26Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:27Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:29Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:30Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:31Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:32Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:33Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:34Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:35Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:37Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:38Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:39Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:40Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:41Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:42Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:43Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:44Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:46Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:47Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:48Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:49Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:50Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:51Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:52Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:53Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:55Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:56Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:57Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:58Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:08:59Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:09:00Z", "chains": "yes", "docker": "up", "firewall": "exited/unhealthy", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:09:01Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "status": "stopped"}
+{"at": "2026-10-19T08:09:03Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:04Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:05Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:06Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:07Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:08Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:09Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:10Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:11Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:13Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:14Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:15Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:16Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:17Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:18Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:19Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:20Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:22Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:23Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:24Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:25Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:26Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:27Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "status": "enforced"}
+{"at": "2026-10-19T08:09:28Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:09:28.122581047Z"], "status": "enforced"}
+{"at": "2026-10-19T08:09:30Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:09:28.122581047Z"], "status": "enforced"}
+{"at": "2026-10-19T08:09:31Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:09:28.122581047Z"], "status": "enforced"}
+{"at": "2026-10-19T08:09:32Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:09:28.122581047Z"], "status": "enforced"}
+{"at": "2026-10-19T08:09:33Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:09:28.122581047Z"], "status": "enforced"}
+{"at": "2026-10-19T08:09:34Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:09:28.122581047Z"], "status": "enforced"}
+{"at": "2026-10-19T08:09:35Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:36Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:37Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:39Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:40Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:41Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:42Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:43Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:44Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:45Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:46Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": "stopped"}
+{"at": "2026-10-19T08:09:48Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:09:55Z", "chains": "yes", "docker": "up", "firewall": "running/starting", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:09:56Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:09:57Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:09:58Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:09:59Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:01Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:02Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:03Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:04Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:05Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:06Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:07Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 exited"], "status": "enforced"}
+{"at": "2026-10-19T08:10:08Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:10Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:11Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:12Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:13Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:14Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:15Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:16Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:18Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:19Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:20Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:21Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:22Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:23Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:24Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:26Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:27Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:28Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:29Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:30Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:31Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:32Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:34Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:35Z", "chains": "yes", "docker": "up", "firewall": "running/healthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "enforced"}
+{"at": "2026-10-19T08:10:36Z", "chains": "yes", "docker": "up", "firewall": "removing/unhealthy", "host": "up", "jump": "first", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:37Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:38Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:39Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:40Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:42Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:43Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:44Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:45Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:46Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:47Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:48Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:50Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:51Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:52Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:53Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:54Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:55Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:56Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:58Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:10:59Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "runner": ["mr-01a15310-a89f-7592-8a0e-190140b17331 running"], "started": ["/mr-01a15310-a89f-7592-8a0e-190140b17331 2026-10-19T08:10:08.689680606Z"], "status": "stopped"}
+{"at": "2026-10-19T08:11:00Z", "chains": "yes", "docker": "up", "firewall": "", "host": "up", "jump": "first", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:01Z", "chains": "yes", "docker": "down", "firewall": "", "host": "up", "jump": "first", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:02Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:04Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:05Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:06Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:07Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:08Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:10Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:11Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:12Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:13Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:14Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:15Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:16Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:17Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:19Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:20Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:21Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:22Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:23Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:24Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:25Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:26Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:28Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:29Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:30Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:31Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:32Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:33Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:34Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:35Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:37Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:38Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:39Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:40Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:41Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:42Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:43Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:44Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:46Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:47Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:48Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:49Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:50Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:51Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:52Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:54Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:55Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:56Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:57Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:58Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:11:59Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:12:00Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}
+{"at": "2026-10-19T08:12:02Z", "chains": "no", "docker": "up", "firewall": "", "host": "up", "jump": "no", "none": "", "status": ""}

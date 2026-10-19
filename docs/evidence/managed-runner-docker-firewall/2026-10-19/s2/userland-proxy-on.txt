@@ -1,0 +1,13 @@
++ 2026-10-19T07:48:21Z back to the default (userland proxy on): flags removed; pkill -TERM -x dockerd
+firewall backend: {"Driver":"iptables","Info":[["EnableUserlandProxy","true"],["UserlandProxyPath","/usr/local/bin/docker-proxy"]]}
+Chain ORBIT-MR-INPUT (1 references)
+    pkts      bytes target     prot opt in     out     source               destination         
+       0        0 RETURN     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+       0        0 RETURN     tcp  --  *      *       0.0.0.0/0            172.19.0.1           tcp dpt:2086
+       0        0 RETURN     tcp  --  *      *       0.0.0.0/0            10.77.0.2            tcp dpt:18080
+       6      336 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-admin-prohibited
+Chain ORBIT-MR-FORWARD (1 references)
+    pkts      bytes target     prot opt in     out     source               destination         
+     933   672693 RETURN     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+       7      420 RETURN     tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate DNAT ctorigdst 172.19.0.1 ctorigdstport 2086
+       3      180 RETURN     tcp  --  *      *       0.0.0.0/0            10.77.0.2            tcp dpt:18080

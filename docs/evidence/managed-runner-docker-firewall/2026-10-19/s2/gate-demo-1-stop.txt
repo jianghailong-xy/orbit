@@ -1,0 +1,6 @@
++ 2026-10-19T07:30:40Z docker compose stop managed-runner-firewall
+ Container orbit-managed-runner-firewall Stopped 
++ status file:
+{"apiPort": 2086, "backend": "nft", "bootId": "369b4f51-8eef-4b7b-8357-90245df8ed63", "bridge": "br-fddeb223c3a0", "checkedAt": 1792395040, "gateway": "172.19.0.1", "network": "orbit-managed-runners", "reason": "the firewall service stopped; its rules stay", "schemaVersion": 1, "state": "stopped"}
+
++ rules still on the host: ORBIT-MR-INPUT rules=5, first rule of INPUT: -A INPUT -i br-fddeb223c3a0 -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT

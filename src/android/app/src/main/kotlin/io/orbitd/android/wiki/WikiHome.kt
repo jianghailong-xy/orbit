@@ -55,11 +55,6 @@ internal fun wikiMaintenanceRunnerOnline(space: WikiSpace?, data: DirectoryData)
     if (!data.ready) return null
     return data.runners.firstOrNull { ObjectId.same(it.id, runner) }?.online
 }
-/** Where a draft runs: the workspace and its runner (`wikiMaintenanceWhere`). */
-internal fun wikiMaintenanceWhere(space: WikiSpace?, data: DirectoryData): String? {
-    val workspace = space?.settings?.maintenance?.workspaceId?.let { id -> data.workspaces.firstOrNull { ObjectId.same(it.id, id) } } ?: return null
-    return WikiModeLogic.workspaceLabel(workspace.name, workspace.runnerId?.let { r -> data.runners.firstOrNull { ObjectId.same(it.id, r) }?.name })
-}
 
 /** A minute's clock for the relative times, as iOS's `TimelineView(.periodic(by: 60))`. No network call. */
 @Composable

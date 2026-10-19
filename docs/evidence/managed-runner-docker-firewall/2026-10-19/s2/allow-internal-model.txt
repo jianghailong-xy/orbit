@@ -1,0 +1,23 @@
+--- /tmp/config.before
++++ data/managed-runners/firewall/config.json
+@@ -5,6 +5,12 @@
+   "gateway": "172.19.0.1",
+   "apiPort": 2086,
+   "dnsServers": [],
+-  "allow": [],
++  "allow": [
++    {
++      "to": "10.77.0.2",
++      "protocol": "tcp",
++      "port": 18080
++    }
++  ],
+   "intervalSeconds": 10
+ }
+ Container orbit-managed-runner-firewall Restarting 
+ Container orbit-managed-runner-firewall Started 
+health: healthy
+ Container s2-managed-runner-firewall-run-24bbbfef606c Creating 
+ Container s2-managed-runner-firewall-run-24bbbfef606c Created 
+{"backend": "nft", "enforced": true, "problems": []}
+-A ORBIT-MR-FORWARD -d 10.77.0.2/32 -p tcp -m tcp --dport 18080 -j RETURN

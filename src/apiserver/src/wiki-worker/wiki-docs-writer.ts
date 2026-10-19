@@ -3,22 +3,23 @@ import { WIKI_DOC_BUILD_RULES, WIKI_DOC_RULES, WIKI_REPO_OPS, uuidToBase62, type
 import { collapseWhitespace, cutRunes, goTrimSpace } from './wiki-import-extract';
 
 /**
- * `orbit wiki docs build`'s writer, on the server (contracts/wiki.contract.json `docs.build`, `docs.build.server`;
- * design §8, P7): the deterministic half of `src/runner-go/wiki_docs_build.go`, function for function — what a
- * section's material is, how it is filtered, capped and fingerprinted, how a design document's section, a code
- * symbol and a contract are cut out of a file, how a quote is folded and found, the prompts word for word, and how
- * the model's answers are read back into footnotes and a material ledger.
+ * The writer `orbit wiki docs build` had, on the server (contracts/wiki.contract.json `docs.build`, `docs.build.server`;
+ * design §8, P7): the deterministic half of `src/runner-go/wiki_docs_build.go`, ported function for function before
+ * P11 deleted it — what a section's material is, how it is filtered, capped and fingerprinted, how a design
+ * document's section, a code symbol and a contract are cut out of a file, how a quote is folded and found, the
+ * prompts word for word, and how the model's answers are read back into footnotes and a material ledger.
  *
  * NOTHING HERE READS ANYTHING. The repository comes in through `WikiDocRepo` — on the server, a file read by the
  * space's runner at the snapshot's commit (wiki-docs-build-job.ts) — and the records through the material the
  * server gathers (wiki-docs-material.ts). wiki-docs-build.ts runs a build over these functions.
  *
- * GO'S READING OF TEXT. Where the runner and the server must answer the same for the same input — the
+ * GO'S READING OF TEXT. Where the server must answer what the runner answered for the same input — the
  * fingerprint above all, which decides whether a section is written again whichever path wrote it last — the
  * port reads text the way Go does: a character is a code point, `\s` in a pattern is RE2's ASCII [\t\n\f\r ],
  * `.` is anything but a newline, `strings.TrimSpace` and `unicode.IsSpace` are Go's, and the fingerprint is the
  * sha256 of Go's json.Marshal (struct fields in their order, map keys sorted, `<`, `>`, `&` and U+2028/9 escaped).
- * src/shared/src/wiki-docs-build.fixture.json holds both implementations to the same answers.
+ * src/shared/src/wiki-docs-build.fixture.json, which the runner's Go test wrote and which is frozen since P11, holds
+ * the server to the runner's answers.
  */
 
 // ── The contract's numbers and words ────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ import { collapseWhitespace, cutRunes, goTrimSpace } from './wiki-import-extract
 export const WIKI_DOCS_BUILD_SYSTEM_PROMPT = "You are Orbit's technical writer. You write only from the materials you are given, and invent no "
   + 'fact, name, number or path. Write in English; keep code names, paths and commands as they are. Output only what is asked for.';
 
-/** What of the repository one piece carries (wiki_docs_build.go's sample sizes). */
+/** What of the repository one piece carries (the sample sizes wiki_docs_build.go had). */
 export const WIKI_DOC_PIECE_RULES = {
   docSectionChars: 4200,
   symbolChars: 3200,
@@ -786,7 +787,7 @@ function kindWord(kind: string): string {
   return KIND_WORDS[kind] ?? kind;
 }
 
-// The four prompts, word for word as wiki_docs_build.go writes them (its fmt.Sprintf templates).
+// The four prompts, word for word as wiki_docs_build.go wrote them (its fmt.Sprintf templates).
 
 const WIKI_DOC_MERGE_TEMPLATE = `# Task: the "merge" for the document «%s», section %d: combine the materials below into the "current state" this section is to write
 
@@ -1544,7 +1545,7 @@ export function wikiDocOverviewFootnotes(repo: WikiDocRepo, body: string, notes:
 
 /**
  * A line cut at 。！？, and at a full stop or an ASCII ? or ! followed by a space or the line's end, each sentence
- * keeping its markers — `wikiArticleSentences` (src/runner-go/wiki_articles.go), which the build reads by.
+ * keeping its markers — `wikiArticleSentences` (src/runner-go/wiki_articles.go), which the runner's build read by.
  */
 export function wikiDocSentences(line: string): string[] {
   const out: string[] = [];

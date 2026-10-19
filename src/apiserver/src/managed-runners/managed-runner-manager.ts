@@ -15,6 +15,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
 import {
+  ManagedFirewallNotEnforced,
   ManagedInstanceLimit,
   ManagedRunnerConflict,
   ManagedVolumeHeld,
@@ -131,7 +132,8 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  *     the wait is over (`waitReason`).
  *   - No instance is created on a volume something else holds, a backup's helper container say: it
  *     waits until the volume is free (VOLUME_IN_USE), as for a predecessor's volume still detaching.
- *     A host at its cap on instances makes it wait for room the same way (CONTAINER_LIMIT).
+ *     A host at its cap on instances makes it wait for room the same way (CONTAINER_LIMIT), and so does
+ *     a Docker host whose firewall for managed runners is not in force (FIREWALL_NOT_ENFORCED).
  *   - A FAILED mapping whose recorded volume was missing is looked at again, and becomes retryable
  *     once that very volume is back (`volumeBack`).
  *   - A backend that cannot be reached at all — no request got to it: the Kubernetes API server or
@@ -276,10 +278,17 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     message: 'The Docker host has as many runner containers as it allows, so this runner is not started yet. It starts by itself once one of them is removed, as when another runner goes to sleep.',
     retryable: false,
   },
+  FIREWALL_NOT_ENFORCED: {
+    message: "The Docker host's firewall for managed runners is not in force, so this runner is not started yet. It starts by itself once an operator has the firewall running again.",
+    retryable: false,
+  },
 };
 
-/** The waits for room (`waitForRoom`): a create the environment's cap refused, made again once there is room. */
-const ROOM_WAITS: ReadonlySet<string> = new Set(['CONTAINER_LIMIT', 'KUBERNETES_QUOTA_EXCEEDED']);
+/**
+ * The waits for room (`waitForRoom`): a create the environment refused for now — its cap, or on Docker its
+ * firewall for managed runners not in force — made again once it would be admitted.
+ */
+const ROOM_WAITS: ReadonlySet<string> = new Set(['CONTAINER_LIMIT', 'KUBERNETES_QUOTA_EXCEEDED', 'FIREWALL_NOT_ENFORCED']);
 
 /** A reason an automatic restart stands under (`terminated`). */
 function restartingReason(reason: unknown): boolean {
@@ -721,6 +730,9 @@ export class ManagedRunnerManager {
         // Refused for a holder that came after the look above, with nothing made: the same wait.
         if (error instanceof ManagedVolumeHeld) return this.volumeInUse(begun, error.detail, { resourceOperationState: 'COMPLETED' });
         if (error instanceof ManagedInstanceLimit) return this.waitForRoom(begun, 'CONTAINER_LIMIT', error.detail);
+        if (error instanceof ManagedFirewallNotEnforced) {
+          return this.waitForRoom(begun, 'FIREWALL_NOT_ENFORCED', error.detail, 'once the firewall is in force');
+        }
         throw error;
       }
       return { next: await this.recordInstance(begun, instance, this.roomMade(begun)) };
@@ -1817,9 +1829,9 @@ export class ManagedRunnerManager {
    * deadline running — and asks again after `capacityRetrySeconds`. Once the create goes through, the
    * wait ends (`roomMade`) and the deadline runs from then.
    */
-  private async waitForRoom(mapping: ManagedRunner, code: string, detail: string): Promise<Step> {
+  private async waitForRoom(mapping: ManagedRunner, code: string, detail: string, until = 'once there is room'): Promise<Step> {
     if ((mapping.lastError as { code?: unknown } | null)?.code !== code) {
-      this.log.warn(`managed runner ${mapping.id}: ${code}: ${detail}; it is started once there is room`);
+      this.log.warn(`managed runner ${mapping.id}: ${code}: ${detail}; it is started ${until}`);
     }
     await this.commit(mapping, {
       resourceOperationState: 'COMPLETED',

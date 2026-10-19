@@ -76,10 +76,11 @@ import {
 
 /**
  * A plan job on the server (contracts/wiki.contract.json `plan.jobs.server` and `jobs.kindRuns.plan_draft` /
- * `plan_revise`, design §8, P6): what `orbit wiki plan draft` and `orbit wiki plan revise` do in a maintenance
- * session, done by the wiki-worker with the System model — ported from `src/runner-go/wiki_plan_draft.go`.
+ * `plan_revise`, design §8, P6): what `orbit wiki plan draft` and `orbit wiki plan revise` did in a maintenance
+ * session, done by the wiki-worker with the System model — ported from `src/runner-go/wiki_plan_draft.go` before
+ * P11 deleted it.
  *
- * THE MODEL DRAFTS, THE GATE DECIDES — as on the runner. The model writes the plan in four small steps — the
+ * THE MODEL DRAFTS, THE GATE DECIDES — as it did on the runner. The model writes the plan in four small steps — the
  * catalogue's skeleton, each category's documents in detail, each document's outline with where every section's
  * material comes from, and a draft of the rules — or, for a revision, the new catalogue with what each document is
  * made from, and the documents that merge or are new. Everything it says is held to this job's own gate
@@ -93,12 +94,12 @@ import {
  * in a work directory. A replay asks the same questions because the job's materials are read once, at its first
  * run, and kept on the plan job (`wiki_plan_job.materials`): the snapshot's sha, what Orbit said of the space, and
  * the texts the snapshot does not carry. Only a snapshot that moved under the job — another job of the space took a
- * newer one — makes it start over, as the runner starts over when the sha it drafted from left origin/main.
+ * newer one — makes it start over, as the runner started over when the sha it drafted from left origin/main.
  *
  * THE PLAN JOB SAYS WHERE IT IS. Its round goes on the plan job (`attempt`), which is what the plan page shows, and
- * it ends there with its version or its last errors (`WikiPlans.finishServerJob`), exactly as a session's run ends
- * it through the runner door. A failure of the platform — a request past its wait limit, the space's runner away,
- * the worker stopping — is not the draft's: the wiki_job is tried again and the plan job stays running.
+ * it ends there with its version or its last errors (`WikiPlans.finishServerJob`), exactly as a session's run ended
+ * it through the runner door before P11. A failure of the platform — a request past its wait limit, the space's
+ * runner away, the worker stopping — is not the draft's: the wiki_job is tried again and the plan job stays running.
  */
 
 /** What the job needs besides its context: the plan's service, the repository's operations, and the model's name. */
@@ -164,7 +165,7 @@ export function wikiPlanOpId(name: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-/** A unit's name as the runner names its file (`wikiPlanFileName`): what a request's unit is called after. */
+/** A unit's name as the runner named its file (`wikiPlanFileName`): what a request's unit is called after. */
 export function wikiPlanFileName(unit: string): string {
   const name = unit.replace(/[^A-Za-z0-9._-]+/gu, '_');
   return name === '' ? 'unit' : name;

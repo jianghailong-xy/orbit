@@ -89,33 +89,21 @@ export const WIKI_PLAN_STATUS_LABELS = { draft: 'Draft', confirmed: 'Confirmed',
 export const WIKI_PLAN_NONE = 'This space has no plan yet';
 export const WIKI_PLAN_EMPTY_TITLE = 'No plan yet';
 /**
- * Who drafts the plan while the server executes the account: the wiki-worker's System model, never the account's
- * provider (owner's call 2026-10-08 — the plan page said one thing and the Plan card another). Every sentence that
- * names the drafter takes this name then; under runner each keeps `<provider>`, word for word.
+ * Who drafts the plan: the wiki-worker's System model, never the account's provider (owner's call 2026-10-08 — the
+ * plan page said one thing and the Plan card another). Every sentence that names the drafter takes this name.
  */
 export const WIKI_PLAN_DRAFTER_SERVER = 'System model';
-export function wikiPlanEmptyText(provider: string | null, serverExecutes: boolean): string {
-  const drafter = serverExecutes ? `The ${WIKI_PLAN_DRAFTER_SERVER}` : provider ?? WIKI_HISTORY_MAINTENANCE;
-  return (
-    'A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, '
-    + `and where each section’s material comes from. ${drafter} drafts it; nothing is written until you confirm it.`
-  );
-}
+export const WIKI_PLAN_EMPTY_TEXT =
+  'A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, '
+  + `and where each section’s material comes from. The ${WIKI_PLAN_DRAFTER_SERVER} drafts it; nothing is written until you confirm it.`;
 /**
- * Where a draft runs and how long it takes, under Draft plan: `on orbit · wikova with local-vllm`. While the server
- * executes the account the wiki-worker drafts it with the System model, so the line is the server's (owner's call
- * 2026-10-08, mock 35's Plan card): the duration is not touched until P10 measures it. Activity's Plan card says the
- * short one (`WIKI_PLAN_NOTE_SERVER`); the plan's empty page keeps the sentence that still holds there.
+ * Where a draft runs and how long it takes, under Draft plan: the wiki-worker drafts it with the System model (owner's
+ * call 2026-10-08, mock 35's Plan card). Activity's Plan card says the short one (`WIKI_PLAN_NOTE_SERVER`); the plan's
+ * empty page says the sentence.
  */
 export const WIKI_PLAN_NOTE_SERVER = 'System model · about 1–2 hours';
 export const WIKI_PLAN_EMPTY_NOTE_SERVER =
   'Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.';
-export function wikiPlanEmptyNote(where: string | null, provider: string | null, serverExecutes: boolean): string {
-  if (serverExecutes) return WIKI_PLAN_EMPTY_NOTE_SERVER;
-  const on = where ? `, on ${where}` : '';
-  const with_ = provider ? ` with ${provider}` : '';
-  return `Runs as a task in the Wiki maintenance list${on}${with_} — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.`;
-}
 
 /** The sentence under the head of a draft that failed the gate (mock 21 ①): what the owner can do about it. */
 export const wikiPlanFailedHint = (inForce: number | null): string =>
@@ -366,7 +354,7 @@ export function wikiPlanFromFailedJob(job: WikiPlanJob, number: number, baseVers
     target: report?.target ?? { min: WIKI_PLAN_RULES.docsMin, max: WIKI_PLAN_RULES.docsMax },
     gate: null,
     repoCheck: report?.repo ? { sha: report.repo.sha, checked: report.repo.checked, missing: [] } : null,
-    model: report?.model ?? job.provider,
+    model: report?.model ?? null,
     createdAt: job.endedAt,
     confirmedAt: null,
     errors: job.errors,
@@ -588,7 +576,7 @@ const attemptsOf = (job: WikiPlanJob): number => job.attempt ?? wikiPlanDraftRep
 /** How many of the gate's four checks a failed draft's errors fall under. */
 export const wikiPlanFailedChecks = (errors: readonly WikiPlanGateError[]): number => new Set(errors.map((error) => error.check)).size;
 
-/** The run a job's card opens: the run it waits for while queued, its own once it has one. */
+/** The run a job's card opens: the session of a job a task made before server execution, which kept it. */
 const runLink = (sessionId: string | null | undefined): WikiPlanJobCard['link'] =>
   sessionId ? { label: WIKI_PLAN_VIEW_RUN, to: 'run', sessionId } : null;
 
@@ -605,8 +593,6 @@ export function wikiPlanJobCard(
   context: {
     now: number;
     runnerOnline: boolean | null;
-    /** The server executes this account's wiki: a draft is the wiki-worker's, on the System model. */
-    serverExecutes: boolean;
     failed?: WikiPlanJob | null;
     /** The version shown is the one in force: its writing is what the card says. */
     inForce?: boolean;
@@ -627,14 +613,12 @@ export function wikiPlanJobCard(
     };
   }
   if (open?.state === 'queued') {
-    const started = open.waitingFor?.startedAt ? ` (started ${wikiAgo(open.waitingFor.startedAt, context.now)})` : '';
-    return { look: 'queued', title: WIKI_PLAN_QUEUED, text: `${WIKI_PLAN_QUEUED_TEXT}${started}`, link: runLink(open.waitingFor?.sessionId), progress: null };
+    return { look: 'queued', title: WIKI_PLAN_QUEUED, text: WIKI_PLAN_QUEUED_TEXT, link: null, progress: null };
   }
   if (draft?.state === 'running') {
-    const who = context.serverExecutes ? WIKI_PLAN_DRAFTER_SERVER : draft.provider ?? WIKI_HISTORY_MAINTENANCE;
     const text = draft.startedAt
-      ? `${who} · attempt ${draft.attempt ?? 1} of ${draft.attemptsMax} · started ${wikiAgo(draft.startedAt, context.now)}`
-      : `${who} · waiting for its run to start`;
+      ? `${WIKI_PLAN_DRAFTER_SERVER} · attempt ${draft.attempt ?? 1} of ${draft.attemptsMax} · started ${wikiAgo(draft.startedAt, context.now)}`
+      : `${WIKI_PLAN_DRAFTER_SERVER} · waiting for its run to start`;
     return { look: 'drafting', title: WIKI_PLAN_DRAFTING, text, link: runLink(draft.sessionId), progress: null };
   }
   if (build?.state === 'running') {
@@ -913,7 +897,7 @@ export function wikiPlanGate(
     passed: false,
     title: WIKI_PLAN_FAILED,
     line: `${failedChecks} of ${WIKI_PLAN_GATE_CHECKS.length} checks failed${at}`,
-    aside: job ? `${shown.model ?? job.provider ?? WIKI_HISTORY_MAINTENANCE} tried ${plural(attemptsOf(job), 'time', 'times')}` : null,
+    aside: job ? `${shown.model ?? WIKI_HISTORY_MAINTENANCE} tried ${plural(attemptsOf(job), 'time', 'times')}` : null,
     rows,
     refKinds: [...kinds.entries()].sort((a, b) => b[1] - a[1]).map(([many, count]) => `${wikiCount(count)} ${count === 1 ? many.replace(/ies$/u, 'y').replace(/s$/u, '') : many}`),
     refs,
@@ -1241,8 +1225,8 @@ export const WIKI_PLAN_UPDATE_FAILED = 'Couldn’t update the documents';
 /**
  * Whether the plan page offers Update documents on the version it shows: the version in force, while the server
  * executes the account's wiki — drawn then, and pressable (`ready`) only while no build of it is queued, held or
- * running (`busy`, the job's card says what it is doing). Null draws nothing: another version, or the runner's path,
- * where a build is asked for by a confirmation alone (`plan.jobs.rebuild.when`).
+ * running (`busy`, the job's card says what it is doing). Null draws nothing: another version, or a read that does
+ * not say the server executes the account's wiki (`plan.jobs.rebuild.when`).
  */
 export function wikiPlanUpdateDocs(
   state: Pick<WikiPlanState, 'job' | 'confirmed'>,
@@ -1259,15 +1243,10 @@ export const WIKI_PLAN_REDRAFT_GO = 'Redraft';
 export const WIKI_PLAN_REDRAFT_PLACEHOLDER = 'What should change: what to merge, split, move or leave out';
 
 /** The dialog's sentence: what drafts it again, from which version, and how often it retries. */
-export function wikiPlanRedraftNote(
-  provider: string | null,
-  from: { version: number; inForce: boolean } | null,
-  serverExecutes: boolean,
-): string {
+export function wikiPlanRedraftNote(from: { version: number; inForce: boolean } | null): string {
   const base = from ? (from.inForce ? ` from v${from.version}, the plan in force,` : ` from draft v${from.version},`) : '';
-  const drafter = serverExecutes ? `The ${WIKI_PLAN_DRAFTER_SERVER}` : provider ?? WIKI_HISTORY_MAINTENANCE;
   return (
-    `${drafter} drafts it again${base} with what you write here. A draft that doesn’t pass the plan check is `
+    `The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here. A draft that doesn’t pass the plan check is `
     + `redrafted with its errors, up to ${WIKI_PLAN_JOB_RULES.attemptsMax} times.`
   );
 }
@@ -1557,8 +1536,6 @@ export function wikiPlanCard(
     now: number;
     docs: { written: number; total: number } | null;
     runnerOnline: boolean | null;
-    provider: string | null;
-    serverExecutes: boolean;
   },
 ): WikiPlanCard {
   const open = wikiPlanOpenJob(state);
@@ -1622,7 +1599,7 @@ export function wikiPlanCard(
         dot: 'blue',
         count: null,
         sub: null,
-        text: `Drafting the plan · ${context.serverExecutes ? WIKI_PLAN_DRAFTER_SERVER : open?.provider ?? WIKI_HISTORY_MAINTENANCE} · attempt ${open?.attempt ?? 1} of ${open?.attemptsMax ?? WIKI_PLAN_JOB_RULES.attemptsMax}${
+        text: `Drafting the plan · ${WIKI_PLAN_DRAFTER_SERVER} · attempt ${open?.attempt ?? 1} of ${open?.attemptsMax ?? WIKI_PLAN_JOB_RULES.attemptsMax}${
           open?.startedAt ? ` · started ${wikiAgo(open.startedAt, context.now)}` : ''
         }.${topicArticles}`,
         primary: planButton,
@@ -1660,7 +1637,7 @@ export function wikiPlanCard(
         text: 'No plan yet. A plan lays out this wiki’s documents; until you confirm one, the Wiki shows its topic articles.',
         primary: { label: WIKI_PLAN_DRAFT, to: 'draft' },
         secondary: null,
-        note: context.serverExecutes ? WIKI_PLAN_NOTE_SERVER : `${context.provider ?? WIKI_HISTORY_MAINTENANCE} · about 1–2 hours`,
+        note: WIKI_PLAN_NOTE_SERVER,
       };
   }
 }

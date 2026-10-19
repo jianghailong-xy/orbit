@@ -8,31 +8,26 @@ import {
   type WikiSystemModelReadState,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { WikiSystemModelReads } from './wiki-system-model';
 import { WikiRefusalError, type WikiService } from './wiki.service';
 
 /**
  * `orbit wiki import` on the server (contracts/wiki.contract.json `import.server`, design §2.2, P5): the runner
- * door's half of it. The command still reads the files and registers each as a note (`import.note`); when the
- * executor switch gives its account to the server it then hands the notes to an `import` job here instead of a
- * model of its own, and waits for the job's report — what the wiki-worker read, found and proposed
+ * door's half of it. The command reads the files and registers each as a note (`import.note`), hands the notes to
+ * an `import` job here, and waits for the job's report — what the wiki-worker read, found and proposed
  * (src/apiserver/src/wiki-worker/wiki-import-job.ts).
  *
  * THREE ROUTES, ALL THE CALLING SESSION'S OWNER'S:
- *   GET  …/spaces/:id/import            which path an import of this space takes — the server's, or the
- *                                       runner's own (the switch; the System model's name and state)
+ *   GET  …/spaces/:id/import            which path an import of this space takes — the server's — and the
+ *                                       System model's name and state
  *   POST …/spaces/:id/import-jobs       the notes, as a job; the command names the job's id, so a request sent
  *                                       again after a lost answer is the same job and not a second one
  *   GET  …/spaces/:id/import-jobs/:jobId  the job: where it is, and its report once it has one
- *
- * A job is made only for an account the switch gives the server: under `runner` the command reads with its own
- * model exactly as it always has, and a job nobody would run is refused rather than queued.
  */
 
-/** Which path an import takes (`import.server.executor`). */
+/** Which path an import takes (`import.server.executor`): the server's, the one there is. */
 export interface WikiImportExecutor {
-  executor: 'server' | 'runner';
+  executor: 'server';
   /** The System model's name and state; null and the state the read says when it is not known. */
   model: string | null;
   modelState: WikiSystemModelReadState;
@@ -74,11 +69,14 @@ export interface WikiImportJobRead {
   model: { name: string | null; state: WikiSystemModelReadState };
 }
 
-/** Which path an import of this account takes, and the model the server would read with. */
-export async function wikiImportExecutor(prisma: PrismaService, ownerId: string): Promise<WikiImportExecutor> {
-  const server = wikiExecutorServes(currentWikiExecutorSwitch(), ownerId);
+/**
+ * Which path an import takes — the server's import job, always — and the model the server reads with. The
+ * account is not asked: the field is kept for the runners that ask before they read (contract
+ * `import.server.executor`).
+ */
+export async function wikiImportExecutor(prisma: PrismaService): Promise<WikiImportExecutor> {
   const status = await new WikiSystemModelReads(prisma).read(new Date());
-  return { executor: server ? 'server' : 'runner', model: status.model, modelState: status.state };
+  return { executor: 'server', model: status.model, modelState: status.state };
 }
 
 /**
@@ -92,12 +90,6 @@ export async function createWikiImportJob(
   input: { ownerId: string; spaceId: string; sessionId: string; body: WikiImportJobDto },
 ): Promise<WikiImportJobRead> {
   const space = await wiki.requireSpace(input.ownerId, input.spaceId);
-  if (!wikiExecutorServes(currentWikiExecutorSwitch(), input.ownerId)) {
-    throw new ConflictException(
-      "this account's wiki runs on its runner (ORBIT_WIKI_EXECUTOR): orbit wiki import reads with the session's own model, "
-        + 'and the server makes no import job for it',
-    );
-  }
   const job = importJobInput(input.body, input.sessionId);
   const held = await prisma.wikiNote.findMany({
     where: { ownerId: input.ownerId, spaceId: space.id, id: { in: job.notes.map((note) => note.noteId) } },

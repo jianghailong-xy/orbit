@@ -1,6 +1,6 @@
 {
-  "why": "One input, one deterministic answer on both paths: what src/runner-go/wiki_import.go makes of a note (on the runner) and what src/apiserver/src/wiki-worker/wiki-import-extract.ts makes of it (on the server) — the prompt, a note's language, the reading of an answer, the quote, the verify command, the ops an answer becomes and the retry that names what did not hold up, and a path anchor. The outputs are the Go code's; both implementations are held to them (contract import.server, criterion: the deterministic results agree on both paths).",
-  "write": "cd src/runner-go && ORBIT_WIKI_IMPORT_FIXTURE=write go test -run TestWikiImportFixtureIsTheServersToo .",
+  "why": "Frozen since P11 (2026-10-19), when the runner's Go code was deleted: one input, one deterministic answer: what src/runner-go/wiki_import.go made of a note (on the runner), which src/apiserver/src/wiki-worker/wiki-import-extract.ts is held to (on the server) — the prompt, a note's language, the reading of an answer, the quote, the verify command, the ops an answer becomes and the retry that names what did not hold up, and a path anchor. The outputs are the Go code's; both implementations are held to them (contract import.server, criterion: the deterministic results agree on both paths).",
+  "write": "nothing: frozen since P11 (2026-10-19), when its Go writer (TestWikiImportFixtureIsTheServersToo) was deleted",
   "notes": [
     {
       "id": "note-1",

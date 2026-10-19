@@ -16,26 +16,26 @@ import {
 
 /**
  * The `verify` job (contracts/wiki.contract.json `jobs.kindRuns.verify`, design §2.2 and §8): what a session
- * proposed into an Automatic space waiting for its verdict is verified by the server's worker instead of by
- * `orbit wiki verify` in the session — the same question, the same evidence, the same write path, and the
- * System model in place of the session's provider.
+ * proposed into an Automatic space waiting for its verdict is verified by the server's worker, where on the runner
+ * path `orbit wiki verify` verified it in the session until P11 — the same question, the same evidence, the same
+ * write path, and the System model in place of the session's provider.
  *
  * WHAT IT DOES, IN THE ORDER OF THE RUNNER'S OWN VERIFIER. It reads its session's waiting ops from the
- * verification list (the same `WikiService.listVerifications` the runner door answers with, so the evidence is
+ * verification list (the same `WikiService.listVerifications` the runner door answered with, so the evidence is
  * the server's own: each record's text read now, redacted, cut — `wiki-verify-evidence.ts`), builds the one-op
  * prompt, asks the System model through the request queue — one request per op, identified by the op's id, so
  * a replayed job reuses the answers it already has — and reports each verdict the moment it is read
  * (`WikiService.recordVerifications`, the one writer of a verdict, which also applies it and leaves the trail).
  *
- * A VERDICT THAT CANNOT BE READ IS REPORTED AS NOTHING. The answer is parsed as strictly as the runner parses
+ * A VERDICT THAT CANNOT BE READ IS REPORTED AS NOTHING. The answer is parsed as strictly as the runner parsed
  * it, and what the parse refuses is not a failure of the run: the op is counted as one left without a verdict,
  * the report names why, and the job goes on — it succeeds, because the ops that did get verdicts are the work's
- * result. That is the 09-30 lesson the runner's command already carries (one op in eighty-nine without a verdict
+ * result. That is the 09-30 lesson the runner's command already carried (one op in eighty-nine without a verdict
  * failed every run): those ops keep waiting, and the next job (or P8's maintenance pass) asks again.
  *
  * WHO IT IS. The job is not a session, and it writes as none: the principal it records verdicts with names the
  * *proposing* session — the ops a verdict is allowed to reach are exactly that session's, by the same rule the
- * runner door applies — and its writes say `system`, because the server made them on its own account. The
+ * runner door applied — and its writes say `system`, because the server made them on its own account. The
  * second pass over what a first pass left without a verdict, and the adoption of ended sessions' ops
  * (`verification.adoption`), are {@link verifyWikiOps}'s options: P8's maintenance run calls this with them.
  *
@@ -221,7 +221,7 @@ async function verifyOneOp(
   } catch (error) {
     if (!(error instanceof WikiJobContentError)) throw error;
     // One op's call that ended for a reason of its own is that op's failure, not the pass's: the runner's
-    // verifier goes on to the next op the same way, and what could not be answered keeps waiting.
+    // verifier went on to the next op the same way, and what could not be answered keeps waiting.
     fail(error.message);
     return false;
   }
@@ -331,7 +331,7 @@ function countVerdict(report: Pick<WikiVerifyReport, 'supported' | 'partial' | '
 }
 
 /**
- * What the server did with one verdict, as the runner's own progress line reads it (Go
+ * What the server did with one verdict, as the runner's own progress line read it (Go
  * `describeWikiVerdictOutcome`). An adopted add whose very content a later op made live is that entry's
  * duplicate whatever the verdict said, and the line names the entry the server found.
  */

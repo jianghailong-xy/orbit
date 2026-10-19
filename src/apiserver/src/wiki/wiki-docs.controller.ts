@@ -9,8 +9,8 @@ import { WikiRolloutGuard } from './wiki-rollout';
 /**
  * The documents, on the user door (contracts/wiki.contract.json `docs.routes`): the owner reads the
  * confirmed plan's directory of documents, one document with its sentences' statuses and its footnotes
- * resolved, and the A–Z index. Reads only — the door has no route that writes a document, which is a
- * maintenance run's work (`RunnerWikiDocsController`).
+ * resolved, and the A–Z index. Reads only — the door has no route that writes a document, which is the
+ * server's own work (its `docs_build` and `maintain` jobs, and an import its container runs: `WikiDocs.write`).
  *
  * A controller of its own rather than more routes on `WikiController`, so the specs that stand that one
  * up by hand construct it exactly as before. Another account's space or document is the plain 404 every

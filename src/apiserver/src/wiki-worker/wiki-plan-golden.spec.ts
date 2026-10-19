@@ -47,15 +47,16 @@ import {
 import { WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 
 /**
- * One repository, one set of materials and answers, one deterministic answer on both paths (project criterion:
- * "the deterministic results — parsing, gate checks — agree on the old path and the new"):
- * `src/shared/src/wiki-plan.fixture.json` holds what the runner's Go code (src/runner-go/wiki_plan_*.go) makes of a
+ * One repository, one set of materials and answers, one deterministic answer (project criterion: "the
+ * deterministic results — parsing, gate checks — agree on the old path and the new"):
+ * `src/shared/src/wiki-plan.fixture.json` holds what the runner's Go code (src/runner-go/wiki_plan_*.go) made of a
  * real checkout — its snapshot index as wiki-repo-op/v1 builds it, every file's text, the plan's materials — and of
  * a set of rounds' answers: the line format read back, the repository's references checked, the materials laid
  * out, every step's prompt, the draft each round assembles, the gate's errors and the repository check. This holds
  * the server's port to the same bytes, reading the repository the server's way: from the index, and from the text
- * a read at the sha answers for the files the gate looks into. The Go side holds itself to the same file
- * (wiki_plan_fixture_test.go), and writes it.
+ * a read at the sha answers for the files the gate looks into. The Go side's test (wiki_plan_fixture_test.go) wrote
+ * the file until P11 deleted the drafting code; the file is frozen since, and that test now only holds the runner's
+ * snapshot of `files` to `index`.
  */
 
 interface FixtureRound {
