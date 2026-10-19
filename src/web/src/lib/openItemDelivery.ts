@@ -43,6 +43,9 @@ export function parseOpenItemDelivery(payload: unknown): OpenItemDeliveryCard | 
     failure: failureOf(card.failure),
     actions: strings(card.actions) as OpenItemAction[],
     landing: landingOf(card.landing),
+    // The landing this failure came from (§2.9 LS1): the card's link to it. Absent in a payload an
+    // older server recorded, which reads as "no landing to open".
+    landingSessionId: stringOrNull(card.landingSessionId),
   };
 }
 

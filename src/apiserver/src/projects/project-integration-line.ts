@@ -542,6 +542,9 @@ interface InFlightJobRow extends IntegrationCheckSource {
   taskId: string | null;
   taskTitle: string | null;
   promotionId: string | null;
+  /** The landing session of the subject this attempt belongs to (§2.9 LS1); null when the job has
+   *  no subject (a row an older build queued). */
+  landingSessionId: string | null;
   claimGeneration: bigint;
   round: number | null;
   step: string | null;
@@ -713,6 +716,9 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     taskId: row.taskId,
     taskTitle: row.taskTitle,
     promotionId: row.promotionId,
+    // §2.9 LS1: the conversation that owns this attempt's landing. It names the landing even before
+    // its session row exists — the id is pre-generated when the subject opens.
+    landingSessionId: row.landingSessionId ?? null,
     generation: row.generation,
     startedAt: row.claimedAt ?? row.createdAt,
     queuedAt: row.createdAt,
@@ -747,6 +753,7 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
     heartbeatAt: job.heartbeatAt,
     waitMs: claimedWaitMs(job),
     jobId: job.jobId,
+    landingSessionId: job.landingSessionId,
     taskId: job.taskId,
     promotionId: job.promotionId ?? null,
     runner: job.runnerName,
@@ -847,6 +854,7 @@ async function readInFlightJobsForProjects(
            j."id", j."state", j."kind", j."phase", j."generation",
            j."task_id" AS "taskId", t."title" AS "taskTitle",
            j."promotion_id" AS "promotionId",
+           l."session_id" AS "landingSessionId",
            j."claim_generation" AS "claimGeneration",
            j."round", j."step",
            j."step_started_at" AS "stepStartedAt",
@@ -901,6 +909,9 @@ async function readInFlightJobsForProjects(
       LEFT JOIN "session" s ON s."id" = j."session_id"
       LEFT JOIN "task" st ON st."id" = s."task_id"
       LEFT JOIN "project_promotion" p ON p."id" = j."promotion_id"
+      -- §2.9 LS1: the landing subject the attempt belongs to, whose pre-generated session id the
+      -- line hands to a client that opens it.
+      LEFT JOIN "project_landing" l ON l."id" = j."landing_id"
       LEFT JOIN "runner" r ON r."id" = j."runner_id"
       -- The runner the work's workspace names is the only one the claim can hand this job to (J-T2);
       -- read for a QUEUED job so WAITING_RUNNER and M-T12's capability speak about that one.

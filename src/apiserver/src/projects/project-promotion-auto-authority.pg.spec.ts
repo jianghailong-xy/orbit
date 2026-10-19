@@ -1286,6 +1286,14 @@ test('(f) J-T13: a refused push ends the landing only — the confirmation stand
       assert.equal(still.confirmedByUserId, w.ownerId);
       assert.ok(still.confirmedAt, 'the confirmation it was already given is kept');
       assert.ok(still.landJobId);
+      // §3.6 / §2.9 LS1: while it is confirmed, the card's check line opens the landing it is on.
+      const confirmed = await stack.promotions.readCurrent(w.ownerId, w.projectId);
+      const round = await stack.db.projectLanding.findFirstOrThrow({
+        where: { projectId: w.projectId, subject: 'PROMOTION' },
+        select: { sessionId: true },
+      });
+      assert.equal(confirmed?.landingSessionId, round.sessionId,
+        'the confirmed candidate names the landing session of its round');
       assert.notEqual(still.landJobId, land.jobId, 'a new generation was queued');
       assert.equal((await approvalCards(stack.db, w.projectId)).length, 1,
         'the card answered when the owner confirmed is the only one');
@@ -1362,6 +1370,14 @@ test('(f) J-T13: the generation queued under the same confirmation checks the ne
       assert.equal(merged.mergedSha, MERGE_COMMIT);
       assert.equal(merged.confirmedByUserId, w.ownerId, 'merged under the owner\'s own press');
       assert.equal(merged.confirmedAutomatically, false);
+      // §3.6 / §2.9 LS1: the merge's receipt opens the landing session that made it.
+      const [receiptView] = await stack.promotions.readMerged(w.ownerId, w.projectId);
+      const round = await stack.db.projectLanding.findFirstOrThrow({
+        where: { projectId: w.projectId, subject: 'PROMOTION' },
+        select: { sessionId: true },
+      });
+      assert.equal(receiptView?.landingSessionId, round.sessionId,
+        'the merged receipt names the landing session that merged it');
       assert.deepEqual(await integrationErrorItems(stack.db, w.projectId), [],
         'nothing about the steal was anybody\'s todo');
       const receipts = await mainReceipts(stack.db, taskId);

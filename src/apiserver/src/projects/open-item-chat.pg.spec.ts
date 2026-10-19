@@ -510,8 +510,25 @@ test('task-scoped: with the coordinator, being handled, superseded, then the own
         stage: 'WITH_COORDINATOR',
         refusal: null,
       });
-      assert.deepEqual(read.row.actions, ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
-        'the coordinator\'s doors are what they were');
+      assert.deepEqual(read.row.actions,
+        ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK', 'OPEN_LANDING'],
+        'the coordinator\'s doors are what they were, plus the landing this failure came from');
+      // §4.8 / §2.9 LS1: the row names the landing session its failure recorded, which is what
+      // the card's "Open the landing ↗" opens.
+      const failedItem = await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id: red.itemId },
+        select: { integrationJobId: true },
+      });
+      const failedJob = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: failedItem.integrationJobId! },
+        select: { landingId: true },
+      });
+      const landingOfFailure = await stack.db.projectLanding.findUniqueOrThrow({
+        where: { id: failedJob.landingId! },
+        select: { sessionId: true },
+      });
+      assert.equal(read.row.landingSessionId, landingOfFailure.sessionId,
+        'the row opens the landing session that failed');
 
       // H1: the coordinator's rerun is in flight — the item is being handled, and still chattable.
       await stack.openItems.retryIntegration(w.ownerId, w.projectId, red.taskId, { reason: REASON },
@@ -555,7 +572,8 @@ test('task-scoped: with the coordinator, being handled, superseded, then the own
         stage: 'WITH_OWNER',
         refusal: null,
       });
-      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+      assert.deepEqual(read.row.actions,
+        ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK', 'OPEN_LANDING'],
         'the owner\'s doors are what they were: the chat is not one of them');
       const rerunAgain = await denied(() => stack.openItems.retryIntegration(w.ownerId, w.projectId,
         red.taskId, { reason: REASON }, w.coordinatorSessionId));
@@ -584,7 +602,8 @@ test('promotion-scoped: the blocked merge\'s item — with the coordinator, bein
         stage: 'WITH_COORDINATOR',
         refusal: null,
       });
-      assert.deepEqual(read.row.actions, ['RETRY', 'REVIEW'], 'the re-check and the merge card, and no chat door');
+      assert.deepEqual(read.row.actions, ['RETRY', 'REVIEW', 'OPEN_LANDING'],
+        'the re-check and the merge card, the landing the check ran in, and no chat door');
 
       await stack.openItems.retryPromotionCheck(w.ownerId, w.projectId, blocked.promotionId,
         { reason: REASON }, w.coordinatorSessionId);
@@ -630,7 +649,8 @@ test('promotion-scoped, escalated ("It is yours"): the chat is open to the owner
       // The presses `openItemActions` gives an escalated failure of the merge — the way back to the
       // coordinator (§4.7), the owner's own re-check and the merge card — and nothing beside them
       // for the chat.
-      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'], 'no new door beside the merge card');
+      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW', 'OPEN_LANDING'],
+        'no new door beside the merge card but the landing its check ran in');
 
       // The owner-only edges, unmoved by a chat being on offer.
       const recheck = await denied(() => stack.openItems.retryPromotionCheck(w.ownerId, w.projectId,
@@ -694,7 +714,8 @@ test('refused with its reason where there is no conversation to take the message
         stage: 'WITH_COORDINATOR',
         refusal: 'NO_COORDINATOR',
       });
-      assert.deepEqual(read.row.actions, ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+      assert.deepEqual(read.row.actions,
+        ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK', 'OPEN_LANDING'],
         'refusing the chat takes no door away either');
     } finally {
       await stack.db.$disconnect();

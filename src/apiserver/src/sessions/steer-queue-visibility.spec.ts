@@ -94,6 +94,8 @@ const ITEM_CARD = {
     upstream: 'main',
     integration: `project/${PROJECT_ID}`,
   },
+  // The item names no landing: this fixture is a failed task, and a task failure lands nothing.
+  landingSessionId: null,
 };
 
 function makeService(
