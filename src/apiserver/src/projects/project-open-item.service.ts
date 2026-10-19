@@ -77,6 +77,8 @@ import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
   endTimedOutLanding,
+  enqueueForDoneTask,
+  pushBoundaryPassed,
   queueLandingRetry,
 } from './project-integration-job';
 import {
@@ -85,7 +87,13 @@ import {
   readInFlightJobs,
   readProjectCodebase,
   readProjectIntegrationView,
+  stopInFlightJob,
 } from './project-integration-line';
+import {
+  INTEGRATION_STOP_NOT_APPLICABLE,
+  INTEGRATION_STOP_OWNER_CHANNEL_ONLY,
+  INTEGRATION_STOP_PUSHED,
+} from './project-integration-abandon';
 import {
   INTEGRATION_RETRY_COORDINATOR_ONLY,
   INTEGRATION_RETRY_IN_FLIGHT,
@@ -372,6 +380,17 @@ export interface PromotionCheckRetried {
   reason: string;
   /** The coordinator's open items about the candidate, now being handled by this check. */
   handlingItemIds: string[];
+}
+
+/** What the owner's LAND_TASK stop (J-T8) left the job as. */
+export interface TaskIntegrationStop {
+  taskId: string;
+  jobId: string;
+  /** CANCELLED: a queued generation ended on the spot. CANCELLING: a live claim was asked, and its
+   *  runner answers (J-T12). ERROR: a claim already past its lease was ended with J12's code. */
+  state: 'CANCELLED' | 'CANCELLING' | 'ERROR';
+  /** J12's answer when the generation was ended on the spot; null when it was only asked. */
+  errorCode: 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
@@ -1885,6 +1904,134 @@ export class ProjectOpenItemService {
       await readProjectCodebase(this.prisma, projectId),
       project.exceptionEscalationSeconds,
     ));
+  }
+
+  /**
+   * The account owner's LAND_TASK stop (`POST /projects/:id/tasks/:taskId/integration/stop`, J-T8).
+   *
+   * WHAT IT DOES. A QUEUED generation ends `CANCELLED` here and now: it was never claimed, nothing
+   * can have pushed, and a queued row with a stop request is never claimed. A RUNNING generation
+   * inside its reporting window is only ASKED — `cancel_requested_at` — and its runner answers
+   * CANCELLED through the result transaction (J-T12); the server must not claim a landing did not
+   * happen while a push may be in flight. A RUNNING generation already silent past its limit (§7.2
+   * V6, read by `readInFlightJobs`) is ended on the spot as `ERROR` with J12's code, by the same
+   * compare-and-set every stop door uses (`stopInFlightJob`): a request written onto it would never
+   * be collected, and it would hold its serial key for ever.
+   *
+   * WHAT IT REFUSES. A generation past the push boundary (J-T4) is not stopped at all: the merge
+   * may already have happened, and only the runner's result can say so. With no queued or running
+   * LAND_TASK there is nothing to stop. The door is the owner's alone — a coordinator stops its
+   * work by reopening the task, which is J-T8's other trigger.
+   *
+   * THE DONE BEHIND A STOPPED GENERATION (J-T8, revision 24). A task reopened and written DONE
+   * again while this generation was in flight could not queue its own generation (J3's one-inflight
+   * index) and kept its `task_reopen_intent`. The generation has just stopped being live — whether
+   * by ending CANCELLED or by being ended ERROR — so the deferred DONE is queued here, in this same
+   * transaction, under the project binding (rank 55) taken before the job row (rank 60).
+   */
+  async stopTaskIntegrationAsOwner(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    actingSessionId: string | undefined,
+  ): Promise<TaskIntegrationStop> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        code: INTEGRATION_STOP_OWNER_CHANNEL_ONLY,
+        message:
+          'the stop door is the account owner\'s, and an acting session has no way through it. A '
+          + 'coordinator that wants work stopped reopens the task (task_reopen): its next DONE '
+          + 'queues the generation the line should land.',
+      });
+    }
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const project = await tx.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: { id: true },
+      });
+      if (!project) throw new NotFoundException('project not found');
+      const task = await tx.task.findFirst({
+        where: { id: taskId, ownerId },
+        select: { id: true, projectId: true },
+      });
+      if (!task || task.projectId !== projectId) {
+        throw new NotFoundException('task not found in this project');
+      }
+      // J3 allows at most one in-flight LAND_TASK per task; the newest is the one that would be
+      // stopped, and a task with none has nothing for this door.
+      const landing = await tx.projectIntegrationJob.findFirst({
+        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true, state: true, phase: true, progressProtocol: true,
+          pushReportedGeneration: true, claimGeneration: true,
+        },
+      });
+      if (!landing) {
+        throw new ConflictException({
+          code: INTEGRATION_STOP_NOT_APPLICABLE,
+          message: 'this task has no queued or running landing on this project\'s integration line, '
+            + 'so there is nothing to stop. A task whose landing already finished is left as it '
+            + 'finished: read the job list for what it answered.',
+        });
+      }
+      // J-T4's boundary, read as a row fact for a v2 claim and from `phase` for a legacy one. A
+      // generation past it may have pushed, and stopping it would claim otherwise.
+      if (landing.state === 'RUNNING' && pushBoundaryPassed(landing)) {
+        throw new ConflictException({
+          code: INTEGRATION_STOP_PUSHED,
+          message: 'this landing has passed the point where it may push — the server recorded its '
+            + 'PUSH report, or a legacy claim reported PUSH or VERIFY — so the merge may already '
+            + 'have happened. A stop cannot claim it did not: wait for its result, which is the fact.',
+        });
+      }
+      // Rank 55 before the job row's rank-60 write, exactly as the result transaction takes it for
+      // a stopped LAND_TASK: that is what orders this stop against a DONE queueing the next
+      // generation, and it is why the deferred enqueue below can read the marker safely.
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "project_codebase"
+         WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
+         FOR UPDATE`);
+      const stoppedAt = new Date();
+      const stopped = await stopInFlightJob(tx, { projectId, jobId: landing.id, now: stoppedAt });
+      if (stopped.outcome === 'NONE') {
+        throw new ConflictException({
+          code: INTEGRATION_STOP_NOT_APPLICABLE,
+          message: 'this landing moved on while the stop was being decided — it was claimed, '
+            + 'finished or stopped by another press. Read the job again.',
+        });
+      }
+      if (stopped.outcome !== 'STOP_REQUESTED') {
+        await this.queueDeferredDoneAfterStop(tx, ownerId, taskId);
+      }
+      return {
+        taskId,
+        jobId: landing.id,
+        state: stopped.outcome === 'CANCELLED'
+          ? 'CANCELLED'
+          : stopped.outcome === 'ENDED' ? 'ERROR' : 'CANCELLING',
+        errorCode: stopped.errorCode,
+      } satisfies TaskIntegrationStop;
+    }, loggedRetry(this.logger, 'projectOpenItem.stopTaskIntegrationAsOwner'));
+  }
+
+  /**
+   * J-T8's deferred DONE (revision 24): a stopped generation releases the enqueue a second DONE was
+   * owed. Read again here, inside the transaction that wrote the terminal state; nothing is queued
+   * unless the marker is still there and the task is DONE at this instant.
+   */
+  private async queueDeferredDoneAfterStop(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+  ): Promise<void> {
+    const intent = await tx.taskReopenIntent.findFirst({
+      where: { taskId }, select: { taskId: true },
+    });
+    if (!intent) return;
+    const task = await tx.task.findFirst({ where: { id: taskId }, select: { status: true } });
+    if (task?.status !== 'DONE') return;
+    await enqueueForDoneTask(tx, ownerId, taskId);
   }
 
   /**

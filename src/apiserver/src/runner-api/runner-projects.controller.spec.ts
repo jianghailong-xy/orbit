@@ -341,6 +341,76 @@ test('skipIntegrationMergeCheck is exposed as POST projects/:id/tasks/:taskId/in
   }
 });
 
+test('abandonIntegrationJob is exposed as POST projects/:id/integration/jobs/:jobId/abandon', () => {
+  const handler = RunnerProjectsController.prototype.abandonIntegrationJob;
+  assert.equal(
+    Reflect.getMetadata(PATH_METADATA, handler),
+    'projects/:id/integration/jobs/:jobId/abandon',
+  );
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'abandonIntegrationJob') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  for (const id of ['id', 'jobId']) {
+    const arg = Object.values(args ?? {}).find((candidate) => candidate.data === id);
+    assert.ok(arg, `no ${id} param on abandonIntegrationJob`);
+    assert.ok(
+      (arg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+      `${id} does not resolve through PublicIdPipe`,
+    );
+  }
+});
+
+/**
+ * The abandon door is the retry doors' shape: the runner owner's scope, the acting session as the
+ * authority, and the reason trimmed so the record keeps the sentence the caller meant. A blank
+ * reason is refused before the service — an abandonment nobody explained is a record with only its
+ * consequence on it.
+ */
+test('abandonIntegrationJob abandons in the runner owner scope, as the acting session', async () => {
+  const seen: unknown[] = [];
+  const integrationJobs = {
+    abandon: async (input: unknown) => {
+      seen.push(input);
+      return {
+        abandoned: {
+          jobId: 'job-1', kind: 'LAND_TASK', state: 'ERROR',
+          errorCode: 'PUSH_OUTCOME_UNKNOWN', openItemId: null,
+        },
+        after: null,
+      };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    undefined,
+    undefined,
+    integrationJobs,
+  );
+
+  const abandoned = await controller.abandonIntegrationJob(
+    RUNNER, ` ${SESSION_ID} `, 'project-1', 'job-1', { reason: ' its runner is gone ' },
+  );
+
+  assert.deepEqual(seen, [{
+    jobId: 'job-1',
+    projectId: 'project-1',
+    ownerId: 'owner-1',
+    by: 'coordinator',
+    sessionId: SESSION_ID,
+    reason: 'its runner is gone',
+  }]);
+  assert.equal(abandoned.state, 'ERROR');
+  await assert.rejects(
+    controller.abandonIntegrationJob(RUNNER, SESSION_ID, 'project-1', 'job-1', { reason: '   ' }),
+    /reason is required/,
+  );
+  assert.equal(seen.length, 1, 'a blank reason never reached the service');
+});
+
 test('skipIntegrationMergeCheck skips in the runner owner scope, as the acting session and its card', async () => {
   const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'skipIntegrationMergeCheck') as
     | Record<string, { data?: unknown }>
@@ -786,6 +856,11 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
+    // `integration_abandon` (§2.2 J-T10): the coordinator ending one of its project's running jobs
+    // whose runner has stopped reporting, with a reason. On the machine door because the acting
+    // session is the authority — the server checks it against the project's current coordinator —
+    // and the gate is the claim's own lease expiry, not an item's assignment.
+    'abandonIntegrationJob',
     // A coordinator putting a question to the account owner (§5.2 R7). It belongs on the machine
     // door and nowhere else: only the conversation a project is coordinated FROM may ask, and that
     // conversation reaches Orbit through this door. Asking grants nothing and starts nothing — the
@@ -858,6 +933,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     ]),
   );
   assert.deepEqual(verbs, {
+    abandonIntegrationJob: RequestMethod.POST,
     askOwner: RequestMethod.POST,
     createProject: RequestMethod.POST,
     // POST because it may open one, like the owner's open and replace. The verb is not the

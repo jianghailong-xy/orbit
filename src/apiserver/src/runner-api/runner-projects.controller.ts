@@ -7,6 +7,8 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpCode,
+  HttpException,
   Optional,
   Param,
   Patch,
@@ -18,6 +20,7 @@ import { Prisma, Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import { type SessionLifecycleActor } from '../projects/attempt-budget';
 import {
+  AbandonIntegrationJobDto,
   AskOwnerDto,
   CreateProjectDto,
   HandOverOpenItemDto,
@@ -42,6 +45,10 @@ import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import {
+  IntegrationJobRelay,
+  integrationAbandonHttpError,
+} from './integration-job-relay';
 
 /**
  * A project's durable context, read and written by `orbit project` and the `project_*` MCP tools
@@ -94,6 +101,12 @@ export class RunnerProjectsController {
      * one route sends without charging, which is what every hand-built controller in the specs does.
      */
     @Optional() private readonly attempts?: SessionAttemptService,
+    /**
+     * The integration queue's own service, for the coordinator's abandon door (J-T10). Provided by
+     * RunnerApiModule; `@Optional()` for the hand-built specs that exercise other routes here and
+     * provide only the collaborators those routes reach. Absent, that one route answers 503.
+     */
+    @Optional() private readonly integrationJobs?: IntegrationJobRelay,
   ) {}
 
   /**
@@ -590,6 +603,59 @@ export class RunnerProjectsController {
     @Body() dto: RetryIntegrationDto,
   ) {
     return this.openItems.retryPromotionCheck(runner.ownerId, id, promotionId, dto, sessionId?.trim());
+  }
+
+  /**
+   * A coordinator abandoning one of its project's running jobs whose runner has stopped reporting
+   * (`integration_abandon`, contract §2.2 J-T10).
+   *
+   * The acting session is the authority: it must be the project's CURRENT coordinator, checked by
+   * the relay under the transaction that ends the job, and a missing or blank header is never read
+   * as the account owner — the owner's abandon door is the user API's. The reason is required and
+   * kept on `error_detail`: an abandonment ends work nobody will report, so why it was safe is the
+   * whole of what the record gains. The gate is §7.2 V6's lease expiry, read the same way the job
+   * list's `timedOut` is; no retry door's item ownership, Automatic switch or owner-blocker rule
+   * applies. It never queues the next generation.
+   */
+  @Post('projects/:id/integration/jobs/:jobId/abandon')
+  @HttpCode(200)
+  async abandonIntegrationJob(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() dto: AbandonIntegrationJobDto,
+  ) {
+    const reason = typeof dto?.reason === 'string' ? dto.reason.trim() : '';
+    if (!reason) {
+      throw new BadRequestException({
+        code: 'INTEGRATION_ABANDON_REASON_REQUIRED',
+        message: 'a reason is required: say why this job\'s runner is not coming back. It stays on '
+          + 'the job as the record of why the work was given up.',
+      });
+    }
+    if (!this.integrationJobs) {
+      throw new HttpException(
+        { code: 'INTEGRATION_QUEUE_UNAVAILABLE', message: 'this control plane runs no integration queue' },
+        503,
+      );
+    }
+    try {
+      const applied = await this.integrationJobs.abandon({
+        jobId,
+        projectId: id,
+        ownerId: runner.ownerId,
+        by: 'coordinator',
+        sessionId: sessionId?.trim(),
+        reason,
+      });
+      if (applied.after && this.openItems) {
+        await this.openItems.deliverForItems(applied.after.openItemIds);
+      }
+      return applied.abandoned;
+    } catch (error) {
+      throw integrationAbandonHttpError(error);
+    }
   }
 
   /**

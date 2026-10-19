@@ -35,6 +35,7 @@ import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
+import { MAX_INTEGRATION_ABANDON_REASON } from './project-integration-abandon';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
 import { MAX_INTEGRATION_SKIP_REASON } from './project-integration-skip-check';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
@@ -762,6 +763,16 @@ export class RetryIntegrationDto {
  * landing. The account owner's own door needs no card (they are the person it would ask) and reads
  * none.
  */
+/**
+ * A coordinator abandoning one of its project's running jobs (`integration_abandon`, contract §2.2
+ * J-T10). The reason is required: the job ends as an error nobody will report, and the sentence is
+ * the record of why it was safe to end. The owner's own door carries none — the account owner's
+ * press is the decision.
+ */
+export class AbandonIntegrationJobDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_ABANDON_REASON) reason!: string;
+}
+
 export class SkipMergeCheckDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
   /** The card's own id, in either spelling: the runner hands back the uuid its own create answered

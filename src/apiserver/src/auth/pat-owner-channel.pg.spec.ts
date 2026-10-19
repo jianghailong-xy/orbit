@@ -253,6 +253,19 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200,
       observe: async () => (await projectRow(anyProject)).exceptionEscalationSeconds,
     },
+    // The two doors that take work off the line without retrying it (§2.2 J-T8, J-T10). The ids
+    // name nothing, so a login is answered not-found — the point held here is that the token is
+    // refused before either door is reached.
+    {
+      route: 'POST /projects/:id/integration/jobs/:jobId/abandon',
+      path: `/projects/${anyProject}/integration/jobs/${nobody()}/abandon`,
+      login: 404,
+    },
+    {
+      route: 'POST /projects/:id/tasks/:taskId/integration/stop',
+      path: `/projects/${anyProject}/tasks/${nobody()}/integration/stop`,
+      login: 404,
+    },
     { route: 'POST /wiki/entries/:id/reject', path: `/wiki/entries/${nobody()}/reject`, body: { reason: 'not_true' }, login: 404 },
     { route: 'POST /wiki/entries/:id/confirm', path: `/wiki/entries/${nobody()}/confirm`, login: 404 },
     {

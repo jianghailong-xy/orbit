@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { HttpException, Injectable, Logger, Optional } from '@nestjs/common';
 import { CreatorType, Prisma } from '@prisma/client';
 import {
   IntegrationCheckResult,
@@ -40,10 +40,18 @@ import {
   landingJudgedTooEarly,
   landingLeftWorkBehind,
   openItemKindForJobState,
+  pushBoundaryPassed,
   queueLandingBehindTheWork,
   shortBranchName,
+  timedOutErrorCode,
   workBranchEndedOn,
 } from '../projects/project-integration-job';
+import {
+  abandonPushOutcome,
+  INTEGRATION_ABANDON_COORDINATOR_ONLY,
+  INTEGRATION_ABANDON_LEASE_LIVE,
+  INTEGRATION_ABANDON_NOT_RUNNING,
+} from '../projects/project-integration-abandon';
 import {
   ownerHoldOnHandledItems,
   recordIntegrationFailure,
@@ -55,7 +63,7 @@ import {
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
 import { mainBranchOf } from '../projects/project-criterion-landing';
-import { readProjectCodebase } from '../projects/project-integration-line';
+import { readInFlightJobs, readProjectCodebase } from '../projects/project-integration-line';
 import {
   LIVE_PROMOTION_STATES,
   PromotionState,
@@ -156,8 +164,24 @@ export class IntegrationJobRelay {
     return applyIntegrationJobResult(
       this.prisma,
       { jobId, runnerId, ownerId, body },
-      loggedRetry(this.logger, 'integrationJob.applyResult'),
+      this.applyResultRetry(),
     );
+  }
+
+  /** §2.2 J-T10 — see `abandonIntegrationJob`. */
+  abandon(
+    input: Parameters<typeof abandonIntegrationJob>[1],
+  ): Promise<{ abandoned: AbandonedIntegrationJob; after: IntegrationResultAftermath | null }> {
+    return abandonIntegrationJob(this.prisma, input, this.applyResultRetry());
+  }
+
+  /**
+   * The retry both doors of the result transaction run under. `abandonIntegrationJob` writes
+   * through `applyIntegrationJobResult`, so the operation a retried conflict is attributed to is
+   * the same one whether a runner reported the end or the platform decided it.
+   */
+  private applyResultRetry(): Parameters<typeof withTransactionRetry>[2] {
+    return loggedRetry(this.logger, 'integrationJob.applyResult');
   }
 }
 
@@ -616,6 +640,77 @@ export class IntegrationJobRefused extends Error {
   }
 }
 
+/** Why the abandon door refused, in the shape the controllers turn into a status code (J-T10). */
+export type IntegrationAbandonRefusal =
+  | 'NOT_FOUND'
+  | 'COORDINATOR_ONLY'
+  | 'NOT_RUNNING'
+  | 'LEASE_LIVE';
+
+export const INTEGRATION_ABANDON_REFUSAL_STATUS: Record<IntegrationAbandonRefusal, number> = {
+  NOT_FOUND: 404,
+  COORDINATOR_ONLY: 403,
+  NOT_RUNNING: 409,
+  LEASE_LIVE: 409,
+};
+
+/** The `code` each refusal answers with, as §4.7's route table spells it. */
+export const INTEGRATION_ABANDON_REFUSAL_CODE: Record<IntegrationAbandonRefusal, string> = {
+  // No route table names this one; another account's job, or one of another project, is answered
+  // as an id that names nothing, exactly as the retry and job-list doors answer it.
+  NOT_FOUND: 'INTEGRATION_ABANDON_NOT_FOUND',
+  COORDINATOR_ONLY: INTEGRATION_ABANDON_COORDINATOR_ONLY,
+  NOT_RUNNING: INTEGRATION_ABANDON_NOT_RUNNING,
+  LEASE_LIVE: INTEGRATION_ABANDON_LEASE_LIVE,
+};
+
+export class IntegrationAbandonRefused extends Error {
+  constructor(readonly refusal: IntegrationAbandonRefusal, message?: string) {
+    super(message ?? refusal);
+  }
+}
+
+/**
+ * The error a door sends: the refusal classes carry a code and a status, and everything else is
+ * rethrown untouched. Used by the owner door and the coordinator's runner door alike, so one
+ * refusal cannot read two ways.
+ */
+export function integrationAbandonHttpError(error: unknown): unknown {
+  if (error instanceof IntegrationAbandonRefused) {
+    return new HttpException(
+      { code: INTEGRATION_ABANDON_REFUSAL_CODE[error.refusal], message: error.message },
+      INTEGRATION_ABANDON_REFUSAL_STATUS[error.refusal],
+    );
+  }
+  if (error instanceof IntegrationJobRefused) {
+    return new HttpException(
+      { code: error.refusal, message: error.message },
+      INTEGRATION_RESULT_REFUSAL_STATUS[error.refusal],
+    );
+  }
+  return error;
+}
+
+/**
+ * The extra facts a PLATFORM-written terminal state carries (J-T10's abandon door).
+ *
+ * A result is reported by the runner that holds the claim, and its fence is
+ * `(leaseOwner, claimGeneration)`. The platform ends a job nobody is reporting any more, so it has
+ * no lease owner to fence on: the gate is re-decided inside the result transaction — the job is
+ * RUNNING, its claim's lease has expired by §7.2 V6, and the coordinator (on the runner door) is
+ * the project's current one — and the terminal write is a compare-and-set on the state,
+ * `claim_generation`, and the `heartbeat_at` the timeout was judged from. `claim_generation` moves
+ * on, so a report or result that arrives after this end is refused.
+ */
+export interface IntegrationJobPlatformEnd {
+  /** Which channel pressed: the owner's user door or the project coordinator's runner door. */
+  by: 'owner' | 'coordinator';
+  /** The acting session the runner door names; checked against the project's coordinator pointer. */
+  sessionId?: string;
+  /** The coordinator's explanation, kept on `error_detail`; the owner's door carries none. */
+  reason?: string;
+}
+
 /**
  * A heartbeat from the runner working on a job (J-T4): the phase it reached, the current check, and
  * the lease renewal that keeps another runner from taking it over.
@@ -882,11 +977,20 @@ export interface IntegrationResultAftermath {
  */
 export async function applyIntegrationJobResult(
   prisma: PrismaService,
-  /** `ownerId`, the reporting runner's owner: another account's job is answered as one that does not exist. */
-  input: { jobId: string; runnerId?: string; ownerId?: string; body: IntegrationJobResultRequest },
+  /**
+   * `ownerId`, the reporting runner's owner: another account's job is answered as one that does not
+   * exist. `projectId` is set only by the abandon door, which addresses a job under a project; the
+   * result route names the job alone.
+   */
+  input: {
+    jobId: string; projectId?: string; runnerId?: string; ownerId?: string;
+    body: IntegrationJobResultRequest;
+  },
   onRetry?: Parameters<typeof withTransactionRetry>[2],
+  /** Set only by the abandon door (J-T10): the platform, not a runner, writes this terminal state. */
+  platformEnd?: IntegrationJobPlatformEnd,
 ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
-  const body = input.body;
+  let body = input.body;
   const state = body?.state;
   if (!INTEGRATION_JOB_STATES.includes(state as never) || !isTerminalJobState(state)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
@@ -905,12 +1009,19 @@ export async function applyIntegrationJobResult(
     // that it is still live — an id that names nothing is what it gets (T2 of the tenant isolation
     // census). A runner of the same owner meets the claim fence below, as J-T3 has it.
     const job = await tx.projectIntegrationJob.findFirst({
-      where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
+      where: {
+        id: input.jobId,
+        ...(input.projectId != null ? { projectId: input.projectId } : {}),
+        ...(input.ownerId != null ? { ownerId: input.ownerId } : {}),
+      },
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
         codebaseId: true, cancelRequestedAt: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
+        // The columns J-T10's gate and J12's answer are read from: the phase the job stopped at,
+        // the protocol the current claim was made under, and whether that claim recorded a PUSH.
+        phase: true, progressProtocol: true, pushReportedGeneration: true,
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
         retryRequestedByUserId: true,
@@ -921,7 +1032,75 @@ export async function applyIntegrationJobResult(
       },
     });
     if (!job) throw new IntegrationJobRefused('NOT_FOUND');
+    /**
+     * J-T10's common gate, decided in THIS transaction and before anything is written: the caller
+     * is the project's current coordinator (the runner door), the job is RUNNING, and its claim's
+     * lease has expired by §7.2 V6's one definition (read through `readInFlightJobs`, which also
+     * knows that a job waiting on this runner's local lock is not timed out). No retry door's item
+     * ownership, Automatic switch or owner-blocker rule applies: an abandoned job is not a failure
+     * anybody is deciding, it is a runner that will never report again.
+     */
+    let platformHeartbeatAt: Date | null | undefined;
+    if (platformEnd) {
+      const project = await tx.project.findFirst({
+        where: { id: job.projectId, ownerId: job.ownerId },
+        select: { coordinatorSessionId: true },
+      });
+      if (!project) throw new IntegrationAbandonRefused('NOT_FOUND');
+      if (platformEnd.by === 'coordinator'
+          && (!platformEnd.sessionId || project.coordinatorSessionId !== platformEnd.sessionId)) {
+        throw new IntegrationAbandonRefused('COORDINATOR_ONLY',
+          'only the conversation this project is coordinated from may abandon one of its jobs. '
+          + 'A task\'s own run does not decide what happens to the work it finished, and another '
+          + 'project\'s coordinator does not decide this one\'s.');
+      }
+      if (job.state !== 'RUNNING') {
+        throw new IntegrationAbandonRefused('NOT_RUNNING',
+          `this job is ${job.state}, not RUNNING: there is no claim to abandon. A queued job is `
+          + 'stopped by the stop door, and a finished one has already been written down.');
+      }
+      const [silent] = await readInFlightJobs(tx, job.projectId, job.id);
+      if (!silent || silent.state !== 'RUNNING') {
+        throw new IntegrationAbandonRefused('NOT_RUNNING',
+          'this job stopped being RUNNING while the abandon was being decided: there is no claim '
+          + 'left to abandon. Read the job again.');
+      }
+      if (!silent.timedOut) {
+        throw new IntegrationAbandonRefused('LEASE_LIVE',
+          'this job\'s runner is still reporting: its lease has not expired, so the work is not '
+          + 'lost and abandoning it would end a job somebody is working on. Wait for its result, or '
+          + 'stop it if it must not go on.');
+      }
+      // The gate's own answer, and the answer J12 gives for this kind and claim. Anything that
+      // may have pushed says so: only a CHECK_PROMOTION, or a landing whose current claim is v2
+      // and recorded no PUSH, may claim nothing was pushed.
+      const errorCode = timedOutErrorCode(job);
+      const pushRecorded = pushBoundaryPassed(job);
+      platformHeartbeatAt = silent.heartbeatAt;
+      body = {
+        ...body,
+        claimGeneration: job.claimGeneration.toString(),
+        leaseOwner: job.claimLeaseOwner ?? '',
+        ...(job.phase ? { phase: job.phase as IntegrationJobPhase } : {}),
+        errorCode,
+        errorDetail: {
+          abandoned: true,
+          by: platformEnd.by,
+          ...(platformEnd.sessionId ? { sessionId: platformEnd.sessionId } : {}),
+          ...(platformEnd.reason ? { reason: platformEnd.reason } : {}),
+          phase: job.phase,
+          lastReportAt: (silent.heartbeatAt ?? job.claimedAt ?? new Date()).toISOString(),
+          limitSeconds: silent.limitSeconds,
+          runnerName: silent.runnerName,
+          pushRecorded,
+          pushOutcome: abandonPushOutcome(errorCode),
+        },
+      };
+    }
     if (isTerminalJobState(job.state)) {
+      if (platformEnd) {
+        throw new IntegrationAbandonRefused('NOT_RUNNING', 'this job is already terminal');
+      }
       // Not an error the runner has to do anything about: a result whose response was lost is
       // resent, and the second copy finds the job already written down.
       return {
@@ -929,11 +1108,11 @@ export async function applyIntegrationJobResult(
         after: null,
       };
     }
-    if (
+    if (!platformEnd && (
       job.claimLeaseOwner !== body.leaseOwner
       || job.claimGeneration !== BigInt(body.claimGeneration)
       || (input.runnerId != null && job.runnerId !== input.runnerId)
-    ) {
+    )) {
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
 
@@ -952,7 +1131,12 @@ export async function applyIntegrationJobResult(
     // A lock taken only on what a plain pre-read saw would close neither: the DONE transaction
     // never waits for a reader, so the result could commit after a DONE that found this generation
     // still in flight, and both would decide the other was queueing.
-    const stoppedLanding = job.kind === 'LAND_TASK' && job.taskId != null && cancelRequested;
+    //
+    // An ABANDONED LAND_TASK is one of the stopped generations J-T8 names (revision 24): the
+    // DONE that was deferred behind this generation is queued in the transaction that ends it,
+    // even though abandoning never retries the abandoned generation itself.
+    const stoppedLanding = job.kind === 'LAND_TASK' && job.taskId != null
+      && (cancelRequested || platformEnd !== undefined);
     if (stoppedLanding) {
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "project_codebase"
@@ -1255,38 +1439,60 @@ export async function applyIntegrationJobResult(
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
-    await tx.projectIntegrationJob.update({
-      where: { id: job.id },
-      data: {
-        // The state the row is WRITTEN with, which is the answer rather than the spelling an older
-        // runner sent it in: a no-commit answer recorded as `ALREADY_LANDED` is the positive
-        // conclusion this exists to stop writing, and a row that says so is what a promotion card
-        // and a landing lane go on to read.
-        state: effectiveState,
-        phase: INTEGRATION_JOB_PHASES.includes(body.phase as never) ? body.phase : undefined,
-        sourceSha: body.sourceSha ?? undefined,
-        targetShaBefore: body.targetShaBefore ?? undefined,
-        upstreamSha: body.upstreamSha ?? undefined,
-        mainSyncSha: body.mainSyncSha ?? undefined,
-        testedSha: body.testedSha ?? undefined,
-        testedTreeSha: body.testedTreeSha ?? undefined,
-        landedSha: body.landedSha ?? undefined,
-        landedTreeSha: body.landedTreeSha ?? undefined,
-        aheadOfUpstream: body.aheadOfUpstream ?? undefined,
-        // The runner's measurement and nothing else (0346): only a boolean it sent is written, so a
-        // row an older runner answered keeps NULL — "not measured" — which §1.4 withholds on.
-        sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
-        // The same for the other measurement a NOTHING_TO_LAND carries (0410).
-        sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
-        checks: checks as unknown as Prisma.InputJsonValue,
-        conflicts: (body.conflicts ?? []).slice(0, 200),
-        errorCode: body.errorCode ?? undefined,
-        errorDetail: (body.errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
-        receiptIds: [...receiptIds, ...promotionReceiptIds],
-        finishedAt: new Date(),
-        heartbeatAt: new Date(),
-      },
-    });
+    const terminalData = {
+      // The state the row is WRITTEN with, which is the answer rather than the spelling an older
+      // runner sent it in: a no-commit answer recorded as `ALREADY_LANDED` is the positive
+      // conclusion this exists to stop writing, and a row that says so is what a promotion card
+      // and a landing lane go on to read.
+      state: effectiveState,
+      phase: INTEGRATION_JOB_PHASES.includes(body.phase as never) ? body.phase : undefined,
+      sourceSha: body.sourceSha ?? undefined,
+      targetShaBefore: body.targetShaBefore ?? undefined,
+      upstreamSha: body.upstreamSha ?? undefined,
+      mainSyncSha: body.mainSyncSha ?? undefined,
+      testedSha: body.testedSha ?? undefined,
+      testedTreeSha: body.testedTreeSha ?? undefined,
+      landedSha: body.landedSha ?? undefined,
+      landedTreeSha: body.landedTreeSha ?? undefined,
+      aheadOfUpstream: body.aheadOfUpstream ?? undefined,
+      // The runner's measurement and nothing else (0346): only a boolean it sent is written, so a
+      // row an older runner answered keeps NULL — "not measured" — which §1.4 withholds on.
+      sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
+      // The same for the other measurement a NOTHING_TO_LAND carries (0410).
+      sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
+      checks: checks as unknown as Prisma.InputJsonValue,
+      conflicts: (body.conflicts ?? []).slice(0, 200),
+      errorCode: body.errorCode ?? undefined,
+      errorDetail: (body.errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
+      receiptIds: [...receiptIds, ...promotionReceiptIds],
+      finishedAt: new Date(),
+      heartbeatAt: new Date(),
+    };
+    if (platformEnd) {
+      // J-T10's compare-and-set: still RUNNING under the claim this gate was judged on, at the very
+      // heartbeat the lease expiry was read from. A report that arrived since moved the heartbeat
+      // and a takeover moved the generation; either way the end is refused rather than written over
+      // work that is talking again, and `claim_generation + 1` closes the door on late reports and
+      // results (they are ALREADY_FINAL / rejected).
+      const ended = await tx.projectIntegrationJob.updateMany({
+        where: {
+          id: job.id,
+          state: 'RUNNING',
+          claimGeneration: job.claimGeneration,
+          ...(platformHeartbeatAt === null
+            ? { heartbeatAt: null }
+            : { heartbeatAt: platformHeartbeatAt }),
+        },
+        data: { ...terminalData, claimGeneration: { increment: 1 } },
+      });
+      if (ended.count !== 1) {
+        throw new IntegrationAbandonRefused('LEASE_LIVE',
+          'this job\'s runner reported again while the abandon was being decided, so its claim is '
+          + 'not expired any more. Read the job again.');
+      }
+    } else {
+      await tx.projectIntegrationJob.update({ where: { id: job.id }, data: terminalData });
+    }
 
     // §2.6, the other half: the line answered about a branch this task's work did not end on, so the
     // commits are on a branch nothing has offered and nothing will — the row just written is terminal
@@ -1366,7 +1572,12 @@ export async function applyIntegrationJobResult(
     // J-T8: a job somebody asked to stop does not open a card for the work it is stopping. A
     // failure it reports before it gets the stop is a fact about work nobody is waiting for any
     // more — the task was reopened or taken away, the candidate was superseded or retired — and an
-    // item about it would be a todo with no door its owner would take.
+    // item about it would be a todo with no door its owner would take. Revision 24 extends that to
+    // a STOPPED generation that is then abandoned: stop and abandon both say it is not wanted.
+    // Abandoning a generation that was NOT stopped is the other case and keeps the item (J-T10 and
+    // §4's INTEGRATION_ERROR row): its work is not on the line, no result will ever say so, and the
+    // item is the door through which the coordinator reaches `integration_retry`. The condition is
+    // therefore `cancelRequested` alone, not the abandon path as such.
     if (itemKind && !candidateMovedOn && !cancelRequested) {
       // A promotion's item is named after the merge it is about: into the project's main branch.
       const mainBranch = job.kind === 'LAND_TASK'
@@ -1460,6 +1671,88 @@ export async function applyIntegrationJobResult(
       },
     };
   }, onRetry);
+}
+
+/** What the abandon door answers once the job is ended. */
+export interface AbandonedIntegrationJob {
+  jobId: string;
+  kind: string;
+  state: 'ERROR';
+  /** J12's answer for this kind and claim: the only sentence the record may say about the push. */
+  errorCode: 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN';
+  openItemId: string | null;
+}
+
+/**
+ * J-T10's abandon (contract §2.2, §4.7): end a RUNNING job whose runner has stopped reporting, as
+ * `ERROR`, through the SAME result transaction every runner-reported end goes through.
+ *
+ * WHY IT SHARES THAT TRANSACTION. Everything a result implies has to be written with it or not at
+ * all, and an abandoned job implies the same things: its promotion's `BLOCKED` state (an error the
+ * candidate's owner has to look at) and the J-T8 deferred DONE an abandoned `LAND_TASK` was
+ * holding. Writing them anywhere else would let a reader see a terminal job with a transition
+ * still owed, or the reverse.
+ *
+ * THE FAILURE ITEM, AND THE ONE IT DOES NOT OPEN. An abandoned generation is an `ERROR` like any
+ * other, so it opens the project's `INTEGRATION_ERROR` item (§4 X table names J-T10's codes as a
+ * source): the work is not on the line, no runner will ever report on it, and that item is how the
+ * coordinator reaches `integration_retry`. The exception (J-T8, revision 24) is the generation
+ * that was ALREADY ASKED TO STOP (`cancel_requested_at` set): stop and abandon both say that
+ * generation is not wanted, and a card asking somebody to fix work deliberately given up would
+ * have no door its owner would take. A promotion is blocked either way.
+ *
+ * WHAT IT DOES NOT DO. It does not queue the next generation (J-T1b): abandonment is "only end,
+ * never re-queue", for all three kinds. The one exception is J-T8's deferred DONE — the enqueue a
+ * task's second DONE was already owed when this generation was still in flight, which
+ * `applyIntegrationJobResult` performs when the marker and the task's DONE are still there.
+ *
+ * WHICH ERROR CODE. `timedOutErrorCode`, J12's one rule, read off the row inside the transaction:
+ * `CHECK_PROMOTION` is always `RUNNER_LOST` (it never pushes); `LAND_TASK` / `LAND_PROMOTION` are
+ * `RUNNER_LOST` only when the current claim is v2 and `push_reported_generation IS NULL`; every
+ * other claim, legacy included, is `PUSH_OUTCOME_UNKNOWN` and may not claim nothing was pushed.
+ */
+export async function abandonIntegrationJob(
+  prisma: PrismaService,
+  input: {
+    jobId: string;
+    projectId: string;
+    /** The tenant the caller acts in: another account's project or job answers as one that is not there. */
+    ownerId: string;
+    by: 'owner' | 'coordinator';
+    /** The coordinator's acting session, checked against the project's current one. */
+    sessionId?: string;
+    /** The coordinator's explanation, kept on `error_detail`; the owner's door carries none. */
+    reason?: string;
+  },
+  onRetry?: Parameters<typeof withTransactionRetry>[2],
+): Promise<{ abandoned: AbandonedIntegrationJob; after: IntegrationResultAftermath | null }> {
+  const applied = await applyIntegrationJobResult(prisma, {
+    jobId: input.jobId,
+    projectId: input.projectId,
+    ownerId: input.ownerId,
+    // The claim the fence names is decided inside the transaction; these are placeholders the
+    // platform-end branch replaces with the row's own claim before anything reads them.
+    body: { claimGeneration: '0', leaseOwner: '', state: 'ERROR' },
+  }, onRetry, {
+    by: input.by,
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.reason ? { reason: input.reason } : {}),
+  });
+  // The row is terminal and immutable now (J4), so this read is a fact, not a race.
+  const row = await prisma.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: input.jobId },
+    select: { kind: true, errorCode: true },
+  });
+  return {
+    abandoned: {
+      jobId: input.jobId,
+      kind: row.kind,
+      state: 'ERROR',
+      errorCode: (row.errorCode ?? 'RUNNER_LOST') as AbandonedIntegrationJob['errorCode'],
+      openItemId: applied.answer.openItemId,
+    },
+    after: applied.after,
+  };
 }
 
 /**
