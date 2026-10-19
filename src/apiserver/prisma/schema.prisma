@@ -2969,6 +2969,11 @@ model ProjectIntegrationJob {
   claimGeneration   BigInt    @default(0) @map("claim_generation")
   claimedAt         DateTime? @map("claimed_at") @db.Timestamptz(3)
   heartbeatAt       DateTime? @map("heartbeat_at") @db.Timestamptz(3)
+  /// A stop somebody asked of this claim (J-T8). A QUEUED row never carries one — the transaction
+  /// that asks ends it CANCELLED on the spot (`project_integration_job_queued_cancel_chk`, 0433),
+  /// because a QUEUED row with a request is a row no claim will ever take and every in-flight reader
+  /// still counts. On a RUNNING row it is the ask the runner reads (today when it starts the job, and
+  /// on the new claim a takeover writes); the result decides the rest (J-T12).
   cancelRequestedAt DateTime? @map("cancel_requested_at") @db.Timestamptz(3)
 
   /// The three tips this job froze, and the merge commit that absorbed upstream into the target.

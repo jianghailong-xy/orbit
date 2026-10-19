@@ -83,8 +83,11 @@ export const INTEGRATION_ERROR_CODES = [
   'RUNNER_DRAINING',
   'INTEGRATION_REPOSITORY_UNKNOWN',
   // Written by the platform, never reported: the runner stopped reporting past the job's limit and
-  // a retry ended the job to queue the next generation (§2.2 J-T9).
+  // the job was ended on the spot (§2.2 J-T9, J-T8).
   'RUNNER_LOST',
+  // The same end, for a landing whose push outcome the server cannot know (§2.6 J12): a legacy
+  // claim reports PUSH on a best-effort basis, so "no push recorded" is not "nothing was pushed".
+  'PUSH_OUTCOME_UNKNOWN',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
@@ -765,19 +768,38 @@ export interface LandingRetryRequest {
 
 /**
  * End a RUNNING landing whose runner stopped reporting past its limit, for the retry that replaces it
- * in the same transaction (§2.2 J-T9). Nobody reported this end, so it is the platform's: ERROR with
- * `RUNNER_LOST`, the step it was last at, and whether that step was past the push.
+ * in the same transaction (§2.2 J-T9). Nobody reported this end, so it is the platform's: ERROR, the
+ * step it was last at, and whether that step was past the push.
+ *
+ * WHICH ERROR CODE IS J12'S ONE RULE, AND IT BRANCHES ON THE KIND OF JOB. A `CHECK_PROMOTION` never
+ * pushes — `promoteOnce` answers READY before M-S4 is reached (`integrate.go:716-720`) — so a check
+ * whose runner is gone is `RUNNER_LOST` whatever its claim was. `LAND_TASK` and `LAND_PROMOTION` do
+ * push, and can only be called `RUNNER_LOST` when the server KNOWS nothing was pushed: the current
+ * claim is a v2 one and `push_reported_generation IS NULL`. Every claim today is a legacy one, whose
+ * PUSH report is best-effort on the way out and which cannot prove the negative, so those two kinds
+ * are `PUSH_OUTCOME_UNKNOWN` here. The v2 half of the rule arrives with the progress protocol
+ * (`34a1400z5T8WzXuLEQfWM`), in this one function; the retry door (J-T9), the abandon door (J-T10)
+ * and M-T13 all take their answer from it.
  *
  * A compare-and-set on what the timeout was judged from: still RUNNING, and the heartbeat the read
  * saw. A report, a takeover claim or a result that arrived since moved one of them, and the caller is
  * told so rather than ending a job that is talking again. The claim generation moves with it, so a
  * runner that was alive after all is refused when it reports.
  */
+export function timedOutErrorCode(kind: string): 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' {
+  // A check answers READY before the push step exists for it, so nothing about it can have pushed.
+  if (kind === 'CHECK_PROMOTION') return 'RUNNER_LOST';
+  // LAND_TASK / LAND_PROMOTION. Every claim written before `progress_protocol` exists is legacy —
+  // the column is NULL — and a legacy PUSH report is best-effort, so the negative cannot be proven.
+  return 'PUSH_OUTCOME_UNKNOWN';
+}
+
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
-  job: { jobId: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
+  job: { jobId: string; kind: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
          limitSeconds: number | null; runnerName: string | null },
 ): Promise<boolean> {
+  const errorCode = timedOutErrorCode(job.kind);
   const detail = {
     detail: `no report from ${job.runnerName ? `runner ${job.runnerName}` : 'its runner'} within `
       + `${Math.round((job.limitSeconds ?? 0) / 60)} minutes`,
@@ -786,10 +808,13 @@ export async function endTimedOutLanding(
     limitSeconds: job.limitSeconds,
     runnerName: job.runnerName,
     pushRecorded: job.phase === 'PUSH' || job.phase === 'VERIFY',
+    // What J12 lets this row say about the push, so a reader does not have to re-derive it from the
+    // kind and the protocol of a claim the row no longer names.
+    pushOutcome: errorCode === 'RUNNER_LOST' ? 'NOT_PUSHED' : 'UNKNOWN',
   };
   const ended = await tx.$executeRaw(Prisma.sql`
     UPDATE "project_integration_job"
-       SET "state" = 'ERROR', "error_code" = 'RUNNER_LOST',
+       SET "state" = 'ERROR', "error_code" = ${errorCode},
            "error_detail" = ${JSON.stringify(detail)}::jsonb,
            "claim_generation" = "claim_generation" + 1,
            "finished_at" = now(), "updated_at" = now()
@@ -1014,9 +1039,22 @@ export async function enqueueForDoneTask(
     ownerId, projectId, taskId, codebase, session, line: first.line,
   });
   if (queued === null) {
+    // A generation this task already has in flight is the ordinary answer. But a generation somebody
+    // ASKED TO STOP is not: J-T8 leaves it QUEUED/RUNNING while its runner catches up, so the DONE
+    // that was written after the reopen has nowhere to queue. The marker is kept for that case —
+    // the result transaction that writes the stopped generation CANCELLED queues this DONE's
+    // generation itself, and consumes the marker there (J-T8). Any other in-flight generation is
+    // already serving this DONE, so the marker has done its work.
+    const stopped = await tx.projectIntegrationJob.findFirst({
+      where: {
+        taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] },
+        cancelRequestedAt: { not: null },
+      },
+      select: { id: true },
+    });
     // The explicit reopen was already answered by an existing generation; do not let its marker
     // leak into a later, unrelated DONE.
-    await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    if (!stopped) await tx.taskReopenIntent.deleteMany({ where: { taskId } });
     return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
   }
 

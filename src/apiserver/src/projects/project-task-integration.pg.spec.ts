@@ -576,10 +576,14 @@ test('an open MAIN_SYNC conflict holds the next landing as a project-line sync, 
       });
       assert.deepEqual(await beat(stack, w), [], 'M2: the claim holds it too');
 
-      // A cancel asked of it is named first: the claim skips a cancelled job whatever else holds it.
-      await stack.db.projectIntegrationJob.update({ where: { id: waiting.jobId }, data: { cancelRequestedAt: new Date() } });
-      assert.equal((await read(stack, w, later)).landTask?.blockingReason?.code, 'CANCELLING');
-      await stack.db.projectIntegrationJob.update({ where: { id: waiting.jobId }, data: { cancelRequestedAt: null } });
+      // A queued attempt never carries a stop request: J-T8 ends one in the transaction that asks,
+      // so there is no CANCELLING reason to read and the row cannot be written that way.
+      await assert.rejects(
+        stack.db.projectIntegrationJob.update({
+          where: { id: waiting.jobId }, data: { cancelRequestedAt: new Date() },
+        }),
+        /project_integration_job_queued_cancel_chk/,
+      );
 
       // The conflicted task's own next generation — the one carrying the absorb (§3.1 M3) — is
       // exempt from its own item: queued as the reopen route queues it, it is next for the runner.
