@@ -109,7 +109,7 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
 
 @Composable
 private fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
-    SessionLine.Tone.APPROVAL -> LocalOrbitColors.current.needsYou
+    SessionLine.Tone.APPROVAL, SessionLine.Tone.WARNING -> LocalOrbitColors.current.needsYou
     SessionLine.Tone.RUNNING -> MaterialTheme.colorScheme.primary
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }

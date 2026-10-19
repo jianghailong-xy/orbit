@@ -316,4 +316,19 @@ describe('the landing rows that open the list', () => {
     expect(document.querySelector('.session-project-merge .landing-head')).not.toBeNull();
     expect(document.querySelector('.landing-head-press')).toBeNull();
   });
+
+  it('turns the WHOLE merge card amber when the server judged the merge job timed out', async () => {
+    const check = merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
+      startedAt: instant(NOW - 31 * 60_000), heartbeatAt: instant(NOW - 23 * 60_000),
+      timedOut: true, limitSeconds: 600, retryable: false, liveness: 'LEASE_EXPIRED' });
+    const read = view([check]);
+    integration = { ...read, inFlight: { ...read.inFlight!, liveness: 'LEASE_EXPIRED',
+      startedAt: check.startedAt, heartbeatAt: check.heartbeatAt } };
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    const card = document.querySelector<HTMLElement>('.session-project-merge');
+    expect(card?.getAttribute('data-shape')).toBe('checking');
+    // The same rule as the Landing card: the card's border and wash are the warning ones.
+    expect(card?.classList.contains('is-timed-out')).toBe(true);
+    expect(card?.querySelector('.landing-head.is-timed-out')).not.toBeNull();
+  });
 });

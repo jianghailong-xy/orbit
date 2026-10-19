@@ -302,6 +302,60 @@ final class ProjectPageTests: XCTestCase {
             word: "Landing", updated: "Updated just now"))
     }
 
+    /// §7.2 V6 (contract :1579-1610, board docs/mocks/landing-session/v4/05): once the server derives
+    /// the claim's liveness, the head's two slots carry the step's clock against its budget, the
+    /// claim and round, and the liveness sentence — and the card and the job rows carry the same
+    /// head. A server that sends none keeps the line above, word for word (the tests above it).
+    func testTheV6FieldsDrawTheStepClockTheClaimAndTheLiveness() {
+        let check = ProjectIntegrationCheck(name: "TASK_ACCEPTANCE", index: 1, count: 3, budgetSeconds: 3600,
+                                            startedAt: iso(110.5))
+        let inFlight = ProjectIntegrationInFlight(
+            taskTitle: "C5", state: "RUNNING", startedAt: iso(110.5), kind: "LAND_TASK", phase: "CHECK",
+            heartbeatAt: iso(0), jobId: "j1", taskId: "t1", runner: "wikova", claim: 1, round: 1,
+            check: check, stepStartedAt: iso(110.5), outputMovedAt: iso(6.4), progressProtocol: "v2",
+            liveness: "LIVE")
+        let job = ProjectIntegrationJob(
+            jobId: "j1", kind: "LAND_TASK", state: "RUNNING", phase: "CHECK", taskId: "t1", taskTitle: "C5",
+            startedAt: iso(110.5), queuedAt: iso(140.5), heartbeatAt: iso(0), runnerName: "wikova",
+            claim: 1, round: 1, check: check, stepStartedAt: iso(110.5), outputMovedAt: iso(6.4),
+            liveness: "LIVE")
+        let view = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 0, inFlight: inFlight,
+            landTasks: [ProjectLandTask(taskId: "t1", taskTitle: "C5", landTask: LandTaskIntegrationView(
+                jobId: "j1", state: "RUNNING", phase: "CHECK", targetRef: "refs/heads/project/p",
+                startedAt: iso(110.5)))],
+            inFlightJobs: [job])
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)!
+        let head = ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,
+                                           detail: "checking · output 6s ago · claim 1 · round 1 of 3")
+        XCTAssertEqual(line.head, head)
+        let card = ProjectPage.landingCard(view, now: Self.now, updatedAt: Self.now)!
+        XCTAssertEqual(card.head, head)
+        XCTAssertEqual(card.clock, "1m 50s of 60m")
+        XCTAssertEqual(ProjectPage.landingJobLines(view, now: Self.now, updatedAt: Self.now).first?.line.head, head)
+        // The three readings that change the shape: a quiet check still runs, SILENT stops the ring,
+        // and LEGACY says why its quiet is not a stall with no freshness to misread.
+        func read(_ liveness: String, step: TimeInterval = 110.5, heartbeat: TimeInterval = 0,
+                  output: TimeInterval = 6.4) -> ProjectPage.LandingLine {
+            let flight = ProjectIntegrationInFlight(
+                taskTitle: "C5", state: "RUNNING", startedAt: iso(step), kind: "LAND_TASK", phase: "CHECK",
+                heartbeatAt: iso(heartbeat), jobId: "j1", taskId: "t1", runner: "wikova", claim: 1, round: 1,
+                check: check, stepStartedAt: iso(step), outputMovedAt: iso(output), progressProtocol: "v2",
+                liveness: liveness)
+            return ProjectPage.landingLine(ProjectIntegrationView(integratingCount: 1, inFlight: flight),
+                                           now: Self.now, updatedAt: Self.now)!
+        }
+        XCTAssertEqual(read("QUIET", output: 840.5).head.detail,
+                       "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3")
+        let silent = read("SILENT", step: 600.5, heartbeat: 240.5)
+        XCTAssertEqual(silent.head.detail, "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3")
+        XCTAssertFalse(silent.running)
+        let legacy = read("LEGACY", step: 720.5, heartbeat: 720.5)
+        XCTAssertEqual(legacy.head.detail, "checking · reports only between steps · claim 1 · round 1 of 3")
+        XCTAssertFalse(legacy.head.detail.contains("Updated"))
+        XCTAssertTrue(legacy.running)
+    }
+
     func testTheLandingLineIsQueuedAndStillWhileTheJobWaitsItsTurn() {
         let view = ProjectIntegrationView(
             integratingCount: 0, queuedCount: 1,

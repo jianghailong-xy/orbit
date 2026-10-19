@@ -25,7 +25,9 @@ export interface SessionProjectSession extends GroupableSession {
 
 export interface SessionProjectLine {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
+  /** `warning` is a fact the row states in amber without asking anything: a landing the server
+   *  judged timed out. It is deliberately not `approval`, which lights the row's needs-you dot. */
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
 }
 
 export interface SessionProjectRow<T> extends GroupableSession {
@@ -114,6 +116,14 @@ export function landingSilentWord(minutes: number | null): string {
   return minutes === null ? 'no report yet' : `no report for ${minutes}m`;
 }
 
+/** §7.2 V6 in the row's own scale: the server judged the claim timed out — "timed out · no report
+ *  for 23m", in amber words and with no needs-you dot, because a stopped landing is a fact, not a
+ *  question. OrbitKit: `SessionProjectCopy.landingTimedOut`. */
+export const SESSION_PROJECT_TIMED_OUT = 'timed out';
+/** The server's SILENT claim in the row's scale: "no word from runner · 4m" — inside the lease,
+ *  so not a timeout. OrbitKit: `SessionProjectCopy.landingNoWordFromRunner`. */
+export const SESSION_PROJECT_NO_WORD = 'no word from runner';
+
 /** The project page's landing line, shortened for a row that is not redrawn every second:
  *  "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Null when nothing is in
  *  flight; a server that sends only the count gets "Landing · N jobs".
@@ -134,16 +144,39 @@ export function sessionProjectLandingLine(
   if (!job) return count > 0 ? { text: `Landing · ${count} ${count === 1 ? 'job' : 'jobs'}`, tone: 'queued' } : null;
   const heartbeat = Date.parse(job.heartbeatAt ?? '');
   const reported = Number.isFinite(heartbeat);
-  // The runner has gone quiet — the same claim lease the project page's landing row reads the same
-  // fact with (`LANDING_NO_REPORT`): how long it has been silent, never a verdict about the work.
+  const word = (job.kind && jobWords(main)[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
+  const head = count > 1 ? `${word} ${count} jobs` : word;
+  const since = Number.isFinite(heartbeat) ? heartbeat : Date.parse(job.startedAt);
+  const minutes = Number.isFinite(since) ? Math.max(0, Math.floor((now - since) / 60_000)) : 0;
+  // §7.2 V6: a server that derives the claim's liveness hands this row the fact, so it no longer
+  // reads the heartbeat against the claim lease by itself. A timeout is the server's verdict and
+  // is said in amber words — not the needs-you ink, and not its dot: nothing here is a question.
+  const liveness = job.liveness;
+  if (liveness && job.state === 'RUNNING') {
+    if (liveness === 'LEASE_EXPIRED') {
+      return { text: [head, SESSION_PROJECT_TIMED_OUT, landingSilentWord(minutes)].join(' · '), tone: 'warning' };
+    }
+    if (liveness === 'SILENT') {
+      return { text: [head, `${SESSION_PROJECT_NO_WORD} · ${minutes}m`].join(' · '), tone: 'queued' };
+    }
+    // LIVE, QUIET and LEGACY: the runner is reporting (or reports only between steps, so its
+    // quiet is not silence). A healthy long check stays "checking".
+    return {
+      text: [head, (job.phase && jobPhases(main)[job.phase]) || 'running', elapsedLabel(job.startedAt, now),
+        count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
+      tone: 'running',
+    };
+  }
+  // An older server: the runner has gone quiet — the same claim lease the project page's landing
+  // row reads the same fact with (`LANDING_NO_REPORT`): how long it has been silent, never a
+  // verdict about the work.
   const silent = job.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
   const running = job.state === 'RUNNING' && !silent;
-  const word = (job.kind && jobWords(main)[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
   const state = job.state !== 'RUNNING' ? 'queued'
     : silent ? landingSilentWord(reported ? Math.max(0, Math.floor((now - heartbeat) / 60_000)) : null)
       : (job.phase && jobPhases(main)[job.phase as keyof typeof JOB_PHASES]) || 'running';
   return {
-    text: [count > 1 ? `${word} ${count} jobs` : word, state, elapsedLabel(job.startedAt, now),
+    text: [head, state, elapsedLabel(job.startedAt, now),
       count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
     tone: running ? 'running' : 'queued',
   };
