@@ -10,8 +10,8 @@ import { answerField, fixAnswerStrings, goTrimSpace } from './wiki-import-extrac
 /**
  * What the server asks a model about one waiting op, and how it reads the answer (contracts/wiki.contract.json
  * `agentSurface.verify` and `reviewModes.verification`, design §2.2 and §8): the model part of
- * `src/runner-go/wiki_verify.go`, ported word for word, so the two paths ask the same question of the same
- * op and read the answer as strictly.
+ * `src/runner-go/wiki_verify.go`, ported word for word before P11 removed it there, so the server asks the
+ * question the runner asked of the same op and reads the answer as strictly.
  *
  * ONE OP AT A TIME, JUDGED FROM ITS RECORDS ALONE. The prompt carries the entry as it would read, the text of
  * every record it cites, the entries it may repeat (numbered, never by an id a local model copies wrong) and
@@ -20,8 +20,8 @@ import { answerField, fixAnswerStrings, goTrimSpace } from './wiki-import-extrac
  * `recordVerifications` applies what it read.
  *
  * WHAT THE PORT KEEPS AND WHAT IT DOES NOT. The prompt, the numbering, the retry suffix, `parseWikiVerdict`
- * and `lastJSONObject` are the Go ones, down to the sentences a refusal says back (the runners' tests assert
- * those phrases, and so do the TS ones here). What it drops is everything about running a clean Claude Code:
+ * and `lastJSONObject` are the Go ones, down to the sentences a refusal says back (the runner's tests asserted
+ * those phrases, and the TS ones here still do). What it drops is everything about running a clean Claude Code:
  * there is no `claude` here — the model is the deployment's System model, called through the request queue
  * (`wiki-model-queue`), one request per op, whose identity is the op's id.
  *
@@ -204,7 +204,7 @@ export function parseWikiVerdict(text: string, candidates: readonly WikiVerifyCa
   }
   const verdict = unwrappedVerdict as WikiVerificationVerdict;
   const reasonGiven = answerField(value, 'reason');
-  // Go trims the reason with strings.TrimSpace: NEL (U+0085) goes, a BOM stays — goTrimSpace, not .trim().
+  // Go trimmed the reason with strings.TrimSpace: NEL (U+0085) goes, a BOM stays — goTrimSpace, not .trim().
   if (typeof reasonGiven !== 'string' || goTrimSpace(reasonGiven) === '') return { refusal: 'it gives no reason' };
   const reason = cutRunes(goTrimSpace(reasonGiven), WIKI_REVIEW_RULES.verificationReasonMaxChars);
   const duplicate = answerField(value, 'duplicateOf');
@@ -228,8 +228,8 @@ export function parseWikiVerdict(text: string, candidates: readonly WikiVerifyCa
 /**
  * The last complete JSON object in the text that carries a verdict, or null (Go `lastJSONObject`): a model
  * that thinks aloud before it answers still answers last, and one wrapped in a ```json fence is still one
- * object. Walked from the end exactly as the Go reader walks it — the last `}` that closes a slice some `{`
- * opens, and the rightmost `{` that makes it JSON — so both readers find the same object in the same text.
+ * object. Walked from the end exactly as the Go reader walked it — the last `}` that closes a slice some `{`
+ * opens, and the rightmost `{` that makes it JSON — so this finds the object the Go reader found in the same text.
  */
 export function lastJSONObject(text: string): string | null {
   let end = text.lastIndexOf('}');
@@ -242,7 +242,7 @@ export function lastJSONObject(text: string): string | null {
           return text.slice(start, end + 1);
         }
       } catch {
-        // Not JSON from here to there: try a wider slice, as the Go reader does.
+        // Not JSON from here to there: try a wider slice, as the Go reader did.
       }
       start = lastIndexOfBefore(text, '{', start);
     }

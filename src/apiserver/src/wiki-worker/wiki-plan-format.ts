@@ -3,16 +3,16 @@ import { goTrimSpace } from './wiki-import-extract';
 /**
  * The compact line format the model drafts a plan in, and how the drafting job reads it back
  * (contracts/wiki.contract.json `plan.jobs.server`, design §8, P6) — ported from
- * `src/runner-go/wiki_plan_format.go`, which does the same on the runner until P10 removes it.
+ * `src/runner-go/wiki_plan_format.go`, which did the same on the runner until P11 removed it.
  *
  * The model writes Markdown lines with a few fixed labels, never JSON — a forty-document catalogue in JSON
  * is what ran into the sample's hour-long timeout — and this file turns them into the plan's schema. It
  * never rewrites a word the model wrote: a line it cannot place is kept as stray and handed back by the gate
  * as a field the plan does not have.
  *
- * ONE READING, TWO IMPLEMENTATIONS. Until P10 the runner and the server both read these answers, and the
- * project's criterion asks that the same answer read the same on both (`wiki-plan.fixture.json` holds the
- * two to the same outputs). So the regular expressions below are RE2's, spelled for JavaScript: RE2's `\s`
+ * ONE READING. Until P11 the runner and the server both read these answers, and the project's criterion
+ * asked that the same answer read the same on both (`wiki-plan.fixture.json`, frozen since P11, holds the
+ * server to the runner's outputs). So the regular expressions below are RE2's, spelled for JavaScript: RE2's `\s`
  * is the five ASCII spaces (`S` below) and its `.` every character but a newline, and a label is looked for
  * within Go's byte offsets, not JavaScript's code units.
  */

@@ -31,11 +31,6 @@ class WikiServerExecutionFixtureTest {
             listOf(WikiModeCopy.repoFromNote, WikiModeCopy.modelNote, WikiModeCopy.dailyLimitNote, WikiModeCopy.lookbackNote))
         assertEquals(settings.fstr("maintenanceNote"), WikiModeCopy.maintenanceNoteServer)
         assertEquals(settings.fstr("privacy"), WikiModeCopy.privacyNote)
-        assertEquals(settings.fstr("automaticNote"), WikiModeCopy.modeNoteAutomaticServer)
-        assertEquals(settings.fstr("automaticNote"), WikiModeCopy.modeNote("automatic", server = true))
-        // Under runner every mode says what it always said; the server changes Automatic's sentence alone.
-        WikiModeLogic.modes.forEach { assertEquals(WikiModeCopy.modeNote(it), WikiModeCopy.modeNote(it, server = false)) }
-        assertEquals(WikiModeCopy.modeNote("tiered"), WikiModeCopy.modeNote("tiered", server = true))
 
         // The System model's five states, as the settings page, Set up and the Runs band's head say them.
         val models = settings.farr("models").map { it.jsonObject }
@@ -69,10 +64,6 @@ class WikiServerExecutionFixtureTest {
             assertEquals("$name: when", case.string("when"), row.whenText)
             assertEquals("$name: foot", case.string("foot"), WikiRunsLogic.foot(job))
         }
-        // The band is drawn while the server runs the account's wiki, or once it ran something for the space.
-        assertFalse(WikiRunsLogic.shown(serverExecutes = false, jobs = emptyList()))
-        assertTrue(WikiRunsLogic.shown(serverExecutes = true, jobs = emptyList()))
-        assertTrue(WikiRunsLogic.shown(serverExecutes = false, jobs = listOf(WikiJob.read(cases[0]["job"])!!)))
     }
 
     @Test fun everyCallRowSaysTheFixturesWords() {
@@ -109,28 +100,21 @@ class WikiServerExecutionFixtureTest {
         assertEquals(plan.fstr("drafter"), WikiPlanCopy.drafterServer)
         // Activity's Plan card: the short line beside Draft plan.
         assertEquals(plan.fstr("note"), WikiPlanCopy.noteServer)
-        // The plan's empty page: the note keeps the half that still holds, and the body names the System model.
+        // The plan's empty page: the note says where a draft runs, and the body names the System model.
         assertEquals(plan.fstr("emptyNote"), WikiPlanCopy.emptyNoteServer)
-        assertEquals(plan.fstr("emptyNote"), WikiPlanCopy.emptyNote("orbit · wikova", "local-vllm", serverExecutes = true))
-        assertEquals(plan.fstr("emptyNote"), WikiPlanCopy.emptyNote(null, null, serverExecutes = true))
-        assertEquals(plan.fstr("emptyText"), WikiPlanCopy.emptyText("local-vllm", serverExecutes = true))
-        assertEquals(plan.fstr("emptyText"), WikiPlanCopy.emptyText(null, serverExecutes = true))
-        plan.farr("redraftNotes").map { it.jsonObject }.forEach { row ->
+        assertEquals(plan.fstr("emptyText"), WikiPlanCopy.emptyText)
+        val notes = plan.farr("redraftNotes").map { it.jsonObject }
+        assertEquals(3, notes.size)
+        notes.forEach { row ->
             val from = row["from"]?.takeIf { it !is JsonNull }?.jsonObject
                 ?.let { it.fint("version") to it.getValue("inForce").jsonPrimitive.boolean }
-            assertEquals(row.string("says"), WikiPlanCopy.redraftNote("local-vllm", from, serverExecutes = true))
+            assertEquals(row.string("says"), WikiPlanCopy.redraftNote(from))
         }
         // What is drafting: the job's card names the System model too.
         val drafting = WikiPlanJob.read(Json.parseToJsonElement(
-            """{"id":"job-drafting","kind":"draft","state":"running","provider":"local-vllm","attempt":1,"attemptsMax":3}"""))
-        val card = WikiPlanLogic.jobCard(drafting, Instant.now(), true, null, false, null, serverExecutes = true)!!
+            """{"id":"job-drafting","kind":"draft","state":"running","provider":null,"attempt":1,"attemptsMax":3}"""))
+        val card = WikiPlanLogic.jobCard(drafting, Instant.now(), true, null, false, null)!!
         assertTrue("the drafting card names the System model: ${card.text}", card.text.startsWith("${plan.fstr("drafter")} · "))
-        // Under runner nothing moved: the provider drafts it, word for word what it always was.
-        assertEquals("Runs as a task in the Wiki maintenance list, on orbit · wikova with local-vllm — usually 1–2 hours." +
-            " Until you confirm a plan, the Wiki shows its topic articles.",
-            WikiPlanCopy.emptyNote("orbit · wikova", "local-vllm", serverExecutes = false))
-        assertTrue(WikiPlanCopy.emptyText("local-vllm", serverExecutes = false).contains("local-vllm drafts it"))
-        assertTrue(WikiPlanCopy.redraftNote("local-vllm", null, serverExecutes = false).startsWith("local-vllm drafts it again"))
     }
 
     // MARK: the reads are the contracts
@@ -156,7 +140,8 @@ class WikiServerExecutionFixtureTest {
         val model = contract.fobj("systemModel").fobj("read")
         assertEquals(model.fstrings("states"), listOf("up", "down", "auth_failed", "unconfigured", "worker_not_running"))
         assertEquals(model.fstrings("fields"), listOf("state", "model", "since", "checkedAt", "workerSeenAt", "executor"))
-        // A read one release apart: an older control plane sends no executor and no new fields, which read as runner.
+        // A read one release apart: an older control plane sends no executor and no new fields — the server's reason
+        // is then not said.
         val older = WikiSpaceHealth.decode(Json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"ok","enabled":true}}"""))
         assertFalse(older.serverExecutes)
         assertNull(older.systemModel)

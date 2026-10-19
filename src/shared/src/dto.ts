@@ -25,7 +25,6 @@ import {
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
-import type { WikiMaintenanceRun } from './wiki';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 
@@ -1832,10 +1831,6 @@ export interface ClaimedSession {
    *  `source-pin/v1` (SR35), so a payload carrying this field only ever reaches a process that
    *  knows it must pin before it may create a worktree or spawn an engine (SR33). */
   source?: SessionSourceSnapshot;
-  /** Present on a Wiki maintenance session only (contracts/wiki.contract.json `maintenance.run`): the run it is
-   *  pinned to, and the clean start and guardrails it is started with. Only a runner that declares
-   *  `wiki-maintenance-run/v1` is handed such a session at all. */
-  wikiMaintenance?: WikiMaintenanceRun;
   /** Asks the runner to name the session through the engine running it, once its opening turn is
    *  underway (runner session_naming.go): present only while nothing else will name it and its engine
    *  can answer from inside its own process. A runner that ignores it leaves the title it has. */
@@ -2215,8 +2210,6 @@ export interface ReclaimSession {
    *  (SR29): a session already `PINNED` keeps the SHA its first claim froze, whatever the
    *  binding's configuration or the ref's tip have done since. */
   source?: SessionSourceSnapshot;
-  /** The maintenance run, cf. ClaimedSession.wikiMaintenance: a restarted runner starts it clean again. */
-  wikiMaintenance?: WikiMaintenanceRun;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */

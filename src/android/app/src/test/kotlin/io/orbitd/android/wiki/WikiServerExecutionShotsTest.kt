@@ -100,7 +100,6 @@ class WikiServerExecutionShotsTest {
             path == "wiki/review" -> ok("[]")
             path == "workspaces" -> ok("""[{"id":"w1","name":"orbit","runnerId":"r1"}]""")
             path == "runners" -> ok("""[{"id":"r1","name":"host-1","displayName":"Mac mini"}]""")
-            path == "providers" -> ok("""[{"slug":"local-vllm","runtime":"claude","defaultModel":"qwen3.8-27b-fp8","models":[]}]""")
             path == "link-previews" -> ok("""{"previews":[]}""")
             else -> ApiResponse(404, "{}".encodeToByteArray())
         }
@@ -166,7 +165,7 @@ class WikiServerExecutionShotsTest {
         compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-settings-model-row").fetchSemanticsNodes().isNotEmpty() }
         says("wiki-settings-workspace-row", WikiModeCopy.repoFrom, "orbit · Mac mini")
         says("wiki-settings-model-row", WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8"), WikiRunsCopy.modelState("up"))
-        compose.onAllNodesWithTag("wiki-settings-provider-row").assertCountEquals(0)
+        compose.onAllNodesWithText("local-vllm", substring = true).assertCountEquals(0)
         compose.onNodeWithTag("wiki-settings-privacy").assertTextContains(WikiModeCopy.privacyNote)
         shot("settings-server")
 

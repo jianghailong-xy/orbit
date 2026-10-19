@@ -1,8 +1,8 @@
 {
   "about": [
     "The wiki under server execution on the two clients (design §2.2, mock docs/mocks/wiki/35; contracts/wiki.contract.json",
-    "`jobs.read`, `jobs.executor.read`, `systemModel.read`, P9): the settings page and Set up while the server runs the",
-    "account's wiki, the System model's five states as they read there, and Activity's Runs — each run's row and each",
+    "`jobs.read`, `jobs.executor.read`, `systemModel.read`, P9): the settings page's maintenance card and Set up, the",
+    "System model's five states as they read there, and Activity's Runs — each run's row and each",
     "call's row of its log. The web reads this file in `lib/wikiRuns.test.ts`, `lib/wikiReviewMode.test.ts`,",
     "`components/WikiSettingsPage.test.tsx` and `components/WikiRunsCard.test.tsx`; OrbitKit in",
     "`WikiServerExecutionCopyParityTests` (`WikiRunsCopy`, `WikiRunsLogic`, `WikiModeCopy`), so the two ends cannot drift into",
@@ -12,10 +12,10 @@
     "delivery): `drafter` names who drafts — the wiki-worker's System model — and `note` is the line beside Draft plan on",
     "Activity's Plan card; `emptyNote`, `emptyText` and `redraftNotes` are the plan empty page's note, its body and the",
     "Redraft… dialog's sentence with the System model as their subject. The web reads them in `lib/wikiPlan.ts`",
-    "(`wikiPlanCard`, `wikiPlanEmptyNote`, `wikiPlanEmptyText`, `wikiPlanRedraftNote`, `wikiPlanJobCard`) and OrbitKit in",
-    "`WikiPlanCopy` (`noteServer`, `emptyNoteServer`, `drafterServer`, `emptyText`, `emptyNote`, `redraftNote`). Under",
-    "runner every one of them keeps what it always said, `<provider>` as the drafter, which is not this file's — those",
-    "rows are `wiki-docs.fixture.json`'s. The documents' build is P7's, not this file's.",
+    "(`wikiPlanCard`, `WIKI_PLAN_EMPTY_NOTE_SERVER`, `WIKI_PLAN_EMPTY_TEXT`, `wikiPlanRedraftNote`, `wikiPlanJobCard`) and",
+    "OrbitKit in `WikiPlanCopy` (`noteServer`, `emptyNoteServer`, `drafterServer`, `emptyText`, `redraftNote`). Since the",
+    "runner's path was removed (P11) these are the plan's only words for its drafter. The documents' build is P7's, not",
+    "this file's.",
     "",
     "Times are read at `now`. A run case is a `GET /api/wiki/spaces/:id/jobs` job and the row the Runs card draws for it:",
     "`kind`, `state` and `text` (what follows the state, ` · ` between its parts), `mark`, `tone` and `when`. A call case is",
@@ -54,7 +54,6 @@
     },
     "maintenanceNote": "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model.",
     "privacy": "The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.",
-    "automaticNote": "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.",
     "systemModel": "System model",
     "models": [
       {
@@ -120,6 +119,13 @@
           "inForce": true
         },
         "says": "The System model drafts it again from v1, the plan in force, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
+      },
+      {
+        "from": {
+          "version": 2,
+          "inForce": false
+        },
+        "says": "The System model drafts it again from draft v2, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
       }
     ]
   },

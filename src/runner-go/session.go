@@ -1616,12 +1616,6 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		emit(evError, map[string]interface{}{"message": r.Code + ": " + reason})
 		return stFailed, true, false
 	}
-	// A Wiki maintenance run that may not start — pinned to a provider it cannot have, or on the wrong
-	// runtime — gets no engine either, and says why the same way (wiki_maintenance_session.go).
-	if msg := wikiMaintenanceRefusal(job); msg != "" {
-		emit(evError, map[string]interface{}{"message": msg})
-		return stFailed, true, false
-	}
 	provider := runtimeProvider(job)
 	// An engine this runner knows but has no session driver for gets no engine either: nothing is
 	// installed or started for a session it cannot run. The control plane hands a Cursor CLI session
@@ -1757,14 +1751,6 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
-	// A Wiki maintenance run starts in a HOME and config directory of its own, and the transcript
-	// rebuild below has to look for its conversation there (wiki_maintenance_session.go).
-	if job.wikiMaintenanceCleanStart() {
-		if err := prepareWikiMaintenanceStart(job, scratchDir); err != nil {
-			emit(evError, map[string]interface{}{"message": "could not make the Wiki maintenance run's own HOME: " + err.Error()})
-			return stFailed, true, false
-		}
-	}
 	// Set when an inbox 'reload' turn asks us to re-spawn with a new model/mode.
 	var reloadRequested atomic.Bool
 	// Set by the stdout reader on the first stream-json message. A process that exits
@@ -2671,11 +2657,6 @@ scanLoop:
 				}
 				reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetEnded.Error(), false)
 				settleSteerTurn(d.turnID, errCurrentWorkTargetEnded, job, completeTurn)
-			}
-			// A Wiki maintenance run cut short by its turn limit failed, and the run can no longer say so
-			// itself: the runner records it on the space's cursor (wiki_maintenance_session.go).
-			if r.Subtype == claudeMaxTurnsSubtype && job.WikiMaintenance != nil {
-				reportWikiMaintenanceTruncated(t, job)
 			}
 			// A Claude API error — or an expired sign-in — returns as assistant text + a
 			// "success" result with no is_error, so it slips past resultFrom. Treat the turn

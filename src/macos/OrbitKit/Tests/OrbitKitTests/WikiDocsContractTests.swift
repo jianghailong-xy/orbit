@@ -52,21 +52,19 @@ final class WikiDocsContractTests: XCTestCase {
         XCTAssertTrue(Set(opening).isSubset(of: records))
     }
 
-    /// The owner reads on the user door; a maintenance run reads what is written and writes on the runner
-    /// door, and nothing on the user door writes a document.
+    /// The owner reads on the user door; the runner door has no route of the documents, and nothing on the
+    /// user door writes one.
     func testTheOwnersReadsAreOnTheUserDoor() throws {
         let routes = try XCTUnwrap(try docsSection()["routes"] as? [String: String])
         let doors = try XCTUnwrap((try contract()["agentSurface"] as? [String: Any])?["doors"] as? [String: Any])
         let user = try XCTUnwrap((doors["user"] as? [String: Any])?["routes"] as? [String])
-        let maintenance = Set(try XCTUnwrap((doors["runner"] as? [String: Any])?["maintenanceRoutes"] as? [String]))
+        let runner = try XCTUnwrap(doors["runner"] as? [String: Any]).values.flatMap { $0 as? [String] ?? [] }
         for name in ["directory", "doc", "index"] {
             let route = try XCTUnwrap(routes[name], name)
             XCTAssertTrue(user.contains(route), "\(route) is not a route the user door declares")
             XCTAssertTrue(route.hasPrefix("GET "), route)
         }
-        for name in ["writerState", "write"] {
-            XCTAssertTrue(maintenance.contains(try XCTUnwrap(routes[name], name)), name)
-        }
+        XCTAssertFalse(runner.contains { $0.contains("/docs") }, "the runner door has a route of the documents: \(runner.sorted())")
         XCTAssertFalse(user.contains { $0.hasPrefix("POST") && $0.contains("/docs") })
     }
 

@@ -23451,7 +23451,7 @@ button.project-open-item-action:disabled {
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-maint-state { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-3); white-space: nowrap; }
 .wk-dot.on { background: var(--success-solid); }
-.wk-maint-rows { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 7px 12px; font-size: 13.5px; line-height: 1.5; }
+.wk-maint-rows { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 7px 12px; font-size: 13.5px; line-height: 1.5; }
 .wk-maint-rows > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; }
 .wk-maint-rows > .v { color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
 .wk-maint-rows .dim { color: var(--text-3); }
@@ -23464,9 +23464,8 @@ button.project-open-item-action:disabled {
 .wk-setup-limit .orbit-number-input { width: 72px; }
 .wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
-/* Maintenance while the server runs the wiki (mock 35 ①②): the longer key, the System model and its state, read-only,
-   and the line that says where the wiki's material goes. */
-.wk-maint-rows.server { grid-template-columns: 160px minmax(0, 1fr); }
+/* Maintenance as the server runs the wiki (mock 35 ①②): the System model and its state, read-only, and the line that
+   says where the wiki's material goes. */
 .wk-model-line .dim { color: var(--text-3); }
 .wk-model-state { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; font-size: 12.5px; white-space: nowrap; }
 .wk-model-state .wk-dot { margin: 0; }
