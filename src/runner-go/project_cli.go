@@ -35,7 +35,7 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 
 Usage:
   orbit project get PROJECT_ID [--json]
-  orbit project integration PROJECT_ID [--job-id ID] [--cursor CURSOR] [--json]
+  orbit project integration PROJECT_ID [--job-id ID] [--claim N] [--round N] [--check N] [--cursor CURSOR] [--timeline-cursor CURSOR] [--json]
   orbit project crossings PROJECT_ID [--state STATE] [--json]
   orbit project ensure-coordinator PROJECT_ID [--json]
   orbit project send PROJECT_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
@@ -97,7 +97,7 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 	"integration": `orbit project integration — read this project's integration line: the queue and what each attempt is doing
 
 Usage:
-  orbit project integration PROJECT_ID [--job-id ID] [--cursor CURSOR] [--json]
+  orbit project integration PROJECT_ID [--job-id ID] [--claim N] [--round N] [--check N] [--cursor CURSOR] [--timeline-cursor CURSOR] [--json]
 
 The line is where the project's finished work lands, and this is the read of what is happening on
 it: every QUEUED and RUNNING job across all three kinds (a task landing, a merge candidate's
@@ -109,13 +109,18 @@ the same facts through the interface that is allowed to serve them.
 Inside a session it is read as that session, which must belong to the project (its coordinator, a
 session of one of its tasks, or a child of one). Logged in as yourself it calls the user route and
 answers the line as the project page shows it. --job-id names one attempt and serves what its
-checks printed under 'log'; --cursor continues that page. Without --job-id the line is served as it
-always was.
+checks printed under 'log' and its attempts' ordered facts under 'timeline'; --claim, --round and
+--check narrow either page, --cursor continues the check page and --timeline-cursor continues the
+timeline page. Without --job-id the line is served as it always was.
 
 Options:
-  --job-id ID              narrow the page to one job
-  --cursor CURSOR          continue a paged read
-  --json                   emit compact JSON
+  --job-id ID                 narrow the page to one job
+  --claim N                   narrow the page to one claim generation, from 0
+  --round N                   narrow the page to one round inside the claim, from 1
+  --check N                   narrow the check log to one check's position, from 1
+  --cursor CURSOR             continue a paged read
+  --timeline-cursor CURSOR    continue the attempt timeline page
+  --json                      emit compact JSON
 `,
 	"ensure-coordinator": `orbit project ensure-coordinator — take the conversation that coordinates this project, opening the next one only when the standing one cannot take a message
 
