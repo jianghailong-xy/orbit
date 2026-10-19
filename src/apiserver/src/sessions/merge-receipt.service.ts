@@ -639,6 +639,14 @@ export class MergeReceiptService {
        *  (integration contract §3.3 M-T11). Written into the receipt's `detail` so the ledger itself
        *  says which merges a person made and which the platform made on its own. */
       confirmedAutomatically?: boolean;
+      /**
+       * J12's repair: this receipt is for a landing whose push outcome the platform could not read
+       * at the time (ERROR · PUSH_OUTCOME_UNKNOWN) and which a later job found on the target. It is
+       * written against THAT job — the `jobId` above — whose terminal row is never rewritten (J4),
+       * so the marker is what makes the repair visible in the ledger rather than looking like an
+       * ordinary report.
+       */
+      recoveredUnknownPush?: boolean;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -671,6 +679,7 @@ export class MergeReceiptService {
           ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
           ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),
           ...(args.confirmedAutomatically ? { confirmedAutomatically: true } : {}),
+          ...(args.recoveredUnknownPush ? { recoveredUnknownPush: true } : {}),
         } as Prisma.InputJsonValue,
         idempotencyKey: mergeReceiptIdempotencyKey({
           sessionId: args.sessionId,
