@@ -272,6 +272,74 @@ class TakeoverLabTest(unittest.TestCase):
         self.assertEqual(self.takeover.NODES, {1: render.ENV["LAB_NAME"], 2: render.ENV["LAB2_NAME"]})
 
 
+class CrossNodeLabTest(unittest.TestCase):
+    """lab/cross-node-lab.py (T08x), offline: its own names over takeover-lab.py's, and the runbook commands it runs."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("lab_cross_node", LAB / "cross-node-lab.py")
+        cls.cross = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.cross)
+
+    def test_it_reads_only_the_lab_context_and_its_own_server_directory_and_names(self):
+        source = (LAB / "cross-node-lab.py").read_text()
+        # The runbook's own variable ADMIN_KUBECONFIG names the lab's kubeconfig; KUBECONFIG itself is never set.
+        self.assertIsNone(re.search(r"(?<!ADMIN_)KUBECONFIG=", source))
+        self.assertEqual(self.cross.OWN_SERVER_DIRS, ("test-server-t08x", "test-server-t08x-dev"))
+        self.assertEqual(self.cross.NODES, {1: render.ENV["LAB_NAME"], 2: render.ENV["LAB2_NAME"]})
+        # takeover-lab.py's own names (T02's accounts, probe, writer, context) are this task's in the helpers it shares.
+        self.assertEqual((self.cross.wl.EMAIL, self.cross.ml.EMAIL), ("t08x-{}@lab.invalid", "t08x-{}@lab.invalid"))
+        self.assertEqual(self.cross.wl.name_of("t08x-bob@lab.invalid"), "bob")
+        self.assertEqual((self.cross.wl.PROBE_ROOT, self.cross.tl.WRITER_RUN), ("/var/lib/orbit/home/t08x-probe", "t08x-writer"))
+        self.assertEqual(self.cross.al.CONTEXT.name, "t08x-context.json")
+        self.assertIn("test-server-t08x", self.cross.al.OWN_SERVER_DIRS)
+
+    def test_the_runbook_blocks_it_runs_are_the_runbook_s(self):
+        query = self.cross.runbook_block("Find an account's runner", "from managed_runner m", "sql")
+        self.assertIn("m.node_name", query)
+        find = self.cross.find_runner_block()
+        self.assertIn('$K get pod "mr-$R"', find)
+        self.assertFalse([line for line in find.splitlines() if line.startswith(("R=", "rbd "))])
+        self.assertIn("managed-runner-stop-report", self.cross.runbook_block("The stop-report finalizer", "UID_="))
+        with self.assertRaises(self.cross.Failed):
+            self.cross.runbook_block("The stop-report finalizer", "no such command")
+
+    @unittest.skipUnless(__import__("shutil").which("jq"), "the runbook's finalizer patch uses jq")
+    def test_the_runbook_s_finalizer_patch_tests_the_uid_and_the_finalizer(self):
+        pod = {"metadata": {"uid": "uid-1", "finalizers": ["other.example/x", "orbit.dev/managed-runner-stop-report"]}}
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "bin").mkdir()
+            kubectl = Path(folder) / "bin/kubectl"
+            # A stand-in that records each call's arguments and answers the two reads the block makes.
+            kubectl.write_text("#!/usr/bin/env python3\nimport json, pathlib, sys\nhere = pathlib.Path(sys.argv[0]).parent\n"
+                               "with open(here / 'calls', 'a') as calls:\n    calls.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                               "if any(a.startswith('jsonpath=') for a in sys.argv):\n    print('uid-1', end='')\n"
+                               "elif sys.argv[-2:] == ['-o', 'json']:\n    print((here / 'pod.json').read_text())\n")
+            kubectl.chmod(0o755)
+            (Path(folder) / "bin/pod.json").write_text(json.dumps(pod))
+            saved = self.cross.LAB_DIR
+            self.cross.LAB_DIR = Path(folder)
+            try:
+                result = self.cross.runbook_bash("finalizer", self.cross.runbook_block("The stop-report finalizer", "UID_="), R="r1")
+            finally:
+                self.cross.LAB_DIR = saved
+            calls = [json.loads(line) for line in (Path(folder) / "bin/calls").read_text().splitlines()]
+        self.assertEqual(result["exit"], 0, result["stderr"])
+        patch = calls[-1]
+        self.assertEqual(patch[:-1], ["--kubeconfig", f"{folder}/kubeconfig.json", "--context", render.ENV["LAB_NAME"], "--namespace",
+                                      render.ENV["LAB_NAMESPACE"], "patch", "pod", "mr-r1", "--type=json", "-p"])
+        self.assertEqual(json.loads(patch[-1]),
+                         [{"op": "test", "path": "/metadata/uid", "value": "uid-1"},
+                          {"op": "test", "path": "/metadata/finalizers/1", "value": "orbit.dev/managed-runner-stop-report"},
+                          {"op": "remove", "path": "/metadata/finalizers/1"}])
+
+    def test_what_a_power_cut_left_of_the_last_seconds_is_classified(self):
+        before = {"a": {"bytes": 10, "sha256": "x"}, "b": {"bytes": 10, "sha256": "y"}, "c": {"bytes": 10, "sha256": "z"}, "d": {"bytes": 10, "sha256": "w"}}
+        after = {"a": {"bytes": 10, "sha256": "x"}, "b": {"bytes": 0, "sha256": "e"}, "c": {"error": "FileNotFoundError"}, "d": {"bytes": 12, "sha256": "v"}}
+        self.assertEqual({path: found["result"] for path, found in self.cross.lost_since(before, after).items()},
+                         {"a": "kept", "b": "shorter", "c": "missing", "d": "changed"})
+
+
 class ApiGateTest(unittest.TestCase):
     """lab/api-gate.py (T04) on loopback sockets: a stand-in upstream answers every chunk it receives."""
 
@@ -388,6 +456,10 @@ class FakeModelTest(unittest.TestCase):
         [answer] = self.ask([self.user("T02-ANN-MOVE T08-ANN-S1 a message, T05-NOT-A-MARKER")])
         self.assertEqual(answer["type"], "text")
         self.assertTrue(answer["text"].endswith("Answering: T02-ANN-MOVE T08-ANN-S1"), answer["text"])
+
+    def test_t08x_markers_are_quoted_too(self):
+        [answer] = self.ask([self.user("T08X-BOB-LAST a message, T08Y-NOT-A-MARKER")])
+        self.assertTrue(answer["text"].endswith("Answering: T08X-BOB-LAST"), answer["text"])
 
     def test_a_background_job_is_one_bg_run_call_and_its_result_is_answered(self):
         first = self.user("T06-X FAKE-BG 7 start a job")
