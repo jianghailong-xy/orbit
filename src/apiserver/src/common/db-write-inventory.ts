@@ -136,6 +136,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary, which the runner treats as "not delivered" and resends. The work itself already happened in the repository, so nothing is lost by making it say so again; what the resend must not do is land a second time, and the terminal check above is what stops it.',
   },
   {
+    at: 'runner-api/integration-job-relay.ts#receiveIntegrationJobOutput',
+    shape: 'TX_RETRIED',
+    locks: 'project_integration_job (rank 60) FOR UPDATE by the id the chunk names, matched on this runner, RUNNING and the exact (leaseOwner, claimGeneration); then its own child rows in project_integration_job_log (rank 60) — the INSERT under the unique key, and the trim\'s DELETE/UPDATE of rows of the one check. No session, task, project or codebase row is read or locked: the output gate is a job gate, and it never waits on a session lock (§2.9 LS2). The child foreign key re-checks the job row already held, so it adds no second parent lock.',
+    identity: 'The chunk\'s key (job, claimGeneration, round, check name and index, seq), enforced by `project_integration_job_log_key`: a resent chunk is ON CONFLICT DO NOTHING and is still answered accepted. The fence is the claim the body names, so a chunk from a claim that was taken over, released or abandoned matches no job row and writes nothing (STALE_CLAIM / ALREADY_FINAL / 404).',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read inside the closure: the job row under FOR UPDATE (the fence and the round the chunk is filed under), then the check\'s stored rows, from which the head and tail caps are recomputed. A re-run after a conflict therefore re-decides the trim against the committed set rather than replaying a gap it computed from a discarded snapshot; the insert itself is idempotent by the key above.',
+    effects: 'None. One table of rows; no job column is written, no run_event, no session, and no reader is woken. The runner uploads best-effort and does not wait on the answer to keep checking.',
+    answer: 'Typed 503 from the global boundary. The runner\'s uploader treats it as a chunk not yet stored; the next flush of the same check carries later chunks, and the missing one is a gap in a best-effort log rather than a fact any decision rests on.',
+  },
+  {
     at: 'projects/project-promotion.service.ts#considerCandidate',
     shape: 'TX_RETRIED',
     locks: 'project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project` FOR KEY SHARE, which no status write conflicts with; the task and session the candidate and its check name are history references with no key (0423, 0424) and take nothing.',
@@ -1860,6 +1871,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled
   // in the transaction that ended it: the retry limit's failure.
   { at: 'wiki-worker/wiki-jobs.ts#settleWikiJobRows', under: 'wiki-worker/wiki-jobs.ts#endAtRetryLimit' },
+  // The check output's cap (§2.9 LS2, migration 0437): the middle rows of one check deleted and the
+  // first retained tail row's gap updated, inside the transaction that took the job row FOR UPDATE.
+  // It opens nothing and is re-run exactly when `receiveIntegrationJobOutput` is.
+  { at: 'runner-api/integration-job-relay.ts#trimIntegrationJobLog', under: 'runner-api/integration-job-relay.ts#receiveIntegrationJobOutput' },
   { at: 'common/lock-order.ts#lockCreatorSessions', under: 'every rank-30 caller (I2)' },
   { at: 'common/lock-order.ts#lockTaskLists', under: 'every rank-20 caller (I2)' },
   { at: 'common/session-inbox-fence.ts#retireSessionInboxGeneration', under: 'runner-api takeover/activate/release leases' },

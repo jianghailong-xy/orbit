@@ -230,6 +230,21 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { jobId: of.runner.integrationJobId }, body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner, phase: 'CHECK' } }),
   },
+  // One chunk of a running check's output (contract §2.2 J-T4's output route, §2.9 LS2): fenced on
+  // the claim it names, so a machine that learned A's claim is still not A's. A's own chunk is taken.
+  'POST /runner/integration-jobs/:jobId/output': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { jobId: of.runner.integrationJobId },
+      body: {
+        claimGeneration: '1',
+        leaseOwner: of.runner.leaseOwner,
+        check: { name: 'MERGE_CHECK', index: 1 },
+        seq: 0,
+        text: 'census\n',
+      },
+    }),
+  },
   // The claim given back, named as the result below names it. A's own release puts the job back in
   // the queue, after which the result is A's claim that moved on: both reach the job.
   'POST /runner/integration-jobs/:jobId/release': {

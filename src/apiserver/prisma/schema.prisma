@@ -3091,11 +3091,51 @@ model ProjectIntegrationJob {
   /// and a foreign key would turn that into a cascade or a refused delete.
   landingId String? @map("landing_id") @db.Uuid
 
+  /// The chunks of check output uploaded under this attempt (migration 0437).
+  logs ProjectIntegrationJobLog[]
+
   @@index([state, createdAt, id], map: "project_integration_job_queued_idx")
   @@index([projectId, createdAt], map: "project_integration_job_project_idx")
   @@index([sessionId, createdAt], map: "project_integration_job_session_created_idx")
   @@index([landingId, createdAt], map: "project_integration_job_landing_idx")
   @@map("project_integration_job")
+}
+
+/// One uploaded chunk of one check's output (migration 0437, docs/project-integration-line-contract.md
+/// §2.2 J-T4's output route, §2.9 LS2).
+///
+/// A v2 runner streams a check's combined stdout and stderr here while the check runs, in seq order
+/// under the claim it names. The key is (job, claim, round, check, seq), so a retried upload is the
+/// chunk already stored rather than a second copy. The server keeps a bounded head and tail per check
+/// and records the bytes it dropped from the middle on the first retained tail row's
+/// `truncatedBytes` — a reader draws one "N bytes omitted" line there and nothing else.
+///
+/// Deliberately not `run_event`: this is not a session event, it is a check's output, and the
+/// transcript table is the hot one (design §8 phase 3).
+model ProjectIntegrationJobLog {
+  id              String @id @default(uuid(7)) @db.Uuid
+  jobId           String @map("job_id") @db.Uuid
+  job             ProjectIntegrationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  /// The claim the chunk was uploaded under; the output gate fences on it.
+  claimGeneration BigInt @map("claim_generation")
+  /// The round inside that claim, from 1, as the job row had it when the chunk arrived.
+  round           Int
+  /// TASK_ACCEPTANCE | MERGE_CHECK (`project_integration_job_log_check_name_chk`).
+  checkName       String @map("check_name")
+  /// The check's position in the run, from 1.
+  checkIndex      Int    @map("check_index")
+  /// The chunk's number within this check, from 0, in the order produced.
+  seq             Int
+  /// The chunk, already redacted by the runner.
+  text            String
+  /// Bytes dropped from the middle immediately before this chunk; non-zero only on the first
+  /// retained tail row.
+  truncatedBytes  Int      @default(0) @map("truncated_bytes")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([jobId, claimGeneration, round, checkName, checkIndex, seq], map: "project_integration_job_log_key")
+  @@index([jobId, claimGeneration, round, checkIndex, seq], map: "project_integration_job_log_page_idx")
+  @@map("project_integration_job_log")
 }
 
 /// One landing's address, record and state (migration 0436, docs/project-integration-line-contract.md

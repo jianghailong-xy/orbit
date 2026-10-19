@@ -72,6 +72,7 @@ import {
   MAX_PROMPT_CHARS,
   PermissionMode,
   type PermissionRule,
+  type ProjectIntegrationLogPage,
   ROOT_FALLBACK_PERMISSION_MODE,
   ROOT_REFUSED_PERMISSION_MODES,
   RunEventType,
@@ -145,6 +146,7 @@ import {
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
 import { readSourceLanding } from '../projects/landing-session';
+import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
@@ -3443,6 +3445,30 @@ export class SessionsService {
         owesReplyTo: peers?.owesReplyTo ?? [],
       };
     });
+  }
+
+  /**
+   * One page of a landing session's check output (`GET /sessions/:id/landing/log`, contract §2.9
+   * LS2): what a check printed while the landing ran, kept as a bounded head and tail per check.
+   *
+   * The user gate is the session's owner, and another account's session is the same 404 as a
+   * session that does not exist — the page is only ever addressed through a session the reader
+   * owns. A session that is not a landing session has no landing subject and is answered the same
+   * way. Which attempt is read is the selectors': a `jobId` from the landing view's generations, or
+   * the newest attempt when the request names none; `claim`, `round` and `check` narrow within it,
+   * and `cursor` continues a page.
+   */
+  async landingLog(
+    ownerId: string,
+    id: string,
+    selectors: IntegrationLogSelectors,
+  ): Promise<ProjectIntegrationLogPage<Date>> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return readLandingIntegrationLog(this.prisma, { ownerId, sessionId: id, selectors });
   }
 
   async get(ownerId: string, id: string) {
