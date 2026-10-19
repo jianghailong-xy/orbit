@@ -4,6 +4,7 @@
 文档收尾（`34hJAyWIuEl2rXy6q9HlL`，2026-10-19）补上实现任务交付说明里的实测结论和协调会话的裁定：P4b、P5b 跟进、P5c、P6a、P6b、P6b 跟进（§3.3、§3.4、§4、§5、§6、§9、§11–§13、§16、§17）。
 D-P8-2 修复（`34iQUqxC9htJed8AY8vic`，2026-10-19）按 P8 的实测补了 §3.2（Cursor 怎么起标题）、§14.4（P8 录到的署名 trailer）和 §7.2、§16.4、§16.7。
 D-P8-1 收尾（`34iSsJHzTeI5uzhcGSmlI`，2026-10-19）按 P8、P5c 的录制改正了 §5.2 被拒调用的形状，写明 Orbit 怎么结算被拒的调用，§4.1、§16.4 同步。
+撤回的审批卡（`34iTwiTCaIxwfXdQlHvIR`，2026-10-19）：还没人应答、这一轮就结束的审批卡，它的调用按没有运行结算（§5.2），§3.3、§16.4 同步。
 改这里的任何一条结论，要同时改依赖它的任务。已定的设计（作业指导里的所有者决定）不在这里重新论证。
 
 **实测版本**：**Cursor CLI `2026.10.14-941492e`**，linux/x64，HPC（内核 `6.12.107+deb13-amd64`，24 核，root）。
@@ -288,8 +289,9 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
 - **被取消的工具卡停在 `pending → in_progress`，之后再没有 `tool_call_update`**。ACP 这里根本没有 `failed` 状态【源码 A@77469】。
   **P5b：取消、断开、崩溃后，Orbit 自己结算所有未终态的工具卡。**
 - **审批进行中（权限请求未答）时停止**【实测 `p5c/accept-edits-stop`，经 Orbit 的 runner】：Orbit 发 `session/cancel`，并对未答的请求回 `cancelled`，
-  审批卡撤回；prompt 以 `{"stopReason":"cancelled"}` 返回，命令没有执行，工具卡同样停在 `in_progress`。
-- **请求未答时 CLI 被 SIGKILL**【实测 `p5c/accept-edits-disconnect`】：命令没有执行，什么回复都没有；Orbit 撤回审批卡，这一轮按「CLI 在这一轮中退出」失败。
+  审批卡撤回；prompt 以 `{"stopReason":"cancelled"}` 返回，命令没有执行，工具卡同样停在 `in_progress`。Orbit 把这张卡结算为没有运行（§5.2）。
+- **请求未答时 CLI 被 SIGKILL**【实测 `p5c/accept-edits-disconnect`】：命令没有执行，什么回复都没有；Orbit 撤回审批卡，这一轮按「CLI 在这一轮中退出」失败，
+  这张卡结算为没有运行（§5.2）。
 - 只发 `session/cancel`、不应答未答的请求时 CLI 自己怎么收尾【待验】：Orbit 总是应答（§4.2），不依赖它。
   源码：权限请求没有超时（S@6078003），取消会让等待的请求以 "Cancelled" 拒绝（A@56902）。
 
@@ -494,15 +496,22 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   - shell 和编辑：只有 `{status:"completed"}`，没有 rawOutput，也没有 content，单看这条更新和一次成功而没有输出的调用分不出来。
     夹具：P8 经 Orbit 的 runner 录的 [`src/runner-go/testdata/cursor/p8/key-allow-reject`](../src/runner-go/testdata/cursor/p8/README.md)（被拒的 `date -u > notes-when.txt`），
     以及 `p5c/accept-edits-allow-deny`（被拒的 `touch cmd-denied.txt` 和工作区外的 `Write`）。
-  - **Orbit 以自己回过的应答为准**【约定：D-P8-1 及其收尾，协调会话 2026-10-19 裁定；`src/runner-go/cursor_permissions.go` 的 `mark`，`cursor_events.go` 的 `refuse`、`cursorToolResult`、`settle`】：
+  - **Orbit 以自己回过的应答为准**【约定：D-P8-1、D-P8-1 收尾和撤回的审批卡（`34iTwiTCaIxwfXdQlHvIR`），协调会话 2026-10-19 裁定；`src/runner-go/cursor_permissions.go` 的 `mark`、`close`，`cursor_events.go` 的 `refuse`、`withdraw`、`cursorToolResult`、`settle`】：
     - 一轮进行中，runner 对权限请求回了 allow 以外的应答，就先给请求所指的工具卡做标记，再发应答。这包括人在卡上拒绝，Plan、Don't Ask 不问直接拒绝，
       Orbit 看不懂请求，以及没人能决定或选项不认识时回的 `cancelled`。
     - 被标记的卡结算为 `isError:true`、"Not run: the tool call was rejected."，不看 rawOutput。
     - Cursor 的 `completed` 还没到、这一轮就结束了（Stop、断连、进程退出或 EOF），也这样结算：CLI 拿到应答之前一直阻塞（下面「没有超时」），拒绝和 `cancelled` 都不执行。
-    - 不做标记的：被允许的调用；轮次结束、Stop、断连、租约丢失时撤回的卡（这时桥已关闭，回 `cancelled`）。它们没完成时仍按 §3.3 由 Orbit 结算，说明可能已经运行。
-    - 例外：这一轮没在发出它的进程里结算、之后按轮次账本补结算时（租约归了别的 runner，或 runner 中途重启；`cursor_acp.go` 的 `recoverTurn`），
-      标记不进账本，没完成的卡仍说明可能已经运行。租约这一种，协调会话裁定不改（D-P8-1 收尾）。
-    - 回放用例：`src/runner-go/cursor_permissions_test.go` 的 `TestCursorRefusedToolCards`；验收脚本 `scripts/test-cursor-rejected-tools.mjs`、`scripts/test-cursor-refusal-settle.mjs`。
+    - **撤回的审批卡按没有运行结算**【实测 `p5c/accept-edits-stop`、`p5c/accept-edits-disconnect`：审批卡还没人应答时 Stop，或 CLI 被 SIGKILL，命令都没有执行（§3.3）】：
+      - 审批卡还没人应答、这一轮就结束了（Stop、断连、进程退出或 EOF），桥撤回它时就给请求所指的工具卡做「撤回」标记（和上面拒绝的标记分开），赶在这一轮结算之前；
+        请求随后回 `cancelled`，CLI 当作拒绝。
+      - 这一轮正在结束时才到的权限请求（例如 Stop 已经发出、这一轮还没结算），不出卡，直接回 `cancelled`，同样做撤回标记（`answerClosed`）。
+      - 带撤回标记的卡按这一轮的终态结算，`isError:true`：Stop（interrupted）为 "Not run: the turn was stopped before this tool call was approved."；
+        其他终态（断连、进程退出、EOF、出错）为 "Not run: the turn ended before this tool call was approved."。结算之前 Cursor 补发了这张卡的 `completed`，也不当结果。
+    - 不做标记的：被允许的调用，以及提问卡和计划卡（撤回时同样回 `cancelled`，§4.2）。它们没完成时仍按 §3.3 由 Orbit 结算，说明可能已经运行。
+    - 例外只剩一种：这一轮没在发出它的进程里结算、之后按轮次账本补结算时（租约归了别的 runner，或 runner 中途重启；`cursor_acp.go` 的 `recoverTurn`），
+      拒绝和撤回的标记都不进账本，没完成的卡仍说明可能已经运行。这两种情况协调会话都裁定不改（D-P8-1 收尾）。
+    - 回放用例：`src/runner-go/cursor_permissions_test.go` 的 `TestCursorRefusedToolCards`、`TestCursorWithdrawnApprovals`；
+      验收脚本 `scripts/test-cursor-rejected-tools.mjs`、`scripts/test-cursor-refusal-settle.mjs`、`scripts/test-cursor-withdrawn-approval.mjs`。
 - **allow-always**：
   - 写进 `<CURSOR_CONFIG_DIR>/cli-config.json` 的 `permissions.allow`。实测 `echo` 被允许后，内容变成 `["Shell(ls)","Shell(echo)"]`。
   - 同一会话下一轮 `echo again > again.txt` 不再问【实测】。
@@ -1217,7 +1226,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | --- | --- |
 | `agent_message_chunk` | 正文增量（按轮累加；先过 §12 的错误句子匹配） |
 | `agent_thought_chunk` | 思考增量 |
-| `tool_call` / `tool_call_update` | 工具开始和进度；`completed` 是终态，rawOutput 带 `exitCode≠0` 或 `error` 时标为失败，带 `rejected`（只有 MCP 被拒时有）时标为被拒。shell 和编辑被拒时 Cursor 只发 `{status:"completed"}`【实测 `src/runner-go/testdata/cursor/p8/key-allow-reject`】，所以被拒以 Orbit 自己回过的应答为准：回过 allow 以外应答的卡结算为 "Not run: the tool call was rejected."（`isError:true`），Cursor 的 `completed` 没到这一轮就结束也一样（§5.2，D-P8-1 及其收尾）；取消、断开、崩溃后 Orbit 自己结算其余 `in_progress` 的卡（§3.3） |
+| `tool_call` / `tool_call_update` | 工具开始和进度；`completed` 是终态，rawOutput 带 `exitCode≠0` 或 `error` 时标为失败，带 `rejected`（只有 MCP 被拒时有）时标为被拒。shell 和编辑被拒时 Cursor 只发 `{status:"completed"}`【实测 `src/runner-go/testdata/cursor/p8/key-allow-reject`】，所以被拒以 Orbit 自己回过的应答为准：回过 allow 以外应答的卡结算为 "Not run: the tool call was rejected."（`isError:true`），Cursor 的 `completed` 没到这一轮就结束也一样（§5.2，D-P8-1 及其收尾）；审批卡还没人应答这一轮就结束的，撤回时做标记，结算为没有运行（`isError:true`，§5.2）；取消、断开、崩溃后 Orbit 自己结算其余 `in_progress` 的卡（§3.3） |
 | `plan`、`cursor/create_plan` | 计划展示；create_plan 要应答（P5c：计划卡，Don't Ask 下回 `rejected`） |
 | `cursor/update_todos` | 待办列表（请求，回 `{}`） |
 | `subagent_spawned` / `subagent_state_update` + 子会话的更新 | 子代理卡（需要 `_meta.subagents`）；`cursor/task` 回 `{}` |
