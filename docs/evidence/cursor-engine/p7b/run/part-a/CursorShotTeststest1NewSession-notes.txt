@@ -1,0 +1,20 @@
+sheet-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+hero-light: mode 9 label="Auto" value="" frame=(64.0, 797.0, 33.0, 18.0) hittable=true
+ios1-c-row-not-installed-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-c-row-not-installed-light: 9 label="Cursor CLI, Not installed →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+ios1-d-row-signed-out-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-d-row-signed-out-light: 9 label="Cursor CLI, Not signed in, sign in →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+ios1-e-row-update-runner-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-e-row-update-runner-light: 9 label="Cursor CLI, Update runner →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+ios1-f-row-unsupported-version-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-f-row-unsupported-version-light: 9 label="Cursor CLI, Unsupported version →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+sheet-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+hero-dark: mode 9 label="Auto" value="" frame=(64.0, 797.0, 33.0, 18.0) hittable=true
+ios1-c-row-not-installed-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-c-row-not-installed-dark: 9 label="Cursor CLI, Not installed →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+ios1-d-row-signed-out-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-d-row-signed-out-dark: 9 label="Cursor CLI, Not signed in, sign in →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+ios1-e-row-update-runner-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-e-row-update-runner-dark: 9 label="Cursor CLI, Update runner →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true
+ios1-f-row-unsupported-version-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+ios1-f-row-unsupported-version-dark: 9 label="Cursor CLI, Unsupported version →" value="" frame=(16.0, 515.0, 370.0, 69.33333333333337) hittable=true

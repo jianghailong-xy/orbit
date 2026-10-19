@@ -1,0 +1,54 @@
+Test Case '-[OrbitKitTests.CursorEngineTests testARunnerSignInToCursorRunsOnCursorAloneAndNoOtherCredentialRunsOnIt]' started.
+Test Case '-[OrbitKitTests.CursorEngineTests testARunnerSignInToCursorRunsOnCursorAloneAndNoOtherCredentialRunsOnIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorEngineTests testASessionARunnerAWorkspaceAndARefusalOnCursorDecode]' started.
+Test Case '-[OrbitKitTests.CursorEngineTests testASessionARunnerAWorkspaceAndARefusalOnCursorDecode]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorEngineTests testATasksEngineFieldListsTheEnginesDrawnAndItsOwnPin]' started.
+Test Case '-[OrbitKitTests.CursorEngineTests testATasksEngineFieldListsTheEnginesDrawnAndItsOwnPin]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorEngineTests testCursorCLIIsDrawnOnceARunnerOfTheAccountKnowsIt]' started.
+Test Case '-[OrbitKitTests.CursorEngineTests testCursorCLIIsDrawnOnceARunnerOfTheAccountKnowsIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorEngineTests testCursorCLIJoinsEveryListOfEnginesLastOnceARunnerKnowsIt]' started.
+Test Case '-[OrbitKitTests.CursorEngineTests testCursorCLIJoinsEveryListOfEnginesLastOnceARunnerKnowsIt]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAConversationStartsWithItsFirstTurn]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAConversationStartsWithItsFirstTurn]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAKeysLastCheckOnItsRowAndItsPage]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAKeysLastCheckOnItsRowAndItsPage]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAModelsContextAndSpeedTravelInItsValue]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAModelsContextAndSpeedTravelInItsValue]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAReadingOnlyAboveZeroAndNeverSpent]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAReadingOnlyAboveZeroAndNeverSpent]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testARunnersStateGoesFromWhatIsMostFundamental]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testARunnersStateGoesFromWhatIsMostFundamental]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testASignedOutCursorSignInIsAttention]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testASignedOutCursorSignInIsAttention]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testASpentAccountIsSpentUntilItsUsageResets]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testASpentAccountIsSpentUntilItsUsageResets]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAutosNoteFitsAnIPhoneMenusItems]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testAutosNoteFitsAnIPhoneMenusItems]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testDefaultIsGreyedAndASessionLandsOnAcceptEdits]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testDefaultIsGreyedAndASessionLandsOnAcceptEdits]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testEachStateSaysWhatFixesIt]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testEachStateSaysWhatFixesIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testOnlyCursorsOwnSlashCommandsInACursorSession]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testOnlyCursorsOwnSlashCommandsInACursorSession]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheEnginePageListsEachAccountWithItsPlan]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheEnginePageListsEachAccountWithItsPlan]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheHeroListsCursorCLIOnAutoOrSaysWhyNot]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheHeroListsCursorCLIOnAutoOrSaysWhyNot]' passed (0.010 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheMachinesCursorRowSaysWhereItStands]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheMachinesCursorRowSaysWhereItStands]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheModelMenuIsCursorsCatalogueWithAutoFirst]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheModelMenuIsCursorsCatalogueWithAutoFirst]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheModesAreTheSharedTablesOwn]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheModesAreTheSharedTablesOwn]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheRunnersReportDecodes]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheRunnersReportDecodes]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheSeventhEngineCardAndWhatNeedsAPerson]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheSeventhEngineCardAndWhatNeedsAPerson]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheUsageLimitCardNamesTheAccountItsPlanAndWhereElseToGo]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheUsageLimitCardNamesTheAccountItsPlanAndWhereElseToGo]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheUsageWordsAreTheWebsOwn]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheUsageWordsAreTheWebsOwn]' passed (0.023 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheVariantRulesAreTheSharedOnes]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheVariantRulesAreTheSharedOnes]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheWordsAreTheWebsOwn]' started.
+Test Case '-[OrbitKitTests.CursorRuntimeTests testTheWordsAreTheWebsOwn]' passed (0.002 seconds).
