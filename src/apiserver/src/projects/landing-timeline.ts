@@ -290,6 +290,7 @@ export async function readLandingTimeline(
         kind: 'TIMED_OUT',
         at: job.finishedAt ?? job.createdAt,
         claim,
+        round: job.round ?? null,
         phase: job.phase,
         actor: { type: 'PLATFORM' },
         data: timedOut as unknown as Record<string, unknown>,
@@ -306,6 +307,7 @@ export async function readLandingTimeline(
         kind: 'RESULT_FALLBACK',
         at: job.finishedAt ?? job.createdAt,
         claim,
+        round: job.round ?? null,
         phase: job.phase,
         data: { state: job.state, errorCode: job.errorCode },
         text: resultText({
