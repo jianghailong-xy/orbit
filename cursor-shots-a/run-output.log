@@ -1,0 +1,114 @@
+==> stub ready after 2s
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+Test Case '-[CursorProbeUITests.CursorShotTests test1NewSession]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test1NewSession]' passed (376.578 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' passed (637.587 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test3Accounts]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test3Accounts]' passed (273.691 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.863) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.864) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.865) seconds
+** TEST SUCCEEDED **
+.p7b-probe/run.sh: line 59:  8189 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 30920
+drwxr-xr-x  100 runner  staff    3200 Oct 19 00:32 .
+drwxr-xr-x    3 runner  staff      96 Oct 19 00:00 ..
+drwxr-xr-x   70 runner  staff    2240 Oct 19 00:32 attachments
+-rw-r--r--@   1 runner  staff    3125 Oct 19 00:15 CursorShotTeststest1NewSession-notes.txt
+-rw-r--r--@   1 runner  staff    5278 Oct 19 00:26 CursorShotTeststest2Infrastructure-notes.txt
+-rw-r--r--@   1 runner  staff     928 Oct 19 00:31 CursorShotTeststest3Accounts-notes.txt
+-rw-r--r--    1 runner  staff  254533 Oct 19 00:13 ios1-a-engine-sheet-dark.png
+-rw-r--r--    1 runner  staff  257419 Oct 19 00:10 ios1-a-engine-sheet-light.png
+-rw-r--r--    1 runner  staff  143646 Oct 19 00:13 ios1-b-hero-cursor-dark.png
+-rw-r--r--    1 runner  staff  230028 Oct 19 00:10 ios1-b-hero-cursor-light.png
+-rw-r--r--    1 runner  staff   25022 Oct 19 00:14 ios1-c-row-not-installed-dark.png
+-rw-r--r--    1 runner  staff   24955 Oct 19 00:11 ios1-c-row-not-installed-light.png
+-rw-r--r--    1 runner  staff  258878 Oct 19 00:14 ios1-c-row-not-installed-sheet-dark.png
+-rw-r--r--    1 runner  staff  262342 Oct 19 00:11 ios1-c-row-not-installed-sheet-light.png
+-rw-r--r--    1 runner  staff   25902 Oct 19 00:15 ios1-d-row-signed-out-dark.png
+-rw-r--r--    1 runner  staff   25761 Oct 19 00:12 ios1-d-row-signed-out-light.png
+-rw-r--r--    1 runner  staff  255989 Oct 19 00:15 ios1-d-row-signed-out-sheet-dark.png
+-rw-r--r--    1 runner  staff  259773 Oct 19 00:12 ios1-d-row-signed-out-sheet-light.png
+-rw-r--r--    1 runner  staff   24449 Oct 19 00:15 ios1-e-row-update-runner-dark.png
+-rw-r--r--    1 runner  staff   24492 Oct 19 00:12 ios1-e-row-update-runner-light.png
+-rw-r--r--    1 runner  staff  256478 Oct 19 00:15 ios1-e-row-update-runner-sheet-dark.png
+-rw-r--r--    1 runner  staff  260564 Oct 19 00:12 ios1-e-row-update-runner-sheet-light.png
+-rw-r--r--    1 runner  staff   26463 Oct 19 00:15 ios1-f-row-unsupported-version-dark.png
+-rw-r--r--    1 runner  staff   26529 Oct 19 00:13 ios1-f-row-unsupported-version-light.png
+-rw-r--r--    1 runner  staff  256891 Oct 19 00:15 ios1-f-row-unsupported-version-sheet-dark.png
+-rw-r--r--    1 runner  staff  260824 Oct 19 00:13 ios1-f-row-unsupported-version-sheet-light.png
+-rw-r--r--    1 runner  staff  466384 Oct 19 00:21 ios2-a-infrastructure-cursor-card-dark.png
+-rw-r--r--    1 runner  staff  508702 Oct 19 00:16 ios2-a-infrastructure-cursor-card-light.png
+-rw-r--r--    1 runner  staff  343627 Oct 19 00:22 ios2-b-machine-hpc-cursor-row-dark.png
+-rw-r--r--    1 runner  staff  380060 Oct 19 00:17 ios2-b-machine-hpc-cursor-row-light.png
+-rw-r--r--    1 runner  staff  213999 Oct 19 00:23 ios2-c-cursor-engine-page-dark.png
+-rw-r--r--    1 runner  staff  227048 Oct 19 00:17 ios2-c-cursor-engine-page-light.png
+-rw-r--r--    1 runner  staff  213999 Oct 19 00:23 ios2-c2-cursor-engine-page-footer-dark.png
+-rw-r--r--    1 runner  staff  227048 Oct 19 00:17 ios2-c2-cursor-engine-page-footer-light.png
+-rw-r--r--    1 runner  staff   24606 Oct 19 00:24 ios2-d-state-not-installed-dark.png
+-rw-r--r--    1 runner  staff  131930 Oct 19 00:24 ios2-d-state-not-installed-engine-page-dark.png
+-rw-r--r--    1 runner  staff  145071 Oct 19 00:18 ios2-d-state-not-installed-engine-page-light.png
+-rw-r--r--    1 runner  staff   24555 Oct 19 00:18 ios2-d-state-not-installed-light.png
+-rw-r--r--    1 runner  staff  353311 Oct 19 00:24 ios2-d-state-not-installed-page-dark.png
+-rw-r--r--    1 runner  staff  393405 Oct 19 00:18 ios2-d-state-not-installed-page-light.png
+-rw-r--r--    1 runner  staff   38351 Oct 19 00:24 ios2-e-state-signed-out-dark.png
+-rw-r--r--    1 runner  staff   38068 Oct 19 00:19 ios2-e-state-signed-out-light.png
+-rw-r--r--    1 runner  staff  337573 Oct 19 00:24 ios2-e-state-signed-out-page-dark.png
+-rw-r--r--    1 runner  staff  388975 Oct 19 00:19 ios2-e-state-signed-out-page-light.png
+-rw-r--r--    1 runner  staff    4813 Oct 19 00:25 ios2-f-state-update-runner-dark.png
+-rw-r--r--    1 runner  staff    4407 Oct 19 00:19 ios2-f-state-update-runner-light.png
+-rw-r--r--    1 runner  staff  346285 Oct 19 00:25 ios2-f-state-update-runner-page-dark.png
+-rw-r--r--    1 runner  staff  397773 Oct 19 00:19 ios2-f-state-update-runner-page-light.png
+-rw-r--r--    1 runner  staff   62155 Oct 19 00:26 ios2-g-state-unsupported-version-dark.png
+-rw-r--r--    1 runner  staff  166446 Oct 19 00:26 ios2-g-state-unsupported-version-engine-page-dark.png
+-rw-r--r--    1 runner  staff  180984 Oct 19 00:20 ios2-g-state-unsupported-version-engine-page-light.png
+-rw-r--r--    1 runner  staff   61296 Oct 19 00:20 ios2-g-state-unsupported-version-light.png
+-rw-r--r--    1 runner  staff  367154 Oct 19 00:26 ios2-g-state-unsupported-version-page-dark.png
+-rw-r--r--    1 runner  staff  407836 Oct 19 00:20 ios2-g-state-unsupported-version-page-light.png
+-rw-r--r--    1 runner  staff  240666 Oct 19 00:29 ios3-a-add-pending-dark.png
+-rw-r--r--    1 runner  staff  251179 Oct 19 00:27 ios3-a-add-pending-light.png
+-rw-r--r--    1 runner  staff  258123 Oct 19 00:29 ios3-b-add-link-dark.png
+-rw-r--r--    1 runner  staff  267750 Oct 19 00:27 ios3-b-add-link-light.png
+-rw-r--r--    1 runner  staff  235777 Oct 19 00:30 ios3-c-add-expired-dark.png
+-rw-r--r--    1 runner  staff  247694 Oct 19 00:27 ios3-c-add-expired-light.png
+-rw-r--r--    1 runner  staff  250339 Oct 19 00:30 ios3-d-add-done-dark.png
+-rw-r--r--    1 runner  staff  260160 Oct 19 00:27 ios3-d-add-done-light.png
+-rw-r--r--    1 runner  staff  295399 Oct 19 00:30 ios3-e-team-menu-dark.png
+-rw-r--r--    1 runner  staff  331696 Oct 19 00:28 ios3-e-team-menu-light.png
+-rw-r--r--    1 runner  staff  257353 Oct 19 00:30 ios3-f-sign-in-again-link-dark.png
+-rw-r--r--    1 runner  staff  266819 Oct 19 00:28 ios3-f-sign-in-again-link-light.png
+-rw-r--r--    1 runner  staff  279676 Oct 19 00:30 ios3-g-remove-confirm-dark.png
+-rw-r--r--    1 runner  staff  338150 Oct 19 00:28 ios3-g-remove-confirm-light.png
+-rw-r--r--    1 runner  staff  233020 Oct 19 00:31 ios3-h-remove-refused-dark.png
+-rw-r--r--    1 runner  staff  244701 Oct 19 00:28 ios3-h-remove-refused-light.png
+-rw-r--r--    1 runner  staff   19489 Oct 19 00:32 not-served.txt
+-rw-r--r--    1 runner  staff   93177 Oct 19 00:31 requests.log
+-rw-r--r--    1 runner  staff      49 Oct 19 00:01 stub.out
+-rw-r--r--@   1 runner  staff   28232 Oct 19 00:30 tree-add-done-dark.txt
+-rw-r--r--@   1 runner  staff   28232 Oct 19 00:27 tree-add-done-light.txt
+-rw-r--r--@   1 runner  staff   27724 Oct 19 00:29 tree-add-link-dark.txt
+-rw-r--r--@   1 runner  staff   27724 Oct 19 00:27 tree-add-link-light.txt
+-rw-r--r--@   1 runner  staff   27507 Oct 19 00:29 tree-add-pending-dark.txt
+-rw-r--r--@   1 runner  staff   27507 Oct 19 00:27 tree-add-pending-light.txt
+-rw-r--r--@   1 runner  staff   26646 Oct 19 00:23 tree-engine-dark.txt
+-rw-r--r--@   1 runner  staff   26646 Oct 19 00:18 tree-engine-light.txt
+-rw-r--r--@   1 runner  staff   13965 Oct 19 00:13 tree-hero-dark.txt
+-rw-r--r--@   1 runner  staff   13965 Oct 19 00:10 tree-hero-light.txt
+-rw-r--r--@   1 runner  staff   34799 Oct 19 00:24 tree-ios2-d-state-not-installed-dark.txt
+-rw-r--r--@   1 runner  staff   34799 Oct 19 00:18 tree-ios2-d-state-not-installed-light.txt
+-rw-r--r--@   1 runner  staff   34404 Oct 19 00:25 tree-ios2-e-state-signed-out-dark.txt
+-rw-r--r--@   1 runner  staff   34404 Oct 19 00:19 tree-ios2-e-state-signed-out-light.txt
+-rw-r--r--@   1 runner  staff   33547 Oct 19 00:25 tree-ios2-f-state-update-runner-dark.txt
+-rw-r--r--@   1 runner  staff   33547 Oct 19 00:19 tree-ios2-f-state-update-runner-light.txt
+-rw-r--r--@   1 runner  staff   34052 Oct 19 00:26 tree-ios2-g-state-unsupported-version-dark.txt
+-rw-r--r--@   1 runner  staff   34052 Oct 19 00:20 tree-ios2-g-state-unsupported-version-light.txt
+-rw-r--r--@   1 runner  staff   33574 Oct 19 00:22 tree-machine-dark.txt
+-rw-r--r--@   1 runner  staff   33574 Oct 19 00:17 tree-machine-light.txt
+-rw-r--r--@   1 runner  staff   30747 Oct 19 00:21 tree-overview-dark.txt
+-rw-r--r--@   1 runner  staff   30747 Oct 19 00:16 tree-overview-light.txt
+-rw-r--r--@   1 runner  staff   27023 Oct 19 00:31 tree-remove-refused-dark.txt
+-rw-r--r--@   1 runner  staff   27023 Oct 19 00:28 tree-remove-refused-light.txt
+-rw-r--r--@   1 runner  staff   24549 Oct 19 00:13 tree-sheet-dark.txt
+-rw-r--r--@   1 runner  staff   24549 Oct 19 00:10 tree-sheet-light.txt
+-rw-r--r--    1 runner  staff  828087 Oct 19 00:32 xcodebuild-ios.log

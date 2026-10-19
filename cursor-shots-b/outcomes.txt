@@ -1,0 +1,2 @@
+capture=success
+only=test4Keys test5Session test6ModesAndSwitch

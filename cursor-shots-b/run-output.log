@@ -1,0 +1,78 @@
+==> stub ready after 2s
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+Test Case '-[CursorProbeUITests.CursorShotTests test4Keys]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test4Keys]' passed (480.800 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test5Session]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test5Session]' passed (290.613 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test6ModesAndSwitch]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test6ModesAndSwitch]' passed (268.186 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1039.600 (1039.612) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1039.600 (1039.616) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1039.600 (1039.618) seconds
+** TEST SUCCEEDED **
+.p7b-probe/run.sh: line 59:  4820 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 17768
+drwxr-xr-x  64 runner  staff    2048 Oct 19 00:27 .
+drwxr-xr-x   3 runner  staff      96 Oct 19 00:00 ..
+drwxr-xr-x  36 runner  staff    1152 Oct 19 00:27 attachments
+-rw-r--r--@  1 runner  staff    1727 Oct 19 00:16 CursorShotTeststest4Keys-notes.txt
+-rw-r--r--@  1 runner  staff    2289 Oct 19 00:21 CursorShotTeststest5Session-notes.txt
+-rw-r--r--@  1 runner  staff    3158 Oct 19 00:26 CursorShotTeststest6ModesAndSwitch-notes.txt
+-rw-r--r--   1 runner  staff  333464 Oct 19 00:14 ios4-a-api-keys-dark.png
+-rw-r--r--   1 runner  staff  371431 Oct 19 00:10 ios4-a-api-keys-light.png
+-rw-r--r--   1 runner  staff  201774 Oct 19 00:14 ios4-b-cursor-key-valid-dark.png
+-rw-r--r--   1 runner  staff  212877 Oct 19 00:10 ios4-b-cursor-key-valid-light.png
+-rw-r--r--   1 runner  staff  214774 Oct 19 00:16 ios4-c-cursor-key-rejected-dark.png
+-rw-r--r--   1 runner  staff  225696 Oct 19 00:12 ios4-c-cursor-key-rejected-light.png
+-rw-r--r--   1 runner  staff  213710 Oct 19 00:16 ios4-d-cursor-key-checked-again-dark.png
+-rw-r--r--   1 runner  staff  225153 Oct 19 00:12 ios4-d-cursor-key-checked-again-light.png
+-rw-r--r--   1 runner  staff  252393 Oct 19 00:19 ios5-a-model-menu-auto-dark.png
+-rw-r--r--   1 runner  staff  337536 Oct 19 00:17 ios5-a-model-menu-auto-light.png
+-rw-r--r--   1 runner  staff  256137 Oct 19 00:20 ios5-a2-model-menu-auto-three-models-dark.png
+-rw-r--r--   1 runner  staff  340340 Oct 19 00:18 ios5-a2-model-menu-auto-three-models-light.png
+-rw-r--r--   1 runner  staff  247056 Oct 19 00:19 ios5-b-model-menu-opus-dark.png
+-rw-r--r--   1 runner  staff  331230 Oct 19 00:17 ios5-b-model-menu-opus-light.png
+-rw-r--r--   1 runner  staff  155171 Oct 19 00:19 ios5-b0-chip-opus-dark.png
+-rw-r--r--   1 runner  staff  180327 Oct 19 00:17 ios5-b0-chip-opus-light.png
+-rw-r--r--   1 runner  staff  224941 Oct 19 00:20 ios5-b2-model-menu-opus-three-models-dark.png
+-rw-r--r--   1 runner  staff  308938 Oct 19 00:18 ios5-b2-model-menu-opus-three-models-light.png
+-rw-r--r--   1 runner  staff  160096 Oct 19 00:20 ios5-c-turn-running-queued-dark.png
+-rw-r--r--   1 runner  staff  191666 Oct 19 00:18 ios5-c-turn-running-queued-light.png
+-rw-r--r--   1 runner  staff  213272 Oct 19 00:21 ios5-d-context-unavailable-dark.png
+-rw-r--r--   1 runner  staff  239761 Oct 19 00:18 ios5-d-context-unavailable-light.png
+-rw-r--r--   1 runner  staff  176302 Oct 19 00:21 ios5-e-usage-limit-dark.png
+-rw-r--r--   1 runner  staff  201194 Oct 19 00:19 ios5-e-usage-limit-light.png
+-rw-r--r--   1 runner  staff  216608 Oct 19 00:24 ios6-a-modes-dark.png
+-rw-r--r--   1 runner  staff  252201 Oct 19 00:22 ios6-a-modes-light.png
+-rw-r--r--   1 runner  staff  305304 Oct 19 00:24 ios6-b-provider-blocked-dark.png
+-rw-r--r--   1 runner  staff  344594 Oct 19 00:22 ios6-b-provider-blocked-light.png
+-rw-r--r--   1 runner  staff  210417 Oct 19 00:26 ios6-c-provider-draft-dark.png
+-rw-r--r--   1 runner  staff  276957 Oct 19 00:23 ios6-c-provider-draft-light.png
+-rw-r--r--@  1 runner  staff   31896 Oct 19 00:16 missing-band-keys2-dark.txt
+-rw-r--r--@  1 runner  staff   31896 Oct 19 00:12 missing-band-keys2-light.txt
+-rw-r--r--   1 runner  staff   20899 Oct 19 00:27 not-served.txt
+-rw-r--r--   1 runner  staff   83877 Oct 19 00:26 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 19 00:00 stub.out
+-rw-r--r--@  1 runner  staff   21520 Oct 19 00:19 tree-auto-menu-dark.txt
+-rw-r--r--@  1 runner  staff   21520 Oct 19 00:17 tree-auto-menu-light.txt
+-rw-r--r--@  1 runner  staff   21339 Oct 19 00:24 tree-blocked-dark.txt
+-rw-r--r--@  1 runner  staff   21339 Oct 19 00:22 tree-blocked-light.txt
+-rw-r--r--@  1 runner  staff   17480 Oct 19 00:26 tree-draft-dark.txt
+-rw-r--r--@  1 runner  staff   17480 Oct 19 00:23 tree-draft-light.txt
+-rw-r--r--@  1 runner  staff   29399 Oct 19 00:16 tree-key-refused-dark.txt
+-rw-r--r--@  1 runner  staff   29399 Oct 19 00:12 tree-key-refused-light.txt
+-rw-r--r--@  1 runner  staff   28675 Oct 19 00:14 tree-key-valid-dark.txt
+-rw-r--r--@  1 runner  staff   28675 Oct 19 00:10 tree-key-valid-light.txt
+-rw-r--r--@  1 runner  staff   31896 Oct 19 00:14 tree-keys-dark.txt
+-rw-r--r--@  1 runner  staff   31896 Oct 19 00:10 tree-keys-light.txt
+-rw-r--r--@  1 runner  staff   20074 Oct 19 00:24 tree-modes-dark.txt
+-rw-r--r--@  1 runner  staff   20074 Oct 19 00:22 tree-modes-light.txt
+-rw-r--r--@  1 runner  staff   21929 Oct 19 00:19 tree-opus-menu-dark.txt
+-rw-r--r--@  1 runner  staff   21929 Oct 19 00:17 tree-opus-menu-light.txt
+-rw-r--r--@  1 runner  staff   21277 Oct 19 00:20 tree-opus-short-menu-dark.txt
+-rw-r--r--@  1 runner  staff   21277 Oct 19 00:18 tree-opus-short-menu-light.txt
+-rw-r--r--@  1 runner  staff   17428 Oct 19 00:21 tree-quota-dark.txt
+-rw-r--r--@  1 runner  staff   17428 Oct 19 00:19 tree-quota-light.txt
+-rw-r--r--@  1 runner  staff   19224 Oct 19 00:20 tree-running-dark.txt
+-rw-r--r--@  1 runner  staff   19224 Oct 19 00:18 tree-running-light.txt
+-rw-r--r--   1 runner  staff  807725 Oct 19 00:27 xcodebuild-ios.log
