@@ -143,7 +143,7 @@ func TestALandingTheStopEndsMidCheckIsHandedBack(t *testing.T) {
 		runIntegrationJobAndReport(stop, context.Background(), NewTransport(srv.URL, "tok"), job)
 	}()
 	child := waitForPID(t, pidFile)
-	scratch := filepath.Join(filepath.Dir(r.work), integrateScratchPrefix+job.JobID)
+	scratch := r.scratchPath(job.JobID)
 	if _, err := os.Stat(scratch); err != nil {
 		t.Fatalf("the check is running but its scratch worktree is not there: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestALandingTheStopEndsMidCheckIsHandedBack(t *testing.T) {
 	if after := r.originRev("refs/heads/project/line"); after != lineBefore {
 		t.Fatalf("the line moved from %s to %s: an interrupted landing pushed", lineBefore, after)
 	}
-	if spooledResultOnDisk(t, job.JobID) {
+	if spooledResultOnDisk(t, job.JobID, job.ClaimGeneration) {
 		t.Fatal("an interrupted landing spooled a result for the next start to report")
 	}
 }
@@ -203,7 +203,10 @@ func TestTheRerunIsNotTrippedByWhatAKilledAttemptLeft(t *testing.T) {
 	job := r.command("task/rerun", "project/line", IntegrationCheckSpec{
 		Name: "MERGE_CHECK", Command: "test ! -e left-by-a-killed-attempt.txt", ExpectedExitCode: 0, TimeoutSeconds: 60,
 	})
-	scratch := filepath.Join(filepath.Dir(r.work), integrateScratchPrefix+job.JobID)
+	scratch := r.scratchPath(job.JobID)
+	if err := os.MkdirAll(r.scratch, 0o755); err != nil {
+		t.Fatalf("create the scratch root: %v", err)
+	}
 	mustRun(t, r.work, "git", "worktree", "add", "--quiet", "--detach", scratch, "main")
 	if err := os.WriteFile(filepath.Join(scratch, "left-by-a-killed-attempt.txt"), []byte("x\n"), 0o644); err != nil {
 		t.Fatalf("write the leftover: %v", err)
